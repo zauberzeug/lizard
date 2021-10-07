@@ -1,2 +1,3 @@
-# lizard
-Domain-specific language to specify behaviour of microcontroller managed hardware
+# Lizard
+
+Domain-specific language to specify behaviour of microcontroller managed hardware.
