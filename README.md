@@ -17,5 +17,5 @@ mkdocs serve
 Eventually we will publish these on https://lizard.dev through GitHub Pages. But for now you can deploy it with
 
 ```bash
-mkdocs build && rsync -aluv --delete site/* loop:public-web/lizard/
+mkdocs build && rsync -aluv --delete site/* root@lizard.dev:public-web/lizard/
 ```
