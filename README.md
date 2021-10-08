@@ -10,6 +10,12 @@ Lizard is a domain-specific language to define and control hardware behaviour. I
 
 Launch the documentation locally with
 
-    mkdocs serve
+```bash
+mkdocs serve
+```
 
-Later we will publish these on https://lizard.dev through GitHub Pages.
+Eventually we will publish these on https://lizard.dev through GitHub Pages. But for now you can deploy it with
+
+```bash
+mkdocs build && rsync -aluv --delete site/* loop:public-web/lizard/
+```
