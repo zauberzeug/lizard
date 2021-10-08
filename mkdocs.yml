@@ -3,3 +3,10 @@ site_url: https://lizard.dev/
 nav:
     - Home: index.md
     - Messages: messages.md
+repo_url: https://github.com/zauberzeug/lizard
+theme:
+  name: material
+  font:
+    text: Source Sans Pro
+extra_css:
+  - stylesheets/extra.css
