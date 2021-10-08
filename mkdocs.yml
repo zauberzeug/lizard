@@ -1,0 +1,5 @@
+site_name: Lizard
+site_url: https://lizard.dev/
+nav:
+    - Home: index.md
+    - Messages: messages.md
