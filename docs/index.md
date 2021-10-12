@@ -3,7 +3,7 @@
 Lizard is a domain-specific language to define hardware behaviour. 
 It is intened to run on embedded systems which are connected to motor controllers, sensors etc. 
 Most of the time it is used in combination with a higher level engine like [ROS](https://www.ros.org/) or [RoSys](http://rosys.io/). 
-You can think of the microcontroller as the machines lizard brain which ensures basic safety and performs all time critical actions.
+You can think of the microcontroller as the machine's lizard brain which ensures basic safety and performs all time critical actions.
 
 ## Features
 
