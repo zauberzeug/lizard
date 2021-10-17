@@ -16,26 +16,18 @@ You can think of the microcontroller as the machine's lizard brain which ensures
 
 ## Definitions
 
-**Message**
-: any text which is send to the microcontroller over serial
+**Message**: any text which is send to the microcontroller over serial
 
-**Output**
-: the text which is send from a module over serial
+**Output**: the text which is send from a module over serial
 
-**Module**
-: the internal representation for an piece of hardware which has commands, settings, configurations and triggers
+**Module**: the internal representation for an piece of hardware which has commands, settings, configurations and triggers
 
-**Command**
-: a message which is send to an module
+**Command**: a message which is send to an module
 
-**Setting**
-: a message which changes the behaviour of a module
+**Setting**: a message which changes the behaviour of a module
 
-**Configuration**
-: messages which are stored persitently and executed after boot to initialize the system
+**Configuration**: messages which are stored persitently and executed after boot to initialize the system
 
-**Trigger**
-: a kind of variable through which a module reflects its hardware state
+**Trigger**: a kind of variable through which a module reflects its hardware state
 
-**Conditions**
-: regulary checked statements which probe a trigger for a certain value which then executes a command
+**Conditions**º: regulary checked statements which probe a trigger for a certain value which then executes a command
