@@ -15,8 +15,8 @@ Here are a few examples:
 
 We could extend this pattern to cover the following features:
 
-A message ID could be used to confirm the reception of individual messages or to respond with requested data. (This could be also achieved based on the combination of module and command.)
-A sender or receiver ID could allow for passing messages to additional devices like a second ESP.
+- A message ID could be used to confirm the reception of individual messages or to respond with requested data. (This could be also achieved based on the combination of module and command.)
+- A sender or receiver ID could allow for passing messages to additional devices like a second ESP.
 
 These extensions, however, have the disadvantage of a more complicated format, which is cumbersome to type manually during development and debugging. But maybe we find a hybrid format: If the message starts with a digit, the first words are interpreted as message ID, sender and/or receiver.
 
@@ -24,6 +24,7 @@ These extensions, however, have the disadvantage of a more complicated format, w
 
 A message can optionally contain a checksum that is checked upon reception. If it does not match, a warning is printed and the message is ignored. The sum is computed as XOR of all characters and appended with a “^” as a separator.
 Example:
+
 	Message:	led on
 	Checksum:	0x6c ^ 0x65 ^ 0x64 ^ 0x20 ^ 0x6f ^ 0x6e = 76
 	Result:		led on^76
