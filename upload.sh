@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 
 echo "1/3 Generating parser..."
-owl/owl -c language.owl -o src/parser.h
+if [[ "language.owl" -nt src/parser.h ]]
+then
+    owl/owl -c language.owl -o src/parser.h
+else
+    echo "...not necessary"
+fi
 
 echo "2/3 Compiling Lizard..."
 docker run --rm -v $PWD:/project -w /project espressif/idf:v4.2 make -j4 || exit 1

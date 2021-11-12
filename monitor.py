@@ -57,11 +57,11 @@ async def send():
         try:
             with patch_stdout():
                 line = await session.prompt_async("> ")
-                checksum = 0
-                for c in line:
-                    checksum ^= ord(c)
-                line += '^%d\n' % checksum
-                port.write(line.encode('utf-8'))
+                #checksum = 0
+                #for c in line:
+                #    checksum ^= ord(c)
+                #line += '^%d' % checksum
+                port.write((line + '\n').encode('utf-8'))
         except (KeyboardInterrupt, EOFError):
             print("Bye!")
             loop.stop()

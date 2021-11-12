@@ -1,34 +1,40 @@
 {
-	"folders": [
-		{
-			"path": "."
-		}
-	],
-	"settings": {
-		"actionButtons": {
-			"commands": [
-				{
-					"cwd": "${workspaceFolder}",
-					"name": "Upload",
-					"color": "white",
-					"singleInstance": true,
-					"command": "./upload.sh"
-				},
-				{
-					"cwd": "${workspaceFolder}",
-					"name": "Monitor",
-					"color": "white",
-					"singleInstance": true,
-					"command": "./monitor.py"
-				},
-				{
-					"cwd": "${workspaceFolder}",
-					"name": "Upload + Monitor",
-					"color": "white",
-					"singleInstance": true,
-					"command": "./upload.sh && ./monitor.py"
-				}
-			]
-		}		
-	}
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "actionButtons": {
+      "commands": [
+        {
+          "cwd": "${workspaceFolder}",
+          "name": "Upload",
+          "color": "white",
+          "singleInstance": true,
+          "command": "./upload.sh"
+        },
+        {
+          "cwd": "${workspaceFolder}",
+          "name": "Monitor",
+          "color": "white",
+          "singleInstance": true,
+          "command": "./monitor.py"
+        },
+        {
+          "cwd": "${workspaceFolder}",
+          "name": "Upload + Monitor",
+          "color": "white",
+          "singleInstance": true,
+          "command": "./upload.sh && ./monitor.py"
+        }
+      ]
+    },
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "[cpp]": {
+      "editor.defaultFormatter": "ms-vscode.cpptools"
+    },
+    "editor.minimap.enabled": false
+  }
 }

@@ -1,37 +1,52 @@
 #include <stdio.h>
-#include "sdkconfig.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_system.h"
-#include "esp_spi_flash.h"
+#include "stdint.h"
+#include "driver/uart.h"
 
-extern "C" {
+#define BUFFER_SIZE 1024
+
+extern "C"
+{
+#include "parser.h"
     void app_main();
 }
 void app_main()
 {
-    printf("Hello world!\n");
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .rx_flow_ctrl_thresh = 0,
+        .use_ref_tick = false,
+    };
+    uart_param_config(UART_NUM_0, &uart_config);
+    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
 
-    esp_chip_info_t chip_info;
-    esp_chip_info(&chip_info);
-    printf("This is %s chip with %d CPU core(s), WiFi%s%s, ",
-            CONFIG_IDF_TARGET,
-            chip_info.cores,
-            (chip_info.features & CHIP_FEATURE_BT) ? "/BT" : "",
-            (chip_info.features & CHIP_FEATURE_BLE) ? "/BLE" : "");
+    char *line = (char *)malloc(BUFFER_SIZE);
+    struct owl_tree *tree;
+    while (true)
+    {
+        int len = uart_read_bytes(UART_NUM_0, (uint8_t *)line, BUFFER_SIZE, 20 / portTICK_RATE_MS);
+        if (len <= 1)
+            continue;
 
-    printf("silicon revision %d, ", chip_info.revision);
-
-    printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
-            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
-
-    printf("Minimum free heap size: %d bytes\n", esp_get_minimum_free_heap_size());
-
-    for (int i = 10; i >= 0; i--) {
-        printf("Restarting in %d seconds...\n", i);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        line[len] = 0;
+        tree = owl_tree_create_from_string(line);
+        struct source_range range;
+        owl_error error = owl_tree_get_error(tree, &range);
+        if (error == ERROR_INVALID_FILE)
+            fprintf(stderr, "error: invalid file");
+        else if (error == ERROR_INVALID_OPTIONS)
+            fprintf(stderr, "error: invalid options");
+        else if (error == ERROR_INVALID_TOKEN)
+            fprintf(stderr, "error: invalid token at range %zu %zu\n", range.start, range.end);
+        else if (error == ERROR_UNEXPECTED_TOKEN)
+            fprintf(stderr, "error: unexpected token at range %zu %zu\n", range.start, range.end);
+        else if (error == ERROR_MORE_INPUT_NEEDED)
+            fprintf(stderr, "error: more input needed at range %zu %zu\n", range.start, range.end);
+        else
+            owl_tree_print(tree);
+        owl_tree_destroy(tree);
     }
-    printf("Restarting now.\n");
-    fflush(stdout);
-    esp_restart();
 }
