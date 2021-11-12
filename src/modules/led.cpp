@@ -1,13 +1,13 @@
-#include "pin.h"
+#include "led.h"
 
-Pin::Pin(gpio_num_t number)
+Led::Led(gpio_num_t number)
 {
     this->number = number;
     gpio_reset_pin(number);
-    gpio_set_direction(number, GPIO_MODE_OUTPUT); // TODO: INPUT or OUTPUT?
+    gpio_set_direction(number, GPIO_MODE_OUTPUT);
 }
 
-void Pin::call(std::string method)
+void Led::call(std::string method)
 {
     if (method == "on")
     {
@@ -16,5 +16,9 @@ void Pin::call(std::string method)
     else if (method == "off")
     {
         gpio_set_level(this->number, 0);
+    }
+    else
+    {
+        printf("error: unknown method \"%s\"\n", method.c_str());
     }
 }

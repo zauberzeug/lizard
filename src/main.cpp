@@ -6,8 +6,9 @@
 #include <string.h>
 #include "driver/uart.h"
 
-#include "module.h"
-#include "pin.h"
+#include "modules/button.h"
+#include "modules/led.h"
+#include "modules/module.h"
 
 #define BUFFER_SIZE 1024
 
@@ -73,18 +74,33 @@ void process_tree(owl_tree *tree)
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
             std::string module_type_string = to_string(module_type.identifier);
             Module *module;
-            if (module_type_string == "Pin")
+            if (module_type_string == "Led")
             {
                 struct parsed_argument argument = parsed_argument_get(constructor.argument);
                 struct parsed_expression expression = parsed_expression_get(argument.expression);
                 if (!expression.number.empty)
                 {
                     struct parsed_number number = parsed_number_get(expression.number);
-                    module = new Pin((gpio_num_t)number.number);
+                    module = new Led((gpio_num_t)number.number);
                 }
                 else
                 {
-                    printf("error: expecting number argument for Pin constructor\n");
+                    printf("error: expecting number argument for Led constructor\n");
+                    return;
+                }
+            }
+            else if (module_type_string == "Button")
+            {
+                struct parsed_argument argument = parsed_argument_get(constructor.argument);
+                struct parsed_expression expression = parsed_expression_get(argument.expression);
+                if (!expression.number.empty)
+                {
+                    struct parsed_number number = parsed_number_get(expression.number);
+                    module = new Button((gpio_num_t)number.number);
+                }
+                else
+                {
+                    printf("error: expecting number argument for Button constructor\n");
                     return;
                 }
             }
@@ -97,7 +113,6 @@ void process_tree(owl_tree *tree)
             {
                 struct parsed_instance instance = parsed_instance_get(constructor.instance);
                 std::string instance_string = to_string(instance.identifier);
-                printf("name: %s\n", instance_string.c_str());
                 if (modules.count(instance_string))
                 {
                     printf("error: module \"%s\" already exists\n", instance_string.c_str());
@@ -166,7 +181,7 @@ void app_main()
     uart_param_config(UART_NUM_0, &uart_config);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
 
-    process_line("blue = Pin(25); green = Pin(26); blue.on");
+    process_line("blue = Led(25); green = Led(26); button = Button(33); button.pullup; blue.on");
 
     char *line = (char *)malloc(BUFFER_SIZE);
     while (true)

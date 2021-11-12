@@ -4,12 +4,12 @@
 
 #include "module.h"
 
-class Pin : public Module
+class Led : public Module
 {
 private:
     gpio_num_t number;
 
 public:
-    Pin(gpio_num_t number);
+    Led(gpio_num_t number);
     void call(std::string method);
 };
