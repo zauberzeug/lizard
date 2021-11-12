@@ -1,6 +1,6 @@
 #pragma once
 
-#include "driver/gpio.h"
+#include <string>
 
 #include "module.h"
 
@@ -11,4 +11,5 @@ private:
 
 public:
     Pin(gpio_num_t number);
+    void call(std::string method);
 };

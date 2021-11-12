@@ -18,6 +18,12 @@ extern "C"
     void app_main();
 }
 
+std::string to_string(struct owl_ref ref)
+{
+    struct parsed_identifier identifier = parsed_identifier_get(ref);
+    return std::string(identifier.identifier, identifier.length);
+}
+
 void process_tree(owl_tree *tree)
 {
     struct parsed_statements statements = owl_tree_get_parsed_statements(tree);
@@ -36,16 +42,26 @@ void process_tree(owl_tree *tree)
         }
         else if (!statement.call.empty)
         {
-            printf("error: calls are not implemented yet\n");
-            return;
+            struct parsed_call call = parsed_call_get(statement.call);
+            struct parsed_instance instance = parsed_instance_get(call.instance);
+            std::string instance_string = to_string(instance.identifier);
+            if (!modules.count(instance_string))
+            {
+                printf("error: unknown module \"%s\"\n", instance_string.c_str());
+                return;
+            }
+            struct parsed_method method = parsed_method_get(call.method);
+            std::string method_string = to_string(method.identifier);
+            printf("Calling %s.%s...\n", instance_string.c_str(), method_string.c_str());
+            modules[instance_string]->call(method_string);
         }
         else if (!statement.constructor.empty)
         {
             struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
-            struct parsed_identifier identifier = parsed_identifier_get(module_type.identifier);
+            std::string module_type_string = to_string(module_type.identifier);
             Module *module;
-            if (strncmp(identifier.identifier, "Pin", identifier.length) == 0)
+            if (module_type_string == "Pin")
             {
                 struct parsed_argument argument = parsed_argument_get(constructor.argument);
                 struct parsed_expression expression = parsed_expression_get(argument.expression);
@@ -63,21 +79,20 @@ void process_tree(owl_tree *tree)
             }
             else
             {
-                printf("error: unknown module type %s\n", identifier.identifier);
+                printf("error: unknown module type \"%s\"\n", module_type_string.c_str());
                 return;
             }
             if (!constructor.instance.empty)
             {
                 struct parsed_instance instance = parsed_instance_get(constructor.instance);
-                struct parsed_identifier identifier = parsed_identifier_get(instance.identifier);
-                std::string name = std::string(identifier.identifier, identifier.length);
-                printf("name: %s\n", name.c_str());
-                if (modules.count(name))
+                std::string instance_string = to_string(instance.identifier);
+                printf("name: %s\n", instance_string.c_str());
+                if (modules.count(instance_string))
                 {
-                    printf("error: module %s already exists\n", name.c_str());
+                    printf("error: module \"%s\" already exists\n", instance_string.c_str());
                     return;
                 }
-                modules[name] = module;
+                modules[instance_string] = module;
             }
         }
         else if (!statement.definition.empty)
@@ -136,7 +151,7 @@ void app_main()
     uart_param_config(UART_NUM_0, &uart_config);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
 
-    process_line("pin1 = Pin(15); pin2 = Pin(32)");
+    process_line("blue = Pin(25); green = Pin(26); blue.on");
 
     char *line = (char *)malloc(BUFFER_SIZE);
     while (true)
