@@ -3,6 +3,8 @@
 #include <string.h>
 #include "driver/uart.h"
 
+#include "pin.h"
+
 #define BUFFER_SIZE 1024
 
 extern "C"
@@ -44,8 +46,8 @@ void process_tree(owl_tree *tree)
                 if (!expression.number.empty)
                 {
                     struct parsed_number number = parsed_number_get(expression.number);
-                    int pin = number.number;
-                    printf("Creating Pin(%d)...\n", pin);
+                    printf("Creating Pin(%.0f)...\n", number.number);
+                    Pin *pin = new Pin((gpio_num_t)number.number);
                 }
                 else
                 {
