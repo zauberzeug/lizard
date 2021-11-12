@@ -1,0 +1,34 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"actionButtons": {
+			"commands": [
+				{
+					"cwd": "${workspaceFolder}",
+					"name": "Upload",
+					"color": "white",
+					"singleInstance": true,
+					"command": "./upload.sh"
+				},
+				{
+					"cwd": "${workspaceFolder}",
+					"name": "Monitor",
+					"color": "white",
+					"singleInstance": true,
+					"command": "./monitor.py"
+				},
+				{
+					"cwd": "${workspaceFolder}",
+					"name": "Upload + Monitor",
+					"color": "white",
+					"singleInstance": true,
+					"command": "./upload.sh && ./monitor.py"
+				}
+			]
+		}		
+	}
+}
