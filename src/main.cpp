@@ -1,5 +1,6 @@
 #include <stdio.h>
-#include "stdint.h"
+#include <stdint.h>
+#include <string.h>
 #include "driver/uart.h"
 
 #define BUFFER_SIZE 1024
@@ -13,35 +14,57 @@ extern "C"
 void process_tree(owl_tree *tree)
 {
     struct parsed_statements statements = owl_tree_get_parsed_statements(tree);
-    for (auto s = statements.statement; !s.empty; s = owl_next(s))
+    for (struct owl_ref r = statements.statement; !r.empty; r = owl_next(r))
     {
-        struct parsed_statement item = parsed_statement_get(s);
-        if (!item.assignment.empty)
+        struct parsed_statement statement = parsed_statement_get(r);
+        if (!statement.assignment.empty)
         {
             printf("error: assignments are not implemented yet\n");
             return;
         }
-        else if (!item.await.empty)
+        else if (!statement.await.empty)
         {
             printf("error: awaits are not implemented yet\n");
             return;
         }
-        else if (!item.call.empty)
+        else if (!statement.call.empty)
         {
             printf("error: calls are not implemented yet\n");
             return;
         }
-        else if (!item.constructor.empty)
+        else if (!statement.constructor.empty)
         {
-            printf("error: constructors are not implemented yet\n");
-            return;
+            struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
+            struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
+            struct parsed_identifier identifier = parsed_identifier_get(module_type.identifier);
+            if (strncmp(identifier.identifier, "Pin", identifier.length) == 0)
+            {
+                struct parsed_argument argument = parsed_argument_get(constructor.argument);
+                struct parsed_expression expression = parsed_expression_get(argument.expression);
+                if (!expression.number.empty)
+                {
+                    struct parsed_number number = parsed_number_get(expression.number);
+                    int pin = number.number;
+                    printf("Creating Pin(%d)...\n", pin);
+                }
+                else
+                {
+                    printf("error: expecting number argument for Pin constructor\n");
+                    return;
+                }
+            }
+            else
+            {
+                printf("error: unknown module type %s\n", identifier.identifier);
+                return;
+            }
         }
-        else if (!item.definition.empty)
+        else if (!statement.definition.empty)
         {
             printf("error: definitions are not implemented yet\n");
             return;
         }
-        else if (!item.rule.empty)
+        else if (!statement.rule.empty)
         {
             printf("error: rules are not implemented yet\n");
             return;
