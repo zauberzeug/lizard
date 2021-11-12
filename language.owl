@@ -8,9 +8,9 @@ statement = (constructor | call | assignment | rule | definition | await) (';')?
 
 constructor = instance '=' module_type '(' argument (',' argument)* ')'
 module_type = identifier
-argument = expression
+argument = number | instance
 
-assignment = (setter | instance) '=' expression
+assignment = setter '=' expression
 
 rule = 'if' condition [ 'then' statements  ('else' statements)? 'end' ]
 
@@ -20,7 +20,7 @@ await = 'await' condition
 
 condition = expression comparison expression
 
-expression = number | instance | getter
+expression = number | getter
 comparison =
   '==' : equal
   '!=' : unequal

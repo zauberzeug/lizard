@@ -53,10 +53,9 @@ void process_tree(owl_tree *tree)
             if (module_type_string == "Led")
             {
                 struct parsed_argument argument = parsed_argument_get(constructor.argument);
-                struct parsed_expression expression = parsed_expression_get(argument.expression);
-                if (!expression.number.empty)
+                if (!argument.number.empty)
                 {
-                    struct parsed_number number = parsed_number_get(expression.number);
+                    struct parsed_number number = parsed_number_get(argument.number);
                     module = new Led((gpio_num_t)number.number);
                 }
                 else
@@ -68,10 +67,9 @@ void process_tree(owl_tree *tree)
             else if (module_type_string == "Button")
             {
                 struct parsed_argument argument = parsed_argument_get(constructor.argument);
-                struct parsed_expression expression = parsed_expression_get(argument.expression);
-                if (!expression.number.empty)
+                if (!argument.number.empty)
                 {
-                    struct parsed_number number = parsed_number_get(expression.number);
+                    struct parsed_number number = parsed_number_get(argument.number);
                     module = new Button((gpio_num_t)number.number);
                 }
                 else
