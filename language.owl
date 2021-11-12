@@ -6,7 +6,7 @@
 statements = statement*
 statement = (constructor | call | assignment | rule | definition | await) (';')?
 
-constructor = (instance '=')? module_type '(' argument (',' argument)* ')'
+constructor = instance '=' module_type '(' argument (',' argument)* ')'
 module_type = identifier
 argument = expression
 

@@ -11,7 +11,7 @@ void Button::call(std::string method)
 {
     if (method == "get")
     {
-        printf("%d\n", gpio_get_level(this->number));
+        printf("%s %d\n", this->name.c_str(), gpio_get_level(this->number));
     }
     else if (method == "pullup")
     {

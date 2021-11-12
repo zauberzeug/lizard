@@ -44,31 +44,7 @@ void process_tree(owl_tree *tree)
     for (struct owl_ref r = statements.statement; !r.empty; r = owl_next(r))
     {
         struct parsed_statement statement = parsed_statement_get(r);
-        if (!statement.assignment.empty)
-        {
-            printf("error: assignments are not implemented yet\n");
-            return;
-        }
-        else if (!statement.await.empty)
-        {
-            printf("error: awaits are not implemented yet\n");
-            return;
-        }
-        else if (!statement.call.empty)
-        {
-            struct parsed_call call = parsed_call_get(statement.call);
-            struct parsed_instance instance = parsed_instance_get(call.instance);
-            std::string instance_string = to_string(instance.identifier);
-            if (!modules.count(instance_string))
-            {
-                printf("error: unknown module \"%s\"\n", instance_string.c_str());
-                return;
-            }
-            struct parsed_method method = parsed_method_get(call.method);
-            std::string method_string = to_string(method.identifier);
-            modules[instance_string]->call(method_string);
-        }
-        else if (!statement.constructor.empty)
+        if (!statement.constructor.empty)
         {
             struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
@@ -109,17 +85,39 @@ void process_tree(owl_tree *tree)
                 printf("error: unknown module type \"%s\"\n", module_type_string.c_str());
                 return;
             }
-            if (!constructor.instance.empty)
+            struct parsed_instance instance = parsed_instance_get(constructor.instance);
+            std::string instance_string = to_string(instance.identifier);
+            if (modules.count(instance_string))
             {
-                struct parsed_instance instance = parsed_instance_get(constructor.instance);
-                std::string instance_string = to_string(instance.identifier);
-                if (modules.count(instance_string))
-                {
-                    printf("error: module \"%s\" already exists\n", instance_string.c_str());
-                    return;
-                }
-                modules[instance_string] = module;
+                printf("error: module \"%s\" already exists\n", instance_string.c_str());
+                return;
             }
+            modules[instance_string] = module;
+            module->name = instance_string;
+        }
+        else if (!statement.call.empty)
+        {
+            struct parsed_call call = parsed_call_get(statement.call);
+            struct parsed_instance instance = parsed_instance_get(call.instance);
+            std::string instance_string = to_string(instance.identifier);
+            if (!modules.count(instance_string))
+            {
+                printf("error: unknown module \"%s\"\n", instance_string.c_str());
+                return;
+            }
+            struct parsed_method method = parsed_method_get(call.method);
+            std::string method_string = to_string(method.identifier);
+            modules[instance_string]->call(method_string);
+        }
+        else if (!statement.assignment.empty)
+        {
+            printf("error: assignments are not implemented yet\n");
+            return;
+        }
+        else if (!statement.await.empty)
+        {
+            printf("error: awaits are not implemented yet\n");
+            return;
         }
         else if (!statement.definition.empty)
         {

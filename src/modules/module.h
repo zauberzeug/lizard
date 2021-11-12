@@ -5,5 +5,6 @@
 class Module
 {
 public:
+    std::string name;
     virtual void call(std::string method) = 0;
 };
