@@ -1,0 +1,15 @@
+#using owl.v4
+
+face = eyes nose mouth
+eyes =
+  ':' : normal
+  ';' : winking
+nose =
+  '' : none
+  '-' : straight
+  '^' : pointy
+  '*' : clown
+mouth =
+  ')' : smile
+  '(' : frown
+  'D' : open-smile

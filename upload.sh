@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 
+echo "1/3 Generating parser..."
+owl/owl -c language.owl -o src/parser.h
+
+echo "2/3 Compiling Lizard..."
 docker run --rm -v $PWD:/project -w /project espressif/idf:v4.2 make -j4 || exit 1
+
+echo "3/3 Flash microcontroller..."
 esptool.py \
     --chip esp32 \
     --port /dev/tty.SLAB_USBtoUART \
