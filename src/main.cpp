@@ -1,3 +1,4 @@
+#include <chrono>
 #include <map>
 #include <stdio.h>
 #include <stdint.h>
@@ -16,6 +17,18 @@ extern "C"
 {
 #include "parser.h"
     void app_main();
+}
+
+std::chrono::_V2::system_clock::time_point t;
+void tic()
+{
+    t = std::chrono::high_resolution_clock::now();
+}
+void toc(const char *msg)
+{
+    auto dt = std::chrono::high_resolution_clock::now() - t;
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(dt);
+    printf("%s took %.3f ms\n", msg, 0.001 * us.count());
 }
 
 std::string to_string(struct owl_ref ref)
@@ -52,7 +65,6 @@ void process_tree(owl_tree *tree)
             }
             struct parsed_method method = parsed_method_get(call.method);
             std::string method_string = to_string(method.identifier);
-            printf("Calling %s.%s...\n", instance_string.c_str(), method_string.c_str());
             modules[instance_string]->call(method_string);
         }
         else if (!statement.constructor.empty)
@@ -68,7 +80,6 @@ void process_tree(owl_tree *tree)
                 if (!expression.number.empty)
                 {
                     struct parsed_number number = parsed_number_get(expression.number);
-                    printf("Creating Pin(%.0f)...\n", number.number);
                     module = new Pin((gpio_num_t)number.number);
                 }
                 else
@@ -116,7 +127,9 @@ void process_tree(owl_tree *tree)
 void process_line(const char *line)
 {
     printf(">> %s\n", line);
+    tic();
     struct owl_tree *tree = owl_tree_create_from_string(line);
+    toc("Tree creation");
     struct source_range range;
     owl_error error = owl_tree_get_error(tree, &range);
     if (error == ERROR_INVALID_FILE)
@@ -132,7 +145,9 @@ void process_line(const char *line)
     else
     {
         owl_tree_print(tree);
+        tic();
         process_tree(tree);
+        toc("Tree traversal");
     }
     owl_tree_destroy(tree);
 }
