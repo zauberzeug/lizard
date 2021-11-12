@@ -12,4 +12,5 @@ private:
 public:
     Button(gpio_num_t number);
     void call(std::string method);
+    std::string get_output();
 };

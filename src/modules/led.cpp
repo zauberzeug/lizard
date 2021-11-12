@@ -19,6 +19,6 @@ void Led::call(std::string method)
     }
     else
     {
-        printf("error: unknown method \"%s\"\n", method.c_str());
+        Module::call(method);
     }
 }

@@ -190,5 +190,10 @@ void app_main()
             line[len] = 0;
             process_line(line);
         }
+
+        for (auto const &item : modules)
+        {
+            item.second->step();
+        }
     }
 }

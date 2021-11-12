@@ -23,6 +23,13 @@ void Button::call(std::string method)
     }
     else
     {
-        printf("error: unknown method \"%s\"\n", method.c_str());
+        Module::call(method);
     }
+}
+
+std::string Button::get_output()
+{
+    char buffer[256];
+    std::sprintf(buffer, "%d", gpio_get_level(this->number));
+    return buffer;
 }
