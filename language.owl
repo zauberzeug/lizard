@@ -1,15 +1,34 @@
 #using owl.v4
 
-face = eyes nose mouth
-eyes =
-  ':' : normal
-  ';' : winking
-nose =
-  '' : none
-  '-' : straight
-  '^' : pointy
-  '*' : clown
-mouth =
-  ')' : smile
-  '(' : frown
-  'D' : open-smile
+.whitespace ' ' '\t' '\n'
+.line-comment-token '//'
+
+statements = statement*
+statement = (constructor | call | assignment | rule | definition | await) (';')?
+
+constructor = (instance '=')? module_type '(' argument (',' argument)* ')'
+module_type = identifier
+argument = expression
+
+assignment = (setter | instance) '=' expression
+
+rule = 'if' condition [ 'then' statements  ('else' statements)? 'end' ]
+
+definition = instance [ ':=' statements 'end' ]
+
+await = 'await' condition
+
+condition = expression comparison expression
+
+expression = number | instance | getter
+comparison =
+  '==' : equal
+  '!=' : unequal
+
+setter = instance '.' property
+getter = instance '.' property
+call = instance '.' method
+
+instance = identifier
+property = identifier
+method = identifier

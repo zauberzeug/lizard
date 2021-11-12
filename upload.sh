@@ -4,8 +4,13 @@ echo "1/3 Generating parser..."
 if [[ "language.owl" -nt src/parser.h ]]
 then
     owl/owl -c language.owl -o src/parser.h
+    if [[ $? -ne 0 ]]
+    then
+        rm -f src/parser.h 
+        exit 1
+    fi
 else
-    echo "...not necessary"
+    echo "Nothing to do."
 fi
 
 echo "2/3 Compiling Lizard..."
