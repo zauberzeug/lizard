@@ -2,7 +2,9 @@
 
 #include "driver/gpio.h"
 
-class Pin
+#include "module.h"
+
+class Pin : public Module
 {
 private:
     gpio_num_t number;

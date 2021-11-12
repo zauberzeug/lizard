@@ -1,11 +1,16 @@
+#include <map>
 #include <stdio.h>
 #include <stdint.h>
+#include <string>
 #include <string.h>
 #include "driver/uart.h"
 
+#include "module.h"
 #include "pin.h"
 
 #define BUFFER_SIZE 1024
+
+std::map<std::string, Module *> modules;
 
 extern "C"
 {
@@ -39,6 +44,7 @@ void process_tree(owl_tree *tree)
             struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
             struct parsed_identifier identifier = parsed_identifier_get(module_type.identifier);
+            Module *module;
             if (strncmp(identifier.identifier, "Pin", identifier.length) == 0)
             {
                 struct parsed_argument argument = parsed_argument_get(constructor.argument);
@@ -47,7 +53,7 @@ void process_tree(owl_tree *tree)
                 {
                     struct parsed_number number = parsed_number_get(expression.number);
                     printf("Creating Pin(%.0f)...\n", number.number);
-                    Pin *pin = new Pin((gpio_num_t)number.number);
+                    module = new Pin((gpio_num_t)number.number);
                 }
                 else
                 {
@@ -59,6 +65,19 @@ void process_tree(owl_tree *tree)
             {
                 printf("error: unknown module type %s\n", identifier.identifier);
                 return;
+            }
+            if (!constructor.instance.empty)
+            {
+                struct parsed_instance instance = parsed_instance_get(constructor.instance);
+                struct parsed_identifier identifier = parsed_identifier_get(instance.identifier);
+                std::string name = std::string(identifier.identifier, identifier.length);
+                printf("name: %s\n", name.c_str());
+                if (modules.count(name))
+                {
+                    printf("error: module %s already exists\n", name.c_str());
+                    return;
+                }
+                modules[name] = module;
             }
         }
         else if (!statement.definition.empty)
