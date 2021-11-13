@@ -83,48 +83,43 @@ void process_tree(owl_tree *tree)
                 printf("error: unknown module type \"%s\"\n", module_type_string.c_str());
                 return;
             }
-            struct parsed_instance instance = parsed_instance_get(constructor.instance);
-            std::string instance_string = to_string(instance.identifier);
-            if (modules.count(instance_string))
+            struct parsed_module_name module_name = parsed_module_name_get(constructor.module_name);
+            std::string module_name_string = to_string(module_name.identifier);
+            if (modules.count(module_name_string))
             {
-                printf("error: module \"%s\" already exists\n", instance_string.c_str());
+                printf("error: module \"%s\" already exists\n", module_name_string.c_str());
                 return;
             }
-            modules[instance_string] = module;
-            module->name = instance_string;
+            modules[module_name_string] = module;
+            module->name = module_name_string;
         }
-        else if (!statement.call.empty)
+        else if (!statement.method_call.empty)
         {
-            struct parsed_call call = parsed_call_get(statement.call);
-            struct parsed_instance instance = parsed_instance_get(call.instance);
-            std::string instance_string = to_string(instance.identifier);
-            if (!modules.count(instance_string))
+            struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
+            struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
+            std::string module_name_string = to_string(module_name.identifier);
+            if (!modules.count(module_name_string))
             {
-                printf("error: unknown module \"%s\"\n", instance_string.c_str());
+                printf("error: unknown module \"%s\"\n", module_name_string.c_str());
                 return;
             }
-            struct parsed_method method = parsed_method_get(call.method);
+            struct parsed_method method = parsed_method_get(method_call.method);
             std::string method_string = to_string(method.identifier);
-            modules[instance_string]->call(method_string);
+            modules[module_name_string]->call(method_string);
         }
         else if (!statement.assignment.empty)
         {
             printf("error: assignments are not implemented yet\n");
             return;
         }
-        else if (!statement.await.empty)
+        else if (!statement.routine_definition.empty)
         {
-            printf("error: awaits are not implemented yet\n");
+            printf("error: routine definitions are not implemented yet\n");
             return;
         }
-        else if (!statement.definition.empty)
+        else if (!statement.rule_definition.empty)
         {
-            printf("error: definitions are not implemented yet\n");
-            return;
-        }
-        else if (!statement.rule.empty)
-        {
-            printf("error: rules are not implemented yet\n");
+            printf("error: rule definitions are not implemented yet\n");
             return;
         }
         else

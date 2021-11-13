@@ -4,31 +4,35 @@
 .line-comment-token '//'
 
 statements = statement*
-statement = (constructor | call | assignment | rule | definition | await) (';')?
+statement = (constructor | method_call | assignment | routine_definition | rule_definition) (';')?
 
-constructor = instance '=' module_type '(' argument (',' argument)* ')'
+actions = action*
+action = (method_call | assignment | await) (';')?
+
+constructor = module_name '=' module_type '(' argument (',' argument)* ')'
 module_type = identifier
-argument = number | instance
+argument = number | module_name
 
-assignment = setter '=' expression
+assignment = property_setter '=' expression
 
-rule = 'if' condition [ 'then' statements  ('else' statements)? 'end' ]
+rule_definition = 'when' condition [ 'then' actions  ('else' actions)? 'end' ]
 
-definition = instance [ ':=' statements 'end' ]
+routine_definition = routine_name [ ':=' actions 'end' ]
 
 await = 'await' condition
 
 condition = expression comparison expression
 
-expression = number | getter
+expression = number | property_getter
 comparison =
   '==' : equal
   '!=' : unequal
 
-setter = instance '.' property
-getter = instance '.' property
-call = instance '.' method
+property_setter = module_name '.' property
+property_getter = module_name '.' property
+method_call = (module_name '.' method | routine_name)
 
-instance = identifier
+module_name = identifier
+routine_name = identifier
 property = identifier
 method = identifier
