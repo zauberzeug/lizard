@@ -4,10 +4,10 @@
 .line-comment-token '//'
 
 statements = statement*
-statement = (constructor | method_call | assignment | routine_definition | rule_definition) (';')?
+statement = (constructor | method_call | routine_name | assignment | routine_definition | rule_definition) (';')?
 
 actions = action*
-action = (method_call | assignment | await) (';')?
+action = (method_call | routine_name | assignment | await) (';')?
 
 constructor = module_name '=' module_type '(' argument (',' argument)* ')'
 module_type = identifier
@@ -30,7 +30,7 @@ comparison =
 
 property_setter = module_name '.' property
 property_getter = module_name '.' property
-method_call = (module_name '.' method | routine_name)
+method_call = module_name '.' method
 
 module_name = identifier
 routine_name = identifier

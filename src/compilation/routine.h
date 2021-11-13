@@ -7,4 +7,5 @@ class Routine
 {
 public:
     std::list<Action *> actions;
+    void run();
 };

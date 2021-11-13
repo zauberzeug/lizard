@@ -110,6 +110,17 @@ void process_tree(owl_tree *tree)
             std::string method_string = to_string(method.identifier);
             modules[module_name_string]->call(method_string);
         }
+        else if (!statement.routine_name.empty)
+        {
+            struct parsed_routine_name routine_name = parsed_routine_name_get(statement.routine_name);
+            std::string routine_name_string = to_string(routine_name.identifier);
+            if (!routines.count(routine_name_string))
+            {
+                printf("error: unknown routine \"%s\"\n", routine_name_string.c_str());
+                return;
+            }
+            routines[routine_name_string]->run();
+        }
         else if (!statement.assignment.empty)
         {
             printf("error: assignments are not implemented yet\n");
