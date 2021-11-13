@@ -6,6 +6,8 @@
 #include <string.h>
 #include "driver/uart.h"
 
+#include "compilation/routine.h"
+#include "compilation/method_call.h"
 #include "modules/button.h"
 #include "modules/led.h"
 #include "modules/module.h"
@@ -13,6 +15,7 @@
 #define BUFFER_SIZE 1024
 
 std::map<std::string, Module *> modules;
+std::map<std::string, Routine *> routines;
 
 extern "C"
 {
@@ -47,6 +50,13 @@ void process_tree(owl_tree *tree)
         if (!statement.constructor.empty)
         {
             struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
+            struct parsed_module_name module_name = parsed_module_name_get(constructor.module_name);
+            std::string module_name_string = to_string(module_name.identifier);
+            if (modules.count(module_name_string))
+            {
+                printf("error: module \"%s\" already exists\n", module_name_string.c_str());
+                return;
+            }
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
             std::string module_type_string = to_string(module_type.identifier);
             Module *module;
@@ -83,13 +93,6 @@ void process_tree(owl_tree *tree)
                 printf("error: unknown module type \"%s\"\n", module_type_string.c_str());
                 return;
             }
-            struct parsed_module_name module_name = parsed_module_name_get(constructor.module_name);
-            std::string module_name_string = to_string(module_name.identifier);
-            if (modules.count(module_name_string))
-            {
-                printf("error: module \"%s\" already exists\n", module_name_string.c_str());
-                return;
-            }
             modules[module_name_string] = module;
             module->name = module_name_string;
         }
@@ -114,8 +117,40 @@ void process_tree(owl_tree *tree)
         }
         else if (!statement.routine_definition.empty)
         {
-            printf("error: routine definitions are not implemented yet\n");
-            return;
+            struct parsed_routine_definition routine_definition = parsed_routine_definition_get(statement.routine_definition);
+            struct parsed_routine_name routine_name = parsed_routine_name_get(routine_definition.routine_name);
+            std::string routine_name_string = to_string(routine_name.identifier);
+            if (routines.count(routine_name_string))
+            {
+                printf("error: routine \"%s\" already exists\n", routine_name_string.c_str());
+                return;
+            }
+            Routine *routine = new Routine();
+            struct parsed_actions actions = parsed_actions_get(routine_definition.actions);
+            for (struct owl_ref r = actions.action; !r.empty; r = owl_next(r))
+            {
+                struct parsed_action action = parsed_action_get(r);
+                if (!action.method_call.empty)
+                {
+                    struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
+                    struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
+                    std::string module_name_string = to_string(module_name.identifier);
+                    if (!modules.count(module_name_string))
+                    {
+                        printf("error: unknown module \"%s\"\n", module_name_string.c_str());
+                        return;
+                    }
+                    struct parsed_method method = parsed_method_get(method_call.method);
+                    std::string method_string = to_string(method.identifier);
+                    routine->actions.push_back(new MethodCall(modules[module_name_string], method_string));
+                }
+                else
+                {
+                    printf("error: within routine defintions only method calls are implemented yet\n");
+                    return;
+                }
+            }
+            routines[routine_name_string] = routine;
         }
         else if (!statement.rule_definition.empty)
         {
@@ -173,6 +208,7 @@ void app_main()
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
 
     process_line("blue = Led(25); green = Led(26); button = Button(33); button.pullup; blue.on");
+    process_line("all_on := blue.on; green.on; end");
 
     char *line = (char *)malloc(BUFFER_SIZE);
     while (true)
