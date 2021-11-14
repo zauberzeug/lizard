@@ -5,7 +5,10 @@
 
 class Routine
 {
-public:
+private:
     std::list<Action *> actions;
+
+public:
+    Routine(std::list<Action *> actions);
     void run();
 };

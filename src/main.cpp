@@ -54,6 +54,36 @@ std::vector<double> get_arguments(struct owl_ref ref)
     return arguments;
 }
 
+std::list<Action *> get_actions(struct owl_ref ref)
+{
+    std::list<Action *> actions;
+    for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
+    {
+        struct parsed_action action = parsed_action_get(r);
+        if (!action.method_call.empty)
+        {
+            struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
+            struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
+            std::string module_name_string = to_string(module_name.identifier);
+            if (!modules.count(module_name_string))
+            {
+                printf("error: unknown module \"%s\"\n", module_name_string.c_str());
+                break;
+            }
+            struct parsed_method method = parsed_method_get(method_call.method);
+            std::string method_string = to_string(method.identifier);
+            std::vector<double> arguments = get_arguments(method_call.argument);
+            actions.push_back(new MethodCall(modules[module_name_string], method_string, arguments));
+        }
+        else
+        {
+            printf("error: within routine defintions only method calls are implemented yet\n");
+            break;
+        }
+    }
+    return actions;
+}
+
 void process_tree(owl_tree *tree)
 {
     struct parsed_statements statements = owl_tree_get_parsed_statements(tree);
@@ -123,33 +153,8 @@ void process_tree(owl_tree *tree)
                 printf("error: routine \"%s\" already exists\n", routine_name_string.c_str());
                 return;
             }
-            Routine *routine = new Routine();
             struct parsed_actions actions = parsed_actions_get(routine_definition.actions);
-            for (struct owl_ref r = actions.action; !r.empty; r = owl_next(r))
-            {
-                struct parsed_action action = parsed_action_get(r);
-                if (!action.method_call.empty)
-                {
-                    struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
-                    struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
-                    std::string module_name_string = to_string(module_name.identifier);
-                    if (!modules.count(module_name_string))
-                    {
-                        printf("error: unknown module \"%s\"\n", module_name_string.c_str());
-                        return;
-                    }
-                    struct parsed_method method = parsed_method_get(method_call.method);
-                    std::string method_string = to_string(method.identifier);
-                    std::vector<double> arguments = get_arguments(method_call.argument);
-                    routine->actions.push_back(new MethodCall(modules[module_name_string], method_string, arguments));
-                }
-                else
-                {
-                    printf("error: within routine defintions only method calls are implemented yet\n");
-                    return;
-                }
-            }
-            routines[routine_name_string] = routine;
+            routines[routine_name_string] = new Routine(get_actions(actions.action));
         }
         else if (!statement.rule_definition.empty)
         {
