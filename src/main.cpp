@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string>
 #include <string.h>
+#include <vector>
 #include "driver/uart.h"
 
 #include "compilation/routine.h"
@@ -41,6 +42,18 @@ std::string to_string(struct owl_ref ref)
     return std::string(identifier.identifier, identifier.length);
 }
 
+std::vector<double> get_arguments(struct owl_ref ref)
+{
+    std::vector<double> arguments;
+    for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
+    {
+        struct parsed_argument argument = parsed_argument_get(r);
+        struct parsed_number number = parsed_number_get(argument.number);
+        arguments.push_back(number.number);
+    }
+    return arguments;
+}
+
 void process_tree(owl_tree *tree)
 {
     struct parsed_statements statements = owl_tree_get_parsed_statements(tree);
@@ -59,38 +72,11 @@ void process_tree(owl_tree *tree)
             }
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
             std::string module_type_string = to_string(module_type.identifier);
-            Module *module;
-            if (module_type_string == "Led")
+            std::vector<double> arguments = get_arguments(constructor.argument);
+            Module *module = Module::create(module_type_string, arguments);
+            if (module == nullptr)
             {
-                struct parsed_argument argument = parsed_argument_get(constructor.argument);
-                if (!argument.number.empty)
-                {
-                    struct parsed_number number = parsed_number_get(argument.number);
-                    module = new Led((gpio_num_t)number.number);
-                }
-                else
-                {
-                    printf("error: expecting number argument for Led constructor\n");
-                    return;
-                }
-            }
-            else if (module_type_string == "Button")
-            {
-                struct parsed_argument argument = parsed_argument_get(constructor.argument);
-                if (!argument.number.empty)
-                {
-                    struct parsed_number number = parsed_number_get(argument.number);
-                    module = new Button((gpio_num_t)number.number);
-                }
-                else
-                {
-                    printf("error: expecting number argument for Button constructor\n");
-                    return;
-                }
-            }
-            else
-            {
-                printf("error: unknown module type \"%s\"\n", module_type_string.c_str());
+                printf("error: could not create module\n");
                 return;
             }
             modules[module_name_string] = module;
@@ -108,7 +94,8 @@ void process_tree(owl_tree *tree)
             }
             struct parsed_method method = parsed_method_get(method_call.method);
             std::string method_string = to_string(method.identifier);
-            modules[module_name_string]->call(method_string);
+            std::vector<double> arguments = get_arguments(method_call.argument);
+            modules[module_name_string]->call(method_string, arguments);
         }
         else if (!statement.routine_name.empty)
         {
@@ -153,7 +140,8 @@ void process_tree(owl_tree *tree)
                     }
                     struct parsed_method method = parsed_method_get(method_call.method);
                     std::string method_string = to_string(method.identifier);
-                    routine->actions.push_back(new MethodCall(modules[module_name_string], method_string));
+                    std::vector<double> arguments = get_arguments(method_call.argument);
+                    routine->actions.push_back(new MethodCall(modules[module_name_string], method_string, arguments));
                 }
                 else
                 {
@@ -218,8 +206,8 @@ void app_main()
     uart_param_config(UART_NUM_0, &uart_config);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
 
-    process_line("blue = Led(25); green = Led(26); button = Button(33); button.pullup; blue.on");
-    process_line("all_on := blue.on; green.on; end");
+    process_line("blue = Led(25); green = Led(26); button = Button(33); button.pullup(); blue.on()");
+    process_line("all_on := blue.on(); green.on(); end");
 
     char *line = (char *)malloc(BUFFER_SIZE);
     while (true)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "module.h"
 
@@ -11,6 +12,6 @@ private:
 
 public:
     Button(gpio_num_t number);
-    void call(std::string method);
+    void call(std::string method, std::vector<double> arguments);
     std::string get_output();
 };

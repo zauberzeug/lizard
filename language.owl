@@ -9,9 +9,8 @@ statement = (constructor | method_call | routine_name | assignment | routine_def
 actions = action*
 action = (method_call | routine_name | assignment | await) (';')?
 
-constructor = module_name '=' module_type '(' argument (',' argument)* ')'
+constructor = module_name '=' module_type '(' ( argument (',' argument)* )? ')'
 module_type = identifier
-argument = number | module_name
 
 assignment = property_setter '=' expression
 
@@ -30,8 +29,9 @@ comparison =
 
 property_setter = module_name '.' property
 property_getter = module_name '.' property
-method_call = module_name '.' method
+method_call = module_name '.' method '(' ( argument (',' argument)* )? ')'
 
+argument = number
 module_name = identifier
 routine_name = identifier
 property = identifier
