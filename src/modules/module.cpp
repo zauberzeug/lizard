@@ -68,6 +68,12 @@ void Module::call(std::string method, std::vector<double> arguments)
     }
 }
 
+double Module::get(std::string property_name)
+{
+    printf("error: unknown property \"%s\"\n", property_name.c_str());
+    return 0;
+}
+
 std::string Module::get_output()
 {
     return "";

@@ -42,6 +42,18 @@ void Button::call(std::string method, std::vector<double> arguments)
     }
 }
 
+double Button::get(std::string property_name)
+{
+    if (property_name == "level")
+    {
+        return gpio_get_level(this->number);
+    }
+    else
+    {
+        return Module::get(property_name);
+    }
+}
+
 std::string Button::get_output()
 {
     char buffer[256];

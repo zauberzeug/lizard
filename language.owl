@@ -27,12 +27,12 @@ comparison =
   '==' : equal
   '!=' : unequal
 
-property_setter = module_name '.' property
-property_getter = module_name '.' property
+property_setter = module_name '.' property_name
+property_getter = module_name '.' property_name
 method_call = module_name '.' method '(' ( argument (',' argument)* )? ')'
 
 argument = number
 module_name = identifier
 routine_name = identifier
-property = identifier
+property_name = identifier
 method = identifier

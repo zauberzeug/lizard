@@ -13,5 +13,6 @@ private:
 public:
     Button(gpio_num_t number);
     void call(std::string method, std::vector<double> arguments);
+    double get(std::string property_name);
     std::string get_output();
 };

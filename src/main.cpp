@@ -1,4 +1,5 @@
 #include <chrono>
+#include <list>
 #include <map>
 #include <stdio.h>
 #include <stdint.h>
@@ -7,8 +8,9 @@
 #include <vector>
 #include "driver/uart.h"
 
-#include "compilation/routine.h"
 #include "compilation/method_call.h"
+#include "compilation/routine.h"
+#include "compilation/rule.h"
 #include "modules/button.h"
 #include "modules/led.h"
 #include "modules/module.h"
@@ -17,6 +19,7 @@
 
 std::map<std::string, Module *> modules;
 std::map<std::string, Routine *> routines;
+std::list<Rule *> rules;
 
 extern "C"
 {
@@ -42,7 +45,7 @@ std::string to_string(struct owl_ref ref)
     return std::string(identifier.identifier, identifier.length);
 }
 
-std::vector<double> get_arguments(struct owl_ref ref)
+std::vector<double> compile_arguments(struct owl_ref ref)
 {
     std::vector<double> arguments;
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
@@ -54,7 +57,7 @@ std::vector<double> get_arguments(struct owl_ref ref)
     return arguments;
 }
 
-std::list<Action *> get_actions(struct owl_ref ref)
+std::list<Action *> compile_actions(struct owl_ref ref)
 {
     std::list<Action *> actions;
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
@@ -72,7 +75,7 @@ std::list<Action *> get_actions(struct owl_ref ref)
             }
             struct parsed_method method = parsed_method_get(method_call.method);
             std::string method_string = to_string(method.identifier);
-            std::vector<double> arguments = get_arguments(method_call.argument);
+            std::vector<double> arguments = compile_arguments(method_call.argument);
             actions.push_back(new MethodCall(modules[module_name_string], method_string, arguments));
         }
         else
@@ -82,6 +85,39 @@ std::list<Action *> get_actions(struct owl_ref ref)
         }
     }
     return actions;
+}
+
+Expression *compile_expression(struct owl_ref ref)
+{
+    struct parsed_expression expression = parsed_expression_get(ref);
+    if (!expression.number.empty)
+    {
+        struct parsed_number number = parsed_number_get(expression.number);
+        return new ConstExpression(number.number);
+    }
+    if (!expression.property_getter.empty)
+    {
+        struct parsed_property_getter property_getter = parsed_property_getter_get(expression.property_getter);
+        struct parsed_module_name module_name = parsed_module_name_get(property_getter.module_name);
+        std::string module_name_string = to_string(module_name.identifier);
+        if (!modules.count(module_name_string))
+        {
+            printf("error: unknown module \"%s\"\n", module_name_string.c_str());
+            return nullptr;
+        }
+        struct parsed_property_name property_name = parsed_property_name_get(property_getter.property_name);
+        std::string property_name_string = to_string(property_name.identifier);
+        return new PropertyGetterExpression(modules[module_name_string], property_name_string);
+    }
+    printf("error: invalid expression in range \"%d\"-\"%d\"\n", expression.range.start, expression.range.end);
+    return nullptr;
+}
+
+Condition *compile_condition(struct owl_ref ref)
+{
+    struct parsed_condition condition = parsed_condition_get(ref);
+    bool equality = parsed_comparison_get(condition.comparison).type == PARSED_EQUAL;
+    return new Condition(compile_expression(condition.expression), compile_expression(owl_next(condition.expression)), equality);
 }
 
 void process_tree(owl_tree *tree)
@@ -102,7 +138,7 @@ void process_tree(owl_tree *tree)
             }
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
             std::string module_type_string = to_string(module_type.identifier);
-            std::vector<double> arguments = get_arguments(constructor.argument);
+            std::vector<double> arguments = compile_arguments(constructor.argument);
             Module *module = Module::create(module_type_string, arguments);
             if (module == nullptr)
             {
@@ -124,7 +160,7 @@ void process_tree(owl_tree *tree)
             }
             struct parsed_method method = parsed_method_get(method_call.method);
             std::string method_string = to_string(method.identifier);
-            std::vector<double> arguments = get_arguments(method_call.argument);
+            std::vector<double> arguments = compile_arguments(method_call.argument);
             modules[module_name_string]->call(method_string, arguments);
         }
         else if (!statement.routine_name.empty)
@@ -154,11 +190,13 @@ void process_tree(owl_tree *tree)
                 return;
             }
             struct parsed_actions actions = parsed_actions_get(routine_definition.actions);
-            routines[routine_name_string] = new Routine(get_actions(actions.action));
+            routines[routine_name_string] = new Routine(compile_actions(actions.action));
         }
         else if (!statement.rule_definition.empty)
         {
-            printf("error: rule definitions are not implemented yet\n");
+            struct parsed_rule_definition rule_definition = parsed_rule_definition_get(statement.rule_definition);
+            struct parsed_actions actions = parsed_actions_get(rule_definition.actions);
+            rules.push_back(new Rule(compile_condition(rule_definition.condition), new Routine(compile_actions(actions.action))));
             return;
         }
         else
@@ -213,6 +251,7 @@ void app_main()
 
     process_line("blue = Led(25); green = Led(26); button = Button(33); button.pullup(); blue.on()");
     process_line("all_on := blue.on(); green.on(); end");
+    process_line("when button.level == 0 then blue.off(); end");
 
     char *line = (char *)malloc(BUFFER_SIZE);
     while (true)
@@ -227,6 +266,14 @@ void app_main()
         for (auto const &item : modules)
         {
             item.second->step();
+        }
+
+        for (auto const &rule : rules)
+        {
+            if (rule->condition->evaluate())
+            {
+                rule->routine->run();
+            }
         }
     }
 }
