@@ -163,9 +163,10 @@ void process_tree(owl_tree *tree)
             std::vector<double> arguments = compile_arguments(method_call.argument);
             modules[module_name_string]->call(method_string, arguments);
         }
-        else if (!statement.routine_name.empty)
+        else if (!statement.routine_call.empty)
         {
-            struct parsed_routine_name routine_name = parsed_routine_name_get(statement.routine_name);
+            struct parsed_routine_call routine_call = parsed_routine_call_get(statement.routine_call);
+            struct parsed_routine_name routine_name = parsed_routine_name_get(routine_call.routine_name);
             std::string routine_name_string = to_string(routine_name.identifier);
             if (!routines.count(routine_name_string))
             {
