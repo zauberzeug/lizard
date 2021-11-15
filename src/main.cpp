@@ -175,6 +175,22 @@ void process_tree(owl_tree *tree)
             }
             routines[routine_name_string]->run();
         }
+        else if (!statement.property_getter.empty)
+        {
+            struct parsed_property_getter property_getter = parsed_property_getter_get(statement.property_getter);
+            struct parsed_module_name module_name = parsed_module_name_get(property_getter.module_name);
+            std::string module_name_string = to_string(module_name.identifier);
+            if (!modules.count(module_name_string))
+            {
+                printf("error: unknown module \"%s\"\n", module_name_string.c_str());
+                break;
+            }
+            struct parsed_property_name property_name = parsed_property_name_get(property_getter.property_name);
+            std::string property_name_string = to_string(property_name.identifier);
+            double value = modules[module_name_string]->get(property_name_string);
+            printf("%s.%s = %f\n", module_name_string.c_str(), property_name_string.c_str(), value);
+            return;
+        }
         else if (!statement.assignment.empty)
         {
             printf("error: assignments are not implemented yet\n");
@@ -253,6 +269,7 @@ void app_main()
     process_line("blue = Led(25); green = Led(26); button = Button(33); button.pullup(); blue.on()");
     process_line("all_on := blue.on(); green.on(); end");
     process_line("when button.level == 0 then blue.off(); end");
+    process_line("button.level");
 
     char *line = (char *)malloc(BUFFER_SIZE);
     while (true)

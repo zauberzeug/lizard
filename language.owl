@@ -4,10 +4,23 @@
 .line-comment-token '//'
 
 statements = statement*
-statement = (constructor | method_call | routine_call | assignment | routine_definition | rule_definition) (';')?
+statement = (
+  constructor |
+  method_call |
+  routine_call |
+  property_getter |
+  assignment |
+  routine_definition |
+  rule_definition
+) (';')?
 
 actions = action*
-action = (method_call | routine_call | assignment | await) (';')?
+action = (
+  method_call |
+  routine_call |
+  assignment |
+  await
+) (';')?
 
 constructor = module_name '=' module_type '(' ( argument (',' argument)* )? ')'
 module_type = identifier
