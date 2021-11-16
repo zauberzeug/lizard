@@ -5,6 +5,7 @@
 #include "led.h"
 #include "roboclaw.h"
 #include "serial.h"
+#include "../global.h"
 
 Module::Module(ModuleType type, std::string name)
 {
@@ -12,10 +13,7 @@ Module::Module(ModuleType type, std::string name)
     this->name = name;
 }
 
-Module *Module::create(std::string type,
-                       std::string name,
-                       std::vector<Argument *> arguments,
-                       std::map<std::string, Module *> existing_modules)
+Module *Module::create(std::string type, std::string name, std::vector<Argument *> arguments)
 {
     if (type == "Led")
     {
@@ -64,17 +62,17 @@ Module *Module::create(std::string type,
             return nullptr;
         }
         std::string serial_name = arguments[0]->identifier_value;
-        if (!existing_modules.count(serial_name))
+        if (!Global::modules.count(serial_name))
         {
             printf("error: unknown module \"%s\"\n", serial_name.c_str());
             return nullptr;
         }
-        if (existing_modules[serial_name]->type != serial)
+        if (Global::modules[serial_name]->type != serial)
         {
             printf("error: module \"%s\" is no serial connection\n", serial_name.c_str());
             return nullptr;
         }
-        Serial *serial = (Serial *)(existing_modules[serial_name]);
+        Serial *serial = (Serial *)(Global::modules[serial_name]);
         uint8_t address = arguments[1]->number_value;
         return new RoboClaw(name, serial, address);
     }
@@ -117,9 +115,44 @@ void Module::call(std::string method, std::vector<Argument *> arguments)
         }
         this->output = true;
     }
+    else if (method == "shadow")
+    {
+        if (arguments.size() != 1 ||
+            arguments[0]->type != identifier)
+        {
+            printf("error: expecting 1 identifier argument for method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+            return;
+        }
+        std::string target_name = arguments[0]->identifier_value;
+        if (!Global::modules.count(target_name))
+        {
+            printf("error: unknown module \"%s\"\n", target_name.c_str());
+            return;
+        }
+        Module *target_module = Global::modules[target_name];
+        if (this->type != target_module->type)
+        {
+            printf("error: shadow module is not of same type\n");
+            return;
+        }
+        if (this != target_module)
+        {
+            this->shadow_modules.push_back(target_module);
+        }
+    }
     else
     {
-        printf("error: unknown method \"%s\"\n", method.c_str());
+        printf("error: unknown method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+        return;
+    }
+}
+
+void Module::call_with_shadows(std::string method, std::vector<Argument *> arguments)
+{
+    this->call(method, arguments);
+    for (auto const &module : this->shadow_modules)
+    {
+        module->call(method, arguments);
     }
 }
 

@@ -9,6 +9,6 @@ MethodCall::MethodCall(Module *module, std::string method_name, std::vector<Argu
 
 bool MethodCall::run()
 {
-    this->module->call(this->method_name, this->arguments);
+    this->module->call_with_shadows(this->method_name, this->arguments);
     return true;
 }
