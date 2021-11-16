@@ -13,5 +13,5 @@ public:
     std::vector<double> arguments;
 
     MethodCall(Module *module, std::string method_name, std::vector<double> arguments);
-    void run();
+    bool run();
 };

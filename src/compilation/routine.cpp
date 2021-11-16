@@ -1,14 +1,34 @@
 #include "routine.h"
 
-Routine::Routine(std::list<Action *> actions)
+Routine::Routine(std::vector<Action *> actions)
 {
     this->actions = actions;
 }
 
-void Routine::run()
+bool Routine::is_running()
 {
-    for (auto const &action : this->actions)
+    return 0 <= this->instruction_index && this->instruction_index < this->actions.size();
+}
+
+void Routine::start()
+{
+    this->instruction_index = 0;
+}
+
+void Routine::step()
+{
+    if (!this->is_running())
     {
-        action->run();
+        return;
     }
+    while (this->instruction_index < this->actions.size())
+    {
+        bool can_proceed = this->actions[this->instruction_index]->run();
+        if (!can_proceed)
+        {
+            return;
+        }
+        this->instruction_index++;
+    }
+    this->instruction_index = -1;
 }

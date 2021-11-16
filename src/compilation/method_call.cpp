@@ -7,7 +7,8 @@ MethodCall::MethodCall(Module *module, std::string method_name, std::vector<doub
     this->arguments = arguments;
 }
 
-void MethodCall::run()
+bool MethodCall::run()
 {
     this->module->call(this->method_name, this->arguments);
+    return true;
 }

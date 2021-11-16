@@ -8,6 +8,7 @@
 #include <vector>
 #include "driver/uart.h"
 
+#include "compilation/await.h"
 #include "compilation/method_call.h"
 #include "compilation/routine.h"
 #include "compilation/rule.h"
@@ -57,36 +58,6 @@ std::vector<double> compile_arguments(struct owl_ref ref)
     return arguments;
 }
 
-std::list<Action *> compile_actions(struct owl_ref ref)
-{
-    std::list<Action *> actions;
-    for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
-    {
-        struct parsed_action action = parsed_action_get(r);
-        if (!action.method_call.empty)
-        {
-            struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
-            struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
-            std::string module_name_string = to_string(module_name.identifier);
-            if (!modules.count(module_name_string))
-            {
-                printf("error: unknown module \"%s\"\n", module_name_string.c_str());
-                break;
-            }
-            struct parsed_method method = parsed_method_get(method_call.method);
-            std::string method_string = to_string(method.identifier);
-            std::vector<double> arguments = compile_arguments(method_call.argument);
-            actions.push_back(new MethodCall(modules[module_name_string], method_string, arguments));
-        }
-        else
-        {
-            printf("error: within routine defintions only method calls are implemented yet\n");
-            break;
-        }
-    }
-    return actions;
-}
-
 Expression *compile_expression(struct owl_ref ref)
 {
     struct parsed_expression expression = parsed_expression_get(ref);
@@ -118,6 +89,42 @@ Condition *compile_condition(struct owl_ref ref)
     struct parsed_condition condition = parsed_condition_get(ref);
     bool equality = parsed_comparison_get(condition.comparison).type == PARSED_EQUAL;
     return new Condition(compile_expression(condition.expression), compile_expression(owl_next(condition.expression)), equality);
+}
+
+std::vector<Action *> compile_actions(struct owl_ref ref)
+{
+    std::vector<Action *> actions;
+    for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
+    {
+        struct parsed_action action = parsed_action_get(r);
+        if (!action.method_call.empty)
+        {
+            struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
+            struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
+            std::string module_name_string = to_string(module_name.identifier);
+            if (!modules.count(module_name_string))
+            {
+                printf("error: unknown module \"%s\"\n", module_name_string.c_str());
+                break;
+            }
+            struct parsed_method method = parsed_method_get(method_call.method);
+            std::string method_string = to_string(method.identifier);
+            std::vector<double> arguments = compile_arguments(method_call.argument);
+            actions.push_back(new MethodCall(modules[module_name_string], method_string, arguments));
+        }
+        else if (!action.await.empty)
+        {
+            struct parsed_await await = parsed_await_get(action.await);
+            Condition *condition = compile_condition(await.condition);
+            actions.push_back(new Await(condition));
+        }
+        else
+        {
+            printf("error: within routine defintions only method calls and awaits are implemented yet\n");
+            break;
+        }
+    }
+    return actions;
 }
 
 void process_tree(owl_tree *tree)
@@ -173,7 +180,14 @@ void process_tree(owl_tree *tree)
                 printf("error: unknown routine \"%s\"\n", routine_name_string.c_str());
                 return;
             }
-            routines[routine_name_string]->run();
+            if (routines[routine_name_string]->is_running())
+            {
+                printf("error: routine \"%s\" is alreaty running\n", routine_name_string.c_str());
+            }
+            else
+            {
+                routines[routine_name_string]->start();
+            }
         }
         else if (!statement.property_getter.empty)
         {
@@ -288,10 +302,15 @@ void app_main()
 
         for (auto const &rule : rules)
         {
-            if (rule->condition->evaluate())
+            if (rule->condition->evaluate() && !rule->routine->is_running())
             {
-                rule->routine->run();
+                rule->routine->start();
             }
+        }
+
+        for (auto const &item : routines)
+        {
+            item.second->step();
         }
     }
 }

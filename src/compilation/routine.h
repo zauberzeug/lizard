@@ -1,14 +1,17 @@
 #pragma once
 
-#include <list>
+#include <vector>
 #include "action.h"
 
 class Routine
 {
 private:
-    std::list<Action *> actions;
+    std::vector<Action *> actions;
+    unsigned int instruction_index = -1;
 
 public:
-    Routine(std::list<Action *> actions);
-    void run();
+    Routine(std::vector<Action *> actions);
+    bool is_running();
+    void start();
+    void step();
 };
