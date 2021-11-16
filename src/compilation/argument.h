@@ -4,16 +4,16 @@
 
 enum ArgumentType
 {
-    integer,
-    string,
+    number,
+    identifier,
 };
 
 class Argument
 {
 public:
     ArgumentType type;
-    int integer_value;
-    std::string string_value;
-    Argument(int value);
+    double number_value;
+    std::string identifier_value;
+    Argument(double value);
     Argument(std::string value);
 };

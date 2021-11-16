@@ -159,14 +159,13 @@ void process_tree(owl_tree *tree)
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
             std::string module_type_string = to_string(module_type.identifier);
             std::vector<Argument *> arguments = compile_arguments(constructor.argument);
-            Module *module = Module::create(module_type_string, arguments);
+            Module *module = Module::create(module_type_string, module_name_string, arguments, modules);
             if (module == nullptr)
             {
                 printf("error: could not create module\n");
                 return;
             }
             modules[module_name_string] = module;
-            module->name = module_name_string;
         }
         else if (!statement.method_call.empty)
         {
@@ -297,6 +296,8 @@ void app_main()
     process_line("all_on := blue.on(); green.on(); end");
     process_line("when button.level == 0 then blue.off(); end");
     process_line("button.level");
+    process_line("serial = Serial(17, 16, 38400, 1)");
+    process_line("claw = RoboClaw(serial, 128)");
 
     char *line = (char *)malloc(BUFFER_SIZE);
     while (true)
