@@ -3,9 +3,12 @@
 #define RX_BUF_SIZE 1024
 #define TX_BUF_SIZE 1024
 
-Serial::Serial(std::string name, gpio_num_t rx_pin, gpio_num_t tx_pin, long baud_rate, uart_port_t uart_num)
+Serial::Serial(std::string name,
+               gpio_num_t rx_pin,
+               gpio_num_t tx_pin,
+               long baud_rate,
+               uart_port_t uart_num) : Module(serial, name)
 {
-    this->name = name;
     this->uart_num = uart_num;
 
     if (uart_is_driver_installed(uart_num))

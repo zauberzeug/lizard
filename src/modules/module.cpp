@@ -6,12 +6,18 @@
 #include "roboclaw.h"
 #include "serial.h"
 
-Module *Module::create(std::string module_type,
-                       std::string module_name,
+Module::Module(ModuleType type, std::string name)
+{
+    this->type = type;
+    this->name = name;
+}
+
+Module *Module::create(std::string type,
+                       std::string name,
                        std::vector<Argument *> arguments,
                        std::map<std::string, Module *> existing_modules)
 {
-    if (module_type == "Led")
+    if (type == "Led")
     {
         if (arguments.size() != 1 ||
             arguments[0]->type != number)
@@ -19,9 +25,9 @@ Module *Module::create(std::string module_type,
             printf("error: expecting 1 number argument for \"Led\" constructor\n");
             return nullptr;
         }
-        return new Led(module_name, (gpio_num_t)arguments[0]->number_value);
+        return new Led(name, (gpio_num_t)arguments[0]->number_value);
     }
-    else if (module_type == "Button")
+    else if (type == "Button")
     {
         if (arguments.size() != 1 ||
             arguments[0]->type != number)
@@ -29,9 +35,9 @@ Module *Module::create(std::string module_type,
             printf("error: expecting 1 number argument for \"Button\" constructor\n");
             return nullptr;
         }
-        return new Button(module_name, (gpio_num_t)arguments[0]->number_value);
+        return new Button(name, (gpio_num_t)arguments[0]->number_value);
     }
-    else if (module_type == "Serial")
+    else if (type == "Serial")
     {
         if (arguments.size() != 4 ||
             arguments[0]->type != number ||
@@ -46,9 +52,9 @@ Module *Module::create(std::string module_type,
         gpio_num_t tx_pin = (gpio_num_t)arguments[1]->number_value;
         long baud_rate = arguments[2]->number_value;
         gpio_port_t uart_num = (gpio_port_t)arguments[3]->number_value;
-        return new Serial(module_name, rx_pin, tx_pin, baud_rate, uart_num);
+        return new Serial(name, rx_pin, tx_pin, baud_rate, uart_num);
     }
-    else if (module_type == "RoboClaw")
+    else if (type == "RoboClaw")
     {
         if (arguments.size() != 2 ||
             arguments[0]->type != identifier ||
@@ -63,13 +69,18 @@ Module *Module::create(std::string module_type,
             printf("error: unknown module \"%s\"\n", serial_name.c_str());
             return nullptr;
         }
+        if (existing_modules[serial_name]->type != serial)
+        {
+            printf("error: module \"%s\" is no serial connection\n", serial_name.c_str());
+            return nullptr;
+        }
         Serial *serial = (Serial *)(existing_modules[serial_name]);
         uint8_t address = arguments[1]->number_value;
-        return new RoboClaw(module_name, serial, address);
+        return new RoboClaw(name, serial, address);
     }
     else
     {
-        printf("error: unknown module type \"%s\"\n", module_type.c_str());
+        printf("error: unknown module type \"%s\"\n", type.c_str());
         return nullptr;
     }
 }

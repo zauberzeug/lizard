@@ -1,8 +1,7 @@
 #include "led.h"
 
-Led::Led(std::string name, gpio_num_t number)
+Led::Led(std::string name, gpio_num_t number) : Module(led, name)
 {
-    this->name = name;
     this->number = number;
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_OUTPUT);

@@ -1,8 +1,7 @@
 #include "button.h"
 
-Button::Button(std::string name, gpio_num_t number)
+Button::Button(std::string name, gpio_num_t number) : Module(button, name)
 {
-    this->name = name;
     this->number = number;
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_INPUT);

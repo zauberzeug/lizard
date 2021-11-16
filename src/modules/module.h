@@ -5,14 +5,24 @@
 #include <vector>
 #include "../compilation/argument.h"
 
+enum ModuleType
+{
+    led,
+    button,
+    serial,
+    roboclaw,
+};
+
 class Module
 {
 public:
+    ModuleType type;
     std::string name;
     bool output = false;
 
-    static Module *create(std::string module_type,
-                          std::string module_name,
+    Module(ModuleType type, std::string name);
+    static Module *create(std::string type,
+                          std::string name,
                           std::vector<Argument *> arguments,
                           std::map<std::string, Module *> existing_modules);
     virtual void step();
