@@ -8,6 +8,7 @@
 #include <vector>
 #include "driver/uart.h"
 
+#include "compilation/argument.h"
 #include "compilation/await.h"
 #include "compilation/method_call.h"
 #include "compilation/routine.h"
@@ -46,14 +47,26 @@ std::string to_string(struct owl_ref ref)
     return std::string(identifier.identifier, identifier.length);
 }
 
-std::vector<double> compile_arguments(struct owl_ref ref)
+std::vector<Argument *> compile_arguments(struct owl_ref ref)
 {
-    std::vector<double> arguments;
+    std::vector<Argument *> arguments;
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
     {
         struct parsed_argument argument = parsed_argument_get(r);
-        struct parsed_number number = parsed_number_get(argument.number);
-        arguments.push_back(number.number);
+        if (!argument.number.empty)
+        {
+            struct parsed_number number = parsed_number_get(argument.number);
+            arguments.push_back(new Argument(number.number));
+        }
+        else if (!argument.identifier.empty)
+        {
+            std::string identifier_string = to_string(argument.identifier);
+            arguments.push_back(new Argument(identifier_string));
+        }
+        else
+        {
+            printf("error: invalid argument in range \"%d\"-\"%d\"\n", argument.range.start, argument.range.end);
+        }
     }
     return arguments;
 }
@@ -109,7 +122,7 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
             }
             struct parsed_method method = parsed_method_get(method_call.method);
             std::string method_string = to_string(method.identifier);
-            std::vector<double> arguments = compile_arguments(method_call.argument);
+            std::vector<Argument *> arguments = compile_arguments(method_call.argument);
             actions.push_back(new MethodCall(modules[module_name_string], method_string, arguments));
         }
         else if (!action.await.empty)
@@ -145,7 +158,7 @@ void process_tree(owl_tree *tree)
             }
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
             std::string module_type_string = to_string(module_type.identifier);
-            std::vector<double> arguments = compile_arguments(constructor.argument);
+            std::vector<Argument *> arguments = compile_arguments(constructor.argument);
             Module *module = Module::create(module_type_string, arguments);
             if (module == nullptr)
             {
@@ -167,7 +180,7 @@ void process_tree(owl_tree *tree)
             }
             struct parsed_method method = parsed_method_get(method_call.method);
             std::string method_string = to_string(method.identifier);
-            std::vector<double> arguments = compile_arguments(method_call.argument);
+            std::vector<Argument *> arguments = compile_arguments(method_call.argument);
             modules[module_name_string]->call(method_string, arguments);
         }
         else if (!statement.routine_call.empty)

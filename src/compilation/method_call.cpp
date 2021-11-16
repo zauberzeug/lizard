@@ -1,6 +1,6 @@
 #include "method_call.h"
 
-MethodCall::MethodCall(Module *module, std::string method_name, std::vector<double> arguments)
+MethodCall::MethodCall(Module *module, std::string method_name, std::vector<Argument *> arguments)
 {
     this->module = module;
     this->method_name = method_name;

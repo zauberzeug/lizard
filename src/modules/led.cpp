@@ -7,7 +7,7 @@ Led::Led(gpio_num_t number)
     gpio_set_direction(number, GPIO_MODE_OUTPUT);
 }
 
-void Led::call(std::string method, std::vector<double> arguments)
+void Led::call(std::string method, std::vector<Argument *> arguments)
 {
     if (method == "on")
     {

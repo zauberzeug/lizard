@@ -3,25 +3,25 @@
 #include "button.h"
 #include "led.h"
 
-Module *Module::create(std::string module_type_string, std::vector<double> arguments)
+Module *Module::create(std::string module_type_string, std::vector<Argument *> arguments)
 {
     if (module_type_string == "Led")
     {
-        if (arguments.size() != 1)
+        if (arguments.size() != 1 || arguments[0]->type != integer)
         {
-            printf("error: expecting 1 argument for \"Led\" constructor\n");
+            printf("error: expecting 1 integer argument for \"Led\" constructor\n");
             return nullptr;
         }
-        return new Led((gpio_num_t)arguments[0]);
+        return new Led((gpio_num_t)arguments[0]->integer_value);
     }
     else if (module_type_string == "Button")
     {
-        if (arguments.size() != 1)
+        if (arguments.size() != 1 || arguments[0]->type != integer)
         {
-            printf("error: expecting 1 argument for \"Button\" constructor\n");
+            printf("error: expecting 1 integer argument for \"Button\" constructor\n");
             return nullptr;
         }
-        return new Button((gpio_num_t)arguments[0]);
+        return new Button((gpio_num_t)arguments[0]->integer_value);
     }
     else
     {
@@ -42,7 +42,7 @@ void Module::step()
     }
 }
 
-void Module::call(std::string method, std::vector<double> arguments)
+void Module::call(std::string method, std::vector<Argument *> arguments)
 {
     if (method == "mute")
     {

@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "../compilation/argument.h"
 #include "module.h"
 
 class Led : public Module
@@ -12,5 +13,5 @@ private:
 
 public:
     Led(gpio_num_t number);
-    void call(std::string method, std::vector<double> arguments);
+    void call(std::string method, std::vector<Argument *> arguments);
 };
