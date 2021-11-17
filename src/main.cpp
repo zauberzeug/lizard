@@ -81,10 +81,27 @@ std::vector<Argument *> compile_arguments(struct owl_ref ref)
 Expression *compile_expression(struct owl_ref ref)
 {
     struct parsed_expression expression = parsed_expression_get(ref);
+    if (!expression.integer.empty)
+    {
+        struct parsed_integer integer = parsed_integer_get(expression.integer);
+        return new ConstExpression(integer.integer);
+    }
+    if (!expression.neg_integer.empty)
+    {
+        struct parsed_neg_integer neg_integer = parsed_neg_integer_get(expression.neg_integer);
+        struct parsed_integer integer = parsed_integer_get(neg_integer.integer);
+        return new ConstExpression(-integer.integer);
+    }
     if (!expression.number.empty)
     {
         struct parsed_number number = parsed_number_get(expression.number);
         return new ConstExpression(number.number);
+    }
+    if (!expression.neg_number.empty)
+    {
+        struct parsed_neg_number neg_number = parsed_neg_number_get(expression.neg_number);
+        struct parsed_number number = parsed_number_get(neg_number.number);
+        return new ConstExpression(-number.number);
     }
     if (!expression.property_getter.empty)
     {

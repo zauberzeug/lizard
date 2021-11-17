@@ -36,7 +36,7 @@ await = 'await' condition
 
 condition = expression comparison expression
 
-expression = number | property_getter
+expression = integer | neg_integer | number | neg_number | property_getter
 comparison =
   '==' : equal
   '!=' : unequal
