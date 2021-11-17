@@ -18,47 +18,47 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
     if (type == "Led")
     {
         if (arguments.size() != 1 ||
-            arguments[0]->type != number)
+            arguments[0]->type != integer)
         {
-            printf("error: expecting 1 number argument for \"Led\" constructor\n");
+            printf("error: expecting 1 integer argument for \"Led\" constructor\n");
             return nullptr;
         }
-        return new Led(name, (gpio_num_t)arguments[0]->number_value);
+        return new Led(name, (gpio_num_t)arguments[0]->integer_value);
     }
     else if (type == "Button")
     {
         if (arguments.size() != 1 ||
-            arguments[0]->type != number)
+            arguments[0]->type != integer)
         {
-            printf("error: expecting 1 number argument for \"Button\" constructor\n");
+            printf("error: expecting 1 integer argument for \"Button\" constructor\n");
             return nullptr;
         }
-        return new Button(name, (gpio_num_t)arguments[0]->number_value);
+        return new Button(name, (gpio_num_t)arguments[0]->integer_value);
     }
     else if (type == "Serial")
     {
         if (arguments.size() != 4 ||
-            arguments[0]->type != number ||
-            arguments[1]->type != number ||
-            arguments[2]->type != number ||
-            arguments[3]->type != number)
+            arguments[0]->type != integer ||
+            arguments[1]->type != integer ||
+            arguments[2]->type != integer ||
+            arguments[3]->type != integer)
         {
-            printf("error: expecting 4 number arguments for \"Serial\" constructor\n");
+            printf("error: expecting 4 integer arguments for \"Serial\" constructor\n");
             return nullptr;
         }
-        gpio_num_t rx_pin = (gpio_num_t)arguments[0]->number_value;
-        gpio_num_t tx_pin = (gpio_num_t)arguments[1]->number_value;
-        long baud_rate = arguments[2]->number_value;
-        gpio_port_t uart_num = (gpio_port_t)arguments[3]->number_value;
+        gpio_num_t rx_pin = (gpio_num_t)arguments[0]->integer_value;
+        gpio_num_t tx_pin = (gpio_num_t)arguments[1]->integer_value;
+        long baud_rate = arguments[2]->integer_value;
+        gpio_port_t uart_num = (gpio_port_t)arguments[3]->integer_value;
         return new Serial(name, rx_pin, tx_pin, baud_rate, uart_num);
     }
     else if (type == "RoboClaw")
     {
         if (arguments.size() != 2 ||
             arguments[0]->type != identifier ||
-            arguments[1]->type != number)
+            arguments[1]->type != integer)
         {
-            printf("error: expecting 1 identifier argument and 1 number argument for \"Serial\" constructor\n");
+            printf("error: expecting 1 identifier argument and 1 integer argument for \"Serial\" constructor\n");
             return nullptr;
         }
         std::string serial_name = arguments[0]->identifier_value;
@@ -73,7 +73,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
             return nullptr;
         }
         Serial *serial = (Serial *)(Global::modules[serial_name]);
-        uint8_t address = arguments[1]->number_value;
+        uint8_t address = arguments[1]->integer_value;
         return new RoboClaw(name, serial, address);
     }
     else

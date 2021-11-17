@@ -1,13 +1,34 @@
 #include "argument.h"
 
-Argument::Argument(double value)
+Argument::Argument(ArgumentType type)
 {
-    this->type = number;
-    this->number_value = value;
+    this->type = type;
 }
 
-Argument::Argument(std::string value)
+Argument *Argument::create_integer(int value)
 {
-    this->type = identifier;
-    this->identifier_value = value;
+    Argument *argument = new Argument(integer);
+    argument->integer_value = value;
+    return argument;
+}
+
+Argument *Argument::create_number(double value)
+{
+    Argument *argument = new Argument(number);
+    argument->number_value = value;
+    return argument;
+}
+
+Argument *Argument::create_identifier(std::string value)
+{
+    Argument *argument = new Argument(identifier);
+    argument->identifier_value = value;
+    return argument;
+}
+
+Argument *Argument::create_string(std::string value)
+{
+    Argument *argument = new Argument(string);
+    argument->string_value = value;
+    return argument;
 }

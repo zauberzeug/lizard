@@ -25,7 +25,7 @@ extern "C"
     void app_main();
 }
 
-std::string to_string(struct owl_ref ref)
+std::string identifier_to_string(struct owl_ref ref)
 {
     struct parsed_identifier identifier = parsed_identifier_get(ref);
     return std::string(identifier.identifier, identifier.length);
@@ -37,15 +37,26 @@ std::vector<Argument *> compile_arguments(struct owl_ref ref)
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
     {
         struct parsed_argument argument = parsed_argument_get(r);
-        if (!argument.number.empty)
+        if (!argument.integer.empty)
+        {
+            struct parsed_integer integer = parsed_integer_get(argument.integer);
+            arguments.push_back(Argument::create_integer(integer.integer));
+        }
+        else if (!argument.number.empty)
         {
             struct parsed_number number = parsed_number_get(argument.number);
-            arguments.push_back(new Argument(number.number));
+            arguments.push_back(Argument::create_number(number.number));
         }
         else if (!argument.identifier.empty)
         {
-            std::string identifier_string = to_string(argument.identifier);
-            arguments.push_back(new Argument(identifier_string));
+            std::string identifier_string = identifier_to_string(argument.identifier);
+            arguments.push_back(Argument::create_identifier(identifier_string));
+        }
+        else if (!argument.string.empty)
+        {
+            parsed_string string = parsed_string_get(argument.string);
+            std::string string_string = std::string(string.string, string.length);
+            arguments.push_back(Argument::create_string(string_string));
         }
         else
         {
@@ -67,14 +78,14 @@ Expression *compile_expression(struct owl_ref ref)
     {
         struct parsed_property_getter property_getter = parsed_property_getter_get(expression.property_getter);
         struct parsed_module_name module_name = parsed_module_name_get(property_getter.module_name);
-        std::string module_name_string = to_string(module_name.identifier);
+        std::string module_name_string = identifier_to_string(module_name.identifier);
         if (!Global::modules.count(module_name_string))
         {
             printf("error: unknown module \"%s\"\n", module_name_string.c_str());
             return nullptr;
         }
         struct parsed_property_name property_name = parsed_property_name_get(property_getter.property_name);
-        std::string property_name_string = to_string(property_name.identifier);
+        std::string property_name_string = identifier_to_string(property_name.identifier);
         return new PropertyGetterExpression(Global::modules[module_name_string], property_name_string);
     }
     printf("error: invalid expression in range \"%d\"-\"%d\"\n", expression.range.start, expression.range.end);
@@ -98,14 +109,14 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
         {
             struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
             struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
-            std::string module_name_string = to_string(module_name.identifier);
+            std::string module_name_string = identifier_to_string(module_name.identifier);
             if (!Global::modules.count(module_name_string))
             {
                 printf("error: unknown module \"%s\"\n", module_name_string.c_str());
                 break;
             }
             struct parsed_method method = parsed_method_get(method_call.method);
-            std::string method_string = to_string(method.identifier);
+            std::string method_string = identifier_to_string(method.identifier);
             std::vector<Argument *> arguments = compile_arguments(method_call.argument);
             actions.push_back(new MethodCall(Global::modules[module_name_string], method_string, arguments));
         }
@@ -134,14 +145,14 @@ void process_tree(owl_tree *tree)
         {
             struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
             struct parsed_module_name module_name = parsed_module_name_get(constructor.module_name);
-            std::string module_name_string = to_string(module_name.identifier);
+            std::string module_name_string = identifier_to_string(module_name.identifier);
             if (Global::modules.count(module_name_string))
             {
                 printf("error: module \"%s\" already exists\n", module_name_string.c_str());
                 return;
             }
             struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
-            std::string module_type_string = to_string(module_type.identifier);
+            std::string module_type_string = identifier_to_string(module_type.identifier);
             std::vector<Argument *> arguments = compile_arguments(constructor.argument);
             Module *module = Module::create(module_type_string, module_name_string, arguments);
             if (module == nullptr)
@@ -155,14 +166,14 @@ void process_tree(owl_tree *tree)
         {
             struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
             struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
-            std::string module_name_string = to_string(module_name.identifier);
+            std::string module_name_string = identifier_to_string(module_name.identifier);
             if (!Global::modules.count(module_name_string))
             {
                 printf("error: unknown module \"%s\"\n", module_name_string.c_str());
                 return;
             }
             struct parsed_method method = parsed_method_get(method_call.method);
-            std::string method_string = to_string(method.identifier);
+            std::string method_string = identifier_to_string(method.identifier);
             std::vector<Argument *> arguments = compile_arguments(method_call.argument);
             Global::modules[module_name_string]->call_with_shadows(method_string, arguments);
         }
@@ -170,7 +181,7 @@ void process_tree(owl_tree *tree)
         {
             struct parsed_routine_call routine_call = parsed_routine_call_get(statement.routine_call);
             struct parsed_routine_name routine_name = parsed_routine_name_get(routine_call.routine_name);
-            std::string routine_name_string = to_string(routine_name.identifier);
+            std::string routine_name_string = identifier_to_string(routine_name.identifier);
             if (!Global::routines.count(routine_name_string))
             {
                 printf("error: unknown routine \"%s\"\n", routine_name_string.c_str());
@@ -189,14 +200,14 @@ void process_tree(owl_tree *tree)
         {
             struct parsed_property_getter property_getter = parsed_property_getter_get(statement.property_getter);
             struct parsed_module_name module_name = parsed_module_name_get(property_getter.module_name);
-            std::string module_name_string = to_string(module_name.identifier);
+            std::string module_name_string = identifier_to_string(module_name.identifier);
             if (!Global::modules.count(module_name_string))
             {
                 printf("error: unknown module \"%s\"\n", module_name_string.c_str());
                 break;
             }
             struct parsed_property_name property_name = parsed_property_name_get(property_getter.property_name);
-            std::string property_name_string = to_string(property_name.identifier);
+            std::string property_name_string = identifier_to_string(property_name.identifier);
             double value = Global::modules[module_name_string]->get(property_name_string);
             printf("%s.%s = %f\n", module_name_string.c_str(), property_name_string.c_str(), value);
             return;
@@ -210,7 +221,7 @@ void process_tree(owl_tree *tree)
         {
             struct parsed_routine_definition routine_definition = parsed_routine_definition_get(statement.routine_definition);
             struct parsed_routine_name routine_name = parsed_routine_name_get(routine_definition.routine_name);
-            std::string routine_name_string = to_string(routine_name.identifier);
+            std::string routine_name_string = identifier_to_string(routine_name.identifier);
             if (Global::routines.count(routine_name_string))
             {
                 printf("error: routine \"%s\" already exists\n", routine_name_string.c_str());

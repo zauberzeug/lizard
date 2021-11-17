@@ -18,6 +18,16 @@ void Core::call(std::string method, std::vector<Argument *> arguments)
         }
         esp_restart();
     }
+    else if (method == "print")
+    {
+        if (arguments.size() != 1 ||
+            arguments[0]->type != string)
+        {
+            printf("error: expecting 1 string argument for method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+            return;
+        }
+        printf("%s\n", arguments[0]->string_value.c_str());
+    }
     else
     {
         Module::call(method, arguments);
