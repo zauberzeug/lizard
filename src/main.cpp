@@ -13,7 +13,9 @@
 #include "compilation/rule.h"
 #include "modules/core.h"
 #include "modules/module.h"
+#include "utils/tictoc.h"
 #include "global.h"
+#include "storage.h"
 
 #define BUFFER_SIZE 1024
 
@@ -21,18 +23,6 @@ extern "C"
 {
 #include "parser.h"
     void app_main();
-}
-
-std::chrono::_V2::system_clock::time_point t;
-void tic()
-{
-    t = std::chrono::high_resolution_clock::now();
-}
-void toc(const char *msg)
-{
-    auto dt = std::chrono::high_resolution_clock::now() - t;
-    auto us = std::chrono::duration_cast<std::chrono::microseconds>(dt);
-    printf("%s took %.3f ms\n", msg, 0.001 * us.count());
 }
 
 std::string to_string(struct owl_ref ref)
@@ -244,7 +234,31 @@ void process_tree(owl_tree *tree)
     }
 }
 
-void process_line(const char *line)
+void process_storage_command(const char *line)
+{
+    if (line[0] == '+')
+    {
+        Storage::append_to_startup(line + 1);
+    }
+    else if (line[0] == '-')
+    {
+        Storage::remove_from_startup(line + 1);
+    }
+    else if (line[0] == '?')
+    {
+        Storage::print_startup(line + 1);
+    }
+    else if (line[0] == '!')
+    {
+        Storage::save_startup();
+    }
+    else
+    {
+        printf("error: unrecognized storage command\n");
+    }
+}
+
+void process_lizard(const char *line)
 {
     printf(">> %s\n", line);
     tic();
@@ -276,6 +290,9 @@ void app_main()
 {
     Global::modules["core"] = new Core("core");
 
+    Storage::init();
+    process_lizard(Storage::startup.c_str());
+
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -288,21 +305,18 @@ void app_main()
     uart_param_config(UART_NUM_0, &uart_config);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
 
-    process_line("blue = Led(25); green = Led(26); button = Button(33); button.pullup(); blue.on()");
-    process_line("all_on := blue.on(); green.on(); end");
-    process_line("when button.level == 0 then blue.off(); end");
-    process_line("button.level");
-    process_line("serial = Serial(17, 16, 38400, 1)");
-    process_line("claw = RoboClaw(serial, 128)");
-
     char *line = (char *)malloc(BUFFER_SIZE);
     while (true)
     {
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)line, BUFFER_SIZE, 20 / portTICK_RATE_MS);
-        if (len > 1)
+        line[len - 1] = 0;
+        if (len > 2 && line[0] == '!')
         {
-            line[len] = 0;
-            process_line(line);
+            process_storage_command(line + 1);
+        }
+        else if (len > 1)
+        {
+            process_lizard(line);
         }
 
         for (auto const &item : Global::modules)

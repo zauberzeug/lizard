@@ -7,7 +7,7 @@ class Routine
 {
 private:
     std::vector<Action *> actions;
-    unsigned int instruction_index = -1;
+    int instruction_index = -1;
 
 public:
     Routine(std::vector<Action *> actions);
