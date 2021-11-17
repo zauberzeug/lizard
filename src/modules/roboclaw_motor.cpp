@@ -13,12 +13,12 @@ void RoboClawMotor::call(std::string method, std::vector<Argument *> arguments)
     if (method == "power")
     {
         if (arguments.size() != 1 ||
-            arguments[0]->type != number)
+            !arguments[0]->is_numbery())
         {
             printf("error: expecting 1 number argument for method \"%s.%s\"\n", this->name.c_str(), method.c_str());
             return;
         }
-        unsigned short int duty = (short int)(constrain(arguments[0]->number_value, -1, 1) * 32767);
+        unsigned short int duty = (short int)(constrain(arguments[0]->to_number(), -1, 1) * 32767);
         if (this->motor_number == 1)
         {
             this->roboclaw->DutyM1(duty);

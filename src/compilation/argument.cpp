@@ -32,3 +32,25 @@ Argument *Argument::create_string(std::string value)
     argument->string_value = value;
     return argument;
 }
+
+bool Argument::is_numbery()
+{
+    return this->type == number || this->type == integer;
+}
+
+double Argument::to_number()
+{
+    if (this->type == number)
+    {
+        return this->number_value;
+    }
+    else if (this->type == integer)
+    {
+        return this->integer_value;
+    }
+    else
+    {
+        printf("error: argument can not be converted to number\n");
+        return 0;
+    }
+}

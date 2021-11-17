@@ -42,10 +42,22 @@ std::vector<Argument *> compile_arguments(struct owl_ref ref)
             struct parsed_integer integer = parsed_integer_get(argument.integer);
             arguments.push_back(Argument::create_integer(integer.integer));
         }
+        else if (!argument.neg_integer.empty)
+        {
+            struct parsed_neg_integer neg_integer = parsed_neg_integer_get(argument.neg_integer);
+            struct parsed_integer integer = parsed_integer_get(neg_integer.integer);
+            arguments.push_back(Argument::create_integer(-integer.integer));
+        }
         else if (!argument.number.empty)
         {
             struct parsed_number number = parsed_number_get(argument.number);
             arguments.push_back(Argument::create_number(number.number));
+        }
+        else if (!argument.neg_number.empty)
+        {
+            struct parsed_neg_number neg_number = parsed_neg_number_get(argument.neg_number);
+            struct parsed_number number = parsed_number_get(neg_number.number);
+            arguments.push_back(Argument::create_number(-number.number));
         }
         else if (!argument.identifier.empty)
         {

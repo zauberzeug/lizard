@@ -24,4 +24,6 @@ public:
     static Argument *create_number(double value);
     static Argument *create_identifier(std::string value);
     static Argument *create_string(std::string value);
+    bool is_numbery();
+    double to_number();
 };
