@@ -10,6 +10,7 @@
 #include "compilation/await.h"
 #include "compilation/method_call.h"
 #include "compilation/routine.h"
+#include "compilation/routine_call.h"
 #include "compilation/rule.h"
 #include "modules/core.h"
 #include "modules/module.h"
@@ -149,6 +150,18 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
             std::vector<Argument *> arguments = compile_arguments(method_call.argument);
             actions.push_back(new MethodCall(Global::modules[module_name_string], method_string, arguments));
         }
+        else if (!action.routine_call.empty)
+        {
+            struct parsed_routine_call routine_call = parsed_routine_call_get(action.routine_call);
+            struct parsed_routine_name routine_name = parsed_routine_name_get(routine_call.routine_name);
+            std::string routine_name_string = identifier_to_string(routine_name.identifier);
+            if (!Global::routines.count(routine_name_string))
+            {
+                printf("error: unknown routine \"%s\"\n", routine_name_string.c_str());
+                break;
+            }
+            actions.push_back(new RoutineCall(Global::routines[routine_name_string]));
+        }
         else if (!action.await.empty)
         {
             struct parsed_await await = parsed_await_get(action.await);
@@ -157,7 +170,7 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
         }
         else
         {
-            printf("error: within routine defintions only method calls and awaits are implemented yet\n");
+            printf("error: within routine and rule defintions only method calls, routine calls and awaits are implemented yet\n");
             break;
         }
     }
