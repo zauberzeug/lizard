@@ -4,6 +4,7 @@
 #include "button.h"
 #include "led.h"
 #include "roboclaw.h"
+#include "roboclaw_motor.h"
 #include "serial.h"
 #include "../global.h"
 
@@ -58,7 +59,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
             arguments[0]->type != identifier ||
             arguments[1]->type != integer)
         {
-            printf("error: expecting 1 identifier argument and 1 integer argument for \"Serial\" constructor\n");
+            printf("error: expecting 1 identifier argument and 1 integer argument for \"RoboClaw\" constructor\n");
             return nullptr;
         }
         std::string serial_name = arguments[0]->identifier_value;
@@ -75,6 +76,30 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
         Serial *serial = (Serial *)(Global::modules[serial_name]);
         uint8_t address = arguments[1]->integer_value;
         return new RoboClaw(name, serial, address);
+    }
+    else if (type == "RoboClawMotor")
+    {
+        if (arguments.size() != 2 ||
+            arguments[0]->type != identifier ||
+            arguments[1]->type != integer)
+        {
+            printf("error: expecting 1 identifier argument and 1 integer argument for \"RoboClawMotor\" constructor\n");
+            return nullptr;
+        }
+        std::string roboclaw_name = arguments[0]->identifier_value;
+        if (!Global::modules.count(roboclaw_name))
+        {
+            printf("error: unknown module \"%s\"\n", roboclaw_name.c_str());
+            return nullptr;
+        }
+        if (Global::modules[roboclaw_name]->type != roboclaw)
+        {
+            printf("error: module \"%s\" is no RoboClaw\n", roboclaw_name.c_str());
+            return nullptr;
+        }
+        RoboClaw *roboclaw = (RoboClaw *)(Global::modules[roboclaw_name]);
+        unsigned int motor_number = arguments[1]->integer_value;
+        return new RoboClawMotor(name, roboclaw, motor_number);
     }
     else
     {

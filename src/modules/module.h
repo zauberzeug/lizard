@@ -13,6 +13,7 @@ enum ModuleType
     button,
     serial,
     roboclaw,
+    roboclaw_motor,
 };
 
 class Module
