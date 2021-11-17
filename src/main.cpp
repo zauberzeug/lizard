@@ -11,8 +11,7 @@
 #include "compilation/method_call.h"
 #include "compilation/routine.h"
 #include "compilation/rule.h"
-#include "modules/button.h"
-#include "modules/led.h"
+#include "modules/core.h"
 #include "modules/module.h"
 #include "global.h"
 
@@ -275,6 +274,8 @@ void process_line(const char *line)
 
 void app_main()
 {
+    Global::modules["core"] = new Core("core");
+
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,

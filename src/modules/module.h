@@ -8,6 +8,7 @@
 
 enum ModuleType
 {
+    core,
     led,
     button,
     serial,
