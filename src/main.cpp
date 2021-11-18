@@ -8,6 +8,7 @@
 
 #include "compilation/argument.h"
 #include "compilation/await.h"
+#include "compilation/expression.h"
 #include "compilation/method_call.h"
 #include "compilation/routine.h"
 #include "compilation/routine_call.h"
@@ -256,8 +257,19 @@ void process_tree(owl_tree *tree)
         }
         else if (!statement.assignment.empty)
         {
-            printf("error: assignments are not implemented yet\n");
-            return;
+            struct parsed_assignment assignment = parsed_assignment_get(statement.assignment);
+            struct parsed_property_setter property_setter = parsed_property_setter_get(assignment.property_setter);
+            struct parsed_module_name module_name = parsed_module_name_get(property_setter.module_name);
+            std::string module_name_string = identifier_to_string(module_name.identifier);
+            if (!Global::modules.count(module_name_string))
+            {
+                printf("error: unknown module \"%s\"\n", module_name_string.c_str());
+                break;
+            }
+            struct parsed_property_name property_name = parsed_property_name_get(property_setter.property_name);
+            std::string property_name_string = identifier_to_string(property_name.identifier);
+            Expression *expression = compile_expression(assignment.expression);
+            Global::modules[module_name_string]->set(property_name_string, expression->evaluate());
         }
         else if (!statement.routine_definition.empty)
         {
@@ -277,12 +289,10 @@ void process_tree(owl_tree *tree)
             struct parsed_rule_definition rule_definition = parsed_rule_definition_get(statement.rule_definition);
             struct parsed_actions actions = parsed_actions_get(rule_definition.actions);
             Global::rules.push_back(new Rule(compile_condition(rule_definition.condition), new Routine(compile_actions(actions.action))));
-            return;
         }
         else
         {
             printf("error: unknown statement type\n");
-            return;
         }
     }
 }

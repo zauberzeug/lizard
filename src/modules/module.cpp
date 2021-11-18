@@ -187,6 +187,11 @@ double Module::get(std::string property_name)
     return 0;
 }
 
+void Module::set(std::string property_name, double value)
+{
+    printf("error: unknown property \"%s\"\n", property_name.c_str());
+}
+
 std::string Module::get_output()
 {
     return "";

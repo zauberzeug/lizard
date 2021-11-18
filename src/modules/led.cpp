@@ -32,3 +32,11 @@ void Led::call(std::string method, std::vector<Argument *> arguments)
         Module::call(method, arguments);
     }
 }
+
+void Led::set(std::string property_name, double value)
+{
+    if (property_name == "level")
+    {
+        gpio_set_level(this->number, value);
+    }
+}
