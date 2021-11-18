@@ -383,6 +383,7 @@ void app_main()
             {
                 rule->routine->start();
             }
+            rule->routine->step();
         }
 
         for (auto const &item : Global::routines)
