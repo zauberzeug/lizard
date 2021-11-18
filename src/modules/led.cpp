@@ -39,4 +39,8 @@ void Led::set(std::string property_name, double value)
     {
         gpio_set_level(this->number, value);
     }
+    else
+    {
+        Module::set(property_name, value);
+    }
 }

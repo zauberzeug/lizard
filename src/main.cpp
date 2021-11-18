@@ -21,6 +21,8 @@
 
 #define BUFFER_SIZE 1024
 
+Core *core_module;
+
 extern "C"
 {
 #include "parser.h"
@@ -323,10 +325,16 @@ void process_storage_command(const char *line)
 
 void process_lizard(const char *line)
 {
-    printf(">> %s\n", line);
-    tic();
+    if (core_module->debug)
+    {
+        printf(">> %s\n", line);
+        tic();
+    }
     struct owl_tree *tree = owl_tree_create_from_string(line);
-    toc("Tree creation");
+    if (core_module->debug)
+    {
+        toc("Tree creation");
+    }
     struct source_range range;
     owl_error error = owl_tree_get_error(tree, &range);
     if (error == ERROR_INVALID_FILE)
@@ -341,17 +349,23 @@ void process_lizard(const char *line)
         printf("error: more input needed at range %zu %zu\n", range.start, range.end);
     else
     {
-        owl_tree_print(tree);
-        tic();
+        if (core_module->debug)
+        {
+            owl_tree_print(tree);
+            tic();
+        }
         process_tree(tree);
-        toc("Tree traversal");
+        if (core_module->debug)
+        {
+            toc("Tree traversal");
+        }
     }
     owl_tree_destroy(tree);
 }
 
 void app_main()
 {
-    Global::modules["core"] = new Core("core");
+    Global::modules["core"] = core_module = new Core("core");
 
     Storage::init();
     process_lizard(Storage::startup.c_str());

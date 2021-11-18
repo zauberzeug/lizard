@@ -40,8 +40,24 @@ double Core::get(std::string property_name)
     {
         return esp_timer_get_time() / 1000ULL;
     }
+    if (property_name == "debug")
+    {
+        return this->debug;
+    }
     else
     {
         return Module::get(property_name);
+    }
+}
+
+void Core::set(std::string property_name, double value)
+{
+    if (property_name == "debug")
+    {
+        this->debug = value;
+    }
+    else
+    {
+        Module::set(property_name, value);
     }
 }
