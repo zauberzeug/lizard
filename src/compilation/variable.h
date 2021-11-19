@@ -1,9 +1,12 @@
 #pragma once
 
+#include "type.h"
+
 class Variable
 {
 public:
-    double value;
+    double number_value;
+    Type type;
 
-    void set(double value);
+    void set_number(double value);
 };

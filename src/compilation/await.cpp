@@ -1,11 +1,11 @@
 #include "await.h"
 
-Await::Await(Condition *condition)
+Await::Await(Expression *condition)
 {
     this->condition = condition;
 }
 
 bool Await::run()
 {
-    return this->condition->evaluate();
+    return this->condition->evaluate_boolean();
 }

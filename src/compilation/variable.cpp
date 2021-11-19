@@ -1,6 +1,7 @@
 #include "variable.h"
 
-void Variable::set(double value)
+void Variable::set_number(double value)
 {
-    this->value = value;
+    this->type = number;
+    this->number_value = value;
 }

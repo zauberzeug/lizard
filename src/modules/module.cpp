@@ -14,7 +14,7 @@ Module::Module(ModuleType type, std::string name)
     this->name = name;
 }
 
-Module *Module::create(std::string type, std::string name, std::vector<Argument *> arguments)
+Module *Module::create(std::string type, std::string name, std::vector<Expression *> arguments)
 {
     if (type == "Led")
     {
@@ -24,7 +24,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
             printf("error: expecting 1 integer argument for \"Led\" constructor\n");
             return nullptr;
         }
-        return new Led(name, (gpio_num_t)arguments[0]->integer_value);
+        return new Led(name, (gpio_num_t)arguments[0]->evaluate_integer());
     }
     else if (type == "Button")
     {
@@ -34,7 +34,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
             printf("error: expecting 1 integer argument for \"Button\" constructor\n");
             return nullptr;
         }
-        return new Button(name, (gpio_num_t)arguments[0]->integer_value);
+        return new Button(name, (gpio_num_t)arguments[0]->evaluate_integer());
     }
     else if (type == "Serial")
     {
@@ -47,10 +47,10 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
             printf("error: expecting 4 integer arguments for \"Serial\" constructor\n");
             return nullptr;
         }
-        gpio_num_t rx_pin = (gpio_num_t)arguments[0]->integer_value;
-        gpio_num_t tx_pin = (gpio_num_t)arguments[1]->integer_value;
-        long baud_rate = arguments[2]->integer_value;
-        gpio_port_t uart_num = (gpio_port_t)arguments[3]->integer_value;
+        gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
+        gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+        long baud_rate = arguments[2]->evaluate_integer();
+        gpio_port_t uart_num = (gpio_port_t)arguments[3]->evaluate_integer();
         return new Serial(name, rx_pin, tx_pin, baud_rate, uart_num);
     }
     else if (type == "RoboClaw")
@@ -62,7 +62,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
             printf("error: expecting 1 identifier argument and 1 integer argument for \"RoboClaw\" constructor\n");
             return nullptr;
         }
-        std::string serial_name = arguments[0]->identifier_value;
+        std::string serial_name = arguments[0]->evaluate_identifier();
         if (!Global::modules.count(serial_name))
         {
             printf("error: unknown module \"%s\"\n", serial_name.c_str());
@@ -74,7 +74,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
             return nullptr;
         }
         Serial *serial = (Serial *)(Global::modules[serial_name]);
-        uint8_t address = arguments[1]->integer_value;
+        uint8_t address = arguments[1]->evaluate_integer();
         return new RoboClaw(name, serial, address);
     }
     else if (type == "RoboClawMotor")
@@ -86,7 +86,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
             printf("error: expecting 1 identifier argument and 1 integer argument for \"RoboClawMotor\" constructor\n");
             return nullptr;
         }
-        std::string roboclaw_name = arguments[0]->identifier_value;
+        std::string roboclaw_name = arguments[0]->evaluate_identifier();
         if (!Global::modules.count(roboclaw_name))
         {
             printf("error: unknown module \"%s\"\n", roboclaw_name.c_str());
@@ -98,7 +98,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Argument 
             return nullptr;
         }
         RoboClaw *roboclaw = (RoboClaw *)(Global::modules[roboclaw_name]);
-        unsigned int motor_number = arguments[1]->integer_value;
+        unsigned int motor_number = arguments[1]->evaluate_integer();
         return new RoboClawMotor(name, roboclaw, motor_number);
     }
     else
@@ -120,7 +120,7 @@ void Module::step()
     }
 }
 
-void Module::call(std::string method_name, std::vector<Argument *> arguments)
+void Module::call(std::string method_name, std::vector<Expression *> arguments)
 {
     if (method_name == "mute")
     {
@@ -148,7 +148,7 @@ void Module::call(std::string method_name, std::vector<Argument *> arguments)
             printf("error: expecting 1 identifier argument for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
-        std::string target_name = arguments[0]->identifier_value;
+        std::string target_name = arguments[0]->evaluate_identifier();
         if (!Global::modules.count(target_name))
         {
             printf("error: unknown module \"%s\"\n", target_name.c_str());
@@ -172,7 +172,7 @@ void Module::call(std::string method_name, std::vector<Argument *> arguments)
     }
 }
 
-void Module::call_with_shadows(std::string method_name, std::vector<Argument *> arguments)
+void Module::call_with_shadows(std::string method_name, std::vector<Expression *> arguments)
 {
     this->call(method_name, arguments);
     for (auto const &module : this->shadow_modules)

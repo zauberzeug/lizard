@@ -10,7 +10,7 @@ Core::Core(std::string name) : Module(core, name)
 {
 }
 
-void Core::call(std::string method_name, std::vector<Argument *> arguments)
+void Core::call(std::string method_name, std::vector<Expression *> arguments)
 {
     if (method_name == "restart")
     {
@@ -29,7 +29,7 @@ void Core::call(std::string method_name, std::vector<Argument *> arguments)
             printf("error: expecting 1 string argument for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
-        printf("%s\n", arguments[0]->string_value.c_str());
+        printf("%s\n", arguments[0]->evaluate_string().c_str());
     }
     else if (method_name == "output")
     {
@@ -40,9 +40,10 @@ void Core::call(std::string method_name, std::vector<Argument *> arguments)
             return;
         }
         this->output_list.clear();
-        while (!arguments[0]->string_value.empty())
+        std::string format = arguments[0]->evaluate_string();
+        while (!format.empty())
         {
-            std::string element = cut_first_word(arguments[0]->string_value);
+            std::string element = cut_first_word(format);
             std::string module_name = cut_first_word(element, '.');
             if (!Global::modules.count(module_name))
             {

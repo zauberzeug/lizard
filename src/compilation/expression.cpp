@@ -1,32 +1,53 @@
 #include "expression.h"
 
-ConstExpression::ConstExpression(double value)
+bool Expression::evaluate_boolean()
 {
+    return false; // TODO
+}
+
+int Expression::evaluate_integer()
+{
+    return 0; // TODO
+}
+
+double Expression::evaluate_number()
+{
+    return 0; // TODO
+}
+
+std::string Expression::evaluate_identifier()
+{
+    return ""; // TODO
+}
+
+std::string Expression::evaluate_string()
+{
+    return ""; // TODO
+}
+
+bool Expression::is_numbery()
+{
+    return this->type == number || this->type == integer;
+}
+
+IntegerExpression::IntegerExpression(int value)
+{
+    this->type = integer;
     this->value = value;
 }
 
-double ConstExpression::evaluate()
+int IntegerExpression::evaluate_integer()
 {
     return this->value;
 }
 
-PropertyGetterExpression::PropertyGetterExpression(Module *module, std::string property_name)
+StringExpression::StringExpression(std::string value)
 {
-    this->module = module;
-    this->property_name = property_name;
+    this->type = string;
+    this->value = value;
 }
 
-double PropertyGetterExpression::evaluate()
+std::string StringExpression::evaluate_string()
 {
-    return this->module->get(this->property_name);
-}
-
-VariableGetterExpression::VariableGetterExpression(Variable *variable)
-{
-    this->variable = variable;
-}
-
-double VariableGetterExpression::evaluate()
-{
-    return this->variable->value;
+    return this->value;
 }

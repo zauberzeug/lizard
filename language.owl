@@ -3,61 +3,60 @@
 .whitespace ' ' '\t' '\n'
 .line-comment-token '//'
 
-statements = statement*
-statement = (
+statements = statement{';'}
+statement =
+  expression |
   constructor |
   method_call |
   routine_call |
-  property_getter |
   property_assignment |
-  variable_name |
   variable_assignment |
   routine_definition |
   rule_definition
-) (';')?
 
-actions = action*
-action = (
+actions = action{';'}
+action =
   method_call |
   routine_call |
   property_assignment |
   variable_assignment |
   await
-) (';')?
 
-constructor = module_name '=' module_type '(' ( argument (',' argument)* )? ')'
-module_type = identifier
+constructor = identifier@module_name '=' identifier@module_type [ '(' expression@argument{','} ')' ]
+property_assignment = identifier@module_name '.' identifier@property_name '=' expression
+variable_assignment = identifier@variable_name '=' expression
+rule_definition = 'when' expression [ 'then' actions 'end' ]
+routine_definition = identifier@routine_name [ ':=' actions 'end' ]
+routine_call = identifier@routine_name [ '(' ')' ]
+await = 'await' expression
+method_call = identifier@module_name '.' identifier@method_name [ '(' expression@argument{','} ')' ]
 
-property_assignment = property_setter '=' expression
-variable_assignment = variable_name '=' expression
-
-rule_definition = 'when' condition [ 'then' actions  ('else' actions)? 'end' ]
-
-routine_definition = routine_name [ ':=' actions 'end' ]
-routine_call = routine_name '(' ')'
-
-await = 'await' condition
-
-condition = expression comparison expression
-
-expression = integer | neg_integer | number | neg_number | property_getter | variable_name
-comparison =
-  '<': less
-  '==' : equal
-  '>': greater
-  '!=' : unequal
-  '<=': less_equal
-  '>=': greater_equal
-
-property_setter = module_name '.' property_name
-property_getter = module_name '.' property_name
-method_call = module_name '.' method_name '(' ( argument (',' argument)* )? ')'
-
-argument = integer | neg_integer | number | neg_number | identifier | string
-neg_integer = '-' integer
-neg_number = '-' number
-module_name = identifier
-routine_name = identifier
-property_name = identifier
-variable_name = identifier
-method_name = identifier
+expression =
+    string : string
+    integer : integer
+    number : num
+    identifier : var
+    identifier@module_name '.' identifier@property_name : prop
+    [ '(' expression ')' ] : parens
+  .operators infix left
+    '^' | '**' : pow
+  .operators prefix
+    '-' : negate
+  .operators infix flat
+    '*' : times
+    '/' : divided-by
+  .operators infix flat
+    '+' : plus
+    '-' : minus
+  .operators infix flat
+    '>' : greater
+    '<' : less
+    '>=' : greater_equal
+    '<=' : less_equal
+    '==' : equal
+    '!=' : unequal
+  .operators prefix
+    '!' | 'not' : not
+  .operators infix flat
+    '&&' | 'and' : and
+    '||' | 'or' : or

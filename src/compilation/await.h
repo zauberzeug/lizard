@@ -1,13 +1,13 @@
 #pragma once
 
 #include "action.h"
-#include "condition.h"
+#include "expression.h"
 
 class Await : public Action
 {
 public:
-    Condition *condition;
+    Expression *condition;
 
-    Await(Condition *condition);
+    Await(Expression *condition);
     bool run();
 };

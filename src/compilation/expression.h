@@ -1,42 +1,36 @@
 #pragma once
 
 #include <string>
-#include "../modules/module.h"
-#include "variable.h"
+#include "type.h"
 
 class Expression
 {
 public:
-    virtual double evaluate() = 0;
+    Type type;
+    virtual bool evaluate_boolean();
+    virtual int evaluate_integer();
+    virtual double evaluate_number();
+    virtual std::string evaluate_identifier();
+    virtual std::string evaluate_string();
+    bool is_numbery();
 };
 
-class ConstExpression : public Expression
+class IntegerExpression : public Expression
 {
 private:
-    double value;
+    int value;
 
 public:
-    ConstExpression(double value);
-    double evaluate();
+    IntegerExpression(int value);
+    int evaluate_integer();
 };
 
-class PropertyGetterExpression : public Expression
+class StringExpression : public Expression
 {
 private:
-    Module *module;
-    std::string property_name;
+    std::string value;
 
 public:
-    PropertyGetterExpression(Module *module, std::string property_name);
-    double evaluate();
-};
-
-class VariableGetterExpression : public Expression
-{
-private:
-    Variable *variable;
-
-public:
-    VariableGetterExpression(Variable *variable);
-    double evaluate();
+    StringExpression(std::string value);
+    std::string evaluate_string();
 };

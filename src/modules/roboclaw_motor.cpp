@@ -12,7 +12,7 @@ RoboClawMotor::RoboClawMotor(std::string name, RoboClaw *roboclaw, unsigned int 
     this->roboclaw = roboclaw;
 }
 
-void RoboClawMotor::call(std::string method_name, std::vector<Argument *> arguments)
+void RoboClawMotor::call(std::string method_name, std::vector<Expression *> arguments)
 {
     if (method_name == "power")
     {
@@ -22,7 +22,7 @@ void RoboClawMotor::call(std::string method_name, std::vector<Argument *> argume
             printf("error: expecting 1 number argument for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
-        unsigned short int duty = (short int)(constrain(arguments[0]->to_number(), -1, 1) * 32767);
+        unsigned short int duty = (short int)(constrain(arguments[0]->evaluate_number(), -1, 1) * 32767);
         this->motor_number == 1 ? this->roboclaw->DutyM1(duty) : this->roboclaw->DutyM2(duty);
     }
     else if (method_name == "speed")
@@ -33,7 +33,7 @@ void RoboClawMotor::call(std::string method_name, std::vector<Argument *> argume
             printf("error: expecting 1 number argument for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
-        unsigned int counts_per_second = arguments[0]->to_number();
+        unsigned int counts_per_second = arguments[0]->evaluate_number();
         this->motor_number == 1 ? this->roboclaw->DutyM1(counts_per_second) : this->roboclaw->DutyM2(counts_per_second);
     }
     else

@@ -7,7 +7,7 @@ Button::Button(std::string name, gpio_num_t number) : Module(button, name)
     gpio_set_direction(number, GPIO_MODE_INPUT);
 }
 
-void Button::call(std::string method_name, std::vector<Argument *> arguments)
+void Button::call(std::string method_name, std::vector<Expression *> arguments)
 {
     if (method_name == "get")
     {
