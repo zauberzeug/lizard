@@ -14,6 +14,6 @@ private:
 
 public:
     Led(std::string name, gpio_num_t number);
-    void call(std::string method, std::vector<Argument *> arguments);
+    void call(std::string method_name, std::vector<Argument *> arguments);
     void set(std::string property_name, double value);
 };

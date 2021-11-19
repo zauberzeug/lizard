@@ -154,10 +154,10 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
                 printf("error: unknown module \"%s\"\n", module_name_string.c_str());
                 break;
             }
-            struct parsed_method method = parsed_method_get(method_call.method);
-            std::string method_string = identifier_to_string(method.identifier);
+            struct parsed_method_name method_name = parsed_method_name_get(method_call.method_name);
+            std::string method_name_string = identifier_to_string(method_name.identifier);
             std::vector<Argument *> arguments = compile_arguments(method_call.argument);
-            actions.push_back(new MethodCall(Global::modules[module_name_string], method_string, arguments));
+            actions.push_back(new MethodCall(Global::modules[module_name_string], method_name_string, arguments));
         }
         else if (!action.routine_call.empty)
         {
@@ -171,6 +171,16 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
             }
             actions.push_back(new RoutineCall(Global::routines[routine_name_string]));
         }
+        else if (!action.property_assignment.empty)
+        {
+            printf("error: variables are not implemented yet\n");
+            break;
+        }
+        else if (!action.variable_assignment.empty)
+        {
+            printf("error: variable assignments are not implemented yet\n");
+            break;
+        }
         else if (!action.await.empty)
         {
             struct parsed_await await = parsed_await_get(action.await);
@@ -179,7 +189,7 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
         }
         else
         {
-            printf("error: within routine and rule defintions only method calls, routine calls and awaits are implemented yet\n");
+            printf("error: unknown action type\n");
             break;
         }
     }
@@ -223,10 +233,10 @@ void process_tree(owl_tree *tree)
                 printf("error: unknown module \"%s\"\n", module_name_string.c_str());
                 return;
             }
-            struct parsed_method method = parsed_method_get(method_call.method);
-            std::string method_string = identifier_to_string(method.identifier);
+            struct parsed_method_name method_name = parsed_method_name_get(method_call.method_name);
+            std::string method_name_string = identifier_to_string(method_name.identifier);
             std::vector<Argument *> arguments = compile_arguments(method_call.argument);
-            Global::modules[module_name_string]->call_with_shadows(method_string, arguments);
+            Global::modules[module_name_string]->call_with_shadows(method_name_string, arguments);
         }
         else if (!statement.routine_call.empty)
         {
@@ -263,10 +273,10 @@ void process_tree(owl_tree *tree)
             printf("%s.%s = %f\n", module_name_string.c_str(), property_name_string.c_str(), value);
             return;
         }
-        else if (!statement.assignment.empty)
+        else if (!statement.property_assignment.empty)
         {
-            struct parsed_assignment assignment = parsed_assignment_get(statement.assignment);
-            struct parsed_property_setter property_setter = parsed_property_setter_get(assignment.property_setter);
+            struct parsed_property_assignment property_assignment = parsed_property_assignment_get(statement.property_assignment);
+            struct parsed_property_setter property_setter = parsed_property_setter_get(property_assignment.property_setter);
             struct parsed_module_name module_name = parsed_module_name_get(property_setter.module_name);
             std::string module_name_string = identifier_to_string(module_name.identifier);
             if (!Global::modules.count(module_name_string))
@@ -276,8 +286,18 @@ void process_tree(owl_tree *tree)
             }
             struct parsed_property_name property_name = parsed_property_name_get(property_setter.property_name);
             std::string property_name_string = identifier_to_string(property_name.identifier);
-            Expression *expression = compile_expression(assignment.expression);
+            Expression *expression = compile_expression(property_assignment.expression);
             Global::modules[module_name_string]->set(property_name_string, expression->evaluate());
+        }
+        else if (!statement.variable_name.empty)
+        {
+            printf("error: variables are not implemented yet\n");
+            return;
+        }
+        else if (!statement.variable_assignment.empty)
+        {
+            printf("error: variable assignments are not implemented yet\n");
+            return;
         }
         else if (!statement.routine_definition.empty)
         {

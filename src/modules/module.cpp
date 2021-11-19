@@ -120,32 +120,32 @@ void Module::step()
     }
 }
 
-void Module::call(std::string method, std::vector<Argument *> arguments)
+void Module::call(std::string method_name, std::vector<Argument *> arguments)
 {
-    if (method == "mute")
+    if (method_name == "mute")
     {
         if (arguments.size() != 0)
         {
-            printf("error: expecting no arguments for method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+            printf("error: expecting no arguments for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
         this->output = false;
     }
-    else if (method == "unmute")
+    else if (method_name == "unmute")
     {
         if (arguments.size() != 0)
         {
-            printf("error: expecting no arguments for method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+            printf("error: expecting no arguments for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
         this->output = true;
     }
-    else if (method == "shadow")
+    else if (method_name == "shadow")
     {
         if (arguments.size() != 1 ||
             arguments[0]->type != identifier)
         {
-            printf("error: expecting 1 identifier argument for method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+            printf("error: expecting 1 identifier argument for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
         std::string target_name = arguments[0]->identifier_value;
@@ -167,17 +167,17 @@ void Module::call(std::string method, std::vector<Argument *> arguments)
     }
     else
     {
-        printf("error: unknown method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+        printf("error: unknown method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
         return;
     }
 }
 
-void Module::call_with_shadows(std::string method, std::vector<Argument *> arguments)
+void Module::call_with_shadows(std::string method_name, std::vector<Argument *> arguments)
 {
-    this->call(method, arguments);
+    this->call(method_name, arguments);
     for (auto const &module : this->shadow_modules)
     {
-        module->call(method, arguments);
+        module->call(method_name, arguments);
     }
 }
 

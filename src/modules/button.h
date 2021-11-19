@@ -14,7 +14,7 @@ private:
 
 public:
     Button(std::string name, gpio_num_t number);
-    void call(std::string method, std::vector<Argument *> arguments);
+    void call(std::string method_name, std::vector<Argument *> arguments);
     double get(std::string property_name);
     std::string get_output();
 };

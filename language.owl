@@ -9,7 +9,9 @@ statement = (
   method_call |
   routine_call |
   property_getter |
-  assignment |
+  property_assignment |
+  variable_name |
+  variable_assignment |
   routine_definition |
   rule_definition
 ) (';')?
@@ -18,14 +20,16 @@ actions = action*
 action = (
   method_call |
   routine_call |
-  assignment |
+  property_assignment |
+  variable_assignment |
   await
 ) (';')?
 
 constructor = module_name '=' module_type '(' ( argument (',' argument)* )? ')'
 module_type = identifier
 
-assignment = property_setter '=' expression
+property_assignment = property_setter '=' expression
+variable_assignment = variable_name '=' expression
 
 rule_definition = 'when' condition [ 'then' actions  ('else' actions)? 'end' ]
 
@@ -47,7 +51,7 @@ comparison =
 
 property_setter = module_name '.' property_name
 property_getter = module_name '.' property_name
-method_call = module_name '.' method '(' ( argument (',' argument)* )? ')'
+method_call = module_name '.' method_name '(' ( argument (',' argument)* )? ')'
 
 argument = integer | neg_integer | number | neg_number | identifier | string
 neg_integer = '-' integer
@@ -55,4 +59,5 @@ neg_number = '-' number
 module_name = identifier
 routine_name = identifier
 property_name = identifier
-method = identifier
+variable_name = identifier
+method_name = identifier

@@ -10,33 +10,33 @@ Core::Core(std::string name) : Module(core, name)
 {
 }
 
-void Core::call(std::string method, std::vector<Argument *> arguments)
+void Core::call(std::string method_name, std::vector<Argument *> arguments)
 {
-    if (method == "restart")
+    if (method_name == "restart")
     {
         if (arguments.size() != 0)
         {
-            printf("error: expecting no arguments for method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+            printf("error: expecting no arguments for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
         esp_restart();
     }
-    else if (method == "print")
+    else if (method_name == "print")
     {
         if (arguments.size() != 1 ||
             arguments[0]->type != string)
         {
-            printf("error: expecting 1 string argument for method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+            printf("error: expecting 1 string argument for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
         printf("%s\n", arguments[0]->string_value.c_str());
     }
-    else if (method == "output")
+    else if (method_name == "output")
     {
         if (arguments.size() != 1 ||
             arguments[0]->type != string)
         {
-            printf("error: expecting 1 string argument for method \"%s.%s\"\n", this->name.c_str(), method.c_str());
+            printf("error: expecting 1 string argument for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
             return;
         }
         this->output_list.clear();
@@ -58,7 +58,7 @@ void Core::call(std::string method, std::vector<Argument *> arguments)
     }
     else
     {
-        Module::call(method, arguments);
+        Module::call(method_name, arguments);
     }
 }
 
