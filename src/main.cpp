@@ -35,46 +35,17 @@ std::string identifier_to_string(struct owl_ref ref)
     return std::string(identifier.identifier, identifier.length);
 }
 
-// std::vector<Expression *> compile_arguments(struct owl_ref ref)
-// {
-//     std::vector<Expression *> arguments;
-//     for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
-//     {
-//         struct parsed_argument argument = parsed_argument_get(r);
-//         if (!argument.expression.empty)
-//         {
-//             Expression *expression = compile_expression(argument.expression);
-//             arguments.push_back(Expression::create_expression(expression));
-//         }
-//         else if (!argument.number.empty)
-//         {
-//             struct parsed_number number = parsed_number_get(argument.number);
-//             arguments.push_back(Expression::create_number(number.number));
-//         }
-//         else if (!argument.neg_number.empty)
-//         {
-//             struct parsed_neg_number neg_number = parsed_neg_number_get(argument.neg_number);
-//             struct parsed_number number = parsed_number_get(neg_number.number);
-//             arguments.push_back(Expression::create_number(-number.number));
-//         }
-//         else if (!argument.identifier.empty)
-//         {
-//             std::string identifier_string = identifier_to_string(argument.identifier);
-//             arguments.push_back(Expression::create_identifier(identifier_string));
-//         }
-//         else if (!argument.string.empty)
-//         {
-//             parsed_string string = parsed_string_get(argument.string);
-//             std::string string_string = std::string(string.string, string.length);
-//             arguments.push_back(Expression::create_string(string_string));
-//         }
-//         else
-//         {
-//             printf("error: invalid argument in range \"%d\"-\"%d\"\n", argument.range.start, argument.range.end);
-//         }
-//     }
-//     return arguments;
-// }
+Expression *compile_expression(struct owl_ref ref);
+
+std::vector<Expression *> compile_arguments(struct owl_ref ref)
+{
+    std::vector<Expression *> arguments;
+    for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
+    {
+        arguments.push_back(compile_expression(r));
+    }
+    return arguments;
+}
 
 Expression *compile_expression(struct owl_ref ref)
 {
@@ -91,17 +62,10 @@ Expression *compile_expression(struct owl_ref ref)
     case PARSED_NUMBER:
         return new NumberExpression(parsed_number_get(expression.number).number);
     case PARSED_VARIABLE:
-    {
-        struct parsed_identifier identifier = parsed_identifier_get(expression.identifier);
-        return new VariableExpression(Global::variables[std::string(identifier.identifier, identifier.length)]);
-    }
+        return new VariableExpression(Global::variables[identifier_to_string(expression.identifier)]);
     case PARSED_PROPERTY:
-    {
-        struct parsed_identifier module_name = parsed_identifier_get(expression.module_name);
-        struct parsed_identifier property_name = parsed_identifier_get(expression.property_name);
-        return new PropertyExpression(Global::modules[std::string(module_name.identifier, module_name.length)],
-                                      std::string(property_name.identifier, property_name.length));
-    }
+        return new PropertyExpression(Global::modules[identifier_to_string(expression.module_name)],
+                                      identifier_to_string(expression.property_name));
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
@@ -140,67 +104,63 @@ Expression *compile_expression(struct owl_ref ref)
     }
 }
 
-// std::vector<Action *> compile_actions(struct owl_ref ref)
-// {
-//     std::vector<Action *> actions;
-//     for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
-//     {
-//         struct parsed_action action = parsed_action_get(r);
-//         if (!action.method_call.empty)
-//         {
-//             struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
-//             struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
-//             std::string module_name_string = identifier_to_string(module_name.identifier);
-//             if (!Global::modules.count(module_name_string))
-//             {
-//                 printf("error: unknown module \"%s\"\n", module_name_string.c_str());
-//                 break;
-//             }
-//             struct parsed_method_name method_name = parsed_method_name_get(method_call.method_name);
-//             std::string method_name_string = identifier_to_string(method_name.identifier);
-//             std::vector<Argument *> arguments = compile_arguments(method_call.argument);
-//             actions.push_back(new MethodCall(Global::modules[module_name_string], method_name_string, arguments));
-//         }
-//         else if (!action.routine_call.empty)
-//         {
-//             struct parsed_routine_call routine_call = parsed_routine_call_get(action.routine_call);
-//             struct parsed_routine_name routine_name = parsed_routine_name_get(routine_call.routine_name);
-//             std::string routine_name_string = identifier_to_string(routine_name.identifier);
-//             if (!Global::routines.count(routine_name_string))
-//             {
-//                 printf("error: unknown routine \"%s\"\n", routine_name_string.c_str());
-//                 break;
-//             }
-//             actions.push_back(new RoutineCall(Global::routines[routine_name_string]));
-//         }
-//         else if (!action.variable_assignment.empty)
-//         {
-//             struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(action.variable_assignment);
-//             struct parsed_variable_name variable_name = parsed_variable_name_get(variable_assignment.variable_name);
-//             std::string variable_name_string = identifier_to_string(variable_name.identifier);
-//             if (!Global::variables.count(variable_name_string))
-//             {
-//                 printf("error: unknown variable \"%s\"\n", variable_name_string.c_str());
-//                 break;
-//             }
-//             Variable *variable = Global::variables[variable_name_string];
-//             Expression *expression = compile_expression(variable_assignment.expression);
-//             actions.push_back(new VariableAssignment(variable, expression));
-//         }
-//         else if (!action.await.empty)
-//         {
-//             struct parsed_await await = parsed_await_get(action.await);
-//             Condition *condition = compile_condition(await.condition);
-//             actions.push_back(new Await(condition));
-//         }
-//         else
-//         {
-//             printf("error: unknown action type\n");
-//             break;
-//         }
-//     }
-//     return actions;
-// }
+std::vector<Action *> compile_actions(struct owl_ref ref)
+{
+    std::vector<Action *> actions;
+    for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
+    {
+        struct parsed_action action = parsed_action_get(r);
+        if (!action.method_call.empty)
+        {
+            struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
+            std::string module_name = identifier_to_string(method_call.module_name);
+            if (!Global::modules.count(module_name))
+            {
+                printf("error: unknown module \"%s\"\n", module_name.c_str());
+                break;
+            }
+            std::string method_name = identifier_to_string(method_call.method_name);
+            std::vector<Expression *> arguments = compile_arguments(method_call.argument);
+            actions.push_back(new MethodCall(Global::modules[module_name], method_name, arguments));
+        }
+        else if (!action.routine_call.empty)
+        {
+            struct parsed_routine_call routine_call = parsed_routine_call_get(action.routine_call);
+            std::string routine_name = identifier_to_string(routine_call.routine_name);
+            if (!Global::routines.count(routine_name))
+            {
+                printf("error: unknown routine \"%s\"\n", routine_name.c_str());
+                break;
+            }
+            actions.push_back(new RoutineCall(Global::routines[routine_name]));
+        }
+        else if (!action.variable_assignment.empty)
+        {
+            struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(action.variable_assignment);
+            std::string variable_name = identifier_to_string(variable_assignment.variable_name);
+            if (!Global::variables.count(variable_name))
+            {
+                printf("error: unknown variable \"%s\"\n", variable_name.c_str());
+                break;
+            }
+            Variable *variable = Global::variables[variable_name];
+            Expression *expression = compile_expression(variable_assignment.expression);
+            actions.push_back(new VariableAssignment(variable, expression));
+        }
+        else if (!action.await.empty)
+        {
+            struct parsed_await await = parsed_await_get(action.await);
+            Expression *condition = compile_expression(await.condition);
+            actions.push_back(new Await(condition));
+        }
+        else
+        {
+            printf("error: unknown action type\n");
+            break;
+        }
+    }
+    return actions;
+}
 
 void process_tree(owl_tree *tree)
 {
@@ -230,139 +190,120 @@ void process_tree(owl_tree *tree)
                 break;
             }
         }
-        // else if (!statement.constructor.empty)
-        // {
-        //     struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
-        //     struct parsed_module_name module_name = parsed_module_name_get(constructor.module_name);
-        //     std::string module_name_string = identifier_to_string(module_name.identifier);
-        //     if (Global::modules.count(module_name_string))
-        //     {
-        //         printf("error: module \"%s\" already exists\n", module_name_string.c_str());
-        //         return;
-        //     }
-        //     struct parsed_module_type module_type = parsed_module_type_get(constructor.module_type);
-        //     std::string module_type_string = identifier_to_string(module_type.identifier);
-        //     std::vector<Argument *> arguments = compile_arguments(constructor.argument);
-        //     Module *module = Module::create(module_type_string, module_name_string, arguments);
-        //     if (module == nullptr)
-        //     {
-        //         printf("error: could not create module\n");
-        //         return;
-        //     }
-        //     Global::modules[module_name_string] = module;
-        // }
-        // else if (!statement.method_call.empty)
-        // {
-        //     struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
-        //     struct parsed_module_name module_name = parsed_module_name_get(method_call.module_name);
-        //     std::string module_name_string = identifier_to_string(module_name.identifier);
-        //     if (!Global::modules.count(module_name_string))
-        //     {
-        //         printf("error: unknown module \"%s\"\n", module_name_string.c_str());
-        //         return;
-        //     }
-        //     struct parsed_method_name method_name = parsed_method_name_get(method_call.method_name);
-        //     std::string method_name_string = identifier_to_string(method_name.identifier);
-        //     std::vector<Argument *> arguments = compile_arguments(method_call.argument);
-        //     Global::modules[module_name_string]->call_with_shadows(method_name_string, arguments);
-        // }
-        // else if (!statement.routine_call.empty)
-        // {
-        //     struct parsed_routine_call routine_call = parsed_routine_call_get(statement.routine_call);
-        //     struct parsed_routine_name routine_name = parsed_routine_name_get(routine_call.routine_name);
-        //     std::string routine_name_string = identifier_to_string(routine_name.identifier);
-        //     if (!Global::routines.count(routine_name_string))
-        //     {
-        //         printf("error: unknown routine \"%s\"\n", routine_name_string.c_str());
-        //         return;
-        //     }
-        //     if (Global::routines[routine_name_string]->is_running())
-        //     {
-        //         printf("error: routine \"%s\" is alreaty running\n", routine_name_string.c_str());
-        //     }
-        //     else
-        //     {
-        //         Global::routines[routine_name_string]->start();
-        //     }
-        // }
-        // else if (!statement.property_getter.empty)
-        // {
-        //     struct parsed_property_getter property_getter = parsed_property_getter_get(statement.property_getter);
-        //     struct parsed_module_name module_name = parsed_module_name_get(property_getter.module_name);
-        //     std::string module_name_string = identifier_to_string(module_name.identifier);
-        //     if (!Global::modules.count(module_name_string))
-        //     {
-        //         printf("error: unknown module \"%s\"\n", module_name_string.c_str());
-        //         return;
-        //     }
-        //     struct parsed_property_name property_name = parsed_property_name_get(property_getter.property_name);
-        //     std::string property_name_string = identifier_to_string(property_name.identifier);
-        //     double value = Global::modules[module_name_string]->get(property_name_string);
-        //     printf("%s.%s = %f\n", module_name_string.c_str(), property_name_string.c_str(), value);
-        //     return;
-        // }
-        // else if (!statement.property_assignment.empty)
-        // {
-        //     struct parsed_property_assignment property_assignment = parsed_property_assignment_get(statement.property_assignment);
-        //     struct parsed_property_setter property_setter = parsed_property_setter_get(property_assignment.property_setter);
-        //     struct parsed_module_name module_name = parsed_module_name_get(property_setter.module_name);
-        //     std::string module_name_string = identifier_to_string(module_name.identifier);
-        //     if (!Global::modules.count(module_name_string))
-        //     {
-        //         printf("error: unknown module \"%s\"\n", module_name_string.c_str());
-        //         return;
-        //     }
-        //     struct parsed_property_name property_name = parsed_property_name_get(property_setter.property_name);
-        //     std::string property_name_string = identifier_to_string(property_name.identifier);
-        //     Expression *expression = compile_expression(property_assignment.expression);
-        //     Global::modules[module_name_string]->set(property_name_string, expression->evaluate());
-        // }
-        // else if (!statement.variable_name.empty)
-        // {
-        //     struct parsed_variable_name variable_name = parsed_variable_name_get(statement.variable_name);
-        //     std::string variable_name_string = identifier_to_string(variable_name.identifier);
-        //     if (!Global::variables.count(variable_name_string))
-        //     {
-        //         printf("error: unknown variable \"%s\"\n", variable_name_string.c_str());
-        //         return;
-        //     }
-        //     printf("%f\n", Global::variables[variable_name_string]->value);
-        // }
-        // else if (!statement.variable_assignment.empty)
-        // {
-        //     struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(statement.variable_assignment);
-        //     struct parsed_variable_name variable_name = parsed_variable_name_get(variable_assignment.variable_name);
-        //     std::string variable_name_string = identifier_to_string(variable_name.identifier);
-        //     if (!Global::variables.count(variable_name_string))
-        //     {
-        //         Global::variables[variable_name_string] = new Variable();
-        //     }
-        //     Expression *expression = compile_expression(variable_assignment.expression);
-        //     Global::variables[variable_name_string]->set(expression->evaluate());
-        // }
-        // else if (!statement.routine_definition.empty)
-        // {
-        //     struct parsed_routine_definition routine_definition = parsed_routine_definition_get(statement.routine_definition);
-        //     struct parsed_routine_name routine_name = parsed_routine_name_get(routine_definition.routine_name);
-        //     std::string routine_name_string = identifier_to_string(routine_name.identifier);
-        //     if (Global::routines.count(routine_name_string))
-        //     {
-        //         printf("error: routine \"%s\" already exists\n", routine_name_string.c_str());
-        //         return;
-        //     }
-        //     struct parsed_actions actions = parsed_actions_get(routine_definition.actions);
-        //     Global::routines[routine_name_string] = new Routine(compile_actions(actions.action));
-        // }
-        // else if (!statement.rule_definition.empty)
-        // {
-        //     struct parsed_rule_definition rule_definition = parsed_rule_definition_get(statement.rule_definition);
-        //     struct parsed_actions actions = parsed_actions_get(rule_definition.actions);
-        //     Global::rules.push_back(new Rule(compile_condition(rule_definition.condition), new Routine(compile_actions(actions.action))));
-        // }
-        // else
-        // {
-        //     printf("error: unknown statement type\n");
-        // }
+        else if (!statement.constructor.empty)
+        {
+            struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
+            std::string module_name = identifier_to_string(constructor.module_name);
+            if (Global::modules.count(module_name))
+            {
+                printf("error: module \"%s\" already exists\n", module_name.c_str());
+                return;
+            }
+            std::string module_type = identifier_to_string(constructor.module_type);
+            std::vector<Expression *> arguments = compile_arguments(constructor.argument);
+            Module *module = Module::create(module_type, module_name, arguments);
+            if (module == nullptr)
+            {
+                printf("error: could not create module\n");
+                return;
+            }
+            Global::modules[module_name] = module;
+        }
+        else if (!statement.method_call.empty)
+        {
+            struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
+            std::string module_name = identifier_to_string(method_call.module_name);
+            if (!Global::modules.count(module_name))
+            {
+                printf("error: unknown module \"%s\"\n", module_name.c_str());
+                return;
+            }
+            std::string method_name = identifier_to_string(method_call.method_name);
+            std::vector<Expression *> arguments = compile_arguments(method_call.argument);
+            Global::modules[module_name]->call_with_shadows(method_name, arguments);
+        }
+        else if (!statement.routine_call.empty)
+        {
+            struct parsed_routine_call routine_call = parsed_routine_call_get(statement.routine_call);
+            std::string routine_name = identifier_to_string(routine_call.routine_name);
+            if (!Global::routines.count(routine_name))
+            {
+                printf("error: unknown routine \"%s\"\n", routine_name.c_str());
+                return;
+            }
+            if (Global::routines[routine_name]->is_running())
+            {
+                printf("error: routine \"%s\" is alreaty running\n", routine_name.c_str());
+            }
+            else
+            {
+                Global::routines[routine_name]->start();
+            }
+        }
+        else if (!statement.property_assignment.empty)
+        {
+            struct parsed_property_assignment property_assignment = parsed_property_assignment_get(statement.property_assignment);
+            std::string module_name = identifier_to_string(property_assignment.module_name);
+            if (!Global::modules.count(module_name))
+            {
+                printf("error: unknown module \"%s\"\n", module_name.c_str());
+                return;
+            }
+            std::string property_name = identifier_to_string(property_assignment.property_name);
+            Expression *expression = compile_expression(property_assignment.expression);
+            Global::modules[module_name]->set(property_name, expression->evaluate_number());
+        }
+        else if (!statement.variable_assignment.empty)
+        {
+            struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(statement.variable_assignment);
+            std::string variable_name = identifier_to_string(variable_assignment.variable_name);
+            if (!Global::variables.count(variable_name))
+            {
+                Global::variables[variable_name] = new Variable();
+            }
+            Variable *variable = Global::variables[variable_name];
+            Expression *expression = compile_expression(variable_assignment.expression);
+            switch (expression->type)
+            {
+            case boolean:
+                variable->set_boolean(expression->evaluate_boolean());
+                break;
+            case integer:
+                variable->set_integer(expression->evaluate_integer());
+                break;
+            case number:
+                variable->set_number(expression->evaluate_number());
+                break;
+            case string:
+                variable->set_string(expression->evaluate_string());
+                break;
+            default:
+                printf("error: invalid variable type\n");
+            }
+        }
+        else if (!statement.routine_definition.empty)
+        {
+            struct parsed_routine_definition routine_definition = parsed_routine_definition_get(statement.routine_definition);
+            std::string routine_name = identifier_to_string(routine_definition.routine_name);
+            if (Global::routines.count(routine_name))
+            {
+                printf("error: routine \"%s\" already exists\n", routine_name.c_str());
+                return;
+            }
+            struct parsed_actions actions = parsed_actions_get(routine_definition.actions);
+            Global::routines[routine_name] = new Routine(compile_actions(actions.action));
+        }
+        else if (!statement.rule_definition.empty)
+        {
+            struct parsed_rule_definition rule_definition = parsed_rule_definition_get(statement.rule_definition);
+            struct parsed_actions actions = parsed_actions_get(rule_definition.actions);
+            Routine *routine = new Routine(compile_actions(actions.action));
+            Global::rules.push_back(new Rule(compile_expression(rule_definition.condition), routine));
+        }
+        else
+        {
+            printf("error: unknown statement type\n");
+        }
     }
 }
 

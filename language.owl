@@ -25,10 +25,10 @@ action =
 constructor = identifier@module_name '=' identifier@module_type [ '(' expression@argument{','} ')' ]
 property_assignment = identifier@module_name '.' identifier@property_name '=' expression
 variable_assignment = identifier@variable_name '=' expression
-rule_definition = 'when' expression [ 'then' actions 'end' ]
+rule_definition = 'when' expression@condition [ 'then' actions 'end' ]
 routine_definition = identifier@routine_name [ ':=' actions 'end' ]
 routine_call = identifier@routine_name [ '(' ')' ]
-await = 'await' expression
+await = 'await' expression@condition
 method_call = identifier@module_name '.' identifier@method_name [ '(' expression@argument{','} ')' ]
 
 expression =

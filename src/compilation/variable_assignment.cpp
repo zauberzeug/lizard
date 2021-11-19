@@ -8,13 +8,22 @@ VariableAssignment::VariableAssignment(Variable *variable, Expression *expressio
 
 bool VariableAssignment::run()
 {
-    if (this->expression->type == number)
+    switch (this->expression->type)
     {
+    case boolean:
+        this->variable->set_boolean(this->expression->evaluate_boolean());
+        break;
+    case integer:
+        this->variable->set_integer(this->expression->evaluate_integer());
+        break;
+    case number:
         this->variable->set_number(this->expression->evaluate_number());
-    }
-    else
-    {
-        printf("error: only number variables are supported yet\n");
+        break;
+    case string:
+        this->variable->set_string(this->expression->evaluate_string());
+        break;
+    default:
+        printf("error: invalid variable type\n");
     }
     return true;
 }
