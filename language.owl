@@ -34,21 +34,21 @@ method_call = identifier@module_name '.' identifier@method_name [ '(' expression
 expression =
     string : string
     integer : integer
-    number : num
-    identifier : var
-    identifier@module_name '.' identifier@property_name : prop
-    [ '(' expression ')' ] : parens
+    number : number
+    identifier : variable
+    identifier@module_name '.' identifier@property_name : property
+    [ '(' expression ')' ] : parentheses
   .operators infix left
-    '^' | '**' : pow
+    '^' | '**' : power
   .operators prefix
     '-' : negate
-  .operators infix flat
-    '*' : times
-    '/' : divided-by
-  .operators infix flat
-    '+' : plus
-    '-' : minus
-  .operators infix flat
+  .operators infix left
+    '*' : multiply
+    '/' : divide
+  .operators infix left
+    '+' : add
+    '-' : subtract
+  .operators infix left
     '>' : greater
     '<' : less
     '>=' : greater_equal
@@ -57,6 +57,6 @@ expression =
     '!=' : unequal
   .operators prefix
     '!' | 'not' : not
-  .operators infix flat
+  .operators infix left
     '&&' | 'and' : and
     '||' | 'or' : or

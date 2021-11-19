@@ -81,42 +81,63 @@ Expression *compile_expression(struct owl_ref ref)
     struct parsed_expression expression = parsed_expression_get(ref);
     switch (expression.type)
     {
-    case PARSED_INTEGER:
-        return new IntegerExpression(parsed_integer_get(expression.integer).integer);
     case PARSED_STRING:
     {
         struct parsed_string string = parsed_string_get(expression.string);
         return new StringExpression(std::string(string.string, string.length));
     }
+    case PARSED_INTEGER:
+        return new IntegerExpression(parsed_integer_get(expression.integer).integer);
+    case PARSED_NUMBER:
+        return new NumberExpression(parsed_number_get(expression.number).number);
+    case PARSED_VARIABLE:
+    {
+        struct parsed_identifier identifier = parsed_identifier_get(expression.identifier);
+        return new VariableExpression(Global::variables[std::string(identifier.identifier, identifier.length)]);
+    }
+    case PARSED_PROPERTY:
+    {
+        struct parsed_identifier module_name = parsed_identifier_get(expression.module_name);
+        struct parsed_identifier property_name = parsed_identifier_get(expression.property_name);
+        return new PropertyExpression(Global::modules[std::string(module_name.identifier, module_name.length)],
+                                      std::string(property_name.identifier, property_name.length));
+    }
+    case PARSED_PARENTHESES:
+        return compile_expression(expression.expression);
+    case PARSED_POWER:
+        return new PowerExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_NEGATE:
+        return new NegateExpression(compile_expression(expression.operand));
+    case PARSED_MULTIPLY:
+        return new MultiplyExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_DIVIDE:
+        return new DivideExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_ADD:
+        return new AddExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_SUBTRACT:
+        return new SubtractExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_GREATER:
+        return new GreaterExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_LESS:
+        return new LessExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_GREATER_EQUAL:
+        return new GreaterEqualExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_LESS_EQUAL:
+        return new LessEqualExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_EQUAL:
+        return new EqualExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_UNEQUAL:
+        return new UnequalExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_NOT:
+        return new NotExpression(compile_expression(expression.operand));
+    case PARSED_AND:
+        return new AndExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_OR:
+        return new OrExpression(compile_expression(expression.left), compile_expression(expression.right));
     default:
         printf("error: invalid expression in range \"%d\"-\"%d\"\n", expression.range.start, expression.range.end);
         return nullptr;
     }
-    //     if (!expression.property_getter.empty)
-    //     {
-    //         struct parsed_property_getter property_getter = parsed_property_getter_get(expression.property_getter);
-    //         struct parsed_module_name module_name = parsed_module_name_get(property_getter.module_name);
-    //         std::string module_name_string = identifier_to_string(module_name.identifier);
-    //         if (!Global::modules.count(module_name_string))
-    //         {
-    //             printf("error: unknown module \"%s\"\n", module_name_string.c_str());
-    //             return nullptr;
-    //         }
-    //         struct parsed_property_name property_name = parsed_property_name_get(property_getter.property_name);
-    //         std::string property_name_string = identifier_to_string(property_name.identifier);
-    //         return new PropertyGetterExpression(Global::modules[module_name_string], property_name_string);
-    //     }
-    //     if (!expression.variable_name.empty)
-    //     {
-    //         struct parsed_variable_name variable_name = parsed_variable_name_get(expression.variable_name);
-    //         std::string variable_name_string = identifier_to_string(variable_name.identifier);
-    //         if (!Global::variables.count(variable_name_string))
-    //         {
-    //             printf("error: unknown variable \"%s\"\n", variable_name_string.c_str());
-    //             return nullptr;
-    //         }
-    //         return new VariableGetterExpression(Global::variables[variable_name_string]);
-    //     }
 }
 
 // std::vector<Action *> compile_actions(struct owl_ref ref)
