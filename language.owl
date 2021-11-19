@@ -40,7 +40,7 @@ await = 'await' condition
 
 condition = expression comparison expression
 
-expression = integer | neg_integer | number | neg_number | property_getter
+expression = integer | neg_integer | number | neg_number | property_getter | variable_name
 comparison =
   '<': less
   '==' : equal

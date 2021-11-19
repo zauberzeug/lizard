@@ -20,3 +20,13 @@ double PropertyGetterExpression::evaluate()
 {
     return this->module->get(this->property_name);
 }
+
+VariableGetterExpression::VariableGetterExpression(Variable *variable)
+{
+    this->variable = variable;
+}
+
+double VariableGetterExpression::evaluate()
+{
+    return this->variable->value;
+}

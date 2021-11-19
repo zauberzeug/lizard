@@ -13,6 +13,7 @@
 #include "compilation/routine.h"
 #include "compilation/routine_call.h"
 #include "compilation/rule.h"
+#include "compilation/variable_assignment.h"
 #include "modules/core.h"
 #include "modules/module.h"
 #include "utils/tictoc.h"
@@ -121,6 +122,17 @@ Expression *compile_expression(struct owl_ref ref)
         std::string property_name_string = identifier_to_string(property_name.identifier);
         return new PropertyGetterExpression(Global::modules[module_name_string], property_name_string);
     }
+    if (!expression.variable_name.empty)
+    {
+        struct parsed_variable_name variable_name = parsed_variable_name_get(expression.variable_name);
+        std::string variable_name_string = identifier_to_string(variable_name.identifier);
+        if (!Global::variables.count(variable_name_string))
+        {
+            printf("error: unknown variable \"%s\"\n", variable_name_string.c_str());
+            return nullptr;
+        }
+        return new VariableGetterExpression(Global::variables[variable_name_string]);
+    }
     printf("error: invalid expression in range \"%d\"-\"%d\"\n", expression.range.start, expression.range.end);
     return nullptr;
 }
@@ -171,15 +183,19 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
             }
             actions.push_back(new RoutineCall(Global::routines[routine_name_string]));
         }
-        else if (!action.property_assignment.empty)
-        {
-            printf("error: variables are not implemented yet\n");
-            break;
-        }
         else if (!action.variable_assignment.empty)
         {
-            printf("error: variable assignments are not implemented yet\n");
-            break;
+            struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(action.variable_assignment);
+            struct parsed_variable_name variable_name = parsed_variable_name_get(variable_assignment.variable_name);
+            std::string variable_name_string = identifier_to_string(variable_name.identifier);
+            if (!Global::variables.count(variable_name_string))
+            {
+                printf("error: unknown variable \"%s\"\n", variable_name_string.c_str());
+                break;
+            }
+            Variable *variable = Global::variables[variable_name_string];
+            Expression *expression = compile_expression(variable_assignment.expression);
+            actions.push_back(new VariableAssignment(variable, expression));
         }
         else if (!action.await.empty)
         {
@@ -265,7 +281,7 @@ void process_tree(owl_tree *tree)
             if (!Global::modules.count(module_name_string))
             {
                 printf("error: unknown module \"%s\"\n", module_name_string.c_str());
-                break;
+                return;
             }
             struct parsed_property_name property_name = parsed_property_name_get(property_getter.property_name);
             std::string property_name_string = identifier_to_string(property_name.identifier);
@@ -282,7 +298,7 @@ void process_tree(owl_tree *tree)
             if (!Global::modules.count(module_name_string))
             {
                 printf("error: unknown module \"%s\"\n", module_name_string.c_str());
-                break;
+                return;
             }
             struct parsed_property_name property_name = parsed_property_name_get(property_setter.property_name);
             std::string property_name_string = identifier_to_string(property_name.identifier);
@@ -291,13 +307,26 @@ void process_tree(owl_tree *tree)
         }
         else if (!statement.variable_name.empty)
         {
-            printf("error: variables are not implemented yet\n");
-            return;
+            struct parsed_variable_name variable_name = parsed_variable_name_get(statement.variable_name);
+            std::string variable_name_string = identifier_to_string(variable_name.identifier);
+            if (!Global::variables.count(variable_name_string))
+            {
+                printf("error: unknown variable \"%s\"\n", variable_name_string.c_str());
+                return;
+            }
+            printf("%f\n", Global::variables[variable_name_string]->value);
         }
         else if (!statement.variable_assignment.empty)
         {
-            printf("error: variable assignments are not implemented yet\n");
-            return;
+            struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(statement.variable_assignment);
+            struct parsed_variable_name variable_name = parsed_variable_name_get(variable_assignment.variable_name);
+            std::string variable_name_string = identifier_to_string(variable_name.identifier);
+            if (!Global::variables.count(variable_name_string))
+            {
+                Global::variables[variable_name_string] = new Variable();
+            }
+            Expression *expression = compile_expression(variable_assignment.expression);
+            Global::variables[variable_name_string]->set(expression->evaluate());
         }
         else if (!statement.routine_definition.empty)
         {
