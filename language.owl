@@ -38,8 +38,12 @@ condition = expression comparison expression
 
 expression = integer | neg_integer | number | neg_number | property_getter
 comparison =
+  '<': less
   '==' : equal
+  '>': greater
   '!=' : unequal
+  '<=': less_equal
+  '>=': greater_equal
 
 property_setter = module_name '.' property_name
 property_getter = module_name '.' property_name

@@ -128,8 +128,14 @@ Expression *compile_expression(struct owl_ref ref)
 Condition *compile_condition(struct owl_ref ref)
 {
     struct parsed_condition condition = parsed_condition_get(ref);
-    bool equality = parsed_comparison_get(condition.comparison).type == PARSED_EQUAL;
-    return new Condition(compile_expression(condition.expression), compile_expression(owl_next(condition.expression)), equality);
+    static_assert((int)PARSED_EQUAL == (int)equal);
+    static_assert((int)PARSED_UNEQUAL == (int)unequal);
+    static_assert((int)PARSED_LESS == (int)less);
+    static_assert((int)PARSED_GREATER == (int)greater);
+    static_assert((int)PARSED_LESS_EQUAL == (int)less_equal);
+    static_assert((int)PARSED_GREATER_EQUAL == (int)greater_equal);
+    Relation relation = (Relation)parsed_comparison_get(condition.comparison).type;
+    return new Condition(compile_expression(condition.expression), compile_expression(owl_next(condition.expression)), relation);
 }
 
 std::vector<Action *> compile_actions(struct owl_ref ref)
