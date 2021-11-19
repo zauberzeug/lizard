@@ -54,7 +54,7 @@ private:
 
 public:
     VariableExpression(Variable *variable);
-    bool evaluate_bool();
+    bool evaluate_boolean();
     int evaluate_integer();
     double evaluate_number();
     std::string evaluate_string();
@@ -79,6 +79,7 @@ private:
 
 public:
     PowerExpression(Expression *left, Expression *right);
+    int evaluate_integer();
     double evaluate_number();
 };
 
@@ -89,6 +90,7 @@ private:
 
 public:
     NegateExpression(Expression *operand);
+    int evaluate_integer();
     double evaluate_number();
 };
 
@@ -99,6 +101,7 @@ private:
 
 public:
     MultiplyExpression(Expression *left, Expression *right);
+    int evaluate_integer();
     double evaluate_number();
 };
 
@@ -109,6 +112,7 @@ private:
 
 public:
     DivideExpression(Expression *left, Expression *right);
+    int evaluate_integer();
     double evaluate_number();
 };
 
@@ -119,6 +123,7 @@ private:
 
 public:
     AddExpression(Expression *left, Expression *right);
+    int evaluate_integer();
     double evaluate_number();
 };
 
@@ -129,6 +134,7 @@ private:
 
 public:
     SubtractExpression(Expression *left, Expression *right);
+    int evaluate_integer();
     double evaluate_number();
 };
 

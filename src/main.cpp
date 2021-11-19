@@ -251,6 +251,11 @@ void process_tree(owl_tree *tree)
             }
             std::string property_name = identifier_to_string(property_assignment.property_name);
             Expression *expression = compile_expression(property_assignment.expression);
+            if (!expression->is_numbery())
+            {
+                printf("error: expression is no number\n");
+                return;
+            }
             Global::modules[module_name]->set(property_name, expression->evaluate_number());
         }
         else if (!statement.variable_assignment.empty)
