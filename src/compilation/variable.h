@@ -19,20 +19,24 @@ public:
 
 class BooleanVariable : public Variable
 {
-    BooleanVariable(bool value);
+public:
+    BooleanVariable();
 };
 
 class IntegerVariable : public Variable
 {
-    IntegerVariable(int value);
+public:
+    IntegerVariable();
 };
 
 class NumberVariable : public Variable
 {
-    NumberVariable(double value);
+public:
+    NumberVariable();
 };
 
 class StringVariable : public Variable
 {
-    StringVariable(std::string value);
+public:
+    StringVariable();
 };

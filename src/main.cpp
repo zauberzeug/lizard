@@ -13,6 +13,7 @@
 #include "compilation/routine.h"
 #include "compilation/routine_call.h"
 #include "compilation/rule.h"
+#include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
 #include "modules/core.h"
 #include "modules/module.h"
@@ -253,6 +254,37 @@ void process_tree(owl_tree *tree)
                 throw std::runtime_error("unknown variable \"" + variable_name + "\"");
             }
             Global::variables[variable_name]->assign(compile_expression(variable_assignment.expression));
+        }
+        else if (!statement.variable_declaration.empty)
+        {
+            struct parsed_variable_declaration variable_declaration = parsed_variable_declaration_get(statement.variable_declaration);
+            struct parsed_datatype datatype = parsed_datatype_get(variable_declaration.datatype);
+            std::string variable_name = identifier_to_string(variable_declaration.variable_name);
+            if (Global::variables.count(variable_name))
+            {
+                throw std::runtime_error("variable \"" + variable_name + "\" already exists");
+            }
+            switch (datatype.type)
+            {
+            case PARSED_BOOLEAN:
+                Global::variables[variable_name] = new BooleanVariable();
+                break;
+            case PARSED_INTEGER:
+                Global::variables[variable_name] = new IntegerVariable();
+                break;
+            case PARSED_NUMBER:
+                Global::variables[variable_name] = new NumberVariable();
+                break;
+            case PARSED_STRING:
+                Global::variables[variable_name] = new StringVariable();
+                break;
+            default:
+                throw std::runtime_error("invalid data type for variable declaration");
+            }
+            if (!variable_declaration.expression.empty)
+            {
+                Global::variables[variable_name]->assign(compile_expression(variable_declaration.expression));
+            }
         }
         else if (!statement.routine_definition.empty)
         {
