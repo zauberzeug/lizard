@@ -1,5 +1,6 @@
 #include "expression.h"
 
+#include <stdexcept>
 #include "math.h"
 #include "../modules/module.h"
 
@@ -15,8 +16,7 @@ Type get_common_number_type(Expression *left, Expression *right)
     }
     else
     {
-        printf("error: invalid type for arithmetic operation\n");
-        return number;
+        throw std::runtime_error("invalid type for arithmetic operation");
     }
 }
 
@@ -24,7 +24,7 @@ void check_number_types(Expression *left, Expression *right)
 {
     if (!left->is_numbery() || !right->is_numbery())
     {
-        printf("error: invalid type for comparison\n");
+        throw std::runtime_error("invalid type for comparison");
     }
 }
 
@@ -32,87 +32,33 @@ void check_boolean_types(Expression *left, Expression *right)
 {
     if (left->type != boolean || !right->type != boolean)
     {
-        printf("error: invalid type for logical operation\n");
+        throw std::runtime_error("invalid type for logical operation");
     }
 }
 
 bool Expression::evaluate_boolean()
 {
-    switch (this->type)
-    {
-    case integer:
-        return this->evaluate_integer() != 0;
-    case number:
-        return this->evaluate_number() != 0.0;
-    case string:
-        return !this->evaluate_string().empty();
-    default:
-        return false;
-    }
+    throw std::runtime_error("not implemented");
 }
 
 int Expression::evaluate_integer()
 {
-    switch (this->type)
-    {
-    case boolean:
-        return this->evaluate_boolean();
-    case number:
-        return this->evaluate_number();
-    case string:
-        return atoi(this->evaluate_string().c_str());
-    default:
-        return 0;
-    }
+    throw std::runtime_error("not implemented");
 }
 
 double Expression::evaluate_number()
 {
-    switch (this->type)
-    {
-    case boolean:
-        return this->evaluate_boolean();
-    case integer:
-        return this->evaluate_integer();
-    case string:
-        return atof(this->evaluate_string().c_str());
-    default:
-        return 0.0;
-    }
+    throw std::runtime_error("not implemented");
 }
 
 std::string Expression::evaluate_identifier()
 {
-    switch (this->type)
-    {
-    case boolean:
-        return std::to_string(this->evaluate_boolean());
-    case integer:
-        return std::to_string(this->evaluate_integer());
-    case number:
-        return std::to_string(this->evaluate_number());
-    case string:
-        return this->evaluate_string();
-    default:
-        return "";
-    }
+    throw std::runtime_error("not implemented");
 }
 
 std::string Expression::evaluate_string()
 {
-    switch (this->type)
-    {
-    case boolean:
-        return std::to_string(this->evaluate_boolean());
-    case integer:
-        return std::to_string(this->evaluate_integer());
-    case number:
-        return std::to_string(this->evaluate_number());
-    case identifier:
-        return this->evaluate_identifier();
-    default:
-        return "";
-    }
+    throw std::runtime_error("not implemented");
 }
 
 bool Expression::is_numbery()

@@ -1,4 +1,5 @@
 #include <chrono>
+#include <stdexcept>
 #include <stdio.h>
 #include <stdint.h>
 #include <string>
@@ -99,8 +100,7 @@ Expression *compile_expression(struct owl_ref ref)
     case PARSED_OR:
         return new OrExpression(compile_expression(expression.left), compile_expression(expression.right));
     default:
-        printf("error: invalid expression in range \"%d\"-\"%d\"\n", expression.range.start, expression.range.end);
-        return nullptr;
+        throw std::runtime_error("invalid expression");
     }
 }
 
@@ -116,8 +116,7 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
             std::string module_name = identifier_to_string(method_call.module_name);
             if (!Global::modules.count(module_name))
             {
-                printf("error: unknown module \"%s\"\n", module_name.c_str());
-                break;
+                throw std::runtime_error("unknown module \"" + module_name + "\"");
             }
             std::string method_name = identifier_to_string(method_call.method_name);
             std::vector<Expression *> arguments = compile_arguments(method_call.argument);
@@ -129,8 +128,7 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
             std::string routine_name = identifier_to_string(routine_call.routine_name);
             if (!Global::routines.count(routine_name))
             {
-                printf("error: unknown routine \"%s\"\n", routine_name.c_str());
-                break;
+                throw std::runtime_error("unknown routine \"" + routine_name + "\"");
             }
             actions.push_back(new RoutineCall(Global::routines[routine_name]));
         }
@@ -140,8 +138,7 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
             std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             if (!Global::variables.count(variable_name))
             {
-                printf("error: unknown variable \"%s\"\n", variable_name.c_str());
-                break;
+                throw std::runtime_error("unknown variable \"" + variable_name + "\"");
             }
             Variable *variable = Global::variables[variable_name];
             Expression *expression = compile_expression(variable_assignment.expression);
@@ -155,8 +152,7 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
         }
         else
         {
-            printf("error: unknown action type\n");
-            break;
+            throw std::runtime_error("unknown action type");
         }
     }
     return actions;
@@ -196,17 +192,11 @@ void process_tree(owl_tree *tree)
             std::string module_name = identifier_to_string(constructor.module_name);
             if (Global::modules.count(module_name))
             {
-                printf("error: module \"%s\" already exists\n", module_name.c_str());
-                return;
+                throw std::runtime_error("module \"" + module_name + "\" already exists");
             }
             std::string module_type = identifier_to_string(constructor.module_type);
             std::vector<Expression *> arguments = compile_arguments(constructor.argument);
             Module *module = Module::create(module_type, module_name, arguments);
-            if (module == nullptr)
-            {
-                printf("error: could not create module\n");
-                return;
-            }
             Global::modules[module_name] = module;
         }
         else if (!statement.method_call.empty)
@@ -215,8 +205,7 @@ void process_tree(owl_tree *tree)
             std::string module_name = identifier_to_string(method_call.module_name);
             if (!Global::modules.count(module_name))
             {
-                printf("error: unknown module \"%s\"\n", module_name.c_str());
-                return;
+                throw std::runtime_error("unknown module \"" + module_name + "\"");
             }
             std::string method_name = identifier_to_string(method_call.method_name);
             std::vector<Expression *> arguments = compile_arguments(method_call.argument);
@@ -228,12 +217,11 @@ void process_tree(owl_tree *tree)
             std::string routine_name = identifier_to_string(routine_call.routine_name);
             if (!Global::routines.count(routine_name))
             {
-                printf("error: unknown routine \"%s\"\n", routine_name.c_str());
-                return;
+                throw std::runtime_error("unknown routine \"" + routine_name + "\"");
             }
             if (Global::routines[routine_name]->is_running())
             {
-                printf("error: routine \"%s\" is alreaty running\n", routine_name.c_str());
+                throw std::runtime_error("routine \"" + routine_name + "\" is already running");
             }
             else
             {
@@ -246,15 +234,13 @@ void process_tree(owl_tree *tree)
             std::string module_name = identifier_to_string(property_assignment.module_name);
             if (!Global::modules.count(module_name))
             {
-                printf("error: unknown module \"%s\"\n", module_name.c_str());
-                return;
+                throw std::runtime_error("unknown module \"" + module_name + "\"");
             }
             std::string property_name = identifier_to_string(property_assignment.property_name);
             Expression *expression = compile_expression(property_assignment.expression);
             if (!expression->is_numbery())
             {
-                printf("error: expression is no number\n");
-                return;
+                throw std::runtime_error("expression is no number");
             }
             Global::modules[module_name]->set(property_name, expression->evaluate_number());
         }
@@ -264,27 +250,9 @@ void process_tree(owl_tree *tree)
             std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             if (!Global::variables.count(variable_name))
             {
-                Global::variables[variable_name] = new Variable();
+                throw std::runtime_error("unknown variable \"" + variable_name + "\"");
             }
-            Variable *variable = Global::variables[variable_name];
-            Expression *expression = compile_expression(variable_assignment.expression);
-            switch (expression->type)
-            {
-            case boolean:
-                variable->set_boolean(expression->evaluate_boolean());
-                break;
-            case integer:
-                variable->set_integer(expression->evaluate_integer());
-                break;
-            case number:
-                variable->set_number(expression->evaluate_number());
-                break;
-            case string:
-                variable->set_string(expression->evaluate_string());
-                break;
-            default:
-                printf("error: invalid variable type\n");
-            }
+            Global::variables[variable_name]->assign(compile_expression(variable_assignment.expression));
         }
         else if (!statement.routine_definition.empty)
         {
@@ -292,8 +260,7 @@ void process_tree(owl_tree *tree)
             std::string routine_name = identifier_to_string(routine_definition.routine_name);
             if (Global::routines.count(routine_name))
             {
-                printf("error: routine \"%s\" already exists\n", routine_name.c_str());
-                return;
+                throw std::runtime_error("routine \"" + routine_name + "\" already exists");
             }
             struct parsed_actions actions = parsed_actions_get(routine_definition.actions);
             Global::routines[routine_name] = new Routine(compile_actions(actions.action));
@@ -303,11 +270,12 @@ void process_tree(owl_tree *tree)
             struct parsed_rule_definition rule_definition = parsed_rule_definition_get(statement.rule_definition);
             struct parsed_actions actions = parsed_actions_get(rule_definition.actions);
             Routine *routine = new Routine(compile_actions(actions.action));
-            Global::rules.push_back(new Rule(compile_expression(rule_definition.condition), routine));
+            Expression *condition = compile_expression(rule_definition.condition);
+            Global::rules.push_back(new Rule(condition, routine));
         }
         else
         {
-            printf("error: unknown statement type\n");
+            throw std::runtime_error("unknown statement type");
         }
     }
 }
@@ -332,7 +300,7 @@ void process_storage_command(const char *line)
     }
     else
     {
-        printf("error: unrecognized storage command\n");
+        throw std::runtime_error("unrecognized storage command");
     }
 }
 
@@ -400,15 +368,21 @@ void app_main()
     {
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)line, BUFFER_SIZE, 20 / portTICK_RATE_MS);
         line[len - 1] = 0;
-        if (len > 2 && line[0] == '!')
+        try
         {
-            process_storage_command(line + 1);
+            if (len > 2 && line[0] == '!')
+            {
+                process_storage_command(line + 1);
+            }
+            else if (len > 1)
+            {
+                process_lizard(line);
+            }
         }
-        else if (len > 1)
+        catch (const std::runtime_error &e)
         {
-            process_lizard(line);
+            printf("error: %s\n", e.what());
         }
-
         for (auto const &item : Global::modules)
         {
             item.second->step();

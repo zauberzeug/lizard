@@ -11,6 +11,7 @@ statement =
   routine_call |
   property_assignment |
   variable_assignment |
+  variable_declaration |
   routine_definition |
   rule_definition
 
@@ -25,11 +26,18 @@ action =
 constructor = identifier@module_name '=' identifier@module_type [ '(' expression@argument{','} ')' ]
 property_assignment = identifier@module_name '.' identifier@property_name '=' expression
 variable_assignment = identifier@variable_name '=' expression
+variable_declaration = datatype identifier@variable_name ('=' expression)?
 rule_definition = 'when' expression@condition [ 'then' actions 'end' ]
 routine_definition = identifier@routine_name [ ':=' actions 'end' ]
 routine_call = identifier@routine_name [ '(' ')' ]
 await = 'await' expression@condition
 method_call = identifier@module_name '.' identifier@method_name [ '(' expression@argument{','} ')' ]
+
+datatype =
+    'bool' : boolean
+    'int' : integer
+    'float' : number
+    'str' : string
 
 expression =
     string : string
