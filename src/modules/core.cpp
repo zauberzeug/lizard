@@ -23,13 +23,28 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
     }
     else if (method_name == "print")
     {
-        if (arguments.size() != 1 ||
-            arguments[0]->type != string)
+        for (auto const &argument : arguments)
         {
-            printf("error: expecting 1 string argument for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
-            return;
+            switch (argument->type)
+            {
+            case boolean:
+                printf(argument->evaluate_boolean() ? "true" : "false");
+                break;
+            case integer:
+                printf("%d", argument->evaluate_integer());
+                break;
+            case number:
+                printf("%f", argument->evaluate_number());
+                break;
+            case identifier:
+                printf(argument->evaluate_identifier().c_str());
+                break;
+            case string:
+                printf("\"%s\"", argument->evaluate_string().c_str());
+                break;
+            }
         }
-        printf("%s\n", arguments[0]->evaluate_string().c_str());
+        printf("\n");
     }
     else if (method_name == "output")
     {
