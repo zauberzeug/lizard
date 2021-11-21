@@ -66,6 +66,17 @@ bool Expression::is_numbery()
     return this->type == number || this->type == integer;
 }
 
+BooleanExpression::BooleanExpression(bool value)
+{
+    this->type = boolean;
+    this->value = value;
+}
+
+bool BooleanExpression::evaluate_boolean()
+{
+    return this->value;
+}
+
 StringExpression::StringExpression(std::string value)
 {
     this->type = string;

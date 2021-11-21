@@ -16,6 +16,16 @@ public:
     bool is_numbery();
 };
 
+class BooleanExpression : public Expression
+{
+private:
+    bool value;
+
+public:
+    BooleanExpression(bool value);
+    bool evaluate_boolean();
+};
+
 class StringExpression : public Expression
 {
 private:

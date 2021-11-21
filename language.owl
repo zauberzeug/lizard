@@ -40,6 +40,8 @@ datatype =
     'str' : string
 
 expression =
+    'true' : true
+    'false' : false
     string : string
     integer : integer
     number : number

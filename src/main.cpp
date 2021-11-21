@@ -54,6 +54,10 @@ Expression *compile_expression(struct owl_ref ref)
     struct parsed_expression expression = parsed_expression_get(ref);
     switch (expression.type)
     {
+    case PARSED_TRUE:
+        return new BooleanExpression(true);
+    case PARSED_FALSE:
+        return new BooleanExpression(false);
     case PARSED_STRING:
     {
         struct parsed_string string = parsed_string_get(expression.string);
