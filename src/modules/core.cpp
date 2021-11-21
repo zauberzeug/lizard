@@ -45,12 +45,7 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
         {
             std::string element = cut_first_word(format);
             std::string module_name = cut_first_word(element, '.');
-            if (!Global::modules.count(module_name))
-            {
-                printf("error: unknown module \"%s\"\n", module_name.c_str());
-                return;
-            }
-            Module *module = Global::modules[module_name];
+            Module *module = Global::get_module(module_name);
             std::string method_name = cut_first_word(element, ':');
             unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
             this->output_list.push_back({module, method_name, precision});

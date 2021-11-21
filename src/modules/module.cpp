@@ -63,17 +63,13 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
             return nullptr;
         }
         std::string serial_name = arguments[0]->evaluate_identifier();
-        if (!Global::modules.count(serial_name))
-        {
-            printf("error: unknown module \"%s\"\n", serial_name.c_str());
-            return nullptr;
-        }
-        if (Global::modules[serial_name]->type != serial)
+        Module *module = Global::get_module(serial_name);
+        if (module->type != serial)
         {
             printf("error: module \"%s\" is no serial connection\n", serial_name.c_str());
             return nullptr;
         }
-        Serial *serial = (Serial *)(Global::modules[serial_name]);
+        Serial *serial = (Serial *)module;
         uint8_t address = arguments[1]->evaluate_integer();
         return new RoboClaw(name, serial, address);
     }
@@ -87,17 +83,13 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
             return nullptr;
         }
         std::string roboclaw_name = arguments[0]->evaluate_identifier();
-        if (!Global::modules.count(roboclaw_name))
-        {
-            printf("error: unknown module \"%s\"\n", roboclaw_name.c_str());
-            return nullptr;
-        }
-        if (Global::modules[roboclaw_name]->type != roboclaw)
+        Module *module = Global::get_module(roboclaw_name);
+        if (module->type != roboclaw)
         {
             printf("error: module \"%s\" is no RoboClaw\n", roboclaw_name.c_str());
             return nullptr;
         }
-        RoboClaw *roboclaw = (RoboClaw *)(Global::modules[roboclaw_name]);
+        RoboClaw *roboclaw = (RoboClaw *)module;
         unsigned int motor_number = arguments[1]->evaluate_integer();
         return new RoboClawMotor(name, roboclaw, motor_number);
     }
@@ -149,12 +141,7 @@ void Module::call(std::string method_name, std::vector<Expression *> arguments)
             return;
         }
         std::string target_name = arguments[0]->evaluate_identifier();
-        if (!Global::modules.count(target_name))
-        {
-            printf("error: unknown module \"%s\"\n", target_name.c_str());
-            return;
-        }
-        Module *target_module = Global::modules[target_name];
+        Module *target_module = Global::get_module(target_name);
         if (this->type != target_module->type)
         {
             printf("error: shadow module is not of same type\n");
