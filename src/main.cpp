@@ -389,23 +389,46 @@ void app_main()
         {
             printf("error: %s\n", e.what());
         }
+
         for (auto const &item : Global::modules)
         {
-            item.second->step();
+            try
+            {
+                item.second->step();
+            }
+            catch (const std::runtime_error &e)
+            {
+                printf("error in module \"%s\": %s\n", item.first.c_str(), e.what());
+            }
         }
 
         for (auto const &rule : Global::rules)
         {
-            if (rule->condition->evaluate_boolean() && !rule->routine->is_running())
+            try
             {
-                rule->routine->start();
+                printf("type: %d\n", rule->condition->type);
+                if (rule->condition->evaluate_boolean() && !rule->routine->is_running())
+                {
+                    rule->routine->start();
+                }
+                rule->routine->step();
             }
-            rule->routine->step();
+            catch (const std::runtime_error &e)
+            {
+                printf("error in rule: %s\n", e.what());
+            }
         }
 
         for (auto const &item : Global::routines)
         {
-            item.second->step();
+            try
+            {
+                item.second->step();
+            }
+            catch (const std::runtime_error &e)
+            {
+                printf("error in routine \"%s\": %s\n", item.first.c_str(), e.what());
+            }
         }
     }
 }
