@@ -30,7 +30,7 @@ void check_number_types(Expression *left, Expression *right)
 
 void check_boolean_types(Expression *left, Expression *right)
 {
-    if (left->type != boolean || !right->type != boolean)
+    if (left->type != boolean || right->type != boolean)
     {
         throw std::runtime_error("invalid type for logical operation");
     }
