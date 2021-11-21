@@ -123,22 +123,38 @@ VariableExpression::VariableExpression(Variable *variable)
 
 bool VariableExpression::evaluate_boolean()
 {
-    return this->type == boolean ? this->variable->boolean_value : Expression::evaluate_boolean();
+    if (this->type != boolean)
+    {
+        throw std::runtime_error("variable is not of type boolean");
+    }
+    return this->variable->boolean_value;
 }
 
 int VariableExpression::evaluate_integer()
 {
-    return this->type == integer ? this->variable->integer_value : Expression::evaluate_integer();
+    if (this->type != integer)
+    {
+        throw std::runtime_error("variable is not of type integer");
+    }
+    return this->variable->integer_value;
 }
 
 double VariableExpression::evaluate_number()
 {
-    return this->type == number ? this->variable->number_value : Expression::evaluate_number();
+    if (!this->is_numbery())
+    {
+        throw std::runtime_error("variable is no number");
+    }
+    return this->type == number ? this->variable->number_value : this->variable->integer_value;
 }
 
 std::string VariableExpression::evaluate_string()
 {
-    return this->type == string ? this->variable->string_value : Expression::evaluate_string();
+    if (this->type != string)
+    {
+        throw std::runtime_error("variable is not of type string");
+    }
+    return this->variable->string_value;
 }
 
 PropertyExpression::PropertyExpression(Module *module, std::string property_name)

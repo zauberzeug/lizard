@@ -406,7 +406,6 @@ void app_main()
         {
             try
             {
-                printf("type: %d\n", rule->condition->type);
                 if (rule->condition->evaluate_boolean() && !rule->routine->is_running())
                 {
                     rule->routine->start();
