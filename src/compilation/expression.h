@@ -70,18 +70,6 @@ public:
     std::string evaluate_string();
 };
 
-class Module; // NOTE: forward declaration to avoid cyclic include
-class PropertyExpression : public Expression
-{
-private:
-    Module *module;
-    std::string property_name;
-
-public:
-    PropertyExpression(Module *module, std::string property_name);
-    double evaluate_number();
-};
-
 class PowerExpression : public Expression
 {
 private:

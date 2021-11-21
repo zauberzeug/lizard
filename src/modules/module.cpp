@@ -144,18 +144,16 @@ void Module::call_with_shadows(std::string method_name, std::vector<Expression *
     }
 }
 
-double Module::get(std::string property_name)
-{
-    printf("error: unknown property \"%s\"\n", property_name.c_str());
-    return 0;
-}
-
-void Module::set(std::string property_name, double value)
-{
-    printf("error: unknown property \"%s\"\n", property_name.c_str());
-}
-
 std::string Module::get_output()
 {
     return "";
+}
+
+Variable *Module::get_property(std::string property_name)
+{
+    if (!this->properties.count(property_name))
+    {
+        throw std::runtime_error("unknown property \"" + property_name + "\"");
+    }
+    return this->properties[property_name];
 }

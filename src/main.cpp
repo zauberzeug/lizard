@@ -70,8 +70,8 @@ Expression *compile_expression(struct owl_ref ref)
     case PARSED_VARIABLE:
         return new VariableExpression(Global::get_variable(identifier_to_string(expression.identifier)));
     case PARSED_PROPERTY:
-        return new PropertyExpression(Global::get_module(identifier_to_string(expression.module_name)),
-                                      identifier_to_string(expression.property_name));
+        return new VariableExpression(Global::get_module(identifier_to_string(expression.module_name))
+                                          ->get_property(identifier_to_string(expression.property_name)));
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
@@ -220,11 +220,8 @@ void process_tree(owl_tree *tree)
             Module *module = Global::get_module(module_name);
             std::string property_name = identifier_to_string(property_assignment.property_name);
             Expression *expression = compile_expression(property_assignment.expression);
-            if (!expression->is_numbery())
-            {
-                throw std::runtime_error("expression is no number");
-            }
-            module->set(property_name, expression->evaluate_number());
+            Variable *property = module->get_property(property_name);
+            property->assign(expression);
         }
         else if (!statement.variable_assignment.empty)
         {
@@ -312,13 +309,14 @@ void process_storage_command(const char *line)
 
 void process_lizard(const char *line)
 {
-    if (core_module->debug)
+    bool debug = core_module->get_property("debug")->boolean_value;
+    if (debug)
     {
         printf(">> %s\n", line);
         tic();
     }
     struct owl_tree *tree = owl_tree_create_from_string(line);
-    if (core_module->debug)
+    if (debug)
     {
         toc("Tree creation");
     }
@@ -336,13 +334,13 @@ void process_lizard(const char *line)
         printf("error: more input needed at range %zu %zu\n", range.start, range.end);
     else
     {
-        if (core_module->debug)
+        if (debug)
         {
             owl_tree_print(tree);
             tic();
         }
         process_tree(tree);
-        if (core_module->debug)
+        if (debug)
         {
             toc("Tree traversal");
         }

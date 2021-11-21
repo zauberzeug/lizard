@@ -8,6 +8,13 @@
 
 Core::Core(std::string name) : Module(core, name)
 {
+    this->properties["debug"] = new BooleanVariable(false);
+    this->properties["millis"] = new IntegerVariable();
+}
+
+void Core::step()
+{
+    this->properties["millis"]->integer_value = esp_timer_get_time() / 1000ULL;
 }
 
 void Core::call(std::string method_name, std::vector<Expression *> arguments)
@@ -64,34 +71,6 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
     }
 }
 
-double Core::get(std::string property_name)
-{
-    if (property_name == "millis")
-    {
-        return esp_timer_get_time() / 1000ULL;
-    }
-    if (property_name == "debug")
-    {
-        return this->debug;
-    }
-    else
-    {
-        return Module::get(property_name);
-    }
-}
-
-void Core::set(std::string property_name, double value)
-{
-    if (property_name == "debug")
-    {
-        this->debug = value;
-    }
-    else
-    {
-        Module::set(property_name, value);
-    }
-}
-
 std::string Core::get_output()
 {
     static char format_buffer[8];
@@ -100,7 +79,24 @@ std::string Core::get_output()
     for (auto const &element : this->output_list)
     {
         sprintf(format_buffer, "%%.%df", element.precision);
-        pos += sprintf(&output_buffer[pos], format_buffer, element.module->get(element.property_name));
+        Variable *property = element.module->get_property(element.property_name);
+        switch (property->type)
+        {
+        case boolean:
+            pos += sprintf(&output_buffer[pos], "%s", property->boolean_value ? "true" : "false");
+            break;
+        case integer:
+            pos += sprintf(&output_buffer[pos], "%d", property->integer_value);
+            break;
+        case number:
+            pos += sprintf(&output_buffer[pos], format_buffer, property->number_value);
+            break;
+        case string:
+            pos += sprintf(&output_buffer[pos], "\"%s\"", property->string_value.c_str());
+            break;
+        default:
+            throw std::runtime_error("invalid property type");
+        }
     }
     return std::string(output_buffer);
 }

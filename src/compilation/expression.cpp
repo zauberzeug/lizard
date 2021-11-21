@@ -2,7 +2,6 @@
 
 #include <stdexcept>
 #include "math.h"
-#include "../modules/module.h"
 
 Type get_common_number_type(Expression *left, Expression *right)
 {
@@ -155,18 +154,6 @@ std::string VariableExpression::evaluate_string()
         throw std::runtime_error("variable is not of type string");
     }
     return this->variable->string_value;
-}
-
-PropertyExpression::PropertyExpression(Module *module, std::string property_name)
-{
-    this->type = number; // TODO: more flexible property types
-    this->module = module;
-    this->property_name = property_name;
-}
-
-double PropertyExpression::evaluate_number()
-{
-    return this->module->get(this->property_name);
 }
 
 PowerExpression::PowerExpression(Expression *left, Expression *right)

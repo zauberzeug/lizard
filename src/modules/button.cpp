@@ -5,6 +5,12 @@ Button::Button(std::string name, gpio_num_t number) : Module(button, name)
     this->number = number;
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_INPUT);
+    this->properties["level"] = new IntegerVariable();
+}
+
+void Button::step()
+{
+    this->properties["level"]->integer_value = gpio_get_level(this->number);
 }
 
 void Button::call(std::string method_name, std::vector<Expression *> arguments)
@@ -27,18 +33,6 @@ void Button::call(std::string method_name, std::vector<Expression *> arguments)
     else
     {
         Module::call(method_name, arguments);
-    }
-}
-
-double Button::get(std::string property_name)
-{
-    if (property_name == "level")
-    {
-        return gpio_get_level(this->number);
-    }
-    else
-    {
-        return Module::get(property_name);
     }
 }
 
