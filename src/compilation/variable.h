@@ -20,23 +20,23 @@ public:
 class BooleanVariable : public Variable
 {
 public:
-    BooleanVariable();
+    BooleanVariable(bool value = false);
 };
 
 class IntegerVariable : public Variable
 {
 public:
-    IntegerVariable();
+    IntegerVariable(int value = 0);
 };
 
 class NumberVariable : public Variable
 {
 public:
-    NumberVariable();
+    NumberVariable(double value = 0.0);
 };
 
 class StringVariable : public Variable
 {
 public:
-    StringVariable();
+    StringVariable(std::string value = "");
 };

@@ -27,22 +27,26 @@ void Variable::assign(Expression *expression)
     }
 }
 
-BooleanVariable::BooleanVariable()
+BooleanVariable::BooleanVariable(bool value)
 {
     this->type = boolean;
+    this->boolean_value = value;
 }
 
-IntegerVariable::IntegerVariable()
+IntegerVariable::IntegerVariable(int value)
 {
     this->type = integer;
+    this->integer_value = value;
 }
 
-NumberVariable::NumberVariable()
+NumberVariable::NumberVariable(double value)
 {
     this->type = number;
+    this->number_value = value;
 }
 
-StringVariable::StringVariable()
+StringVariable::StringVariable(std::string value)
 {
     this->type = string;
+    this->string_value = value;
 }
