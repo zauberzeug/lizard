@@ -11,20 +11,12 @@ void Led::call(std::string method_name, std::vector<Expression *> arguments)
 {
     if (method_name == "on")
     {
-        if (arguments.size() != 0)
-        {
-            printf("error: expecting no arguments for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
-            return;
-        }
+        Module::expect(arguments, 0);
         gpio_set_level(this->number, 1);
     }
     else if (method_name == "off")
     {
-        if (arguments.size() != 0)
-        {
-            printf("error: expecting no arguments for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
-            return;
-        }
+        Module::expect(arguments, 0);
         gpio_set_level(this->number, 0);
     }
     else

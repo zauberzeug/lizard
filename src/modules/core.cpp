@@ -14,11 +14,7 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
 {
     if (method_name == "restart")
     {
-        if (arguments.size() != 0)
-        {
-            printf("error: expecting no arguments for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
-            return;
-        }
+        Module::expect(arguments, 0);
         esp_restart();
     }
     else if (method_name == "print")
@@ -48,12 +44,7 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
     }
     else if (method_name == "output")
     {
-        if (arguments.size() != 1 ||
-            arguments[0]->type != string)
-        {
-            printf("error: expecting 1 string argument for method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
-            return;
-        }
+        Module::expect(arguments, 1, string);
         this->output_list.clear();
         std::string format = arguments[0]->evaluate_string();
         while (!format.empty())

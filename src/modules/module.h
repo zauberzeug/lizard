@@ -26,6 +26,7 @@ public:
     bool output = false;
 
     Module(ModuleType type, std::string name);
+    static void expect(std::vector<Expression *> arguments, int num, ...);
     static Module *create(std::string type, std::string name, std::vector<Expression *> arguments);
     virtual void step();
     virtual void call(std::string method_name, std::vector<Expression *> arguments);
