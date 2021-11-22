@@ -7,7 +7,8 @@
 #include <vector>
 #include "driver/uart.h"
 
-#include "compilation/await.h"
+#include "compilation/await_condition.h"
+#include "compilation/await_routine.h"
 #include "compilation/expression.h"
 #include "compilation/method_call.h"
 #include "compilation/routine.h"
@@ -142,11 +143,18 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
             Expression *expression = compile_expression(variable_assignment.expression);
             actions.push_back(new VariableAssignment(variable, expression));
         }
-        else if (!action.await.empty)
+        else if (!action.await_condition.empty)
         {
-            struct parsed_await await = parsed_await_get(action.await);
-            Expression *condition = compile_expression(await.condition);
-            actions.push_back(new Await(condition));
+            struct parsed_await_condition await_condition = parsed_await_condition_get(action.await_condition);
+            Expression *condition = compile_expression(await_condition.condition);
+            actions.push_back(new AwaitCondition(condition));
+        }
+        else if (!action.await_routine.empty)
+        {
+            struct parsed_await_routine await_routine = parsed_await_routine_get(action.await_routine);
+            std::string routine_name = identifier_to_string(await_routine.routine_name);
+            Routine *routine = Global::get_routine(routine_name);
+            actions.push_back(new AwaitRoutine(routine));
         }
         else
         {

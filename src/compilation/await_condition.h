@@ -3,11 +3,11 @@
 #include "action.h"
 #include "expression.h"
 
-class Await : public Action
+class AwaitCondition : public Action
 {
 public:
     Expression *condition;
 
-    Await(Expression *condition);
+    AwaitCondition(Expression *condition);
     bool run();
 };
