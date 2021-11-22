@@ -5,6 +5,6 @@ enum Type
     boolean,
     integer,
     number,
-    identifier,
     string,
+    identifier,
 };

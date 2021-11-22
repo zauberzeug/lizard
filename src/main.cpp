@@ -179,11 +179,11 @@ void process_tree(owl_tree *tree)
             case number:
                 printf("%f\n", expression->evaluate_number());
                 break;
-            case identifier:
-                printf("%s\n", expression->evaluate_identifier().c_str());
-                break;
             case string:
                 printf("\"%s\"\n", expression->evaluate_string().c_str());
+                break;
+            case identifier:
+                printf("%s\n", expression->evaluate_identifier().c_str());
                 break;
             }
         }

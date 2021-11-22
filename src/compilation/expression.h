@@ -11,8 +11,8 @@ public:
     virtual bool evaluate_boolean();
     virtual int evaluate_integer();
     virtual double evaluate_number();
-    virtual std::string evaluate_identifier();
     virtual std::string evaluate_string();
+    virtual std::string evaluate_identifier();
     bool is_numbery();
 };
 
@@ -68,6 +68,7 @@ public:
     int evaluate_integer();
     double evaluate_number();
     std::string evaluate_string();
+    std::string evaluate_identifier();
 };
 
 class PowerExpression : public Expression

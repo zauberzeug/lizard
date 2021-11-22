@@ -13,6 +13,7 @@ public:
     int integer_value;
     double number_value;
     std::string string_value;
+    std::string identifier_value;
 
     void assign(Expression *expression);
 };
@@ -39,4 +40,10 @@ class StringVariable : public Variable
 {
 public:
     StringVariable(std::string value = "");
+};
+
+class IdentifierVariable : public Variable
+{
+public:
+    IdentifierVariable(std::string value = "");
 };

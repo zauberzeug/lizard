@@ -14,6 +14,7 @@ enum ModuleType
     core,
     led,
     serial,
+    rmd_motor,
     roboclaw,
     roboclaw_motor,
 };

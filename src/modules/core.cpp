@@ -39,11 +39,11 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
             case number:
                 printf("%f", argument->evaluate_number());
                 break;
-            case identifier:
-                printf(argument->evaluate_identifier().c_str());
-                break;
             case string:
                 printf("\"%s\"", argument->evaluate_string().c_str());
+                break;
+            case identifier:
+                printf(argument->evaluate_identifier().c_str());
                 break;
             }
         }

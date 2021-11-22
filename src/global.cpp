@@ -38,7 +38,12 @@ void Global::add_module(std::string module_name, Module *module)
     {
         throw std::runtime_error("module \"" + module_name + "\" already exists");
     }
+    if (variables.count(module_name))
+    {
+        throw std::runtime_error("variable \"" + module_name + "\" already exists");
+    }
     modules[module_name] = module;
+    variables[module_name] = new IdentifierVariable(module_name);
 }
 
 void Global::add_routine(std::string routine_name, Routine *routine)

@@ -21,6 +21,10 @@ void Variable::assign(Expression *expression)
     {
         this->string_value = expression->evaluate_string();
     }
+    else if (this->type == identifier && expression->type == identifier)
+    {
+        this->identifier_value = expression->evaluate_identifier();
+    }
     else
     {
         throw std::runtime_error("type mismatch");
@@ -49,4 +53,10 @@ StringVariable::StringVariable(std::string value)
 {
     this->type = string;
     this->string_value = value;
+}
+
+IdentifierVariable::IdentifierVariable(std::string value)
+{
+    this->type = identifier;
+    this->identifier_value = value;
 }

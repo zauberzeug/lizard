@@ -124,7 +124,7 @@ bool VariableExpression::evaluate_boolean()
 {
     if (this->type != boolean)
     {
-        throw std::runtime_error("variable is not of type boolean");
+        throw std::runtime_error("variable is not a boolean");
     }
     return this->variable->boolean_value;
 }
@@ -133,7 +133,7 @@ int VariableExpression::evaluate_integer()
 {
     if (this->type != integer)
     {
-        throw std::runtime_error("variable is not of type integer");
+        throw std::runtime_error("variable is not an integer");
     }
     return this->variable->integer_value;
 }
@@ -142,7 +142,7 @@ double VariableExpression::evaluate_number()
 {
     if (!this->is_numbery())
     {
-        throw std::runtime_error("variable is no number");
+        throw std::runtime_error("variable is not a number");
     }
     return this->type == number ? this->variable->number_value : this->variable->integer_value;
 }
@@ -151,9 +151,18 @@ std::string VariableExpression::evaluate_string()
 {
     if (this->type != string)
     {
-        throw std::runtime_error("variable is not of type string");
+        throw std::runtime_error("variable is not a string");
     }
     return this->variable->string_value;
+}
+
+std::string VariableExpression::evaluate_identifier()
+{
+    if (this->type != identifier)
+    {
+        throw std::runtime_error("variable is not an identifier");
+    }
+    return this->variable->identifier_value;
 }
 
 PowerExpression::PowerExpression(Expression *left, Expression *right)
