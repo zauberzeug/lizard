@@ -5,7 +5,8 @@
 RmdMotor::RmdMotor(std::string name, Can *can) : Module(rmd_motor, name)
 {
     this->can = can;
-    this->properties["angle"] = new NumberVariable();
+    this->properties["position"] = new NumberVariable();
+    this->properties["ratio"] = new NumberVariable(6.0);
     can->subscribe(this->can_id, this);
 }
 
@@ -36,7 +37,7 @@ void RmdMotor::call(std::string method_name, std::vector<Expression *> arguments
     else if (method_name == "speed")
     {
         Module::expect(arguments, 1, numbery);
-        int32_t speed = arguments[0]->evaluate_number() * 100;
+        int32_t speed = arguments[0]->evaluate_number() * 100 * this->properties["ratio"]->number_value;
         this->can->send(this->can_id, 0xA2, 0,
                         0,
                         0,
@@ -50,27 +51,27 @@ void RmdMotor::call(std::string method_name, std::vector<Expression *> arguments
         if (arguments.size() == 1)
         {
             Module::expect(arguments, 1, numbery);
-            int32_t angle = arguments[0]->evaluate_number() * 100;
+            int32_t position = arguments[0]->evaluate_number() * 100 * this->properties["ratio"]->number_value;
             this->can->send(this->can_id, 0xA3, 0,
                             0,
                             0,
-                            *((uint8_t *)(&angle) + 0),
-                            *((uint8_t *)(&angle) + 1),
-                            *((uint8_t *)(&angle) + 2),
-                            *((uint8_t *)(&angle) + 3));
+                            *((uint8_t *)(&position) + 0),
+                            *((uint8_t *)(&position) + 1),
+                            *((uint8_t *)(&position) + 2),
+                            *((uint8_t *)(&position) + 3));
         }
         else
         {
             Module::expect(arguments, 2, numbery, numbery);
-            int32_t angle = arguments[0]->evaluate_number() * 100;
-            uint16_t speed = arguments[1]->evaluate_number();
+            int32_t position = arguments[0]->evaluate_number() * 100 * this->properties["ratio"]->number_value;
+            uint16_t speed = arguments[1]->evaluate_number() * 100 * this->properties["ratio"]->number_value;
             this->can->send(this->can_id, 0xA4, 0,
                             *((uint8_t *)(&speed) + 0),
                             *((uint8_t *)(&speed) + 1),
-                            *((uint8_t *)(&angle) + 0),
-                            *((uint8_t *)(&angle) + 1),
-                            *((uint8_t *)(&angle) + 2),
-                            *((uint8_t *)(&angle) + 3));
+                            *((uint8_t *)(&position) + 0),
+                            *((uint8_t *)(&position) + 1),
+                            *((uint8_t *)(&position) + 2),
+                            *((uint8_t *)(&position) + 3));
         }
     }
     else if (method_name == "stop")
@@ -91,14 +92,14 @@ void RmdMotor::call(std::string method_name, std::vector<Expression *> arguments
     else if (method_name == "hold")
     {
         Module::expect(arguments, 0);
-        int32_t angle = this->properties["angle"]->number_value * 100;
+        int32_t position = this->properties["position"]->number_value * 100;
         this->can->send(this->can_id, 0xA3, 0,
                         0,
                         0,
-                        *((uint8_t *)(&angle) + 0),
-                        *((uint8_t *)(&angle) + 1),
-                        *((uint8_t *)(&angle) + 2),
-                        *((uint8_t *)(&angle) + 3));
+                        *((uint8_t *)(&position) + 0),
+                        *((uint8_t *)(&position) + 1),
+                        *((uint8_t *)(&position) + 2),
+                        *((uint8_t *)(&position) + 3));
     }
     else if (method_name == "get_health")
     {
@@ -157,7 +158,7 @@ void RmdMotor::handle_can_msg(uint32_t id, int count, uint8_t *data)
     {
         int64_t value = 0;
         std::memcpy(&value, data + 1, 7);
-        this->properties["angle"]->number_value = (value << 8) / 256.0 / 100.0;
+        this->properties["position"]->number_value = (value << 8) / 256.0 / 100.0 / this->properties["ratio"]->number_value;
         break;
     }
     case 0x9a:
