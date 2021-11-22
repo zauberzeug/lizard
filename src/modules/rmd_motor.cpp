@@ -25,6 +25,95 @@ void RmdMotor::call(std::string method_name, std::vector<Expression *> arguments
         Module::expect(arguments, 0);
         this->can->send(this->can_id, 0x19, 0, 0, 0, 0, 0, 0, 0);
     }
+    else if (method_name == "power")
+    {
+        Module::expect(arguments, 1, numbery);
+        int16_t power = arguments[0]->evaluate_number() * 2000;
+        this->can->send(this->can_id, 0xA1, 0,
+                        0,
+                        0,
+                        *((uint8_t *)(&power) + 0),
+                        *((uint8_t *)(&power) + 1),
+                        0,
+                        0);
+    }
+    else if (method_name == "speed")
+    {
+        Module::expect(arguments, 1, numbery);
+        int32_t speed = arguments[0]->evaluate_number() * 100;
+        this->can->send(this->can_id, 0xA2, 0,
+                        0,
+                        0,
+                        *((uint8_t *)(&speed) + 0),
+                        *((uint8_t *)(&speed) + 1),
+                        *((uint8_t *)(&speed) + 2),
+                        *((uint8_t *)(&speed) + 3));
+    }
+    else if (method_name == "position")
+    {
+        if (arguments.size() == 1)
+        {
+            Module::expect(arguments, 1, numbery);
+            int32_t angle = arguments[0]->evaluate_number() * 100;
+            this->can->send(this->can_id, 0xA3, 0,
+                            0,
+                            0,
+                            *((uint8_t *)(&angle) + 0),
+                            *((uint8_t *)(&angle) + 1),
+                            *((uint8_t *)(&angle) + 2),
+                            *((uint8_t *)(&angle) + 3));
+        }
+        else
+        {
+            Module::expect(arguments, 2, numbery, numbery);
+            int32_t angle = arguments[0]->evaluate_number() * 100;
+            uint16_t speed = arguments[1]->evaluate_number();
+            this->can->send(this->can_id, 0xA4, 0,
+                            *((uint8_t *)(&speed) + 0),
+                            *((uint8_t *)(&speed) + 1),
+                            *((uint8_t *)(&angle) + 0),
+                            *((uint8_t *)(&angle) + 1),
+                            *((uint8_t *)(&angle) + 2),
+                            *((uint8_t *)(&angle) + 3));
+        }
+    }
+    else if (method_name == "stop")
+    {
+        Module::expect(arguments, 0);
+        this->can->send(this->can_id, 0x81, 0, 0, 0, 0, 0, 0, 0);
+    }
+    else if (method_name == "resume")
+    {
+        Module::expect(arguments, 0);
+        this->can->send(this->can_id, 0x88, 0, 0, 0, 0, 0, 0, 0);
+    }
+    else if (method_name == "off")
+    {
+        Module::expect(arguments, 0);
+        this->can->send(this->can_id, 0x80, 0, 0, 0, 0, 0, 0, 0);
+    }
+    else if (method_name == "hold")
+    {
+        Module::expect(arguments, 0);
+        int32_t angle = this->properties["angle"]->number_value * 100;
+        this->can->send(this->can_id, 0xA3, 0,
+                        0,
+                        0,
+                        *((uint8_t *)(&angle) + 0),
+                        *((uint8_t *)(&angle) + 1),
+                        *((uint8_t *)(&angle) + 2),
+                        *((uint8_t *)(&angle) + 3));
+    }
+    else if (method_name == "tune")
+    {
+        Module::expect(arguments, 0); // TODO
+        throw std::runtime_error("tune command is not implemented yet");
+    }
+    else if (method_name == "clear_errors")
+    {
+        Module::expect(arguments, 0);
+        this->can->send(this->can_id, 0x9b, 0, 0, 0, 0, 0, 0, 0);
+    }
     else
     {
         Module::call(method_name, arguments);

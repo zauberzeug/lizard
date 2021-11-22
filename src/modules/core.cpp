@@ -45,6 +45,8 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
             case identifier:
                 printf(argument->evaluate_identifier().c_str());
                 break;
+            default:
+                throw std::runtime_error("argument has an invalid datatype");
             }
         }
         printf("\n");

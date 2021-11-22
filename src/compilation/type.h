@@ -2,9 +2,10 @@
 
 enum Type
 {
-    boolean,
-    integer,
-    number,
-    string,
-    identifier,
+    boolean = 1,
+    integer = 2,
+    number = 4,
+    numbery = 6,
+    string = 8,
+    identifier = 16,
 };

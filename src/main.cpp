@@ -185,6 +185,8 @@ void process_tree(owl_tree *tree)
             case identifier:
                 printf("%s\n", expression->evaluate_identifier().c_str());
                 break;
+            default:
+                throw std::runtime_error("expression has an invalid datatype");
             }
         }
         else if (!statement.constructor.empty)
