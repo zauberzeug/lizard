@@ -115,7 +115,10 @@ std::vector<Action *> compile_actions(struct owl_ref ref)
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
     {
         struct parsed_action action = parsed_action_get(r);
-        if (!action.method_call.empty)
+        if (!action.noop.empty)
+        {
+        }
+        else if (!action.method_call.empty)
         {
             struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
             std::string module_name = identifier_to_string(method_call.module_name);
@@ -159,7 +162,10 @@ void process_tree(owl_tree *tree)
     for (struct owl_ref r = statements.statement; !r.empty; r = owl_next(r))
     {
         struct parsed_statement statement = parsed_statement_get(r);
-        if (!statement.expression.empty)
+        if (!statement.noop.empty)
+        {
+        }
+        else if (!statement.expression.empty)
         {
             Expression *expression = compile_expression(statement.expression);
             switch (expression->type)

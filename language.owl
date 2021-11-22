@@ -1,10 +1,11 @@
 #using owl.v4
 
-.whitespace ' ' '\t' '\n'
+.whitespace ' ' '\t'
 .line-comment-token '//'
 
-statements = statement{';'}
+statements = statement{';' | '\n', 1+}
 statement =
+  noop |
   expression |
   constructor |
   method_call |
@@ -15,14 +16,16 @@ statement =
   routine_definition |
   rule_definition
 
-actions = action{';'}
+actions = action{';' | '\n', 1+}
 action =
+  noop |
   method_call |
   routine_call |
   property_assignment |
   variable_assignment |
   await
 
+noop = ''
 constructor = identifier@module_name '=' identifier@module_type [ '(' expression@argument{','} ')' ]
 property_assignment = identifier@module_name '.' identifier@property_name '=' expression
 variable_assignment = identifier@variable_name '=' expression
