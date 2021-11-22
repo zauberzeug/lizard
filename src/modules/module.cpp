@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include "driver/gpio.h"
 #include "button.h"
+#include "can.h"
 #include "led.h"
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
@@ -45,6 +46,14 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
         Module::expect(arguments, 1, integer);
         return new Button(name, (gpio_num_t)arguments[0]->evaluate_integer());
     }
+    else if (type == "Can")
+    {
+        Module::expect(arguments, 3, integer, integer, integer, integer);
+        gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
+        gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+        long baud_rate = arguments[2]->evaluate_integer();
+        return new Can(name, rx_pin, tx_pin, baud_rate);
+    }
     else if (type == "Serial")
     {
         Module::expect(arguments, 4, integer, integer, integer, integer);
@@ -61,8 +70,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
         Module *module = Global::get_module(serial_name);
         if (module->type != serial)
         {
-            printf("error: module \"%s\" is no serial connection\n", serial_name.c_str());
-            return nullptr;
+            throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
         }
         Serial *serial = (Serial *)module;
         uint8_t address = arguments[1]->evaluate_integer();
@@ -75,8 +83,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
         Module *module = Global::get_module(roboclaw_name);
         if (module->type != roboclaw)
         {
-            printf("error: module \"%s\" is no RoboClaw\n", roboclaw_name.c_str());
-            return nullptr;
+            throw std::runtime_error("module \"" + roboclaw_name + "\" is no RoboClaw");
         }
         RoboClaw *roboclaw = (RoboClaw *)module;
         unsigned int motor_number = arguments[1]->evaluate_integer();
@@ -84,8 +91,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
     }
     else
     {
-        printf("error: unknown module type \"%s\"\n", type.c_str());
-        return nullptr;
+        throw std::runtime_error("unknown module type \"" + type + "\"");
     }
 }
 
@@ -120,8 +126,7 @@ void Module::call(std::string method_name, std::vector<Expression *> arguments)
         Module *target_module = Global::get_module(target_name);
         if (this->type != target_module->type)
         {
-            printf("error: shadow module is not of same type\n");
-            return;
+            throw std::runtime_error("shadow module is not of same type");
         }
         if (this != target_module)
         {
@@ -130,8 +135,7 @@ void Module::call(std::string method_name, std::vector<Expression *> arguments)
     }
     else
     {
-        printf("error: unknown method \"%s.%s\"\n", this->name.c_str(), method_name.c_str());
-        return;
+        throw std::runtime_error("unknown method \"" + this->name + "." + method_name + "\"");
     }
 }
 
@@ -156,4 +160,9 @@ Variable *Module::get_property(std::string property_name)
         throw std::runtime_error("unknown property \"" + property_name + "\"");
     }
     return this->properties[property_name];
+}
+
+void Module::handle_can_msg(uint16_t id, int count, uint8_t d[8])
+{
+    throw std::runtime_error("CAN message handler is not implemented");
 }

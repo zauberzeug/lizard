@@ -1,5 +1,6 @@
 #include "storage.h"
 
+#include <stdexcept>
 #include <string>
 #include "nvs_flash.h"
 #include "utils/strings.h"
@@ -20,20 +21,17 @@ void write(std::string ns, std::string key, std::string value)
     nvs_handle handle;
     if (nvs_open(ns.c_str(), NVS_READWRITE, &handle) != ESP_OK)
     {
-        printf("Could not open storage namespace: %s\n", ns.c_str());
-        return;
+        throw std::runtime_error("could not open storage namespace \"" + ns + "\"");
     }
     if (nvs_set_str(handle, key.c_str(), value.c_str()) != ESP_OK)
     {
-        printf("Could not write to storage: %s.%s=%s\n", ns.c_str(), key.c_str(), value.c_str());
         nvs_close(handle);
-        return;
+        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + value);
     }
     if (nvs_commit(handle) != ESP_OK)
     {
-        printf("Could not commit storage: %s.%s=%s\n", ns.c_str(), key.c_str(), value.c_str());
         nvs_close(handle);
-        return;
+        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + value);
     }
     nvs_close(handle);
 }
@@ -43,25 +41,22 @@ std::string read(std::string ns, std::string key)
     nvs_handle handle;
     if (nvs_open(ns.c_str(), NVS_READWRITE, &handle) != ESP_OK)
     {
-        printf("Could not open storage namespace: %s\n", ns.c_str());
-        return "";
+        throw std::runtime_error("could not open storage namespace \"" + ns + "\"");
     }
     size_t size = 0;
     if (nvs_get_str(handle, key.c_str(), NULL, &size) != ESP_OK)
     {
-        printf("Could not peek storage: %s.%s\n", ns.c_str(), key.c_str());
         nvs_close(handle);
-        return "";
+        throw std::runtime_error("could not peek storage " + ns + "." + key);
     }
     char *value = (char *)malloc(size);
     if (size > 0)
     {
         if (nvs_get_str(handle, key.c_str(), value, &size) != ESP_OK)
         {
-            printf("Could not read storage: %s.%s\n", ns.c_str(), key.c_str());
             free(value);
             nvs_close(handle);
-            return "";
+            throw std::runtime_error("could not read storage " + ns + "." + key);
         }
     }
     std::string result = std::string(value);

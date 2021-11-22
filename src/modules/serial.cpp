@@ -13,8 +13,7 @@ Serial::Serial(std::string name,
 
     if (uart_is_driver_installed(uart_num))
     {
-        printf("error: Serial interface %d is already in use\n", uart_num);
-        return;
+        throw std::runtime_error("serial interface is already in use");
     }
 
     uart_config_t uart_config = {

@@ -358,8 +358,15 @@ void app_main()
 {
     Global::add_module("core", core_module = new Core("core"));
 
-    Storage::init();
-    process_lizard(Storage::startup.c_str());
+    try
+    {
+        Storage::init();
+        process_lizard(Storage::startup.c_str());
+    }
+    catch (const std::runtime_error &e)
+    {
+        printf("error while loading startup script: %s\n", e.what());
+    }
 
     uart_config_t uart_config = {
         .baud_rate = 115200,
@@ -391,7 +398,7 @@ void app_main()
         }
         catch (const std::runtime_error &e)
         {
-            printf("error: %s\n", e.what());
+            printf("error while processing command: %s\n", e.what());
         }
 
         for (auto const &item : Global::modules)
