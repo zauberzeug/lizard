@@ -72,3 +72,49 @@ void Can::step()
         }
     }
 }
+
+void Can::send(uint16_t id, uint8_t data[8], bool rtr)
+{
+    twai_message_t message;
+    message.identifier = id;
+    message.flags = rtr ? TWAI_MSG_FLAG_RTR : TWAI_MSG_FLAG_NONE;
+    message.data_length_code = 8;
+    for (int i = 0; i < 8; ++i)
+    {
+        message.data[i] = data[i];
+    }
+    if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK)
+    {
+        throw std::runtime_error("could not send CAN message");
+    }
+}
+
+void Can::send(uint16_t id,
+               uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
+               uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
+               bool rtr)
+{
+    uint8_t data[8] = {d0, d1, d2, d3, d4, d5, d6, d7};
+    this->send(id, data, rtr);
+}
+
+void Can::call(std::string method_name, std::vector<Expression *> arguments)
+{
+    if (method_name == "send")
+    {
+        Module::expect(arguments, 9, integer, integer, integer, integer, integer, integer, integer, integer, integer);
+        this->send(arguments[0]->evaluate_integer(),
+                   arguments[1]->evaluate_integer(),
+                   arguments[2]->evaluate_integer(),
+                   arguments[3]->evaluate_integer(),
+                   arguments[4]->evaluate_integer(),
+                   arguments[5]->evaluate_integer(),
+                   arguments[6]->evaluate_integer(),
+                   arguments[7]->evaluate_integer(),
+                   arguments[8]->evaluate_integer());
+    }
+    else
+    {
+        Module::call(method_name, arguments);
+    }
+}
