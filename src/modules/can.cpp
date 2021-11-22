@@ -73,7 +73,7 @@ void Can::step()
     }
 }
 
-void Can::send(uint16_t id, uint8_t data[8], bool rtr)
+void Can::send(uint32_t id, uint8_t data[8], bool rtr)
 {
     twai_message_t message;
     message.identifier = id;
@@ -89,7 +89,7 @@ void Can::send(uint16_t id, uint8_t data[8], bool rtr)
     }
 }
 
-void Can::send(uint16_t id,
+void Can::send(uint32_t id,
                uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
                uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
                bool rtr)
@@ -117,4 +117,13 @@ void Can::call(std::string method_name, std::vector<Expression *> arguments)
     {
         Module::call(method_name, arguments);
     }
+}
+
+void Can::subscribe(uint32_t id, Module *module)
+{
+    if (this->subscribers.count(id))
+    {
+        throw std::runtime_error("there is already a subscriber for this CAN ID");
+    }
+    this->subscribers[id] = module;
 }
