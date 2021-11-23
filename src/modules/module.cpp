@@ -27,7 +27,7 @@ void Module::Module::expect(std::vector<Expression *> arguments, int num, ...)
     va_start(vl, num);
     for (int i = 0; i < num; i++)
     {
-        if ((arguments[0]->type & va_arg(vl, int)) == 0)
+        if ((arguments[i]->type & va_arg(vl, int)) == 0)
         {
             throw std::runtime_error("type mismatch at argument " + std::to_string(i));
         }
