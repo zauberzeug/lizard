@@ -182,7 +182,7 @@ void process_tree(owl_tree *tree)
                 printf("%s\n", expression->evaluate_boolean() ? "true" : "false");
                 break;
             case integer:
-                printf("%d\n", expression->evaluate_integer());
+                printf("%lld\n", expression->evaluate_integer());
                 break;
             case number:
                 printf("%f\n", expression->evaluate_number());

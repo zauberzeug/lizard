@@ -99,7 +99,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
             throw std::runtime_error("module \"" + roboclaw_name + "\" is no RoboClaw");
         }
         RoboClaw *roboclaw = (RoboClaw *)module;
-        unsigned int motor_number = arguments[1]->evaluate_integer();
+        int64_t motor_number = arguments[1]->evaluate_integer();
         return new RoboClawMotor(name, roboclaw, motor_number);
     }
     else

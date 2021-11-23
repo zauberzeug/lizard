@@ -9,7 +9,7 @@ class Expression
 public:
     Type type;
     virtual bool evaluate_boolean();
-    virtual int evaluate_integer();
+    virtual int64_t evaluate_integer();
     virtual double evaluate_number();
     virtual std::string evaluate_string();
     virtual std::string evaluate_identifier();
@@ -39,11 +39,11 @@ public:
 class IntegerExpression : public Expression
 {
 private:
-    int value;
+    int64_t value;
 
 public:
-    IntegerExpression(int value);
-    int evaluate_integer();
+    IntegerExpression(int64_t value);
+    int64_t evaluate_integer();
     double evaluate_number();
 };
 
@@ -65,7 +65,7 @@ private:
 public:
     VariableExpression(Variable *variable);
     bool evaluate_boolean();
-    int evaluate_integer();
+    int64_t evaluate_integer();
     double evaluate_number();
     std::string evaluate_string();
     std::string evaluate_identifier();
@@ -78,7 +78,7 @@ private:
 
 public:
     PowerExpression(Expression *left, Expression *right);
-    int evaluate_integer();
+    int64_t evaluate_integer();
     double evaluate_number();
 };
 
@@ -89,7 +89,7 @@ private:
 
 public:
     NegateExpression(Expression *operand);
-    int evaluate_integer();
+    int64_t evaluate_integer();
     double evaluate_number();
 };
 
@@ -100,7 +100,7 @@ private:
 
 public:
     MultiplyExpression(Expression *left, Expression *right);
-    int evaluate_integer();
+    int64_t evaluate_integer();
     double evaluate_number();
 };
 
@@ -111,7 +111,7 @@ private:
 
 public:
     DivideExpression(Expression *left, Expression *right);
-    int evaluate_integer();
+    int64_t evaluate_integer();
     double evaluate_number();
 };
 
@@ -122,7 +122,7 @@ private:
 
 public:
     AddExpression(Expression *left, Expression *right);
-    int evaluate_integer();
+    int64_t evaluate_integer();
     double evaluate_number();
 };
 
@@ -133,7 +133,7 @@ private:
 
 public:
     SubtractExpression(Expression *left, Expression *right);
-    int evaluate_integer();
+    int64_t evaluate_integer();
     double evaluate_number();
 };
 

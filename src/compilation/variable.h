@@ -10,7 +10,7 @@ class Variable
 public:
     Type type;
     bool boolean_value;
-    int integer_value;
+    int64_t integer_value;
     double number_value;
     std::string string_value;
     std::string identifier_value;
@@ -27,7 +27,7 @@ public:
 class IntegerVariable : public Variable
 {
 public:
-    IntegerVariable(int value = 0);
+    IntegerVariable(int64_t value = 0);
 };
 
 class NumberVariable : public Variable

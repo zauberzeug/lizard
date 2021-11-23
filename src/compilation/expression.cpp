@@ -40,7 +40,7 @@ bool Expression::evaluate_boolean()
     throw std::runtime_error("not implemented");
 }
 
-int Expression::evaluate_integer()
+int64_t Expression::evaluate_integer()
 {
     throw std::runtime_error("not implemented");
 }
@@ -87,13 +87,13 @@ std::string StringExpression::evaluate_string()
     return this->value;
 }
 
-IntegerExpression::IntegerExpression(int value)
+IntegerExpression::IntegerExpression(int64_t value)
 {
     this->type = integer;
     this->value = value;
 }
 
-int IntegerExpression::evaluate_integer()
+int64_t IntegerExpression::evaluate_integer()
 {
     return this->value;
 }
@@ -129,7 +129,7 @@ bool VariableExpression::evaluate_boolean()
     return this->variable->boolean_value;
 }
 
-int VariableExpression::evaluate_integer()
+int64_t VariableExpression::evaluate_integer()
 {
     if (this->type != integer)
     {
@@ -172,7 +172,7 @@ PowerExpression::PowerExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
-int PowerExpression::evaluate_integer()
+int64_t PowerExpression::evaluate_integer()
 {
     return pow(this->left->evaluate_integer(), this->right->evaluate_integer());
 }
@@ -188,7 +188,7 @@ NegateExpression::NegateExpression(Expression *operand)
     this->operand = operand;
 }
 
-int NegateExpression::evaluate_integer()
+int64_t NegateExpression::evaluate_integer()
 {
     return -this->operand->evaluate_integer();
 }
@@ -205,7 +205,7 @@ MultiplyExpression::MultiplyExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
-int MultiplyExpression::evaluate_integer()
+int64_t MultiplyExpression::evaluate_integer()
 {
     return this->left->evaluate_integer() * this->right->evaluate_integer();
 }
@@ -222,7 +222,7 @@ DivideExpression::DivideExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
-int DivideExpression::evaluate_integer()
+int64_t DivideExpression::evaluate_integer()
 {
     return this->left->evaluate_integer() / this->right->evaluate_integer();
 }
@@ -239,7 +239,7 @@ AddExpression::AddExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
-int AddExpression::evaluate_integer()
+int64_t AddExpression::evaluate_integer()
 {
     return this->left->evaluate_integer() + this->right->evaluate_integer();
 }
@@ -256,7 +256,7 @@ SubtractExpression::SubtractExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
-int SubtractExpression::evaluate_integer()
+int64_t SubtractExpression::evaluate_integer()
 {
     return this->left->evaluate_integer() - this->right->evaluate_integer();
 }

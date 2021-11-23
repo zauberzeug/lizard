@@ -34,7 +34,7 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
                 printf(argument->evaluate_boolean() ? "true" : "false");
                 break;
             case integer:
-                printf("%d", argument->evaluate_integer());
+                printf("%lld", argument->evaluate_integer());
                 break;
             case number:
                 printf("%f", argument->evaluate_number());
@@ -88,7 +88,7 @@ std::string Core::get_output()
             pos += sprintf(&output_buffer[pos], "%s", property->boolean_value ? "true" : "false");
             break;
         case integer:
-            pos += sprintf(&output_buffer[pos], "%d", property->integer_value);
+            pos += sprintf(&output_buffer[pos], "%lld", property->integer_value);
             break;
         case number:
             pos += sprintf(&output_buffer[pos], format_buffer, property->number_value);

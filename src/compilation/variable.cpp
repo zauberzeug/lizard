@@ -37,7 +37,7 @@ BooleanVariable::BooleanVariable(bool value)
     this->boolean_value = value;
 }
 
-IntegerVariable::IntegerVariable(int value)
+IntegerVariable::IntegerVariable(int64_t value)
 {
     this->type = integer;
     this->integer_value = value;
