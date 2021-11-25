@@ -1,8 +1,5 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include "../compilation/expression.h"
 #include "module.h"
 
 class Proxy : public Module

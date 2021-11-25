@@ -1,7 +1,5 @@
 #pragma once
 
-#include <string>
-
 #include "module.h"
 #include "roboclaw.h"
 
