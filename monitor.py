@@ -4,6 +4,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 import serial
 import os.path
+import sys
 
 
 class LineReader:
@@ -69,12 +70,15 @@ async def send():
 
 
 def serial_connection() -> serial.Serial:
-    for usb_path in [
+    usb_paths = [
         "/dev/ttyTHS1",
         "/dev/ttyUSB0",
         "/dev/tty.SLAB_USBtoUART",
         "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0",
-    ]:
+    ]
+    if len(sys.argv) > 1:
+        usb_paths.insert(0, sys.argv[1])
+    for usb_path in usb_paths:
         if os.path.exists(usb_path):
             print(f"Connecting to {usb_path}")
             break
