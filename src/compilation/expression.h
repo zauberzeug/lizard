@@ -14,6 +14,7 @@ public:
     virtual std::string evaluate_string();
     virtual std::string evaluate_identifier();
     bool is_numbery();
+    int print_to_buffer(char *buffer);
 };
 
 class BooleanExpression : public Expression

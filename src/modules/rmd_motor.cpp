@@ -13,6 +13,7 @@ RmdMotor::RmdMotor(std::string name, Can *can) : Module(rmd_motor, name)
 void RmdMotor::step()
 {
     this->can->send(this->can_id, 0x92, 0, 0, 0, 0, 0, 0, 0);
+    Module::step();
 }
 
 void RmdMotor::call(std::string method_name, std::vector<Expression *> arguments)

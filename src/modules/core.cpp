@@ -14,6 +14,7 @@ Core::Core(std::string name) : Module(core, name)
 void Core::step()
 {
     this->properties["millis"]->integer_value = millis();
+    Module::step();
 }
 
 void Core::call(std::string method_name, std::vector<Expression *> arguments)
@@ -25,30 +26,17 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
     }
     else if (method_name == "print")
     {
+        static char buffer[1024];
+        int pos = 0;
         for (auto const &argument : arguments)
         {
-            switch (argument->type)
+            if (argument != arguments[0])
             {
-            case boolean:
-                printf(argument->evaluate_boolean() ? "true" : "false");
-                break;
-            case integer:
-                printf("%lld", argument->evaluate_integer());
-                break;
-            case number:
-                printf("%f", argument->evaluate_number());
-                break;
-            case string:
-                printf("\"%s\"", argument->evaluate_string().c_str());
-                break;
-            case identifier:
-                printf(argument->evaluate_identifier().c_str());
-                break;
-            default:
-                throw std::runtime_error("argument has an invalid datatype");
+                pos += sprintf(&buffer[pos], " ");
             }
+            pos += argument->print_to_buffer(&buffer[pos]);
         }
-        printf("\n");
+        printf("%s\n", buffer);
     }
     else if (method_name == "output")
     {

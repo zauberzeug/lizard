@@ -31,6 +31,25 @@ void Variable::assign(Expression *expression)
     }
 }
 
+int Variable::print_to_buffer(char *buffer)
+{
+    switch (this->type)
+    {
+    case boolean:
+        return sprintf(buffer, "%s", this->boolean_value ? "true" : "false");
+    case integer:
+        return sprintf(buffer, "%lld", this->integer_value);
+    case number:
+        return sprintf(buffer, "%f", this->number_value);
+    case string:
+        return sprintf(buffer, "\"%s\"", this->string_value.c_str());
+    case identifier:
+        return sprintf(buffer, "%s", this->identifier_value.c_str());
+    default:
+        throw std::runtime_error("variable has an invalid datatype");
+    }
+}
+
 BooleanVariable::BooleanVariable(bool value)
 {
     this->type = boolean;

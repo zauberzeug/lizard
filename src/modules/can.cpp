@@ -71,6 +71,7 @@ void Can::step()
             printf("\n");
         }
     }
+    Module::step();
 }
 
 void Can::send(uint32_t id, uint8_t data[8], bool rtr)

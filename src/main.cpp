@@ -188,26 +188,9 @@ void process_tree(owl_tree *tree)
         else if (!statement.expression.empty)
         {
             Expression *expression = compile_expression(statement.expression);
-            switch (expression->type)
-            {
-            case boolean:
-                printf("%s\n", expression->evaluate_boolean() ? "true" : "false");
-                break;
-            case integer:
-                printf("%lld\n", expression->evaluate_integer());
-                break;
-            case number:
-                printf("%f\n", expression->evaluate_number());
-                break;
-            case string:
-                printf("\"%s\"\n", expression->evaluate_string().c_str());
-                break;
-            case identifier:
-                printf("%s\n", expression->evaluate_identifier().c_str());
-                break;
-            default:
-                throw std::runtime_error("expression has an invalid datatype");
-            }
+            static char buffer[256];
+            expression->print_to_buffer(buffer);
+            printf("%s\n", buffer);
         }
         else if (!statement.constructor.empty)
         {

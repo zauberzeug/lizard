@@ -16,6 +16,7 @@ public:
     std::string identifier_value;
 
     void assign(Expression *expression);
+    int print_to_buffer(char *buffer);
 };
 
 class BooleanVariable : public Variable

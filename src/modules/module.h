@@ -28,11 +28,12 @@ private:
 
 protected:
     std::map<std::string, Variable *> properties;
+    bool output = false;
+    bool broadcast = false;
 
 public:
     ModuleType type;
     std::string name;
-    bool output = false;
 
     Module(ModuleType type, std::string name);
     static void expect(std::vector<Expression *> arguments, int num, ...);

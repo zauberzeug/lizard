@@ -11,6 +11,7 @@ Button::Button(std::string name, gpio_num_t number) : Module(button, name)
 void Button::step()
 {
     this->properties["level"]->integer_value = gpio_get_level(this->number);
+    Module::step();
 }
 
 void Button::call(std::string method_name, std::vector<Expression *> arguments)
@@ -38,7 +39,7 @@ void Button::call(std::string method_name, std::vector<Expression *> arguments)
 
 std::string Button::get_output()
 {
-    char buffer[256];
+    static char buffer[256];
     std::sprintf(buffer, "%d", gpio_get_level(this->number));
     return buffer;
 }

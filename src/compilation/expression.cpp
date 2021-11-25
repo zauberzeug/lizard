@@ -65,6 +65,25 @@ bool Expression::is_numbery()
     return this->type == number || this->type == integer;
 }
 
+int Expression::print_to_buffer(char *buffer)
+{
+    switch (this->type)
+    {
+    case boolean:
+        return sprintf(buffer, "%s", this->evaluate_boolean() ? "true" : "false");
+    case integer:
+        return sprintf(buffer, "%lld", this->evaluate_integer());
+    case number:
+        return sprintf(buffer, "%f", this->evaluate_number());
+    case string:
+        return sprintf(buffer, "\"%s\"", this->evaluate_string().c_str());
+    case identifier:
+        return sprintf(buffer, "%s", this->evaluate_identifier().c_str());
+    default:
+        throw std::runtime_error("expression has an invalid datatype");
+    }
+}
+
 BooleanExpression::BooleanExpression(bool value)
 {
     this->type = boolean;

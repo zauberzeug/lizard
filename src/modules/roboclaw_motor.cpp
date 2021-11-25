@@ -23,6 +23,7 @@ void RoboClawMotor::step()
         throw std::runtime_error("could not read motor position");
     }
     this->properties["position"]->integer_value = position;
+    Module::step();
 }
 
 void RoboClawMotor::call(std::string method_name, std::vector<Expression *> arguments)

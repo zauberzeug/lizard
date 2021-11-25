@@ -127,6 +127,18 @@ void Module::step()
             printf("%s %s\n", this->name.c_str(), output.c_str());
         }
     }
+    if (this->broadcast)
+    {
+        static char buffer[1024];
+        int pos = 0;
+        for (auto const &item : this->properties)
+        {
+            pos += sprintf(&buffer[pos], "%s.%s = ", this->name.c_str(), item.first.c_str());
+            pos += item.second->print_to_buffer(&buffer[pos]);
+            pos += sprintf(&buffer[pos], "\n");
+        }
+        uart_write_bytes(UART_NUM_1, buffer, pos);
+    }
 }
 
 void Module::call(std::string method_name, std::vector<Expression *> arguments)
@@ -140,6 +152,11 @@ void Module::call(std::string method_name, std::vector<Expression *> arguments)
     {
         Module::expect(arguments, 0);
         this->output = true;
+    }
+    else if (method_name == "broadcast")
+    {
+        Module::expect(arguments, 0);
+        this->broadcast = true;
     }
     else if (method_name == "shadow")
     {
