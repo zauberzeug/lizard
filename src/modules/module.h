@@ -13,10 +13,12 @@ enum ModuleType
     can,
     core,
     led,
+    proxy,
     serial,
     rmd_motor,
     roboclaw,
     roboclaw_motor,
+    number_of_module_types,
 };
 
 class Module

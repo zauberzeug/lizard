@@ -5,6 +5,7 @@
 #include <string>
 #include <string.h>
 #include <vector>
+#include "driver/gpio.h"
 #include "driver/uart.h"
 
 #include "compilation/await_condition.h"
@@ -399,7 +400,16 @@ void process_uart(uart_port_t uart_num)
 
 void app_main()
 {
-    Global::add_module("core", core_module = new Core("core"));
+    try
+    {
+        assert(Global::variables.size() == number_of_module_types);
+        Global::add_module("core", core_module = new Core("core"));
+    }
+    catch (const std::runtime_error &e)
+    {
+        printf("error while initializing global state variables and modules: %s\n", e.what());
+        exit(1);
+    }
 
     try
     {
@@ -422,13 +432,14 @@ void app_main()
     };
     uart_param_config(UART_NUM_0, &uart_config);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
-    uart_param_config(UART_NUM_2, &uart_config);
-    uart_driver_install(UART_NUM_2, BUFFER_SIZE * 2, 0, 0, NULL, 0);
+    uart_param_config(UART_NUM_1, &uart_config);
+    uart_set_pin(UART_NUM_1, GPIO_NUM_27, GPIO_NUM_26, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    uart_driver_install(UART_NUM_1, BUFFER_SIZE * 2, 0, 0, NULL, 0);
 
     while (true)
     {
         process_uart(UART_NUM_0);
-        process_uart(UART_NUM_2);
+        process_uart(UART_NUM_1);
 
         for (auto const &item : Global::modules)
         {

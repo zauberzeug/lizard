@@ -5,6 +5,7 @@
 #include "button.h"
 #include "can.h"
 #include "led.h"
+#include "proxy.h"
 #include "rmd_motor.h"
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
@@ -101,6 +102,14 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
         RoboClaw *roboclaw = (RoboClaw *)module;
         int64_t motor_number = arguments[1]->evaluate_integer();
         return new RoboClawMotor(name, roboclaw, motor_number);
+    }
+    else if (type == "Proxy")
+    {
+        if (arguments.size() < 1 || arguments[0]->type != identifier)
+        {
+            throw std::runtime_error("expecting at least 1 identifier argument specifying the module type");
+        }
+        return new Proxy(name, arguments);
     }
     else
     {

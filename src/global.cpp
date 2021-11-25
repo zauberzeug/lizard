@@ -3,7 +3,17 @@
 std::map<std::string, Module *> Global::modules;
 std::map<std::string, Routine *> Global::routines;
 std::list<Rule *> Global::rules;
-std::map<std::string, Variable *> Global::variables;
+std::map<std::string, Variable *> Global::variables{
+    {"Button", new IdentifierVariable("Button")},
+    {"Can", new IdentifierVariable("Can")},
+    {"Core", new IdentifierVariable("Core")},
+    {"Led", new IdentifierVariable("Led")},
+    {"Proxy", new IdentifierVariable("Proxy")},
+    {"Serial", new IdentifierVariable("Serial")},
+    {"RmdMotor", new IdentifierVariable("RmdMotor")},
+    {"RoboClaw", new IdentifierVariable("RoboClaw")},
+    {"RoboClawMotor", new IdentifierVariable("RoboClawMotor")},
+};
 
 Module *Global::get_module(std::string module_name)
 {
