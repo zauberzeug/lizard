@@ -184,6 +184,11 @@ Variable *Module::get_property(std::string property_name)
     return this->properties[property_name];
 }
 
+void Module::write_property(std::string property_name, Expression *expression)
+{
+    this->get_property(property_name)->assign(expression);
+}
+
 void Module::handle_can_msg(uint32_t id, int count, uint8_t *data)
 {
     throw std::runtime_error("CAN message handler is not implemented");

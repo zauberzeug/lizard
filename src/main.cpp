@@ -248,8 +248,7 @@ void process_tree(owl_tree *tree)
             Module *module = Global::get_module(module_name);
             std::string property_name = identifier_to_string(property_assignment.property_name);
             Expression *expression = compile_expression(property_assignment.expression);
-            Variable *property = module->get_property(property_name);
-            property->assign(expression);
+            module->write_property(property_name, expression);
         }
         else if (!statement.variable_assignment.empty)
         {
