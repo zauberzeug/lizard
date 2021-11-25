@@ -54,7 +54,7 @@ expression =
     identifier@module_name '.' identifier@property_name : property
     [ '(' expression ')' ] : parentheses
   .operators infix left
-    '^' | '**' : power
+    '**' : power
   .operators prefix
     '-' : negate
   .operators infix left
@@ -63,6 +63,12 @@ expression =
   .operators infix left
     '+' : add
     '-' : subtract
+  .operators infix left
+    '<<' : shift_left
+    '>>' : shift_right
+    '&' : bit_and
+    '^' : bit_xor
+    '|' : bit_or
   .operators infix left
     '>' : greater
     '<' : less

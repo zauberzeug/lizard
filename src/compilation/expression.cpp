@@ -266,6 +266,66 @@ double SubtractExpression::evaluate_number()
     return this->left->evaluate_number() - this->right->evaluate_number();
 }
 
+ShiftLeftExpression::ShiftLeftExpression(Expression *left, Expression *right)
+{
+    this->type = integer;
+    this->left = left;
+    this->right = right;
+}
+
+int64_t ShiftLeftExpression::evaluate_integer()
+{
+    return this->left->evaluate_integer() << this->right->evaluate_integer();
+}
+
+ShiftRightExpression::ShiftRightExpression(Expression *left, Expression *right)
+{
+    this->type = integer;
+    this->left = left;
+    this->right = right;
+}
+
+int64_t ShiftRightExpression::evaluate_integer()
+{
+    return this->left->evaluate_integer() >> this->right->evaluate_integer();
+}
+
+BitAndExpression::BitAndExpression(Expression *left, Expression *right)
+{
+    this->type = integer;
+    this->left = left;
+    this->right = right;
+}
+
+int64_t BitAndExpression::evaluate_integer()
+{
+    return this->left->evaluate_integer() & this->right->evaluate_integer();
+}
+
+BitXorExpression::BitXorExpression(Expression *left, Expression *right)
+{
+    this->type = integer;
+    this->left = left;
+    this->right = right;
+}
+
+int64_t BitXorExpression::evaluate_integer()
+{
+    return this->left->evaluate_integer() ^ this->right->evaluate_integer();
+}
+
+BitOrExpression::BitOrExpression(Expression *left, Expression *right)
+{
+    this->type = integer;
+    this->left = left;
+    this->right = right;
+}
+
+int64_t BitOrExpression::evaluate_integer()
+{
+    return this->left->evaluate_integer() | this->right->evaluate_integer();
+}
+
 GreaterExpression::GreaterExpression(Expression *left, Expression *right)
 {
     check_number_types(left, right);

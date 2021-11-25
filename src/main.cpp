@@ -87,6 +87,16 @@ Expression *compile_expression(struct owl_ref ref)
         return new AddExpression(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_SUBTRACT:
         return new SubtractExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_SHIFT_LEFT:
+        return new ShiftLeftExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_SHIFT_RIGHT:
+        return new ShiftRightExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_BIT_AND:
+        return new BitAndExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_BIT_XOR:
+        return new BitXorExpression(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_BIT_OR:
+        return new BitOrExpression(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_GREATER:
         return new GreaterExpression(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_LESS:

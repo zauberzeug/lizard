@@ -137,6 +137,56 @@ public:
     double evaluate_number();
 };
 
+class ShiftLeftExpression : public Expression
+{
+private:
+    Expression *left, *right;
+
+public:
+    ShiftLeftExpression(Expression *left, Expression *right);
+    int64_t evaluate_integer();
+};
+
+class ShiftRightExpression : public Expression
+{
+private:
+    Expression *left, *right;
+
+public:
+    ShiftRightExpression(Expression *left, Expression *right);
+    int64_t evaluate_integer();
+};
+
+class BitAndExpression : public Expression
+{
+private:
+    Expression *left, *right;
+
+public:
+    BitAndExpression(Expression *left, Expression *right);
+    int64_t evaluate_integer();
+};
+
+class BitXorExpression : public Expression
+{
+private:
+    Expression *left, *right;
+
+public:
+    BitXorExpression(Expression *left, Expression *right);
+    int64_t evaluate_integer();
+};
+
+class BitOrExpression : public Expression
+{
+private:
+    Expression *left, *right;
+
+public:
+    BitOrExpression(Expression *left, Expression *right);
+    int64_t evaluate_integer();
+};
+
 class GreaterExpression : public Expression
 {
 private:
