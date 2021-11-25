@@ -1,10 +1,9 @@
 #include "core.h"
 
 #include <stdlib.h>
-#include "esp_system.h"
-#include "esp_timer.h"
 #include "../global.h"
 #include "../utils/strings.h"
+#include "../utils/timing.h"
 
 Core::Core(std::string name) : Module(core, name)
 {
@@ -14,7 +13,7 @@ Core::Core(std::string name) : Module(core, name)
 
 void Core::step()
 {
-    this->properties["millis"]->integer_value = esp_timer_get_time() / 1000ULL;
+    this->properties["millis"]->integer_value = millis();
 }
 
 void Core::call(std::string method_name, std::vector<Expression *> arguments)

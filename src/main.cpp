@@ -19,6 +19,7 @@
 #include "modules/core.h"
 #include "modules/module.h"
 #include "utils/tictoc.h"
+#include "utils/timing.h"
 #include "global.h"
 #include "storage.h"
 
@@ -374,6 +375,28 @@ void process_lizard(const char *line)
     owl_tree_destroy(tree);
 }
 
+void process_uart(uart_port_t uart_num)
+{
+    static char *line = (char *)malloc(BUFFER_SIZE);
+    int len = uart_read_bytes(uart_num, (uint8_t *)line, BUFFER_SIZE, 0);
+    line[len - 1] = 0;
+    try
+    {
+        if (len > 2 && line[0] == '!')
+        {
+            process_storage_command(line + 1);
+        }
+        else if (len > 1)
+        {
+            process_lizard(line);
+        }
+    }
+    catch (const std::runtime_error &e)
+    {
+        printf("error while processing command from UART %d: %s\n", uart_num, e.what());
+    }
+}
+
 void app_main()
 {
     Global::add_module("core", core_module = new Core("core"));
@@ -399,27 +422,13 @@ void app_main()
     };
     uart_param_config(UART_NUM_0, &uart_config);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
+    uart_param_config(UART_NUM_2, &uart_config);
+    uart_driver_install(UART_NUM_2, BUFFER_SIZE * 2, 0, 0, NULL, 0);
 
-    char *line = (char *)malloc(BUFFER_SIZE);
     while (true)
     {
-        int len = uart_read_bytes(UART_NUM_0, (uint8_t *)line, BUFFER_SIZE, 20 / portTICK_RATE_MS);
-        line[len - 1] = 0;
-        try
-        {
-            if (len > 2 && line[0] == '!')
-            {
-                process_storage_command(line + 1);
-            }
-            else if (len > 1)
-            {
-                process_lizard(line);
-            }
-        }
-        catch (const std::runtime_error &e)
-        {
-            printf("error while processing command: %s\n", e.what());
-        }
+        process_uart(UART_NUM_0);
+        process_uart(UART_NUM_2);
 
         for (auto const &item : Global::modules)
         {
@@ -460,5 +469,7 @@ void app_main()
                 printf("error in routine \"%s\": %s\n", item.first.c_str(), e.what());
             }
         }
+
+        delay(10);
     }
 }
