@@ -1,5 +1,7 @@
 #include "button.h"
 
+#include "../utils/output.h"
+
 Button::Button(std::string name, gpio_num_t number) : Module(button, name)
 {
     this->number = number;
@@ -19,7 +21,7 @@ void Button::call(std::string method_name, std::vector<Expression *> arguments)
     if (method_name == "get")
     {
         Module::expect(arguments, 0);
-        printf("%s %d\n", this->name.c_str(), gpio_get_level(this->number));
+        echo(all, text, "%s %d", this->name.c_str(), gpio_get_level(this->number));
     }
     else if (method_name == "pullup")
     {

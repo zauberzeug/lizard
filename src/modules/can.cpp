@@ -1,6 +1,7 @@
 #include "can.h"
 
 #include "driver/twai.h"
+#include "../utils/output.h"
 
 Can::Can(std::string name, gpio_num_t rx_pin, gpio_num_t tx_pin, long baud_rate) : Module(can, name)
 {
@@ -60,15 +61,16 @@ void Can::step()
 
         if (this->output)
         {
-            printf("can %03x", message.identifier);
+            static char buffer[256];
+            int pos = std::sprintf(buffer, "can %03x", message.identifier);
             if (!(message.flags & TWAI_MSG_FLAG_RTR))
             {
                 for (int i = 0; i < message.data_length_code; ++i)
                 {
-                    printf(",%02x", message.data[i]);
+                    pos += std::sprintf(&buffer[pos], ",%02x", message.data[i]);
                 }
             }
-            printf("\n");
+            echo(all, text, buffer);
         }
     }
     Module::step();

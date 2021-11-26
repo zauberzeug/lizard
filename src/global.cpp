@@ -19,7 +19,7 @@ Module *Global::get_module(std::string module_name)
 {
     if (!modules.count(module_name))
     {
-        throw std::runtime_error("unkown module \"" + module_name + "\"");
+        throw std::runtime_error("unknown module \"" + module_name + "\"");
     }
     return modules[module_name];
 }
@@ -28,7 +28,7 @@ Routine *Global::get_routine(std::string routine_name)
 {
     if (!routines.count(routine_name))
     {
-        throw std::runtime_error("unkown routine \"" + routine_name + "\"");
+        throw std::runtime_error("unknown routine \"" + routine_name + "\"");
     }
     return routines[routine_name];
 }
@@ -37,7 +37,7 @@ Variable *Global::get_variable(std::string variable_name)
 {
     if (!variables.count(variable_name))
     {
-        throw std::runtime_error("unkown variable \"" + variable_name + "\"");
+        throw std::runtime_error("unknown variable \"" + variable_name + "\"");
     }
     return variables[variable_name];
 }

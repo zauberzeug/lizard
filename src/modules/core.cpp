@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include "../global.h"
+#include "../utils/output.h"
 #include "../utils/strings.h"
 #include "../utils/timing.h"
 
@@ -36,7 +37,7 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
             }
             pos += argument->print_to_buffer(&buffer[pos]);
         }
-        printf("%s\n", buffer);
+        echo(all, text, buffer);
     }
     else if (method_name == "output")
     {

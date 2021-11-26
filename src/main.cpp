@@ -19,6 +19,7 @@
 #include "compilation/variable_assignment.h"
 #include "modules/core.h"
 #include "modules/module.h"
+#include "utils/output.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "global.h"
@@ -190,7 +191,7 @@ void process_tree(owl_tree *tree)
             Expression *expression = compile_expression(statement.expression);
             static char buffer[256];
             expression->print_to_buffer(buffer);
-            printf("%s\n", buffer);
+            echo(all, text, buffer);
         }
         else if (!statement.constructor.empty)
         {
@@ -293,36 +294,12 @@ void process_tree(owl_tree *tree)
     }
 }
 
-void process_storage_command(const char *line)
-{
-    if (line[0] == '+')
-    {
-        Storage::append_to_startup(line + 1);
-    }
-    else if (line[0] == '-')
-    {
-        Storage::remove_from_startup(line + 1);
-    }
-    else if (line[0] == '?')
-    {
-        Storage::print_startup(line + 1);
-    }
-    else if (line[0] == '!')
-    {
-        Storage::save_startup();
-    }
-    else
-    {
-        throw std::runtime_error("unrecognized storage command");
-    }
-}
-
 void process_lizard(const char *line)
 {
     bool debug = core_module->get_property("debug")->boolean_value;
     if (debug)
     {
-        printf(">> %s\n", line);
+        echo(all, text, ">> %s", line);
         tic();
     }
     struct owl_tree *tree = owl_tree_create_from_string(line);
@@ -331,19 +308,26 @@ void process_lizard(const char *line)
         toc("Tree creation");
     }
     struct source_range range;
-    owl_error error = owl_tree_get_error(tree, &range);
-    if (error == ERROR_INVALID_FILE)
-        printf("error: invalid file");
-    else if (error == ERROR_INVALID_OPTIONS)
-        printf("error: invalid options");
-    else if (error == ERROR_INVALID_TOKEN)
-        printf("error: invalid token at range %zu %zu\n", range.start, range.end);
-    else if (error == ERROR_UNEXPECTED_TOKEN)
-        printf("error: unexpected token at range %zu %zu\n", range.start, range.end);
-    else if (error == ERROR_MORE_INPUT_NEEDED)
-        printf("error: more input needed at range %zu %zu\n", range.start, range.end);
-    else
+    switch (owl_tree_get_error(tree, &range))
     {
+    case ERROR_INVALID_FILE:
+        echo(all, text, "error: invalid file");
+        break;
+    case ERROR_INVALID_OPTIONS:
+        echo(all, text, "error: invalid options");
+        break;
+    case ERROR_INVALID_TOKEN:
+        echo(all, text, "error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
+             std::string(&line[range.start], range.end - range.start));
+        break;
+    case ERROR_UNEXPECTED_TOKEN:
+        echo(all, text, "error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
+             std::string(&line[range.start], range.end - range.start));
+        break;
+    case ERROR_MORE_INPUT_NEEDED:
+        echo(all, text, "error: more input needed at range %zu %zu", range.start, range.end);
+        break;
+    default:
         if (debug)
         {
             owl_tree_print(tree);
@@ -358,25 +342,129 @@ void process_lizard(const char *line)
     owl_tree_destroy(tree);
 }
 
-void process_uart(uart_port_t uart_num)
+void process_line(const char *line, int len, uart_port_t uart_num)
 {
-    static char *line = (char *)malloc(BUFFER_SIZE);
-    int len = uart_read_bytes(uart_num, (uint8_t *)line, BUFFER_SIZE, 0);
-    line[len - 1] = 0;
-    try
+    if (len >= 2 && line[0] == '!')
     {
-        if (len > 2 && line[0] == '!')
+        switch (line[1])
         {
-            process_storage_command(line + 1);
+        case '+':
+            Storage::append_to_startup(line + 2);
+            break;
+        case '-':
+            Storage::remove_from_startup(line + 2);
+            break;
+        case '?':
+            Storage::print_startup(line + 2);
+            break;
+        case '.':
+            Storage::save_startup();
+            break;
+        case '!':
+            process_lizard(line + 2);
+            break;
+        case '"':
+            echo(uart_num == UART_NUM_1 ? uart0 : all, text, line + 2);
+            break;
+        default:
+            throw std::runtime_error("unrecognized control command");
         }
-        else if (len > 1)
+    }
+    else
+    {
+        if (uart_num == UART_NUM_1)
+        {
+            printf("%s\n", line);
+        }
+        else
         {
             process_lizard(line);
         }
     }
+}
+
+void process_uart(uart_port_t uart_num)
+{
+    static char *input = (char *)malloc(BUFFER_SIZE);
+    static int buffer_start = 0;
+    static uint8_t checksum = 0;
+
+    try
+    {
+        size_t size;
+        uart_get_buffered_data_len(uart_num, &size);
+        if (size == 0)
+        {
+            return;
+        }
+        // printf("*** there are %d bytes in the ring buffer\n", size);
+        if (size >= BUFFER_SIZE - buffer_start)
+        {
+            uart_flush_input(uart_num);
+            throw std::runtime_error("uart buffer overflow, flushing");
+        }
+
+        int len = uart_read_bytes(uart_num, (uint8_t *)input + buffer_start, size, 0);
+        // printf("*** got %d bytes via uart_read_bytes\n", len);
+
+        int line_start = 0;
+        int pos = 0;
+        while (pos < buffer_start + len)
+        {
+            switch (input[pos])
+            {
+            case '@':
+            {
+                // printf("*** found '@' at position %d\n", pos);
+                std::string hex_number(&input[pos + 1], 2);
+                int number = std::stoi(hex_number, 0, 16);
+                // printf("*** number: %c %c\n", input[pos + 1], input[pos + 2]);
+                input[pos] = 0;
+                if (number == checksum)
+                {
+                    // printf("*** process line: \"%s\"\n", &input[line_start]);
+                    process_line(&input[line_start], pos - line_start, uart_num);
+                }
+                else
+                {
+                    echo(uart0, text, "error: checksum mismatch for input \"%s\" (%d vs. %d)",
+                         &input[line_start], number, checksum);
+                }
+                pos += 4;
+                line_start = pos;
+                checksum = 0;
+                break;
+            }
+            case '\0':
+            case '\n':
+                // printf("*** found chr(%d) at position %d\n", input[pos], pos);
+                input[pos] = 0;
+                // printf("*** process line: \"%s\"\n", &input[line_start]);
+                process_line(&input[line_start], pos - line_start, uart_num);
+                pos += 1;
+                line_start = pos;
+                break;
+            default:
+                // printf("*** char %d\n", input[pos]);
+                checksum ^= input[pos];
+                pos += 1;
+            }
+        }
+
+        // printf("*** input buffer: \"%s\" (length %d)\n", std::string(input, pos).c_str(), pos);
+        // printf("*** moving %d bytes from offset %d to 0\n", pos - line_start, line_start);
+        memmove(input, input + line_start, pos - line_start);
+        buffer_start = pos - line_start;
+        pos -= line_start;
+        // printf("*** input buffer: \"%s\" (length %d)\n", std::string(input, pos).c_str(), pos);
+        // printf("*** buffer_start = %d\n", buffer_start);
+    }
     catch (const std::runtime_error &e)
     {
-        printf("error while processing command from UART %d: %s\n", uart_num, e.what());
+        echo(all, text, "error while processing line from UART %d: %s", uart_num, e.what());
+        uart_flush_input(uart_num);
+        buffer_start = 0;
+        checksum = 0;
     }
 }
 
@@ -389,7 +477,7 @@ void app_main()
     }
     catch (const std::runtime_error &e)
     {
-        printf("error while initializing global state variables and modules: %s\n", e.what());
+        echo(all, text, "error while initializing global state variables and modules: %s", e.what());
         exit(1);
     }
 
@@ -400,7 +488,7 @@ void app_main()
     }
     catch (const std::runtime_error &e)
     {
-        printf("error while loading startup script: %s\n", e.what());
+        echo(all, text, "error while loading startup script: %s", e.what());
     }
 
     uart_config_t uart_config = {
@@ -431,7 +519,7 @@ void app_main()
             }
             catch (const std::runtime_error &e)
             {
-                printf("error in module \"%s\": %s\n", item.first.c_str(), e.what());
+                echo(all, text, "error in module \"%s\": %s", item.first.c_str(), e.what());
             }
         }
 
@@ -447,7 +535,7 @@ void app_main()
             }
             catch (const std::runtime_error &e)
             {
-                printf("error in rule: %s\n", e.what());
+                echo(all, text, "error in rule: %s", e.what());
             }
         }
 
@@ -459,7 +547,7 @@ void app_main()
             }
             catch (const std::runtime_error &e)
             {
-                printf("error in routine \"%s\": %s\n", item.first.c_str(), e.what());
+                echo(all, text, "error in routine \"%s\": %s", item.first.c_str(), e.what());
             }
         }
 

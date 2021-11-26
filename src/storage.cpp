@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 #include "nvs_flash.h"
+#include "utils/output.h"
 #include "utils/strings.h"
 
 #define NAMESPACE "storage"
@@ -102,7 +103,7 @@ void Storage::print_startup(std::string substring)
         std::string line = cut_first_word(startup, '\n');
         if (starts_with(line, substring))
         {
-            printf("%s\n", line.c_str());
+            echo(all, text, line.c_str());
         }
     }
 }

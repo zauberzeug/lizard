@@ -6,7 +6,7 @@ Proxy::Proxy(std::string name, std::vector<Expression *> arguments) : Module(pro
 {
     char buffer[256];
     std::string module_type = arguments[0]->evaluate_identifier();
-    int pos = std::sprintf(buffer, "%s = %s(", name.c_str(), module_type.c_str());
+    int pos = std::sprintf(buffer, "!!%s = %s(", name.c_str(), module_type.c_str());
     for (auto const &argument : arguments)
     {
         if (argument == arguments[0])
@@ -26,7 +26,7 @@ Proxy::Proxy(std::string name, std::vector<Expression *> arguments) : Module(pro
 void Proxy::call(std::string method_name, std::vector<Expression *> arguments)
 {
     static char buffer[256];
-    int pos = std::sprintf(buffer, "%s.%s(", this->name.c_str(), method_name.c_str());
+    int pos = std::sprintf(buffer, "!!%s.%s(", this->name.c_str(), method_name.c_str());
     for (auto const &argument : arguments)
     {
         if (argument != arguments[1])

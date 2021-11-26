@@ -10,6 +10,7 @@
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
 #include "serial.h"
+#include "../utils/output.h"
 #include "../global.h"
 
 Module::Module(ModuleType type, std::string name)
@@ -124,20 +125,19 @@ void Module::step()
         std::string output = this->get_output();
         if (!output.empty())
         {
-            printf("%s %s\n", this->name.c_str(), output.c_str());
+            echo(all, text, "%s %s", this->name.c_str(), output.c_str());
         }
     }
     if (this->broadcast)
     {
         static char buffer[1024];
-        int pos = 0;
         for (auto const &item : this->properties)
         {
+            int pos = 0;
             pos += sprintf(&buffer[pos], "%s.%s = ", this->name.c_str(), item.first.c_str());
             pos += item.second->print_to_buffer(&buffer[pos]);
-            pos += sprintf(&buffer[pos], "\n");
+            echo(all, code, buffer);
         }
-        uart_write_bytes(UART_NUM_1, buffer, pos);
     }
 }
 
