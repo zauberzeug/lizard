@@ -385,90 +385,45 @@ void process_line(const char *line, int len, uart_port_t uart_num)
 
 void process_uart(uart_port_t uart_num)
 {
-    static char *inputs[2] = {(char *)malloc(BUFFER_SIZE), (char *)malloc(BUFFER_SIZE)};
-    static int buffer_starts[2] = {0, 0};
-    static uint8_t checksums[2] = {0, 0};
+    static char *input = (char *)malloc(BUFFER_SIZE);
 
-    char *input = inputs[uart_num];
-    int *buffer_start = &buffer_starts[uart_num];
-    uint8_t *checksum = &checksums[uart_num];
-
-    try
+    while (true)
     {
-        size_t size;
-        uart_get_buffered_data_len(uart_num, &size);
-        if (size == 0)
+        int pos = uart_pattern_get_pos(uart_num);
+        if (pos < 0)
         {
-            return;
-        }
-        // printf("*** there are %d bytes in the ring buffer\n", size);
-        if (size >= BUFFER_SIZE - *buffer_start)
-        {
-            uart_flush_input(uart_num);
-            throw std::runtime_error("uart buffer overflow, flushing");
+            break;
         }
 
-        int len = uart_read_bytes(uart_num, (uint8_t *)input + *buffer_start, size, 0);
-        // printf("*** got %d bytes via uart_read_bytes\n", len);
-
-        int line_start = 0;
-        int pos = 0;
-        while (pos < *buffer_start + len)
+        int len = uart_read_bytes(uart_num, (uint8_t *)input, pos + 1, 0);
+        if (input[len - 4] == '@')
         {
-            switch (input[pos])
+            uint8_t checksum = 0;
+            for (int i = 0; i < len - 4; ++i)
             {
-            case '@':
+                checksum ^= input[i];
+            }
+            std::string hex_number(&input[len - 3], 2);
+            if (std::stoi(hex_number, 0, 16) != checksum)
             {
-                // printf("*** found '@' at position %d\n", pos);
-                std::string hex_number(&input[pos + 1], 2);
-                int number = std::stoi(hex_number, 0, 16);
-                // printf("*** number: %c %c\n", input[pos + 1], input[pos + 2]);
-                input[pos] = 0;
-                if (number == *checksum)
-                {
-                    // printf("*** process line: \"%s\"\n", &input[line_start]);
-                    process_line(&input[line_start], pos - line_start, uart_num);
-                }
-                else
-                {
-                    echo(uart0, text, "error: checksum mismatch for input \"%s\" (%d vs. %d)",
-                         &input[line_start], number, *checksum);
-                }
-                pos += 4;
-                line_start = pos;
-                *checksum = 0;
-                break;
+                throw std::runtime_error("checksum mismatch");
             }
-            case '\0':
-            case '\n':
-                // printf("*** found chr(%d) at position %d\n", input[pos], pos);
-                input[pos] = 0;
-                // printf("*** process line: \"%s\"\n", &input[line_start]);
-                process_line(&input[line_start], pos - line_start, uart_num);
-                pos += 1;
-                line_start = pos;
-                break;
-            default:
-                // printf("*** char %d\n", input[pos]);
-                *checksum ^= input[pos];
-                pos += 1;
-            }
+            len -= 4;
         }
+        else
+        {
+            len -= 1;
+        }
+        input[len] = 0;
 
-        // printf("*** input buffer: \"%s\" (length %d)\n", std::string(input, pos).c_str(), pos);
-        // printf("*** moving %d bytes from offset %d to 0\n", pos - line_start, line_start);
-        memmove(input, input + line_start, pos - line_start);
-        *buffer_start = pos - line_start;
-        pos -= line_start;
-        // printf("*** input buffer: \"%s\" (length %d)\n", std::string(input, pos).c_str(), pos);
-        // printf("*** buffer_start = %d\n", *buffer_start);
-    }
-    catch (const std::runtime_error &e)
-    {
-        echo(all, text, "error while processing line from UART %d: %s", uart_num, e.what());
-        uart_flush_input(uart_num);
-        *buffer_start = 0;
-        *checksum = 0;
+        try
+        {
+            process_line(input, len, uart_num);
+        }
+        catch (const std::runtime_error &e)
+        {
+            echo(all, text, "error while processing line from UART %d: %s", uart_num, e.what());
+        }
     }
 }
 
@@ -505,10 +460,14 @@ void app_main()
         .use_ref_tick = false,
     };
     uart_param_config(UART_NUM_0, &uart_config);
-    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_param_config(UART_NUM_1, &uart_config);
     uart_set_pin(UART_NUM_1, GPIO_NUM_27, GPIO_NUM_26, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_driver_install(UART_NUM_1, BUFFER_SIZE * 2, 0, 0, NULL, 0);
+    uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
+    uart_enable_pattern_det_baud_intr(UART_NUM_1, '\n', 1, 9, 0, 0);
+    uart_pattern_queue_reset(UART_NUM_0, 100);
+    uart_pattern_queue_reset(UART_NUM_1, 100);
 
     while (true)
     {
