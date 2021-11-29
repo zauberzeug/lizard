@@ -35,6 +35,10 @@ void check_boolean_types(Expression *left, Expression *right)
     }
 }
 
+Expression::~Expression()
+{
+}
+
 bool Expression::evaluate_boolean()
 {
     throw std::runtime_error("not implemented");
@@ -191,6 +195,12 @@ PowerExpression::PowerExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+PowerExpression::~PowerExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 int64_t PowerExpression::evaluate_integer()
 {
     return pow(this->left->evaluate_integer(), this->right->evaluate_integer());
@@ -205,6 +215,11 @@ NegateExpression::NegateExpression(Expression *operand)
 {
     this->type = get_common_number_type(operand, operand);
     this->operand = operand;
+}
+
+NegateExpression::~NegateExpression()
+{
+    delete this->operand;
 }
 
 int64_t NegateExpression::evaluate_integer()
@@ -224,6 +239,12 @@ MultiplyExpression::MultiplyExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+MultiplyExpression::~MultiplyExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 int64_t MultiplyExpression::evaluate_integer()
 {
     return this->left->evaluate_integer() * this->right->evaluate_integer();
@@ -239,6 +260,12 @@ DivideExpression::DivideExpression(Expression *left, Expression *right)
     this->type = get_common_number_type(left, right);
     this->left = left;
     this->right = right;
+}
+
+DivideExpression::~DivideExpression()
+{
+    delete this->left;
+    delete this->right;
 }
 
 int64_t DivideExpression::evaluate_integer()
@@ -258,6 +285,12 @@ AddExpression::AddExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+AddExpression::~AddExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 int64_t AddExpression::evaluate_integer()
 {
     return this->left->evaluate_integer() + this->right->evaluate_integer();
@@ -273,6 +306,12 @@ SubtractExpression::SubtractExpression(Expression *left, Expression *right)
     this->type = get_common_number_type(left, right);
     this->left = left;
     this->right = right;
+}
+
+SubtractExpression::~SubtractExpression()
+{
+    delete this->left;
+    delete this->right;
 }
 
 int64_t SubtractExpression::evaluate_integer()
@@ -292,6 +331,12 @@ ShiftLeftExpression::ShiftLeftExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+ShiftLeftExpression::~ShiftLeftExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 int64_t ShiftLeftExpression::evaluate_integer()
 {
     return this->left->evaluate_integer() << this->right->evaluate_integer();
@@ -302,6 +347,12 @@ ShiftRightExpression::ShiftRightExpression(Expression *left, Expression *right)
     this->type = integer;
     this->left = left;
     this->right = right;
+}
+
+ShiftRightExpression::~ShiftRightExpression()
+{
+    delete this->left;
+    delete this->right;
 }
 
 int64_t ShiftRightExpression::evaluate_integer()
@@ -316,6 +367,12 @@ BitAndExpression::BitAndExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+BitAndExpression::~BitAndExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 int64_t BitAndExpression::evaluate_integer()
 {
     return this->left->evaluate_integer() & this->right->evaluate_integer();
@@ -328,6 +385,12 @@ BitXorExpression::BitXorExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+BitXorExpression::~BitXorExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 int64_t BitXorExpression::evaluate_integer()
 {
     return this->left->evaluate_integer() ^ this->right->evaluate_integer();
@@ -338,6 +401,12 @@ BitOrExpression::BitOrExpression(Expression *left, Expression *right)
     this->type = integer;
     this->left = left;
     this->right = right;
+}
+
+BitOrExpression::~BitOrExpression()
+{
+    delete this->left;
+    delete this->right;
 }
 
 int64_t BitOrExpression::evaluate_integer()
@@ -353,6 +422,12 @@ GreaterExpression::GreaterExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+GreaterExpression::~GreaterExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 bool GreaterExpression::evaluate_boolean()
 {
     return this->left->evaluate_number() > this->right->evaluate_number();
@@ -364,6 +439,12 @@ LessExpression::LessExpression(Expression *left, Expression *right)
     this->type = boolean;
     this->left = left;
     this->right = right;
+}
+
+LessExpression::~LessExpression()
+{
+    delete this->left;
+    delete this->right;
 }
 
 bool LessExpression::evaluate_boolean()
@@ -379,6 +460,12 @@ GreaterEqualExpression::GreaterEqualExpression(Expression *left, Expression *rig
     this->right = right;
 }
 
+GreaterEqualExpression::~GreaterEqualExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 bool GreaterEqualExpression::evaluate_boolean()
 {
     return this->left->evaluate_number() >= this->right->evaluate_number();
@@ -390,6 +477,12 @@ LessEqualExpression::LessEqualExpression(Expression *left, Expression *right)
     this->type = boolean;
     this->left = left;
     this->right = right;
+}
+
+LessEqualExpression::~LessEqualExpression()
+{
+    delete this->left;
+    delete this->right;
 }
 
 bool LessEqualExpression::evaluate_boolean()
@@ -405,6 +498,12 @@ EqualExpression::EqualExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+EqualExpression::~EqualExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 bool EqualExpression::evaluate_boolean()
 {
     return this->left->evaluate_number() == this->right->evaluate_number();
@@ -418,6 +517,12 @@ UnequalExpression::UnequalExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+UnequalExpression::~UnequalExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 bool UnequalExpression::evaluate_boolean()
 {
     return this->left->evaluate_number() != this->right->evaluate_number();
@@ -428,6 +533,11 @@ NotExpression::NotExpression(Expression *operand)
     check_boolean_types(operand, operand);
     this->type = boolean;
     this->operand = operand;
+}
+
+NotExpression::~NotExpression()
+{
+    delete this->operand;
 }
 
 bool NotExpression::evaluate_boolean()
@@ -443,6 +553,12 @@ AndExpression::AndExpression(Expression *left, Expression *right)
     this->right = right;
 }
 
+AndExpression::~AndExpression()
+{
+    delete this->left;
+    delete this->right;
+}
+
 bool AndExpression::evaluate_boolean()
 {
     return this->left->evaluate_boolean() && this->right->evaluate_boolean();
@@ -454,6 +570,12 @@ OrExpression::OrExpression(Expression *left, Expression *right)
     this->type = boolean;
     this->left = left;
     this->right = right;
+}
+
+OrExpression::~OrExpression()
+{
+    delete this->left;
+    delete this->right;
 }
 
 bool OrExpression::evaluate_boolean()

@@ -192,6 +192,7 @@ void process_tree(owl_tree *tree)
             static char buffer[256];
             expression->print_to_buffer(buffer);
             echo(all, text, buffer);
+            delete expression;
         }
         else if (!statement.constructor.empty)
         {
@@ -233,13 +234,16 @@ void process_tree(owl_tree *tree)
             std::string property_name = identifier_to_string(property_assignment.property_name);
             Expression *expression = compile_expression(property_assignment.expression);
             module->write_property(property_name, expression);
+            delete expression;
         }
         else if (!statement.variable_assignment.empty)
         {
             struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(statement.variable_assignment);
             std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             Variable *variable = Global::get_variable(variable_name);
-            variable->assign(compile_expression(variable_assignment.expression));
+            Expression *expression = compile_expression(variable_assignment.expression);
+            variable->assign(expression);
+            delete expression;
         }
         else if (!statement.variable_declaration.empty)
         {
@@ -265,7 +269,9 @@ void process_tree(owl_tree *tree)
             }
             if (!variable_declaration.expression.empty)
             {
-                Global::get_variable(variable_name)->assign(compile_expression(variable_declaration.expression));
+                Expression *expression = compile_expression(variable_declaration.expression);
+                Global::get_variable(variable_name)->assign(expression);
+                delete expression;
             }
         }
         else if (!statement.routine_definition.empty)

@@ -8,6 +8,8 @@ class Expression
 {
 public:
     Type type;
+
+    virtual ~Expression();
     virtual bool evaluate_boolean();
     virtual int64_t evaluate_integer();
     virtual double evaluate_number();
@@ -79,6 +81,7 @@ private:
 
 public:
     PowerExpression(Expression *left, Expression *right);
+    ~PowerExpression();
     int64_t evaluate_integer();
     double evaluate_number();
 };
@@ -90,6 +93,7 @@ private:
 
 public:
     NegateExpression(Expression *operand);
+    ~NegateExpression();
     int64_t evaluate_integer();
     double evaluate_number();
 };
@@ -101,6 +105,7 @@ private:
 
 public:
     MultiplyExpression(Expression *left, Expression *right);
+    ~MultiplyExpression();
     int64_t evaluate_integer();
     double evaluate_number();
 };
@@ -112,6 +117,7 @@ private:
 
 public:
     DivideExpression(Expression *left, Expression *right);
+    ~DivideExpression();
     int64_t evaluate_integer();
     double evaluate_number();
 };
@@ -123,6 +129,7 @@ private:
 
 public:
     AddExpression(Expression *left, Expression *right);
+    ~AddExpression();
     int64_t evaluate_integer();
     double evaluate_number();
 };
@@ -134,6 +141,7 @@ private:
 
 public:
     SubtractExpression(Expression *left, Expression *right);
+    ~SubtractExpression();
     int64_t evaluate_integer();
     double evaluate_number();
 };
@@ -145,6 +153,7 @@ private:
 
 public:
     ShiftLeftExpression(Expression *left, Expression *right);
+    ~ShiftLeftExpression();
     int64_t evaluate_integer();
 };
 
@@ -155,6 +164,7 @@ private:
 
 public:
     ShiftRightExpression(Expression *left, Expression *right);
+    ~ShiftRightExpression();
     int64_t evaluate_integer();
 };
 
@@ -165,6 +175,7 @@ private:
 
 public:
     BitAndExpression(Expression *left, Expression *right);
+    ~BitAndExpression();
     int64_t evaluate_integer();
 };
 
@@ -175,6 +186,7 @@ private:
 
 public:
     BitXorExpression(Expression *left, Expression *right);
+    ~BitXorExpression();
     int64_t evaluate_integer();
 };
 
@@ -185,6 +197,7 @@ private:
 
 public:
     BitOrExpression(Expression *left, Expression *right);
+    ~BitOrExpression();
     int64_t evaluate_integer();
 };
 
@@ -195,6 +208,7 @@ private:
 
 public:
     GreaterExpression(Expression *left, Expression *right);
+    ~GreaterExpression();
     bool evaluate_boolean();
 };
 
@@ -205,6 +219,7 @@ private:
 
 public:
     LessExpression(Expression *left, Expression *right);
+    ~LessExpression();
     bool evaluate_boolean();
 };
 
@@ -215,6 +230,7 @@ private:
 
 public:
     GreaterEqualExpression(Expression *left, Expression *right);
+    ~GreaterEqualExpression();
     bool evaluate_boolean();
 };
 
@@ -225,6 +241,7 @@ private:
 
 public:
     LessEqualExpression(Expression *left, Expression *right);
+    ~LessEqualExpression();
     bool evaluate_boolean();
 };
 
@@ -235,6 +252,7 @@ private:
 
 public:
     EqualExpression(Expression *left, Expression *right);
+    ~EqualExpression();
     bool evaluate_boolean();
 };
 
@@ -245,6 +263,7 @@ private:
 
 public:
     UnequalExpression(Expression *left, Expression *right);
+    ~UnequalExpression();
     bool evaluate_boolean();
 };
 
@@ -255,6 +274,7 @@ private:
 
 public:
     NotExpression(Expression *operand);
+    ~NotExpression();
     bool evaluate_boolean();
 };
 
@@ -265,6 +285,7 @@ private:
 
 public:
     AndExpression(Expression *left, Expression *right);
+    ~AndExpression();
     bool evaluate_boolean();
 };
 
@@ -275,5 +296,6 @@ private:
 
 public:
     OrExpression(Expression *left, Expression *right);
+    ~OrExpression();
     bool evaluate_boolean();
 };
