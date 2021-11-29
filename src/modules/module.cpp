@@ -106,11 +106,8 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
     }
     else if (type == "Proxy")
     {
-        if (arguments.size() < 1 || arguments[0]->type != identifier)
-        {
-            throw std::runtime_error("expecting at least 1 identifier argument specifying the module type");
-        }
-        return new Proxy(name, arguments);
+        Module::expect(arguments, 0);
+        return new Proxy(name);
     }
     else
     {

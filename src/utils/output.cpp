@@ -9,7 +9,15 @@ void echo(OutputTarget target, OutputType type, const char *format, ...)
 {
     static char buffer[1024];
 
-    int pos = std::sprintf(buffer, type == text ? "!\"" : "!!");
+    int pos = 0;
+    if (type == text)
+    {
+        pos += std::sprintf(buffer, "!\"");
+    }
+    if (type == code)
+    {
+        pos += std::sprintf(buffer, "!!");
+    }
 
     va_list args;
     va_start(args, format);

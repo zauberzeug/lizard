@@ -9,6 +9,7 @@ enum OutputTarget
 
 enum OutputType
 {
+    raw,
     text,
     code,
 };

@@ -366,6 +366,9 @@ void process_line(const char *line, int len, uart_port_t uart_num)
         case '"':
             echo(uart_num == UART_NUM_1 ? uart0 : all, text, line + 2);
             break;
+        case ">":
+            echo(uart1, raw, line + 2);
+            break;
         default:
             throw std::runtime_error("unrecognized control command");
         }
