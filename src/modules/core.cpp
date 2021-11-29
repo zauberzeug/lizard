@@ -65,12 +65,10 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
 
 std::string Core::get_output()
 {
-    static char format_buffer[8];
     static char output_buffer[1024];
     int pos = 0;
     for (auto const &element : this->output_list)
     {
-        sprintf(format_buffer, "%%.%df", element.precision);
         Variable *property = element.module->get_property(element.property_name);
         switch (property->type)
         {
@@ -81,7 +79,7 @@ std::string Core::get_output()
             pos += sprintf(&output_buffer[pos], "%lld", property->integer_value);
             break;
         case number:
-            pos += sprintf(&output_buffer[pos], format_buffer, property->number_value);
+            pos += sprintf(&output_buffer[pos], "%.*f", element.precision, property->number_value);
             break;
         case string:
             pos += sprintf(&output_buffer[pos], "\"%s\"", property->string_value.c_str());
