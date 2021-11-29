@@ -6,6 +6,12 @@ VariableAssignment::VariableAssignment(Variable *variable, Expression *expressio
     this->expression = expression;
 }
 
+VariableAssignment::~VariableAssignment()
+{
+    // NOTE: don't delete globally managed variables
+    delete this->expression;
+}
+
 bool VariableAssignment::run()
 {
     this->variable->assign(this->expression);

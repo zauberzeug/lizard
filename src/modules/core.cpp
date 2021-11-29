@@ -10,11 +10,13 @@ Core::Core(std::string name) : Module(core, name)
 {
     this->properties["debug"] = new BooleanVariable(false);
     this->properties["millis"] = new IntegerVariable();
+    this->properties["heap"] = new IntegerVariable();
 }
 
 void Core::step()
 {
     this->properties["millis"]->integer_value = millis();
+    this->properties["heap"]->integer_value = xPortGetFreeHeapSize();
     Module::step();
 }
 

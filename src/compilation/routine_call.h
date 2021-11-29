@@ -9,5 +9,6 @@ public:
     Routine *routine;
 
     RoutineCall(Routine *routine);
+    ~RoutineCall();
     bool run();
 };

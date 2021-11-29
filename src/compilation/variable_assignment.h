@@ -11,5 +11,6 @@ public:
     Expression *expression;
 
     VariableAssignment(Variable *variable, Expression *expression);
+    ~VariableAssignment();
     bool run();
 };

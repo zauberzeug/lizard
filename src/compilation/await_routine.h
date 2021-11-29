@@ -9,5 +9,6 @@ public:
     Routine *routine;
 
     AwaitRoutine(Routine *routine);
+    ~AwaitRoutine();
     bool run();
 };

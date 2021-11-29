@@ -5,6 +5,15 @@ Routine::Routine(std::vector<Action *> actions)
     this->actions = actions;
 }
 
+Routine::~Routine()
+{
+    for (auto a : this->actions)
+    {
+        delete a;
+    }
+    this->actions.clear();
+}
+
 bool Routine::is_running()
 {
     return 0 <= this->instruction_index && this->instruction_index < this->actions.size();

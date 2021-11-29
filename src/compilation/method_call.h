@@ -14,5 +14,6 @@ public:
     std::vector<Expression *> arguments;
 
     MethodCall(Module *module, std::string method_name, std::vector<Expression *> arguments);
+    ~MethodCall();
     bool run();
 };

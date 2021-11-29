@@ -9,5 +9,6 @@ public:
     Expression *condition;
 
     AwaitCondition(Expression *condition);
+    ~AwaitCondition();
     bool run();
 };
