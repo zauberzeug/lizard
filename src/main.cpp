@@ -366,7 +366,7 @@ void process_line(const char *line, int len, uart_port_t uart_num)
         case '"':
             echo(uart_num == UART_NUM_1 ? uart0 : all, text, line + 2);
             break;
-        case ">":
+        case '>':
             echo(uart1, raw, line + 2);
             break;
         default:
@@ -388,7 +388,7 @@ void process_line(const char *line, int len, uart_port_t uart_num)
 
 void process_uart(uart_port_t uart_num)
 {
-    static char *input = (char *)malloc(BUFFER_SIZE);
+    static char input[BUFFER_SIZE];
 
     while (true)
     {
@@ -399,7 +399,7 @@ void process_uart(uart_port_t uart_num)
         }
 
         int len = uart_read_bytes(uart_num, (uint8_t *)input, pos + 1, 0);
-        if (input[len - 4] == '@')
+        if (len >= 4 && input[len - 4] == '@')
         {
             uint8_t checksum = 0;
             for (int i = 0; i < len - 4; ++i)
