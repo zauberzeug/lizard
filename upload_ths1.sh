@@ -14,7 +14,7 @@ sudo echo 1 > /sys/class/gpio/gpio$g0/value
 sudo echo 0 > /sys/class/gpio/gpio$en/value
 
 echo "Flashing microcontroller..."
-./esptool.py \
+esptool.py \
     --chip esp32 \
     --port /dev/ttyTHS1 \
     --baud 921600 \

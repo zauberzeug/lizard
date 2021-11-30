@@ -2,4 +2,5 @@ build/
 owl/
 sdkconfig
 *.swp
+*.bin
 config.txt
