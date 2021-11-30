@@ -18,7 +18,12 @@ unsigned long int IRAM_ATTR millis()
     return (unsigned long)(esp_timer_get_time() / 1000ULL);
 }
 
-unsigned long millisSince(unsigned long time)
+unsigned long millis_since(unsigned long time)
 {
     return millis() - time;
+}
+
+unsigned long micros_since(unsigned long time)
+{
+    return micros() - time;
 }
