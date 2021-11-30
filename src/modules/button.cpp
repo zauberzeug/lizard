@@ -7,7 +7,7 @@ Button::Button(std::string name, gpio_num_t number) : Module(button, name)
     this->number = number;
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_INPUT);
-    this->properties["level"] = new IntegerVariable();
+    this->properties["level"] = new IntegerVariable(gpio_get_level(this->number));
 }
 
 void Button::step()
