@@ -1,27 +1,11 @@
 #!/usr/bin/env bash
 
-echo "1/3 Generating parser..."
-if [[ "language.owl" -nt src/parser.h ]]
-then
-    owl/owl -c language.owl -o src/parser.h
-    if [[ $? -ne 0 ]]
-    then
-        rm -f src/parser.h 
-        exit 1
-    fi
-else
-    echo "Nothing to do."
-fi
-
-echo "2/3 Compiling Lizard..."
-docker run --rm -v $PWD:/project -w /project espressif/idf:v4.2 make -j4 || exit 1
-
-echo "3/3 Flash microcontroller..."
+echo "Flashing microcontroller..."
 if [ $# -ne 0 ]
 then
     devices="$@"
 else
-    devices="/dev/tty.SLAB_USBtoUART /dev/ttyTHS1 /dev/ttyUSB0"
+    devices="/dev/tty.SLAB_USBtoUART"
 fi
 for dev in $devices
 do
