@@ -59,7 +59,7 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
     }
     else if (type == "RmdMotor")
     {
-        Module::expect(arguments, 1, identifier);
+        Module::expect(arguments, 2, identifier, integer);
         std::string can_name = arguments[0]->evaluate_identifier();
         Module *module = Global::get_module(can_name);
         if (module->type != can)
@@ -67,7 +67,8 @@ Module *Module::create(std::string type, std::string name, std::vector<Expressio
             throw std::runtime_error("module \"" + can_name + "\" is no can connection");
         }
         Can *can = (Can *)module;
-        return new RmdMotor(name, can);
+        uint8_t motor_id = arguments[1]->evaluate_integer();
+        return new RmdMotor(name, can, motor_id);
     }
     else if (type == "Serial")
     {

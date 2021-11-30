@@ -6,7 +6,7 @@
 class RmdMotor : public Module
 {
 private:
-    uint32_t can_id = 0x141;
+    uint32_t can_id;
     Can *can;
     void send_and_wait(uint32_t id,
                        uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
@@ -14,7 +14,7 @@ private:
                        unsigned long int timeout_ms = 1);
 
 public:
-    RmdMotor(std::string name, Can *can);
+    RmdMotor(std::string name, Can *can, uint8_t motor_id);
     void step();
     void call(std::string method_name, std::vector<Expression *> arguments);
     void handle_can_msg(uint32_t id, int count, uint8_t *data);

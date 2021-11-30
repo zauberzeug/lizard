@@ -6,9 +6,10 @@
 
 uint8_t last_msg = 0;
 
-RmdMotor::RmdMotor(std::string name, Can *can) : Module(rmd_motor, name)
+RmdMotor::RmdMotor(std::string name, Can *can, uint8_t motor_id) : Module(rmd_motor, name)
 {
     this->can = can;
+    this->can_id = 0x140 + motor_id;
     this->properties["position"] = new NumberVariable();
     this->properties["ratio"] = new NumberVariable(6.0);
     this->properties["torque"] = new NumberVariable();
