@@ -478,6 +478,8 @@ void app_main()
     uart_pattern_queue_reset(UART_NUM_0, 100);
     uart_pattern_queue_reset(UART_NUM_1, 100);
 
+    printf("Ready.\n");
+
     while (true)
     {
         process_uart(UART_NUM_0);
