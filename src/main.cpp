@@ -438,27 +438,6 @@ void process_uart(uart_port_t uart_num)
 
 void app_main()
 {
-    try
-    {
-        assert(Global::variables.size() == number_of_module_types);
-        Global::add_module("core", core_module = new Core("core"));
-    }
-    catch (const std::runtime_error &e)
-    {
-        echo(all, text, "error while initializing global state variables and modules: %s", e.what());
-        exit(1);
-    }
-
-    try
-    {
-        Storage::init();
-        process_lizard(Storage::startup.c_str());
-    }
-    catch (const std::runtime_error &e)
-    {
-        echo(all, text, "error while loading startup script: %s", e.what());
-    }
-
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -479,6 +458,28 @@ void app_main()
     uart_pattern_queue_reset(UART_NUM_1, 100);
 
     printf("Ready.\n");
+
+    try
+    {
+        assert(Global::variables.size() == number_of_module_types);
+        Global::add_module("core", core_module = new Core("core"));
+    }
+    catch (const std::runtime_error &e)
+    {
+        echo(all, text, "error while initializing global state variables and modules: %s", e.what());
+        exit(1);
+    }
+
+    try
+    {
+        Storage::init();
+        printf("STORAGE: %s\n", Storage::startup.c_str());
+        process_lizard(Storage::startup.c_str());
+    }
+    catch (const std::runtime_error &e)
+    {
+        echo(all, text, "error while loading startup script: %s", e.what());
+    }
 
     while (true)
     {
