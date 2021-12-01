@@ -324,11 +324,11 @@ void process_lizard(const char *line)
         break;
     case ERROR_INVALID_TOKEN:
         echo(all, text, "error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(&line[range.start], range.end - range.start));
+             std::string(line, range.start, range.end - range.start).c_str());
         break;
     case ERROR_UNEXPECTED_TOKEN:
         echo(all, text, "error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(&line[range.start], range.end - range.start));
+             std::string(line, range.start, range.end - range.start).c_str());
         break;
     case ERROR_MORE_INPUT_NEEDED:
         echo(all, text, "error: more input needed at range %zu %zu", range.start, range.end);
@@ -473,7 +473,6 @@ void app_main()
     try
     {
         Storage::init();
-        printf("STORAGE: %s\n", Storage::startup.c_str());
         process_lizard(Storage::startup.c_str());
     }
     catch (const std::runtime_error &e)

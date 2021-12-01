@@ -36,7 +36,7 @@ def receive():
     line_reader = LineReader(port)
     while True:
         try:
-            line = line_reader.readline().decode('utf-8').strip('\r\n')
+            line = line_reader.readline().decode('utf-8', errors='replace').strip('\r\n')
             if line[-3:-2] == '@':
                 check = int(line[-2:], 16)
                 line = line[:-3]
