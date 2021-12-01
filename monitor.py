@@ -58,12 +58,16 @@ async def send():
     while True:
         try:
             with patch_stdout():
-                line = await session.prompt_async("> ")
+                line = await session.prompt_async("> ") + '\n'
                 checksum = 0
-                for c in line:
-                   checksum ^= ord(c)
-                line += '@%02x' % checksum
-                port.write((line + '\n').encode('utf-8'))
+                start = 0
+                for i, c in enumerate(line):
+                    if c == '\n':
+                        port.write(f'{line[start:i]}@{checksum:02x}\n'.encode('utf-8'))
+                        checksum = 0
+                        start = i
+                    else:
+                        checksum ^= ord(c)
         except (KeyboardInterrupt, EOFError):
             print("Bye!")
             loop.stop()
