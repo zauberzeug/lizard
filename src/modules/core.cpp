@@ -69,6 +69,10 @@ std::string Core::get_output()
     int pos = 0;
     for (auto const &element : this->output_list)
     {
+        if (pos > 0)
+        {
+            pos += sprintf(&output_buffer[pos], " ");
+        }
         Variable *property = element.module->get_property(element.property_name);
         switch (property->type)
         {
