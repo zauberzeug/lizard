@@ -8,6 +8,7 @@
 void echo(OutputTarget target, OutputType type, const char *format, ...)
 {
     static char buffer[1024];
+    static char check_buffer[16];
 
     int pos = 0;
     if (type == text)
@@ -21,22 +22,34 @@ void echo(OutputTarget target, OutputType type, const char *format, ...)
 
     va_list args;
     va_start(args, format);
-    pos += std::vsnprintf(&buffer[pos], sizeof buffer - pos, format, args);
+    pos += std::vsnprintf(&buffer[pos], sizeof buffer - pos - 1, format, args);
     va_end(args);
 
-    uint8_t checksum = 0;
-    for (unsigned int i = 0; i < sizeof buffer and buffer[i] > 0; ++i)
-    {
-        checksum ^= buffer[i];
-    }
-    pos += std::sprintf(&buffer[pos], "@%02x\n", checksum);
+    pos += std::sprintf(&buffer[pos], "\n");
 
-    if (target & uart0)
+    uint8_t checksum = 0;
+    int start = 0;
+    for (unsigned int i = 0; i < pos; ++i)
     {
-        printf(buffer);
-    }
-    if (target & uart1)
-    {
-        uart_write_bytes(UART_NUM_1, buffer, pos);
+        if (buffer[i] == '\n')
+        {
+            buffer[i] = '\0';
+            if (target & uart0)
+            {
+                printf("%s@%02x\n", &buffer[start], checksum);
+            }
+            if (target & uart1)
+            {
+                int check_len = std::sprintf(check_buffer, "@%02x\n", checksum);
+                uart_write_bytes(UART_NUM_1, &buffer[start], i - start);
+                uart_write_bytes(UART_NUM_1, check_buffer, check_len);
+            }
+            start = i + 1;
+            checksum = 0;
+        }
+        else
+        {
+            checksum ^= buffer[i];
+        }
     }
 }
