@@ -1,10 +1,9 @@
 #include "rmd_motor.h"
 
 #include <cstring>
+#include "../global.h"
 #include "../utils/output.h"
 #include "../utils/timing.h"
-
-uint8_t last_msg = 0;
 
 RmdMotor::RmdMotor(std::string name, Can *can, uint8_t motor_id) : Module(rmd_motor, name)
 {
@@ -22,10 +21,10 @@ void RmdMotor::send_and_wait(uint32_t id,
                              uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
                              unsigned long int timeout_ms)
 {
-    last_msg = 0;
+    this->last_msg = 0;
     this->can->send(id, d0, d1, d2, d3, d4, d5, d6, d7);
     unsigned long int start = micros();
-    while (last_msg != d0 && micros_since(start) < timeout_ms * 1000)
+    while (this->last_msg != d0 && micros_since(start) < timeout_ms * 1000)
     {
         this->can->step();
     }
@@ -33,8 +32,30 @@ void RmdMotor::send_and_wait(uint32_t id,
 
 void RmdMotor::step()
 {
+    if (this->last_step_time == 0)
+    {
+        this->last_step_time = micros();
+        return;
+    }
+    double seconds_per_step = micros_since(this->last_step_time) / 1e6;
+    this->last_step_time = micros();
+
     this->send_and_wait(this->can_id, 0x92, 0, 0, 0, 0, 0, 0, 0);
     this->send_and_wait(this->can_id, 0x9c, 0, 0, 0, 0, 0, 0, 0);
+    if (this->leader)
+    {
+        double own_position = this->properties["position"]->number_value;
+        double leader_position = this->leader->properties["position"]->number_value;
+        double target_speed = (leader_position - own_position - leader_offset) / seconds_per_step;
+        int32_t speed = target_speed * 100 * this->properties["ratio"]->number_value;
+        this->send_and_wait(this->can_id, 0xa2, 0,
+                            0,
+                            0,
+                            *((uint8_t *)(&speed) + 0),
+                            *((uint8_t *)(&speed) + 1),
+                            *((uint8_t *)(&speed) + 2),
+                            *((uint8_t *)(&speed) + 3));
+    }
     Module::step();
 }
 
@@ -75,7 +96,7 @@ void RmdMotor::call(std::string method_name, std::vector<Expression *> arguments
         {
             Module::expect(arguments, 1, numbery);
             int32_t position = arguments[0]->evaluate_number() * 100 * this->properties["ratio"]->number_value;
-            this->send_and_wait(this->can_id, 0xA3, 0,
+            this->send_and_wait(this->can_id, 0xa3, 0,
                                 0,
                                 0,
                                 *((uint8_t *)(&position) + 0),
@@ -123,6 +144,24 @@ void RmdMotor::call(std::string method_name, std::vector<Expression *> arguments
                             *((uint8_t *)(&position) + 1),
                             *((uint8_t *)(&position) + 2),
                             *((uint8_t *)(&position) + 3));
+    }
+    else if (method_name == "follow")
+    {
+        Module::expect(arguments, 1, identifier);
+        std::string other_name = arguments[0]->evaluate_identifier();
+        Module *other = Global::get_module(other_name);
+        if (other->type != rmd_motor)
+        {
+            throw std::runtime_error("module \"" + other_name + "\" is no RMD motor");
+        }
+        this->leader = (RmdMotor *)other;
+        this->leader_offset =
+            this->leader->properties["position"]->number_value -
+            this->properties["position"]->number_value;
+    }
+    else if (method_name == "unfollow")
+    {
+        this->leader = nullptr;
     }
     else if (method_name == "get_health")
     {
@@ -218,5 +257,5 @@ void RmdMotor::handle_can_msg(uint32_t id, int count, uint8_t *data)
         break;
     }
     }
-    last_msg = data[0];
+    this->last_msg = data[0];
 }

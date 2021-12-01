@@ -8,6 +8,10 @@ class RmdMotor : public Module
 private:
     uint32_t can_id;
     Can *can;
+    uint8_t last_msg = 0;
+    RmdMotor *leader = nullptr;
+    double leader_offset = 0;
+    unsigned long int last_step_time = 0;
     void send_and_wait(uint32_t id,
                        uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
                        uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
