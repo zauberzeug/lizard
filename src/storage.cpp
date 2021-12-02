@@ -17,7 +17,7 @@ void Storage::init()
     Storage::startup = Storage::get();
 }
 
-void write(std::string ns, std::string key, std::string value)
+void write(const std::string ns, const std::string key, const std::string value)
 {
     nvs_handle handle;
     if (nvs_open(ns.c_str(), NVS_READWRITE, &handle) != ESP_OK)
@@ -37,7 +37,7 @@ void write(std::string ns, std::string key, std::string value)
     nvs_close(handle);
 }
 
-std::string read(std::string ns, std::string key)
+std::string read(const std::string ns, const std::string key)
 {
     nvs_handle handle;
     if (nvs_open(ns.c_str(), NVS_READWRITE, &handle) != ESP_OK)
@@ -66,7 +66,7 @@ std::string read(std::string ns, std::string key)
     return result;
 }
 
-void Storage::put(std::string value)
+void Storage::put(const std::string value)
 {
     write(NAMESPACE, KEY, value);
 }
@@ -76,12 +76,12 @@ std::string Storage::get()
     return read(NAMESPACE, KEY);
 }
 
-void Storage::append_to_startup(std::string line)
+void Storage::append_to_startup(const std::string line)
 {
     Storage::startup += line + '\n';
 }
 
-void Storage::remove_from_startup(std::string substring)
+void Storage::remove_from_startup(const std::string substring)
 {
     std::string new_startup = "";
     while (!Storage::startup.empty())
@@ -95,7 +95,7 @@ void Storage::remove_from_startup(std::string substring)
     Storage::startup = new_startup;
 }
 
-void Storage::print_startup(std::string substring)
+void Storage::print_startup(const std::string substring)
 {
     std::string startup = Storage::startup;
     while (!startup.empty())

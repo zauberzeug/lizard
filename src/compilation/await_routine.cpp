@@ -1,8 +1,8 @@
 #include "await_routine.h"
 
-AwaitRoutine::AwaitRoutine(Routine *routine)
+AwaitRoutine::AwaitRoutine(Routine *const routine)
+    : routine(routine)
 {
-    this->routine = routine;
 }
 
 AwaitRoutine::~AwaitRoutine()

@@ -4,10 +4,9 @@
 #define SetDWORDval(arg) (uint8_t)(((uint32_t)arg) >> 24), (uint8_t)(((uint32_t)arg) >> 16), (uint8_t)(((uint32_t)arg) >> 8), (uint8_t)arg
 #define SetWORDval(arg) (uint8_t)(((uint16_t)arg) >> 8), (uint8_t)arg
 
-RoboClaw::RoboClaw(std::string name, Serial *serial, uint8_t address) : Module(roboclaw, name)
+RoboClaw::RoboClaw(const std::string name, const Serial *const serial, const uint8_t address)
+	: Module(roboclaw, name), address(address), serial(serial)
 {
-	this->serial = serial;
-	this->address = address;
 }
 
 void RoboClaw::crc_clear()
@@ -39,7 +38,7 @@ bool RoboClaw::write_n(uint8_t cnt, ...)
 	do
 	{
 		crc_clear();
-		//send data with crc
+		// send data with crc
 		va_list marker;
 		va_start(marker, cnt); /* Initialize variable arguments. */
 		for (uint8_t index = 0; index < cnt; index++)
@@ -74,7 +73,7 @@ bool RoboClaw::read_n(uint8_t cnt, uint8_t cmd, ...)
 		this->serial->write(cmd);
 		crc_update(cmd);
 
-		//send data with crc
+		// send data with crc
 		va_list marker;
 		va_start(marker, cmd); /* Initialize variable arguments. */
 		for (uint8_t index = 0; index < cnt; index++)

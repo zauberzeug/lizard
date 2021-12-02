@@ -7,7 +7,7 @@
 class Rule
 {
 public:
-    Expression *condition;
-    Routine *routine;
-    Rule(Expression *condition, Routine *routine);
+    const Expression *const condition;
+    Routine *const routine;
+    Rule(const Expression *const condition, Routine *const routine);
 };

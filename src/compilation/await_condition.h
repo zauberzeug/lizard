@@ -6,9 +6,9 @@
 class AwaitCondition : public Action
 {
 public:
-    Expression *condition;
+    const Expression *const condition;
 
-    AwaitCondition(Expression *condition);
+    AwaitCondition(const Expression *const condition);
     ~AwaitCondition();
     bool run();
 };

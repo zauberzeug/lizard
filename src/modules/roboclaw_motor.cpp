@@ -2,14 +2,13 @@
 
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
-RoboClawMotor::RoboClawMotor(std::string name, RoboClaw *roboclaw, unsigned int motor_number) : Module(roboclaw_motor, name)
+RoboClawMotor::RoboClawMotor(const std::string name, RoboClaw *const roboclaw, const unsigned int motor_number)
+    : Module(roboclaw_motor, name), motor_number(constrain(motor_number, 1, 2)), roboclaw(roboclaw)
 {
-    this->motor_number = constrain(motor_number, 1, 2);
     if (this->motor_number != motor_number)
     {
         throw std::runtime_error("illegal motor number");
     }
-    this->roboclaw = roboclaw;
     this->properties["position"] = new IntegerVariable();
 }
 
@@ -26,7 +25,7 @@ void RoboClawMotor::step()
     Module::step();
 }
 
-void RoboClawMotor::call(std::string method_name, std::vector<Expression *> arguments)
+void RoboClawMotor::call(const std::string method_name, const std::vector<const Expression *> arguments)
 {
     if (method_name == "power")
     {

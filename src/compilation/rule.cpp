@@ -1,7 +1,6 @@
 #include "rule.h"
 
-Rule::Rule(Expression *condition, Routine *routine)
+Rule::Rule(const Expression *const condition, Routine *const routine)
+    : condition(condition), routine(routine)
 {
-    this->condition = condition;
-    this->routine = routine;
 }

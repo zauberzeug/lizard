@@ -3,7 +3,11 @@
 #include <stdexcept>
 #include "expression.h"
 
-void Variable::assign(Expression *expression)
+Variable::Variable(const Type type) : type(type)
+{
+}
+
+void Variable::assign(const Expression *const expression)
 {
     if (this->type == boolean && expression->type == boolean)
     {
@@ -31,7 +35,7 @@ void Variable::assign(Expression *expression)
     }
 }
 
-int Variable::print_to_buffer(char *buffer)
+int Variable::print_to_buffer(char *const buffer) const
 {
     switch (this->type)
     {
@@ -50,32 +54,27 @@ int Variable::print_to_buffer(char *buffer)
     }
 }
 
-BooleanVariable::BooleanVariable(bool value)
+BooleanVariable::BooleanVariable(const bool value) : Variable(boolean)
 {
-    this->type = boolean;
     this->boolean_value = value;
 }
 
-IntegerVariable::IntegerVariable(int64_t value)
+IntegerVariable::IntegerVariable(const int64_t value) : Variable(integer)
 {
-    this->type = integer;
     this->integer_value = value;
 }
 
-NumberVariable::NumberVariable(double value)
+NumberVariable::NumberVariable(double value) : Variable(number)
 {
-    this->type = number;
     this->number_value = value;
 }
 
-StringVariable::StringVariable(std::string value)
+StringVariable::StringVariable(std::string value) : Variable(string)
 {
-    this->type = string;
     this->string_value = value;
 }
 
-IdentifierVariable::IdentifierVariable(std::string value)
+IdentifierVariable::IdentifierVariable(std::string value) : Variable(identifier)
 {
-    this->type = identifier;
     this->identifier_value = value;
 }

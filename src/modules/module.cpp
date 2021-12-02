@@ -13,13 +13,11 @@
 #include "../utils/output.h"
 #include "../global.h"
 
-Module::Module(ModuleType type, std::string name)
+Module::Module(const ModuleType type, const std::string name) : type(type), name(name)
 {
-    this->type = type;
-    this->name = name;
 }
 
-void Module::Module::expect(std::vector<Expression *> arguments, int num, ...)
+void Module::Module::expect(const std::vector<const Expression *> arguments, const int num, ...)
 {
     if (arguments.size() != num)
     {
@@ -37,7 +35,7 @@ void Module::Module::expect(std::vector<Expression *> arguments, int num, ...)
     va_end(vl);
 }
 
-Module *Module::create(std::string type, std::string name, std::vector<Expression *> arguments)
+Module *Module::create(const std::string type, const std::string name, const std::vector<const Expression *> arguments)
 {
     if (type == "Led")
     {
@@ -139,7 +137,7 @@ void Module::step()
     }
 }
 
-void Module::call(std::string method_name, std::vector<Expression *> arguments)
+void Module::call(const std::string method_name, const std::vector<const Expression *> arguments)
 {
     if (method_name == "mute")
     {
@@ -176,7 +174,7 @@ void Module::call(std::string method_name, std::vector<Expression *> arguments)
     }
 }
 
-void Module::call_with_shadows(std::string method_name, std::vector<Expression *> arguments)
+void Module::call_with_shadows(const std::string method_name, const std::vector<const Expression *> arguments)
 {
     this->call(method_name, arguments);
     for (auto const &module : this->shadow_modules)
@@ -185,26 +183,26 @@ void Module::call_with_shadows(std::string method_name, std::vector<Expression *
     }
 }
 
-std::string Module::get_output()
+std::string Module::get_output() const
 {
     return "";
 }
 
-Variable *Module::get_property(std::string property_name)
+Variable *Module::get_property(const std::string property_name) const
 {
     if (!this->properties.count(property_name))
     {
         throw std::runtime_error("unknown property \"" + property_name + "\"");
     }
-    return this->properties[property_name];
+    return this->properties.at(property_name);
 }
 
-void Module::write_property(std::string property_name, Expression *expression)
+void Module::write_property(const std::string property_name, const Expression *const expression)
 {
     this->get_property(property_name)->assign(expression);
 }
 
-void Module::handle_can_msg(uint32_t id, int count, uint8_t *data)
+void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *data)
 {
     throw std::runtime_error("CAN message handler is not implemented");
 }

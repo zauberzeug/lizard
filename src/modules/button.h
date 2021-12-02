@@ -6,11 +6,11 @@
 class Button : public Module
 {
 private:
-    gpio_num_t number;
+    const gpio_num_t number;
 
 public:
-    Button(std::string name, gpio_num_t number);
+    Button(const std::string name, const gpio_num_t number);
     void step();
-    void call(std::string method_name, std::vector<Expression *> arguments);
-    std::string get_output();
+    void call(const std::string method_name, const std::vector<const Expression *> arguments);
+    std::string get_output() const;
 };

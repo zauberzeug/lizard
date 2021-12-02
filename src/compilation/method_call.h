@@ -9,11 +9,11 @@
 class MethodCall : public Action
 {
 public:
-    Module *module;
-    std::string method_name;
-    std::vector<Expression *> arguments;
+    Module *const module;
+    const std::string method_name;
+    const std::vector<const Expression *> arguments;
 
-    MethodCall(Module *module, std::string method_name, std::vector<Expression *> arguments);
+    MethodCall(Module *const module, const std::string method_name, const std::vector<const Expression *> arguments);
     ~MethodCall();
     bool run();
 };

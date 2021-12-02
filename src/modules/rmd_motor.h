@@ -6,20 +6,22 @@
 class RmdMotor : public Module
 {
 private:
-    uint32_t can_id;
-    Can *can;
+    const uint32_t can_id;
+    Can *const can;
     uint8_t last_msg = 0;
-    RmdMotor *leader = nullptr;
+
+    const RmdMotor *leader = nullptr;
     double leader_offset = 0;
     unsigned long int last_step_time = 0;
-    void send_and_wait(uint32_t id,
-                       uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
-                       uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
-                       unsigned long int timeout_ms = 1);
+
+    void send_and_wait(const uint32_t id,
+                       const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
+                       const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
+                       const unsigned long int timeout_ms = 1);
 
 public:
-    RmdMotor(std::string name, Can *can, uint8_t motor_id);
+    RmdMotor(const std::string name, Can *const can, const uint8_t motor_id);
     void step();
-    void call(std::string method_name, std::vector<Expression *> arguments);
-    void handle_can_msg(uint32_t id, int count, uint8_t *data);
+    void call(const std::string method_name, const std::vector<const Expression *> arguments);
+    void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
 };

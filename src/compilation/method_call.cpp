@@ -1,10 +1,8 @@
 #include "method_call.h"
 
-MethodCall::MethodCall(Module *module, std::string method_name, std::vector<Expression *> arguments)
+MethodCall::MethodCall(Module *const module, const std::string method_name, const std::vector<const Expression *> arguments)
+    : module(module), method_name(method_name), arguments(arguments)
 {
-    this->module = module;
-    this->method_name = method_name;
-    this->arguments = arguments;
 }
 
 MethodCall::~MethodCall()
@@ -14,7 +12,6 @@ MethodCall::~MethodCall()
     {
         delete a;
     }
-    this->arguments.clear();
 }
 
 bool MethodCall::run()

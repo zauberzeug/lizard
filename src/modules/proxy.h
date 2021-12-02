@@ -5,7 +5,7 @@
 class Proxy : public Module
 {
 public:
-    Proxy(std::string name);
-    void call(std::string method_name, std::vector<Expression *> arguments);
-    void write_property(std::string property_name, Expression *expression);
+    Proxy(const std::string name);
+    void call(const std::string method_name, const std::vector<const Expression *> arguments);
+    void write_property(const std::string property_name, const Expression *const expression);
 };

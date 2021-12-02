@@ -2,11 +2,11 @@
 
 #include "driver/uart.h"
 
-Proxy::Proxy(std::string name) : Module(proxy, name)
+Proxy::Proxy(const std::string name) : Module(proxy, name)
 {
 }
 
-void Proxy::call(std::string method_name, std::vector<Expression *> arguments)
+void Proxy::call(const std::string method_name, const std::vector<const Expression *> arguments)
 {
     static char buffer[256];
     int pos = std::sprintf(buffer, "!!%s.%s(", this->name.c_str(), method_name.c_str());
@@ -22,12 +22,11 @@ void Proxy::call(std::string method_name, std::vector<Expression *> arguments)
     uart_write_bytes(UART_NUM_1, buffer, pos);
 }
 
-void Proxy::write_property(std::string property_name, Expression *expression)
+void Proxy::write_property(const std::string property_name, const Expression *const expression)
 {
     if (!this->properties.count(property_name))
     {
-        this->properties[property_name] = new Variable();
-        this->properties[property_name]->type = expression->type;
+        this->properties[property_name] = new Variable(expression->type);
     }
     Module::get_property(property_name)->assign(expression);
 }

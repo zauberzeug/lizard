@@ -5,7 +5,7 @@
 #include <string>
 #include "driver/uart.h"
 
-void echo(OutputTarget target, OutputType type, const char *format, ...)
+void echo(const OutputTarget target, const OutputType type, const char *format, ...)
 {
     static char buffer[1024];
     static char check_buffer[16];
@@ -40,7 +40,7 @@ void echo(OutputTarget target, OutputType type, const char *format, ...)
             }
             if (target & uart1)
             {
-                int check_len = std::sprintf(check_buffer, "@%02x\n", checksum);
+                const int check_len = std::sprintf(check_buffer, "@%02x\n", checksum);
                 uart_write_bytes(UART_NUM_1, &buffer[start], i - start);
                 uart_write_bytes(UART_NUM_1, check_buffer, check_len);
             }

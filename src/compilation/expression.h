@@ -6,296 +6,317 @@
 
 class Expression
 {
+protected:
+    Expression(const Type type);
+
 public:
-    Type type;
+    const Type type;
 
     virtual ~Expression();
-    virtual bool evaluate_boolean();
-    virtual int64_t evaluate_integer();
-    virtual double evaluate_number();
-    virtual std::string evaluate_string();
-    virtual std::string evaluate_identifier();
-    bool is_numbery();
-    int print_to_buffer(char *buffer);
+    virtual bool evaluate_boolean() const;
+    virtual int64_t evaluate_integer() const;
+    virtual double evaluate_number() const;
+    virtual std::string evaluate_string() const;
+    virtual std::string evaluate_identifier() const;
+    bool is_numbery() const;
+    int print_to_buffer(char *buffer) const;
 };
 
 class BooleanExpression : public Expression
 {
 private:
-    bool value;
+    const bool value;
 
 public:
-    BooleanExpression(bool value);
-    bool evaluate_boolean();
+    BooleanExpression(const bool value);
+    bool evaluate_boolean() const;
 };
 
 class StringExpression : public Expression
 {
 private:
-    std::string value;
+    const std::string value;
 
 public:
-    StringExpression(std::string value);
-    std::string evaluate_string();
+    StringExpression(const std::string value);
+    std::string evaluate_string() const;
 };
 
 class IntegerExpression : public Expression
 {
 private:
-    int64_t value;
+    const int64_t value;
 
 public:
-    IntegerExpression(int64_t value);
-    int64_t evaluate_integer();
-    double evaluate_number();
+    IntegerExpression(const int64_t value);
+    int64_t evaluate_integer() const;
+    double evaluate_number() const;
 };
 
 class NumberExpression : public Expression
 {
 private:
-    double value;
+    const double value;
 
 public:
-    NumberExpression(double value);
-    double evaluate_number();
+    NumberExpression(const double value);
+    double evaluate_number() const;
 };
 
 class VariableExpression : public Expression
 {
 private:
-    Variable *variable;
+    const Variable *const variable;
 
 public:
-    VariableExpression(Variable *variable);
-    bool evaluate_boolean();
-    int64_t evaluate_integer();
-    double evaluate_number();
-    std::string evaluate_string();
-    std::string evaluate_identifier();
+    VariableExpression(const Variable *const variable);
+    bool evaluate_boolean() const;
+    int64_t evaluate_integer() const;
+    double evaluate_number() const;
+    std::string evaluate_string() const;
+    std::string evaluate_identifier() const;
 };
 
 class PowerExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    PowerExpression(Expression *left, Expression *right);
+    PowerExpression(const Expression *const left, const Expression *const right);
     ~PowerExpression();
-    int64_t evaluate_integer();
-    double evaluate_number();
+    int64_t evaluate_integer() const;
+    double evaluate_number() const;
 };
 
 class NegateExpression : public Expression
 {
 private:
-    Expression *operand;
+    const Expression *const operand;
 
 public:
-    NegateExpression(Expression *operand);
+    NegateExpression(const Expression *const operand);
     ~NegateExpression();
-    int64_t evaluate_integer();
-    double evaluate_number();
+    int64_t evaluate_integer() const;
+    double evaluate_number() const;
 };
 
 class MultiplyExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    MultiplyExpression(Expression *left, Expression *right);
+    MultiplyExpression(const Expression *const left, const Expression *const right);
     ~MultiplyExpression();
-    int64_t evaluate_integer();
-    double evaluate_number();
+    int64_t evaluate_integer() const;
+    double evaluate_number() const;
 };
 
 class DivideExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    DivideExpression(Expression *left, Expression *right);
+    DivideExpression(const Expression *const left, const Expression *const right);
     ~DivideExpression();
-    int64_t evaluate_integer();
-    double evaluate_number();
+    int64_t evaluate_integer() const;
+    double evaluate_number() const;
 };
 
 class AddExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    AddExpression(Expression *left, Expression *right);
+    AddExpression(const Expression *const left, const Expression *const right);
     ~AddExpression();
-    int64_t evaluate_integer();
-    double evaluate_number();
+    int64_t evaluate_integer() const;
+    double evaluate_number() const;
 };
 
 class SubtractExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    SubtractExpression(Expression *left, Expression *right);
+    SubtractExpression(const Expression *const left, const Expression *const right);
     ~SubtractExpression();
-    int64_t evaluate_integer();
-    double evaluate_number();
+    int64_t evaluate_integer() const;
+    double evaluate_number() const;
 };
 
 class ShiftLeftExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    ShiftLeftExpression(Expression *left, Expression *right);
+    ShiftLeftExpression(const Expression *const left, const Expression *const right);
     ~ShiftLeftExpression();
-    int64_t evaluate_integer();
+    int64_t evaluate_integer() const;
 };
 
 class ShiftRightExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    ShiftRightExpression(Expression *left, Expression *right);
+    ShiftRightExpression(const Expression *const left, const Expression *const right);
     ~ShiftRightExpression();
-    int64_t evaluate_integer();
+    int64_t evaluate_integer() const;
 };
 
 class BitAndExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    BitAndExpression(Expression *left, Expression *right);
+    BitAndExpression(const Expression *const left, const Expression *const right);
     ~BitAndExpression();
-    int64_t evaluate_integer();
+    int64_t evaluate_integer() const;
 };
 
 class BitXorExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    BitXorExpression(Expression *left, Expression *right);
+    BitXorExpression(const Expression *const left, const Expression *const right);
     ~BitXorExpression();
-    int64_t evaluate_integer();
+    int64_t evaluate_integer() const;
 };
 
 class BitOrExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    BitOrExpression(Expression *left, Expression *right);
+    BitOrExpression(const Expression *const left, const Expression *const right);
     ~BitOrExpression();
-    int64_t evaluate_integer();
+    int64_t evaluate_integer() const;
 };
 
 class GreaterExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    GreaterExpression(Expression *left, Expression *right);
+    GreaterExpression(const Expression *const left, const Expression *const right);
     ~GreaterExpression();
-    bool evaluate_boolean();
+    bool evaluate_boolean() const;
 };
 
 class LessExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    LessExpression(Expression *left, Expression *right);
+    LessExpression(const Expression *const left, const Expression *const right);
     ~LessExpression();
-    bool evaluate_boolean();
+    bool evaluate_boolean() const;
 };
 
 class GreaterEqualExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    GreaterEqualExpression(Expression *left, Expression *right);
+    GreaterEqualExpression(const Expression *const left, const Expression *const right);
     ~GreaterEqualExpression();
-    bool evaluate_boolean();
+    bool evaluate_boolean() const;
 };
 
 class LessEqualExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    LessEqualExpression(Expression *left, Expression *right);
+    LessEqualExpression(const Expression *const left, const Expression *const right);
     ~LessEqualExpression();
-    bool evaluate_boolean();
+    bool evaluate_boolean() const;
 };
 
 class EqualExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    EqualExpression(Expression *left, Expression *right);
+    EqualExpression(const Expression *const left, const Expression *const right);
     ~EqualExpression();
-    bool evaluate_boolean();
+    bool evaluate_boolean() const;
 };
 
 class UnequalExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    UnequalExpression(Expression *left, Expression *right);
+    UnequalExpression(const Expression *const left, const Expression *const right);
     ~UnequalExpression();
-    bool evaluate_boolean();
+    bool evaluate_boolean() const;
 };
 
 class NotExpression : public Expression
 {
 private:
-    Expression *operand;
+    const Expression *const operand;
 
 public:
-    NotExpression(Expression *operand);
+    NotExpression(const Expression *const operand);
     ~NotExpression();
-    bool evaluate_boolean();
+    bool evaluate_boolean() const;
 };
 
 class AndExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    AndExpression(Expression *left, Expression *right);
+    AndExpression(const Expression *const left, const Expression *const right);
     ~AndExpression();
-    bool evaluate_boolean();
+    bool evaluate_boolean() const;
 };
 
 class OrExpression : public Expression
 {
 private:
-    Expression *left, *right;
+    const Expression *const left;
+    const Expression *const right;
 
 public:
-    OrExpression(Expression *left, Expression *right);
+    OrExpression(const Expression *const left, const Expression *const right);
     ~OrExpression();
-    bool evaluate_boolean();
+    bool evaluate_boolean() const;
 };

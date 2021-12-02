@@ -5,9 +5,9 @@
 
 struct output_element_t
 {
-    Module *module;
-    std::string property_name;
-    unsigned int precision;
+    const Module *const module;
+    const std::string property_name;
+    const unsigned int precision;
 };
 
 class Core : public Module
@@ -16,10 +16,10 @@ private:
     std::list<struct output_element_t> output_list;
 
 public:
-    Core(std::string name);
+    Core(const std::string name);
     void step();
-    void call(std::string method_name, std::vector<Expression *> arguments);
-    double get(std::string property_name);
+    void call(const std::string method_name, const std::vector<const Expression *> arguments);
+    double get(const std::string property_name) const;
     void set(std::string property_name, double value);
-    std::string get_output();
+    std::string get_output() const;
 };

@@ -12,9 +12,9 @@
 class RoboClaw : public Module
 {
 	uint16_t crc;
-	uint32_t timeout = 5; // [ticks]
-	uint8_t address;
-	Serial *serial;
+	const uint32_t timeout = 5; // [ticks]
+	const uint8_t address;
+	const Serial *const serial;
 
 	enum
 	{
@@ -94,13 +94,13 @@ class RoboClaw : public Module
 		GETISPEEDS = 79,
 		RESTOREDEFAULTS = 80,
 		GETTEMP = 82,
-		GETTEMP2 = 83, //Only valid on some models
+		GETTEMP2 = 83, // Only valid on some models
 		GETERROR = 90,
 		GETENCODERMODE = 91,
 		SETM1ENCODERMODE = 92,
 		SETM2ENCODERMODE = 93,
 		WRITENVM = 94,
-		READNVM = 95, //Reloads values from Flash into Ram
+		READNVM = 95, // Reloads values from Flash into Ram
 		SETCONFIG = 98,
 		GETCONFIG = 99,
 		SETM1MAXCURRENT = 133,
@@ -109,11 +109,11 @@ class RoboClaw : public Module
 		GETM2MAXCURRENT = 136,
 		SETPWMMODE = 148,
 		GETPWMMODE = 149,
-		FLAGBOOTLOADER = 255 //Only available via USB communications
+		FLAGBOOTLOADER = 255 // Only available via USB communications
 	};
 
 public:
-	RoboClaw(std::string name, Serial *serial, uint8_t address);
+	RoboClaw(const std::string name, const Serial *const serial, const uint8_t address);
 
 	bool ForwardM1(uint8_t speed);
 	bool BackwardM1(uint8_t speed);

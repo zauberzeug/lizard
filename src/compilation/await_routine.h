@@ -6,9 +6,9 @@
 class AwaitRoutine : public Action
 {
 public:
-    Routine *routine;
+    Routine *const routine;
 
-    AwaitRoutine(Routine *routine);
+    AwaitRoutine(Routine *const routine);
     ~AwaitRoutine();
     bool run();
 };

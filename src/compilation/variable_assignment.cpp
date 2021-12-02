@@ -1,9 +1,8 @@
 #include "variable_assignment.h"
 
-VariableAssignment::VariableAssignment(Variable *variable, Expression *expression)
+VariableAssignment::VariableAssignment(Variable *const variable, const Expression *const expression)
+    : variable(variable), expression(expression)
 {
-    this->variable = variable;
-    this->expression = expression;
 }
 
 VariableAssignment::~VariableAssignment()

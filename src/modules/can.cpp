@@ -3,7 +3,8 @@
 #include "driver/twai.h"
 #include "../utils/output.h"
 
-Can::Can(std::string name, gpio_num_t rx_pin, gpio_num_t tx_pin, long baud_rate) : Module(can, name)
+Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
+    : Module(can, name)
 {
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config;
@@ -76,7 +77,7 @@ void Can::step()
     Module::step();
 }
 
-void Can::send(uint32_t id, uint8_t data[8], bool rtr)
+void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr) const
 {
     twai_message_t message;
     message.identifier = id;
@@ -95,13 +96,13 @@ void Can::send(uint32_t id, uint8_t data[8], bool rtr)
 void Can::send(uint32_t id,
                uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
                uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
-               bool rtr)
+               bool rtr) const
 {
     uint8_t data[8] = {d0, d1, d2, d3, d4, d5, d6, d7};
     this->send(id, data, rtr);
 }
 
-void Can::call(std::string method_name, std::vector<Expression *> arguments)
+void Can::call(const std::string method_name, const std::vector<const Expression *> arguments)
 {
     if (method_name == "send")
     {
@@ -122,7 +123,7 @@ void Can::call(std::string method_name, std::vector<Expression *> arguments)
     }
 }
 
-void Can::subscribe(uint32_t id, Module *module)
+void Can::subscribe(const uint32_t id, Module *const module)
 {
     if (this->subscribers.count(id))
     {

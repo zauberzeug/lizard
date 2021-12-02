@@ -7,14 +7,15 @@
 class Serial : public Module
 {
 private:
-    uart_port_t uart_num;
+    const uart_port_t uart_num;
 
 public:
-    Serial(std::string name, gpio_num_t rx_pin, gpio_num_t tx_pin, long baud_rate, uart_port_t uart_num);
+    Serial(const std::string name,
+           const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num);
 
-    int available();
-    int read(uint32_t timeout = 0);
-    size_t write(uint8_t byte);
-    void flush();
-    void clear();
+    int available() const;
+    int read(const uint32_t timeout = 0) const;
+    size_t write(const uint8_t byte) const;
+    void flush() const;
+    void clear() const;
 };

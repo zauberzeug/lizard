@@ -6,9 +6,9 @@
 class Led : public Module
 {
 private:
-    gpio_num_t number;
+    const gpio_num_t number;
 
 public:
-    Led(std::string name, gpio_num_t number);
-    void call(std::string method_name, std::vector<Expression *> arguments);
+    Led(const std::string name, const gpio_num_t number);
+    void call(const std::string method_name, const std::vector<const Expression *> arguments);
 };

@@ -32,17 +32,17 @@ protected:
     bool broadcast = false;
 
 public:
-    ModuleType type;
-    std::string name;
+    const ModuleType type;
+    const std::string name;
 
-    Module(ModuleType type, std::string name);
-    static void expect(std::vector<Expression *> arguments, int num, ...);
-    static Module *create(std::string type, std::string name, std::vector<Expression *> arguments);
+    Module(const ModuleType type, const std::string name);
+    static void expect(const std::vector<const Expression *> arguments, const int num, ...);
+    static Module *create(const std::string type, const std::string name, const std::vector<const Expression *> arguments);
     virtual void step();
-    virtual void call(std::string method_name, std::vector<Expression *> arguments);
-    void call_with_shadows(std::string method_name, std::vector<Expression *> arguments);
-    virtual std::string get_output();
-    Variable *get_property(std::string property_name);
-    virtual void write_property(std::string property_name, Expression *expression);
-    virtual void handle_can_msg(uint32_t id, int count, uint8_t *data);
+    virtual void call(const std::string method_name, const std::vector<const Expression *> arguments);
+    void call_with_shadows(const std::string method_name, const std::vector<const Expression *> arguments);
+    virtual std::string get_output() const;
+    Variable *get_property(const std::string property_name) const;
+    virtual void write_property(const std::string property_name, const Expression *const expression);
+    virtual void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
 };

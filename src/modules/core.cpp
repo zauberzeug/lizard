@@ -6,7 +6,7 @@
 #include "../utils/strings.h"
 #include "../utils/timing.h"
 
-Core::Core(std::string name) : Module(core, name)
+Core::Core(const std::string name) : Module(core, name)
 {
     this->properties["debug"] = new BooleanVariable(false);
     this->properties["millis"] = new IntegerVariable();
@@ -15,12 +15,12 @@ Core::Core(std::string name) : Module(core, name)
 
 void Core::step()
 {
-    this->properties["millis"]->integer_value = millis();
-    this->properties["heap"]->integer_value = xPortGetFreeHeapSize();
+    this->properties.at("millis")->integer_value = millis();
+    this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     Module::step();
 }
 
-void Core::call(std::string method_name, std::vector<Expression *> arguments)
+void Core::call(const std::string method_name, const std::vector<const Expression *> arguments)
 {
     if (method_name == "restart")
     {
@@ -49,10 +49,10 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
         while (!format.empty())
         {
             std::string element = cut_first_word(format);
-            std::string module_name = cut_first_word(element, '.');
-            Module *module = Global::get_module(module_name);
-            std::string method_name = cut_first_word(element, ':');
-            unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
+            const std::string module_name = cut_first_word(element, '.');
+            const Module *const module = Global::get_module(module_name);
+            const std::string method_name = cut_first_word(element, ':');
+            const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
             this->output_list.push_back({module, method_name, precision});
         }
         this->output = true;
@@ -63,7 +63,7 @@ void Core::call(std::string method_name, std::vector<Expression *> arguments)
     }
 }
 
-std::string Core::get_output()
+std::string Core::get_output() const
 {
     static char output_buffer[1024];
     int pos = 0;

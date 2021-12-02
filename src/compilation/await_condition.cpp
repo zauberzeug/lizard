@@ -1,8 +1,8 @@
 #include "await_condition.h"
 
-AwaitCondition::AwaitCondition(Expression *condition)
+AwaitCondition::AwaitCondition(const Expression *const condition)
+    : condition(condition)
 {
-    this->condition = condition;
 }
 
 AwaitCondition::~AwaitCondition()

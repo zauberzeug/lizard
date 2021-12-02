@@ -1,8 +1,8 @@
 #include "routine.h"
 
-Routine::Routine(std::vector<Action *> actions)
+Routine::Routine(const std::vector<Action *> actions)
+    : actions(actions)
 {
-    this->actions = actions;
 }
 
 Routine::~Routine()
@@ -11,10 +11,9 @@ Routine::~Routine()
     {
         delete a;
     }
-    this->actions.clear();
 }
 
-bool Routine::is_running()
+bool Routine::is_running() const
 {
     return 0 <= this->instruction_index && this->instruction_index < this->actions.size();
 }
@@ -32,7 +31,7 @@ void Routine::step()
     }
     while (this->instruction_index < this->actions.size())
     {
-        bool can_proceed = this->actions[this->instruction_index]->run();
+        const bool can_proceed = this->actions[this->instruction_index]->run();
         if (!can_proceed)
         {
             return;

@@ -14,4 +14,4 @@ enum OutputType
     code,
 };
 
-void echo(OutputTarget target, OutputType type, const char *fmt, ...);
+void echo(const OutputTarget target, const OutputType type, const char *fmt, ...);

@@ -1,8 +1,7 @@
 #include "routine_call.h"
 
-RoutineCall::RoutineCall(Routine *routine)
+RoutineCall::RoutineCall(Routine *const routine) : routine(routine)
 {
-    this->routine = routine;
 }
 
 RoutineCall::~RoutineCall()
