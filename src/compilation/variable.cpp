@@ -27,11 +27,11 @@ void Variable::assign(const Expression *const expression)
     }
     else if (this->type == identifier && expression->type == identifier)
     {
-        this->identifier_value = expression->evaluate_identifier();
+        throw std::runtime_error("assignment of identifiers is forbidden");
     }
     else
     {
-        throw std::runtime_error("type mismatch");
+        throw std::runtime_error("type mismatch for variable assignment");
     }
 }
 

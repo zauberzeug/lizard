@@ -154,6 +154,14 @@ std::vector<Action *> compile_actions(const struct owl_ref ref)
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             Variable *const variable = Global::get_variable(variable_name);
             const Expression *const expression = compile_expression(variable_assignment.expression);
+            if (variable->type != expression->type)
+            {
+                throw std::runtime_error("type mismatch for variable assignment");
+            }
+            if (variable->type == identifier)
+            {
+                throw std::runtime_error("assignment of identifiers is forbidden");
+            }
             actions.push_back(new VariableAssignment(variable, expression));
         }
         else if (!action.await_condition.empty)
