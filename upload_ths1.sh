@@ -25,9 +25,9 @@ esptool.py \
     --flash_mode dio \
     --flash_freq 40m \
     --flash_size detect \
-    0x1000 bootloader.bin \
-    0x8000 partitions_singleapp.bin \
-    0x10000 lizard.bin
+    0x1000 build/bootloader/bootloader.bin \
+    0x8000 build/partitions_singleapp.bin \
+    0x10000 build/lizard.bin
 
 echo "Bringing microcontroller back into normal operation mode..."
 sudo echo 0 > /sys/class/gpio/gpio$g0/value
