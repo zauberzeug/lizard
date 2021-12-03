@@ -68,7 +68,7 @@ void RmdMotor::call(const std::string method_name, const std::vector<const Expre
     else if (method_name == "power")
     {
         Module::expect(arguments, 1, numbery);
-        int16_t power = arguments[0]->evaluate_number() * 2000;
+        int16_t power = arguments[0]->evaluate_number() / 32.0 * 2000;
         this->send_and_wait(this->can_id, 0xa1, 0,
                             0,
                             0,
