@@ -39,6 +39,10 @@ Module *Module::create(const std::string type, const std::string name, const std
 {
     if (type == "Output")
     {
+        throw std::runtime_error("creating another core module is forbidden");
+    }
+    else if (type == "Output")
+    {
         Module::expect(arguments, 1, integer);
         return new Output(name, (gpio_num_t)arguments[0]->evaluate_integer());
     }
