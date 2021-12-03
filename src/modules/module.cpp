@@ -37,7 +37,7 @@ void Module::Module::expect(const std::vector<const Expression *> arguments, con
 
 Module *Module::create(const std::string type, const std::string name, const std::vector<const Expression *> arguments)
 {
-    if (type == "Output")
+    if (type == "Core")
     {
         throw std::runtime_error("creating another core module is forbidden");
     }
