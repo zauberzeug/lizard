@@ -1,10 +1,9 @@
 #pragma once
 
-#include "module.h"
 #include "can.h"
+#include "module.h"
 
-class RmdMotor : public Module
-{
+class RmdMotor : public Module {
 private:
     const uint32_t can_id;
     Can *const can;

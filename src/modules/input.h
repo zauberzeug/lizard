@@ -3,8 +3,7 @@
 #include "driver/gpio.h"
 #include "module.h"
 
-class Input : public Module
-{
+class Input : public Module {
 private:
     const gpio_num_t number;
 

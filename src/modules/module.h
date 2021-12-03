@@ -1,14 +1,13 @@
 #pragma once
 
+#include "../compilation/expression.h"
+#include "../compilation/variable.h"
 #include <list>
 #include <map>
 #include <string>
 #include <vector>
-#include "../compilation/expression.h"
-#include "../compilation/variable.h"
 
-enum ModuleType
-{
+enum ModuleType {
     core,
     input,
     output,
@@ -21,8 +20,7 @@ enum ModuleType
     number_of_module_types,
 };
 
-class Module
-{
+class Module {
 private:
     std::list<Module *> shadow_modules;
 

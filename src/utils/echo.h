@@ -1,14 +1,12 @@
 #pragma once
 
-enum OutputTarget
-{
+enum OutputTarget {
     uart0 = 1,
     uart1 = 2,
     all = 3,
 };
 
-enum OutputType
-{
+enum OutputType {
     raw,
     text,
     code,

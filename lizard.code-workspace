@@ -35,6 +35,7 @@
     "[cpp]": {
       "editor.defaultFormatter": "ms-vscode.cpptools"
     },
+    "C_Cpp.clang_format_fallbackStyle": "{BasedOnStyle: LLVM, UseTab: Never, IndentWidth: 4, TabWidth: 4, ColumnLimit: 0, AccessModifierOffset: -4}",
     "editor.minimap.enabled": false
   }
 }

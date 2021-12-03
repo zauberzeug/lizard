@@ -1,13 +1,3 @@
-#include <chrono>
-#include <stdexcept>
-#include <stdio.h>
-#include <stdint.h>
-#include <string>
-#include <string.h>
-#include <vector>
-#include "driver/gpio.h"
-#include "driver/uart.h"
-
 #include "compilation/await_condition.h"
 #include "compilation/await_routine.h"
 #include "compilation/expression.h"
@@ -17,53 +7,55 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
+#include "driver/gpio.h"
+#include "driver/uart.h"
+#include "global.h"
 #include "modules/core.h"
 #include "modules/module.h"
+#include "storage.h"
 #include "utils/echo.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
-#include "global.h"
-#include "storage.h"
+#include <chrono>
+#include <stdexcept>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <string>
+#include <vector>
 
 #define BUFFER_SIZE 1024
 
 Core *core_module;
 
-extern "C"
-{
+extern "C" {
 #include "parser.h"
-    void app_main();
+void app_main();
 }
 
-std::string identifier_to_string(const struct owl_ref ref)
-{
+std::string identifier_to_string(const struct owl_ref ref) {
     const struct parsed_identifier identifier = parsed_identifier_get(ref);
     return std::string(identifier.identifier, identifier.length);
 }
 
 Expression *compile_expression(const struct owl_ref ref);
 
-std::vector<const Expression *> compile_arguments(const struct owl_ref ref)
-{
+std::vector<const Expression *> compile_arguments(const struct owl_ref ref) {
     std::vector<const Expression *> arguments;
-    for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
-    {
+    for (struct owl_ref r = ref; !r.empty; r = owl_next(r)) {
         arguments.push_back(compile_expression(r));
     }
     return arguments;
 }
 
-Expression *compile_expression(const struct owl_ref ref)
-{
+Expression *compile_expression(const struct owl_ref ref) {
     const struct parsed_expression expression = parsed_expression_get(ref);
-    switch (expression.type)
-    {
+    switch (expression.type) {
     case PARSED_TRUE:
         return new BooleanExpression(true);
     case PARSED_FALSE:
         return new BooleanExpression(false);
-    case PARSED_STRING:
-    {
+    case PARSED_STRING: {
         const struct parsed_string string = parsed_string_get(expression.string);
         return new StringExpression(std::string(string.string, string.length));
     }
@@ -123,119 +115,87 @@ Expression *compile_expression(const struct owl_ref ref)
     }
 }
 
-std::vector<Action *> compile_actions(const struct owl_ref ref)
-{
+std::vector<Action *> compile_actions(const struct owl_ref ref) {
     std::vector<Action *> actions;
-    for (struct owl_ref r = ref; !r.empty; r = owl_next(r))
-    {
+    for (struct owl_ref r = ref; !r.empty; r = owl_next(r)) {
         const struct parsed_action action = parsed_action_get(r);
-        if (!action.noop.empty)
-        {
-        }
-        else if (!action.method_call.empty)
-        {
+        if (!action.noop.empty) {
+        } else if (!action.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
             const std::string module_name = identifier_to_string(method_call.module_name);
             Module *const module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
             const std::vector<const Expression *> arguments = compile_arguments(method_call.argument);
             actions.push_back(new MethodCall(module, method_name, arguments));
-        }
-        else if (!action.routine_call.empty)
-        {
+        } else if (!action.routine_call.empty) {
             const struct parsed_routine_call routine_call = parsed_routine_call_get(action.routine_call);
             const std::string routine_name = identifier_to_string(routine_call.routine_name);
             Routine *const routine = Global::get_routine(routine_name);
             actions.push_back(new RoutineCall(routine));
-        }
-        else if (!action.variable_assignment.empty)
-        {
+        } else if (!action.variable_assignment.empty) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(action.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             Variable *const variable = Global::get_variable(variable_name);
             const Expression *const expression = compile_expression(variable_assignment.expression);
-            if (variable->type != expression->type)
-            {
+            if (variable->type != expression->type) {
                 throw std::runtime_error("type mismatch for variable assignment");
             }
-            if (variable->type == identifier)
-            {
+            if (variable->type == identifier) {
                 throw std::runtime_error("assignment of identifiers is forbidden");
             }
             actions.push_back(new VariableAssignment(variable, expression));
-        }
-        else if (!action.await_condition.empty)
-        {
+        } else if (!action.await_condition.empty) {
             struct parsed_await_condition await_condition = parsed_await_condition_get(action.await_condition);
             const Expression *const condition = compile_expression(await_condition.condition);
             actions.push_back(new AwaitCondition(condition));
-        }
-        else if (!action.await_routine.empty)
-        {
+        } else if (!action.await_routine.empty) {
             struct parsed_await_routine await_routine = parsed_await_routine_get(action.await_routine);
             const std::string routine_name = identifier_to_string(await_routine.routine_name);
             Routine *const routine = Global::get_routine(routine_name);
             actions.push_back(new AwaitRoutine(routine));
-        }
-        else
-        {
+        } else {
             throw std::runtime_error("unknown action type");
         }
     }
     return actions;
 }
 
-void process_tree(owl_tree *const tree)
-{
+void process_tree(owl_tree *const tree) {
     const struct parsed_statements statements = owl_tree_get_parsed_statements(tree);
-    for (struct owl_ref r = statements.statement; !r.empty; r = owl_next(r))
-    {
+    for (struct owl_ref r = statements.statement; !r.empty; r = owl_next(r)) {
         const struct parsed_statement statement = parsed_statement_get(r);
-        if (!statement.noop.empty)
-        {
-        }
-        else if (!statement.expression.empty)
-        {
+        if (!statement.noop.empty) {
+        } else if (!statement.expression.empty) {
             const Expression *const expression = compile_expression(statement.expression);
             static char buffer[256];
             expression->print_to_buffer(buffer);
             echo(all, text, buffer);
             delete expression;
-        }
-        else if (!statement.constructor.empty)
-        {
+        } else if (!statement.constructor.empty) {
             const struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
             const std::string module_name = identifier_to_string(constructor.module_name);
-            if (Global::has_module(module_name))
-            {
+            if (Global::has_module(module_name)) {
                 throw std::runtime_error("module \"" + module_name + "\" already exists");
             }
             const std::string module_type = identifier_to_string(constructor.module_type);
             const std::vector<const Expression *> arguments = compile_arguments(constructor.argument);
             Global::add_module(module_name, Module::create(module_type, module_name, arguments));
-        }
-        else if (!statement.method_call.empty)
-        {
+        } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
             const std::string module_name = identifier_to_string(method_call.module_name);
             Module *const module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
             const std::vector<const Expression *> arguments = compile_arguments(method_call.argument);
             module->call_with_shadows(method_name, arguments);
-        }
-        else if (!statement.routine_call.empty)
-        {
+        } else if (!statement.routine_call.empty) {
             const struct parsed_routine_call routine_call = parsed_routine_call_get(statement.routine_call);
             const std::string routine_name = identifier_to_string(routine_call.routine_name);
             Routine *const routine = Global::get_routine(routine_name);
-            if (routine->is_running())
-            {
+            if (routine->is_running()) {
                 throw std::runtime_error("routine \"" + routine_name + "\" is already running");
             }
             routine->start();
-        }
-        else if (!statement.property_assignment.empty)
-        {
+        } else if (!statement.property_assignment.empty) {
             const struct parsed_property_assignment property_assignment = parsed_property_assignment_get(statement.property_assignment);
             const std::string module_name = identifier_to_string(property_assignment.module_name);
             Module *const module = Global::get_module(module_name);
@@ -243,23 +203,18 @@ void process_tree(owl_tree *const tree)
             const Expression *const expression = compile_expression(property_assignment.expression);
             module->write_property(property_name, expression);
             delete expression;
-        }
-        else if (!statement.variable_assignment.empty)
-        {
+        } else if (!statement.variable_assignment.empty) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(statement.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             Variable *const variable = Global::get_variable(variable_name);
             const Expression *const expression = compile_expression(variable_assignment.expression);
             variable->assign(expression);
             delete expression;
-        }
-        else if (!statement.variable_declaration.empty)
-        {
+        } else if (!statement.variable_declaration.empty) {
             const struct parsed_variable_declaration variable_declaration = parsed_variable_declaration_get(statement.variable_declaration);
             const struct parsed_datatype datatype = parsed_datatype_get(variable_declaration.datatype);
             const std::string variable_name = identifier_to_string(variable_declaration.variable_name);
-            switch (datatype.type)
-            {
+            switch (datatype.type) {
             case PARSED_BOOLEAN:
                 Global::add_variable(variable_name, new BooleanVariable());
                 break;
@@ -275,55 +230,43 @@ void process_tree(owl_tree *const tree)
             default:
                 throw std::runtime_error("invalid data type for variable declaration");
             }
-            if (!variable_declaration.expression.empty)
-            {
+            if (!variable_declaration.expression.empty) {
                 const Expression *const expression = compile_expression(variable_declaration.expression);
                 Global::get_variable(variable_name)->assign(expression);
                 delete expression;
             }
-        }
-        else if (!statement.routine_definition.empty)
-        {
+        } else if (!statement.routine_definition.empty) {
             const struct parsed_routine_definition routine_definition = parsed_routine_definition_get(statement.routine_definition);
             const std::string routine_name = identifier_to_string(routine_definition.routine_name);
-            if (Global::has_routine(routine_name))
-            {
+            if (Global::has_routine(routine_name)) {
                 throw std::runtime_error("routine \"" + routine_name + "\" already exists");
             }
             const struct parsed_actions actions = parsed_actions_get(routine_definition.actions);
             Global::add_routine(routine_name, new Routine(compile_actions(actions.action)));
-        }
-        else if (!statement.rule_definition.empty)
-        {
+        } else if (!statement.rule_definition.empty) {
             const struct parsed_rule_definition rule_definition = parsed_rule_definition_get(statement.rule_definition);
             const struct parsed_actions actions = parsed_actions_get(rule_definition.actions);
             Routine *const routine = new Routine(compile_actions(actions.action));
             const Expression *const condition = compile_expression(rule_definition.condition);
             Global::add_rule(new Rule(condition, routine));
-        }
-        else
-        {
+        } else {
             throw std::runtime_error("unknown statement type");
         }
     }
 }
 
-void process_lizard(const char *line)
-{
+void process_lizard(const char *line) {
     const bool debug = core_module->get_property("debug")->boolean_value;
-    if (debug)
-    {
+    if (debug) {
         echo(all, text, ">> %s", line);
         tic();
     }
     struct owl_tree *const tree = owl_tree_create_from_string(line);
-    if (debug)
-    {
+    if (debug) {
         toc("Tree creation");
     }
     struct source_range range;
-    switch (owl_tree_get_error(tree, &range))
-    {
+    switch (owl_tree_get_error(tree, &range)) {
     case ERROR_INVALID_FILE:
         echo(all, text, "error: invalid file");
         break;
@@ -342,26 +285,21 @@ void process_lizard(const char *line)
         echo(all, text, "error: more input needed at range %zu %zu", range.start, range.end);
         break;
     default:
-        if (debug)
-        {
+        if (debug) {
             owl_tree_print(tree);
             tic();
         }
         process_tree(tree);
-        if (debug)
-        {
+        if (debug) {
             toc("Tree traversal");
         }
     }
     owl_tree_destroy(tree);
 }
 
-void process_line(const char *line, const int len, const uart_port_t uart_num)
-{
-    if (len >= 2 && line[0] == '!')
-    {
-        switch (line[1])
-        {
+void process_line(const char *line, const int len, const uart_port_t uart_num) {
+    if (len >= 2 && line[0] == '!') {
+        switch (line[1]) {
         case '+':
             Storage::append_to_startup(line + 2);
             break;
@@ -386,66 +324,49 @@ void process_line(const char *line, const int len, const uart_port_t uart_num)
         default:
             throw std::runtime_error("unrecognized control command");
         }
-    }
-    else
-    {
-        if (uart_num == UART_NUM_1)
-        {
+    } else {
+        if (uart_num == UART_NUM_1) {
             printf("%s\n", line);
-        }
-        else
-        {
+        } else {
             process_lizard(line);
         }
     }
 }
 
-void process_uart(const uart_port_t uart_num)
-{
+void process_uart(const uart_port_t uart_num) {
     static char input[BUFFER_SIZE];
 
-    while (true)
-    {
+    while (true) {
         int pos = uart_pattern_get_pos(uart_num);
-        if (pos < 0)
-        {
+        if (pos < 0) {
             break;
         }
 
         int len = uart_read_bytes(uart_num, (uint8_t *)input, pos + 1, 0);
-        if (len >= 4 && input[len - 4] == '@')
-        {
+        if (len >= 4 && input[len - 4] == '@') {
             uint8_t checksum = 0;
-            for (int i = 0; i < len - 4; ++i)
-            {
+            for (int i = 0; i < len - 4; ++i) {
                 checksum ^= input[i];
             }
             const std::string hex_number(&input[len - 3], 2);
-            if (std::stoi(hex_number, 0, 16) != checksum)
-            {
+            if (std::stoi(hex_number, 0, 16) != checksum) {
                 throw std::runtime_error("checksum mismatch");
             }
             len -= 4;
-        }
-        else
-        {
+        } else {
             len -= 1;
         }
         input[len] = 0;
 
-        try
-        {
+        try {
             process_line(input, len, uart_num);
-        }
-        catch (const std::runtime_error &e)
-        {
+        } catch (const std::runtime_error &e) {
             echo(all, text, "error while processing line from UART %d: %s", uart_num, e.what());
         }
     }
 }
 
-void app_main()
-{
+void app_main() {
     const uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -467,68 +388,48 @@ void app_main()
 
     printf("Ready.\n");
 
-    try
-    {
+    try {
         assert(Global::variables.size() == number_of_module_types);
         Global::add_module("core", core_module = new Core("core"));
-    }
-    catch (const std::runtime_error &e)
-    {
+    } catch (const std::runtime_error &e) {
         echo(all, text, "error while initializing global state variables and modules: %s", e.what());
         exit(1);
     }
 
-    try
-    {
+    try {
         Storage::init();
         process_lizard(Storage::startup.c_str());
-    }
-    catch (const std::runtime_error &e)
-    {
+    } catch (const std::runtime_error &e) {
         echo(all, text, "error while loading startup script: %s", e.what());
     }
 
-    while (true)
-    {
+    while (true) {
         process_uart(UART_NUM_0);
         process_uart(UART_NUM_1);
 
-        for (auto const &item : Global::modules)
-        {
-            try
-            {
+        for (auto const &item : Global::modules) {
+            try {
                 item.second->step();
-            }
-            catch (const std::runtime_error &e)
-            {
+            } catch (const std::runtime_error &e) {
                 echo(all, text, "error in module \"%s\": %s", item.first.c_str(), e.what());
             }
         }
 
-        for (auto const &rule : Global::rules)
-        {
-            try
-            {
-                if (rule->condition->evaluate_boolean() && !rule->routine->is_running())
-                {
+        for (auto const &rule : Global::rules) {
+            try {
+                if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
                     rule->routine->start();
                 }
                 rule->routine->step();
-            }
-            catch (const std::runtime_error &e)
-            {
+            } catch (const std::runtime_error &e) {
                 echo(all, text, "error in rule: %s", e.what());
             }
         }
 
-        for (auto const &item : Global::routines)
-        {
-            try
-            {
+        for (auto const &item : Global::routines) {
+            try {
                 item.second->step();
-            }
-            catch (const std::runtime_error &e)
-            {
+            } catch (const std::runtime_error &e) {
                 echo(all, text, "error in routine \"%s\": %s", item.first.c_str(), e.what());
             }
         }

@@ -1,7 +1,6 @@
 #pragma once
 
-enum Type
-{
+enum Type {
     boolean = 1,
     integer = 2,
     number = 4,

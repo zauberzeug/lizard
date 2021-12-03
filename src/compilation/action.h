@@ -1,7 +1,6 @@
 #pragma once
 
-class Action
-{
+class Action {
 public:
     virtual ~Action();
     virtual bool run() = 0;

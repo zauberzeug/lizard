@@ -3,8 +3,7 @@
 #include "action.h"
 #include "expression.h"
 
-class AwaitCondition : public Action
-{
+class AwaitCondition : public Action {
 public:
     const Expression *const condition;
 

@@ -1,39 +1,30 @@
 #include "routine.h"
 
 Routine::Routine(const std::vector<Action *> actions)
-    : actions(actions)
-{
+    : actions(actions) {
 }
 
-Routine::~Routine()
-{
-    for (auto a : this->actions)
-    {
+Routine::~Routine() {
+    for (auto a : this->actions) {
         delete a;
     }
 }
 
-bool Routine::is_running() const
-{
+bool Routine::is_running() const {
     return 0 <= this->instruction_index && this->instruction_index < this->actions.size();
 }
 
-void Routine::start()
-{
+void Routine::start() {
     this->instruction_index = 0;
 }
 
-void Routine::step()
-{
-    if (!this->is_running())
-    {
+void Routine::step() {
+    if (!this->is_running()) {
         return;
     }
-    while (this->instruction_index < this->actions.size())
-    {
+    while (this->instruction_index < this->actions.size()) {
         const bool can_proceed = this->actions[this->instruction_index]->run();
-        if (!can_proceed)
-        {
+        if (!can_proceed) {
             return;
         }
         this->instruction_index++;

@@ -3,8 +3,7 @@
 #include "module.h"
 #include "roboclaw.h"
 
-class RoboClawMotor : public Module
-{
+class RoboClawMotor : public Module {
 private:
     const unsigned int motor_number;
     RoboClaw *const roboclaw;

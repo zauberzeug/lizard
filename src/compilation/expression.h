@@ -1,11 +1,10 @@
 #pragma once
 
-#include <string>
 #include "type.h"
 #include "variable.h"
+#include <string>
 
-class Expression
-{
+class Expression {
 protected:
     Expression(const Type type);
 
@@ -22,8 +21,7 @@ public:
     int print_to_buffer(char *buffer) const;
 };
 
-class BooleanExpression : public Expression
-{
+class BooleanExpression : public Expression {
 private:
     const bool value;
 
@@ -32,8 +30,7 @@ public:
     bool evaluate_boolean() const;
 };
 
-class StringExpression : public Expression
-{
+class StringExpression : public Expression {
 private:
     const std::string value;
 
@@ -42,8 +39,7 @@ public:
     std::string evaluate_string() const;
 };
 
-class IntegerExpression : public Expression
-{
+class IntegerExpression : public Expression {
 private:
     const int64_t value;
 
@@ -53,8 +49,7 @@ public:
     double evaluate_number() const;
 };
 
-class NumberExpression : public Expression
-{
+class NumberExpression : public Expression {
 private:
     const double value;
 
@@ -63,8 +58,7 @@ public:
     double evaluate_number() const;
 };
 
-class VariableExpression : public Expression
-{
+class VariableExpression : public Expression {
 private:
     const Variable *const variable;
 
@@ -77,8 +71,7 @@ public:
     std::string evaluate_identifier() const;
 };
 
-class PowerExpression : public Expression
-{
+class PowerExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -90,8 +83,7 @@ public:
     double evaluate_number() const;
 };
 
-class NegateExpression : public Expression
-{
+class NegateExpression : public Expression {
 private:
     const Expression *const operand;
 
@@ -102,8 +94,7 @@ public:
     double evaluate_number() const;
 };
 
-class MultiplyExpression : public Expression
-{
+class MultiplyExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -115,8 +106,7 @@ public:
     double evaluate_number() const;
 };
 
-class DivideExpression : public Expression
-{
+class DivideExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -128,8 +118,7 @@ public:
     double evaluate_number() const;
 };
 
-class AddExpression : public Expression
-{
+class AddExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -141,8 +130,7 @@ public:
     double evaluate_number() const;
 };
 
-class SubtractExpression : public Expression
-{
+class SubtractExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -154,8 +142,7 @@ public:
     double evaluate_number() const;
 };
 
-class ShiftLeftExpression : public Expression
-{
+class ShiftLeftExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -166,8 +153,7 @@ public:
     int64_t evaluate_integer() const;
 };
 
-class ShiftRightExpression : public Expression
-{
+class ShiftRightExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -178,8 +164,7 @@ public:
     int64_t evaluate_integer() const;
 };
 
-class BitAndExpression : public Expression
-{
+class BitAndExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -190,8 +175,7 @@ public:
     int64_t evaluate_integer() const;
 };
 
-class BitXorExpression : public Expression
-{
+class BitXorExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -202,8 +186,7 @@ public:
     int64_t evaluate_integer() const;
 };
 
-class BitOrExpression : public Expression
-{
+class BitOrExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -214,8 +197,7 @@ public:
     int64_t evaluate_integer() const;
 };
 
-class GreaterExpression : public Expression
-{
+class GreaterExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -226,8 +208,7 @@ public:
     bool evaluate_boolean() const;
 };
 
-class LessExpression : public Expression
-{
+class LessExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -238,8 +219,7 @@ public:
     bool evaluate_boolean() const;
 };
 
-class GreaterEqualExpression : public Expression
-{
+class GreaterEqualExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -250,8 +230,7 @@ public:
     bool evaluate_boolean() const;
 };
 
-class LessEqualExpression : public Expression
-{
+class LessEqualExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -262,8 +241,7 @@ public:
     bool evaluate_boolean() const;
 };
 
-class EqualExpression : public Expression
-{
+class EqualExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -274,8 +252,7 @@ public:
     bool evaluate_boolean() const;
 };
 
-class UnequalExpression : public Expression
-{
+class UnequalExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -286,8 +263,7 @@ public:
     bool evaluate_boolean() const;
 };
 
-class NotExpression : public Expression
-{
+class NotExpression : public Expression {
 private:
     const Expression *const operand;
 
@@ -297,8 +273,7 @@ public:
     bool evaluate_boolean() const;
 };
 
-class AndExpression : public Expression
-{
+class AndExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;
@@ -309,8 +284,7 @@ public:
     bool evaluate_boolean() const;
 };
 
-class OrExpression : public Expression
-{
+class OrExpression : public Expression {
 private:
     const Expression *const left;
     const Expression *const right;

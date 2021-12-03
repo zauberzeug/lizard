@@ -4,8 +4,7 @@
 #include "driver/uart.h"
 #include "module.h"
 
-class Serial : public Module
-{
+class Serial : public Module {
 private:
     const uart_port_t uart_num;
 

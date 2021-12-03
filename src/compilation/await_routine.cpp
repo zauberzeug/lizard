@@ -1,19 +1,15 @@
 #include "await_routine.h"
 
 AwaitRoutine::AwaitRoutine(Routine *const routine)
-    : routine(routine)
-{
+    : routine(routine) {
 }
 
-AwaitRoutine::~AwaitRoutine()
-{
+AwaitRoutine::~AwaitRoutine() {
     // NOTE: don't delete globally managed routines
 }
 
-bool AwaitRoutine::run()
-{
-    if (!this->routine->is_running())
-    {
+bool AwaitRoutine::run() {
+    if (!this->routine->is_running()) {
         this->routine->start();
     }
     this->routine->step();

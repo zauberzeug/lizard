@@ -1,16 +1,13 @@
 #include "await_condition.h"
 
 AwaitCondition::AwaitCondition(const Expression *const condition)
-    : condition(condition)
-{
+    : condition(condition) {
 }
 
-AwaitCondition::~AwaitCondition()
-{
+AwaitCondition::~AwaitCondition() {
     delete this->condition;
 }
 
-bool AwaitCondition::run()
-{
+bool AwaitCondition::run() {
     return this->condition->evaluate_boolean();
 }

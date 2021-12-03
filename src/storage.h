@@ -2,8 +2,7 @@
 
 #include <string>
 
-class Storage
-{
+class Storage {
 private:
     static void put(const std::string value);
     static std::string get();

@@ -5,10 +5,8 @@
 
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
-    : Module(serial, name), uart_num(uart_num)
-{
-    if (uart_is_driver_installed(uart_num))
-    {
+    : Module(serial, name), uart_num(uart_num) {
+    if (uart_is_driver_installed(uart_num)) {
         throw std::runtime_error("serial interface is already in use");
     }
 
@@ -26,36 +24,30 @@ Serial::Serial(const std::string name,
     uart_driver_install(uart_num, RX_BUF_SIZE, TX_BUF_SIZE, 0, NULL, 0);
 }
 
-size_t Serial::write(const uint8_t byte) const
-{
+size_t Serial::write(const uint8_t byte) const {
     const char send = byte;
     uart_write_bytes(this->uart_num, &send, 1);
     return 1;
 }
 
-int Serial::available() const
-{
+int Serial::available() const {
     size_t available;
     uart_get_buffered_data_len(this->uart_num, &available);
     return available;
 }
 
-void Serial::flush() const
-{
+void Serial::flush() const {
     uart_flush(this->uart_num);
 }
 
-int Serial::read(uint32_t timeout) const
-{
+int Serial::read(uint32_t timeout) const {
     uint8_t data = 0;
     const int length = uart_read_bytes(this->uart_num, &data, 1, timeout);
     return length > 0 ? data : -1;
 }
 
-void Serial::clear() const
-{
-    while (this->available())
-    {
+void Serial::clear() const {
+    while (this->available()) {
         this->read();
     }
 }

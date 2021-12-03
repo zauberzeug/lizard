@@ -1,44 +1,28 @@
 #include "variable.h"
-
-#include <stdexcept>
 #include "expression.h"
+#include <stdexcept>
 
-Variable::Variable(const Type type) : type(type)
-{
+Variable::Variable(const Type type) : type(type) {
 }
 
-void Variable::assign(const Expression *const expression)
-{
-    if (this->type == boolean && expression->type == boolean)
-    {
+void Variable::assign(const Expression *const expression) {
+    if (this->type == boolean && expression->type == boolean) {
         this->boolean_value = expression->evaluate_boolean();
-    }
-    else if (this->type == integer && expression->type == integer)
-    {
+    } else if (this->type == integer && expression->type == integer) {
         this->integer_value = expression->evaluate_integer();
-    }
-    else if (this->type == number && expression->is_numbery())
-    {
+    } else if (this->type == number && expression->is_numbery()) {
         this->number_value = expression->evaluate_number();
-    }
-    else if (this->type == string && expression->type == string)
-    {
+    } else if (this->type == string && expression->type == string) {
         this->string_value = expression->evaluate_string();
-    }
-    else if (this->type == identifier && expression->type == identifier)
-    {
+    } else if (this->type == identifier && expression->type == identifier) {
         throw std::runtime_error("assignment of identifiers is forbidden");
-    }
-    else
-    {
+    } else {
         throw std::runtime_error("type mismatch for variable assignment");
     }
 }
 
-int Variable::print_to_buffer(char *const buffer) const
-{
-    switch (this->type)
-    {
+int Variable::print_to_buffer(char *const buffer) const {
+    switch (this->type) {
     case boolean:
         return sprintf(buffer, "%s", this->boolean_value ? "true" : "false");
     case integer:
@@ -54,27 +38,22 @@ int Variable::print_to_buffer(char *const buffer) const
     }
 }
 
-BooleanVariable::BooleanVariable(const bool value) : Variable(boolean)
-{
+BooleanVariable::BooleanVariable(const bool value) : Variable(boolean) {
     this->boolean_value = value;
 }
 
-IntegerVariable::IntegerVariable(const int64_t value) : Variable(integer)
-{
+IntegerVariable::IntegerVariable(const int64_t value) : Variable(integer) {
     this->integer_value = value;
 }
 
-NumberVariable::NumberVariable(double value) : Variable(number)
-{
+NumberVariable::NumberVariable(double value) : Variable(number) {
     this->number_value = value;
 }
 
-StringVariable::StringVariable(std::string value) : Variable(string)
-{
+StringVariable::StringVariable(std::string value) : Variable(string) {
     this->string_value = value;
 }
 
-IdentifierVariable::IdentifierVariable(std::string value) : Variable(identifier)
-{
+IdentifierVariable::IdentifierVariable(std::string value) : Variable(identifier) {
     this->identifier_value = value;
 }

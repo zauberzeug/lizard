@@ -4,8 +4,7 @@
 #include "expression.h"
 #include "variable.h"
 
-class VariableAssignment : public Action
-{
+class VariableAssignment : public Action {
 public:
     Variable *const variable;
     const Expression *const expression;

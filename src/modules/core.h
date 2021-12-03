@@ -1,17 +1,15 @@
 #pragma once
 
-#include <utility>
 #include "module.h"
+#include <utility>
 
-struct output_element_t
-{
+struct output_element_t {
     const Module *const module;
     const std::string property_name;
     const unsigned int precision;
 };
 
-class Core : public Module
-{
+class Core : public Module {
 private:
     std::list<struct output_element_t> output_list;
 

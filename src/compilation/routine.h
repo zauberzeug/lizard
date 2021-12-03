@@ -1,10 +1,9 @@
 #pragma once
 
-#include <vector>
 #include "action.h"
+#include <vector>
 
-class Routine
-{
+class Routine {
 private:
     const std::vector<Action *> actions;
     int instruction_index = -1;
