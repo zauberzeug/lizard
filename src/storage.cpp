@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <string>
 #include "nvs_flash.h"
-#include "utils/output.h"
+#include "utils/echo.h"
 #include "utils/strings.h"
 
 #define NAMESPACE "storage"

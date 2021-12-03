@@ -1,9 +1,9 @@
-#include "button.h"
+#include "input.h"
 
-#include "../utils/output.h"
+#include "../utils/echo.h"
 
-Button::Button(const std::string name, const gpio_num_t number)
-    : Module(button, name), number(number)
+Input::Input(const std::string name, const gpio_num_t number)
+    : Module(input, name), number(number)
 {
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_INPUT);
@@ -11,7 +11,7 @@ Button::Button(const std::string name, const gpio_num_t number)
     this->properties["change"] = new IntegerVariable();
 }
 
-void Button::step()
+void Input::step()
 {
     const int new_level = gpio_get_level(this->number);
     this->properties.at("change")->integer_value = new_level - this->properties.at("level")->integer_value;
@@ -19,7 +19,7 @@ void Button::step()
     Module::step();
 }
 
-void Button::call(const std::string method_name, const std::vector<const Expression *> arguments)
+void Input::call(const std::string method_name, const std::vector<const Expression *> arguments)
 {
     if (method_name == "get")
     {
@@ -42,7 +42,7 @@ void Button::call(const std::string method_name, const std::vector<const Express
     }
 }
 
-std::string Button::get_output() const
+std::string Input::get_output() const
 {
     static char buffer[256];
     std::sprintf(buffer, "%d", gpio_get_level(this->number));

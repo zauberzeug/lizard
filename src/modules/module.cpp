@@ -2,15 +2,15 @@
 
 #include <stdarg.h>
 #include "driver/gpio.h"
-#include "button.h"
+#include "input.h"
 #include "can.h"
-#include "led.h"
+#include "output.h"
 #include "proxy.h"
 #include "rmd_motor.h"
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
 #include "serial.h"
-#include "../utils/output.h"
+#include "../utils/echo.h"
 #include "../global.h"
 
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name)
@@ -37,15 +37,15 @@ void Module::Module::expect(const std::vector<const Expression *> arguments, con
 
 Module *Module::create(const std::string type, const std::string name, const std::vector<const Expression *> arguments)
 {
-    if (type == "Led")
+    if (type == "Output")
     {
         Module::expect(arguments, 1, integer);
-        return new Led(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        return new Output(name, (gpio_num_t)arguments[0]->evaluate_integer());
     }
-    else if (type == "Button")
+    else if (type == "Input")
     {
         Module::expect(arguments, 1, integer);
-        return new Button(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        return new Input(name, (gpio_num_t)arguments[0]->evaluate_integer());
     }
     else if (type == "Can")
     {
@@ -116,9 +116,9 @@ Module *Module::create(const std::string type, const std::string name, const std
 
 void Module::step()
 {
-    if (this->output)
+    if (this->output_on)
     {
-        std::string output = this->get_output();
+        const std::string output = this->get_output();
         if (!output.empty())
         {
             echo(all, text, "%s %s", this->name.c_str(), output.c_str());
@@ -142,12 +142,12 @@ void Module::call(const std::string method_name, const std::vector<const Express
     if (method_name == "mute")
     {
         Module::expect(arguments, 0);
-        this->output = false;
+        this->output_on = false;
     }
     else if (method_name == "unmute")
     {
         Module::expect(arguments, 0);
-        this->output = true;
+        this->output_on = true;
     }
     else if (method_name == "broadcast")
     {

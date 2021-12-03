@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 #include "../global.h"
-#include "../utils/output.h"
+#include "../utils/echo.h"
 #include "../utils/strings.h"
 #include "../utils/timing.h"
 
@@ -55,7 +55,7 @@ void Core::call(const std::string method_name, const std::vector<const Expressio
             const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
             this->output_list.push_back({module, method_name, precision});
         }
-        this->output = true;
+        this->output_on = true;
     }
     else
     {

@@ -2,7 +2,7 @@
 
 #include <cstring>
 #include "../global.h"
-#include "../utils/output.h"
+#include "../utils/echo.h"
 #include "../utils/timing.h"
 
 RmdMotor::RmdMotor(const std::string name, Can *const can, const uint8_t motor_id)

@@ -19,7 +19,7 @@
 #include "compilation/variable_assignment.h"
 #include "modules/core.h"
 #include "modules/module.h"
-#include "utils/output.h"
+#include "utils/echo.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "global.h"

@@ -9,15 +9,15 @@
 
 enum ModuleType
 {
-    button,
-    can,
     core,
-    led,
-    proxy,
+    input,
+    output,
+    can,
     serial,
     rmd_motor,
     roboclaw,
     roboclaw_motor,
+    proxy,
     number_of_module_types,
 };
 
@@ -28,7 +28,7 @@ private:
 
 protected:
     std::map<std::string, Variable *> properties;
-    bool output = false;
+    bool output_on = false;
     bool broadcast = false;
 
 public:

@@ -1,7 +1,7 @@
 #include "can.h"
 
 #include "driver/twai.h"
-#include "../utils/output.h"
+#include "../utils/echo.h"
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(can, name)
@@ -60,7 +60,7 @@ void Can::step()
                 message.data);
         }
 
-        if (this->output)
+        if (this->output_on)
         {
             static char buffer[256];
             int pos = std::sprintf(buffer, "can %03x", message.identifier);

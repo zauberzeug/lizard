@@ -1,13 +1,13 @@
-#include "led.h"
+#include "output.h"
 
-Led::Led(const std::string name, const gpio_num_t number)
-    : Module(led, name), number(number)
+Output::Output(const std::string name, const gpio_num_t number)
+    : Module(output, name), number(number)
 {
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_OUTPUT);
 }
 
-void Led::call(const std::string method_name, const std::vector<const Expression *> arguments)
+void Output::call(const std::string method_name, const std::vector<const Expression *> arguments)
 {
     if (method_name == "on")
     {

@@ -6,15 +6,15 @@ std::map<const std::string, Module *> Global::modules;
 std::map<const std::string, Routine *> Global::routines;
 std::list<Rule *> Global::rules;
 std::map<const std::string, Variable *> Global::variables{
-    {"Button", new IdentifierVariable("Button")},
-    {"Can", new IdentifierVariable("Can")},
     {"Core", new IdentifierVariable("Core")},
-    {"Led", new IdentifierVariable("Led")},
-    {"Proxy", new IdentifierVariable("Proxy")},
+    {"Input", new IdentifierVariable("Input")},
+    {"Output", new IdentifierVariable("Output")},
+    {"Can", new IdentifierVariable("Can")},
     {"Serial", new IdentifierVariable("Serial")},
     {"RmdMotor", new IdentifierVariable("RmdMotor")},
     {"RoboClaw", new IdentifierVariable("RoboClaw")},
     {"RoboClawMotor", new IdentifierVariable("RoboClawMotor")},
+    {"Proxy", new IdentifierVariable("Proxy")},
 };
 
 Module *Global::get_module(const std::string module_name)

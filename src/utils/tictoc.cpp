@@ -1,7 +1,7 @@
 #include "tictoc.h"
 
 #include <stdio.h>
-#include "output.h"
+#include "echo.h"
 
 std::chrono::_V2::system_clock::time_point t;
 
