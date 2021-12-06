@@ -4,6 +4,7 @@
 #include "can.h"
 #include "driver/gpio.h"
 #include "input.h"
+#include "odrive_motor.h"
 #include "output.h"
 #include "proxy.h"
 #include "rmd_motor.h"
@@ -44,6 +45,16 @@ Module *Module::create(const std::string type, const std::string name, const std
         gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
         long baud_rate = arguments[2]->evaluate_integer();
         return new Can(name, rx_pin, tx_pin, baud_rate);
+    } else if (type == "ODriveMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        std::string can_name = arguments[0]->evaluate_identifier();
+        Module *module = Global::get_module(can_name);
+        if (module->type != can) {
+            throw std::runtime_error("module \"" + can_name + "\" is no can connection");
+        }
+        Can *can = (Can *)module;
+        uint32_t can_id = arguments[1]->evaluate_integer();
+        return new ODriveMotor(name, can, can_id);
     } else if (type == "RmdMotor") {
         Module::expect(arguments, 2, identifier, integer);
         std::string can_name = arguments[0]->evaluate_identifier();

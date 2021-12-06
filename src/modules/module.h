@@ -13,6 +13,7 @@ enum ModuleType {
     output,
     can,
     serial,
+    odrive_motor,
     rmd_motor,
     roboclaw,
     roboclaw_motor,

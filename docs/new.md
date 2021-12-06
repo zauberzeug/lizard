@@ -291,6 +291,27 @@ The serial module allows communicating with peripherals via the specified connec
 | ------------------------------------ | ---------------------------------- | --------- |
 | `serial = Serial(rx, tx, baud, num)` | RX/TX pins, baud rate, UART number | 4x `int`  |
 
+## Odrive Motor
+
+The Odrive motor module controls a motor using an [Odrive motor controller](https://odriverobotics.com/).
+
+| Constructor                        | Description            | Arguments         |
+| ---------------------------------- | ---------------------- | ----------------- |
+| `motor = ODriveMotor(can, can_id)` | CAN module and node ID | CAN module, `int` |
+
+| Properties          | Description             | Data type |
+| ------------------- | ----------------------- | --------- |
+| `motor.position`    | Motor position (meters) | `float`   |
+| `motor.tick_offset` | Encoder tick offset     | `float`   |
+| `motor.m_per_tick`  | Meters per encoder tick | `float`   |
+
+| Methods               | Description                           | Arguments |
+| --------------------- | ------------------------------------- | --------- |
+| `motor.zero()`        | Set current position as zero position |           |
+| `motor.power(torque)` | Move with given `torque`              | `float`   |
+| `motor.speed(speed)`  | Move with given `speed` (m/s)         | `float`   |
+| `motor.off()`         | Turn motor off (idle state)           |           |
+
 ## RMD Motor
 
 The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
@@ -352,7 +373,7 @@ The RoboClaw motor module controls a motor using a RoboClaw module.
 | Methods               | Description                             | Arguments |
 | --------------------- | --------------------------------------- | --------- |
 | `motor.power(torque)` | Move with given `torque` (-1..1)        | `float`   |
-| `motor.power(speed)`  | Move with given `speed` (-32767..32767) | `float`   |
+| `motor.speed(speed)`  | Move with given `speed` (-32767..32767) | `float`   |
 | `motor.zero()`        | Store position as zero position         |           |
 
 ## Proxy
