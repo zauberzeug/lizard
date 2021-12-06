@@ -291,9 +291,9 @@ The serial module allows communicating with peripherals via the specified connec
 | ------------------------------------ | ---------------------------------- | --------- |
 | `serial = Serial(rx, tx, baud, num)` | RX/TX pins, baud rate, UART number | 4x `int`  |
 
-## Odrive Motor
+## ODrive Motor
 
-The Odrive motor module controls a motor using an [Odrive motor controller](https://odriverobotics.com/).
+The ODrive motor module controls a motor using an [ODrive motor controller](https://odriverobotics.com/).
 
 | Constructor                        | Description            | Arguments         |
 | ---------------------------------- | ---------------------- | ----------------- |
@@ -311,6 +311,26 @@ The Odrive motor module controls a motor using an [Odrive motor controller](http
 | `motor.power(torque)` | Move with given `torque`              | `float`   |
 | `motor.speed(speed)`  | Move with given `speed` (m/s)         | `float`   |
 | `motor.off()`         | Turn motor off (idle state)           |           |
+
+## ODrive Wheels
+
+The ODrive wheels module combines to ODrive motors and provides odometry and steering for differential wheeled robots.
+
+| Constructor                                     | Description              | Arguments                |
+| ----------------------------------------------- | ------------------------ | ------------------------ |
+| `wheels = ODriveWheels(left_motor, left_motor)` | Two ODrive motor modules | two ODrive motor modules |
+
+| Properties             | Description           | Data type |
+| ---------------------- | --------------------- | --------- |
+| `wheels.width`         | wheel distance (m)    | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)   | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s) | `float`   |
+
+| Methods                         | Description                                     | Arguments        |
+| ------------------------------- | ----------------------------------------------- | ---------------- |
+| `wheels.power(left, right)`     | Move with torque per wheel                      | `float`, `float` |
+| `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
+| `wheels.off()`                  | Turn both motors off (idle state)               |                  |
 
 ## RMD Motor
 

@@ -5,6 +5,7 @@
 #include "driver/gpio.h"
 #include "input.h"
 #include "odrive_motor.h"
+#include "odrive_wheels.h"
 #include "output.h"
 #include "proxy.h"
 #include "rmd_motor.h"
@@ -55,6 +56,21 @@ Module *Module::create(const std::string type, const std::string name, const std
         Can *can = (Can *)module;
         uint32_t can_id = arguments[1]->evaluate_integer();
         return new ODriveMotor(name, can, can_id);
+    } else if (type == "ODriveWheels") {
+        Module::expect(arguments, 2, identifier, identifier);
+        std::string left_name = arguments[0]->evaluate_identifier();
+        std::string right_name = arguments[1]->evaluate_identifier();
+        Module *left_module = Global::get_module(left_name);
+        Module *right_module = Global::get_module(right_name);
+        if (left_module->type != odrive_motor) {
+            throw std::runtime_error("module \"" + left_name + "\" is no ODrive motor");
+        }
+        if (right_module->type != odrive_motor) {
+            throw std::runtime_error("module \"" + right_name + "\" is no ODrive motor");
+        }
+        ODriveMotor *left_motor = (ODriveMotor *)left_module;
+        ODriveMotor *right_motor = (ODriveMotor *)right_module;
+        return new ODriveWheels(name, left_motor, right_motor);
     } else if (type == "RmdMotor") {
         Module::expect(arguments, 2, identifier, integer);
         std::string can_name = arguments[0]->evaluate_identifier();

@@ -1,5 +1,4 @@
 #include "odrive_motor.h"
-
 #include <cstring>
 
 ODriveMotor::ODriveMotor(const std::string name, Can *const can, const uint32_t can_id)
@@ -36,21 +35,13 @@ void ODriveMotor::call(const std::string method_name, const std::vector<const Ex
             this->properties.at("position")->number_value / this->properties.at("m_per_tick")->number_value;
     } else if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
-        this->set_mode(8, 1, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_TORQUE_CONTROL, INPUT_MODE_PASSTHROUGH
-        uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-        float power = arguments[0]->evaluate_number();
-        std::memcpy(data, &power, 4);
-        this->can->send(this->can_id + 0x00e, data); // "Set Input Torque"
+        this->power(arguments[0]->evaluate_number());
     } else if (method_name == "speed") {
         Module::expect(arguments, 1, numbery);
-        this->set_mode(8, 2, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_VELOCITY_CONTROL, INPUT_MODE_PASSTHROUGH
-        uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-        float vel = arguments[0]->evaluate_number() / this->properties["m_per_tick"]->number_value;
-        std::memcpy(data, &vel, 4);
-        this->can->send(this->can_id + 0x00d, data); // "Set Input Vel"
+        this->speed(arguments[0]->evaluate_number());
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
-        this->set_mode(1); // AXIS_STATE_IDLE
+        this->off();
     } else {
         Module::call(method_name, arguments);
     }
@@ -65,4 +56,27 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
             (tick - this->properties.at("tick_offset")->number_value) * this->properties.at("m_per_tick")->number_value;
     }
     }
+}
+
+void ODriveMotor::power(const float torque) {
+    this->set_mode(8, 1, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_TORQUE_CONTROL, INPUT_MODE_PASSTHROUGH
+    uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    std::memcpy(data, &torque, 4);
+    this->can->send(this->can_id + 0x00e, data); // "Set Input Torque"
+}
+
+void ODriveMotor::speed(const float speed) {
+    this->set_mode(8, 2, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_VELOCITY_CONTROL, INPUT_MODE_PASSTHROUGH
+    uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    float vel = speed / this->properties.at("m_per_tick")->number_value;
+    std::memcpy(data, &vel, 4);
+    this->can->send(this->can_id + 0x00d, data); // "Set Input Vel"
+}
+
+void ODriveMotor::off() {
+    this->set_mode(1); // AXIS_STATE_IDLE
+}
+
+double ODriveMotor::get_position() {
+    return this->properties.at("position")->number_value;
 }

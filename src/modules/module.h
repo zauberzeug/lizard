@@ -14,6 +14,7 @@ enum ModuleType {
     can,
     serial,
     odrive_motor,
+    odrive_wheels,
     rmd_motor,
     roboclaw,
     roboclaw_motor,
