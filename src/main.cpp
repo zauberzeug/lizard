@@ -389,10 +389,9 @@ void app_main() {
     printf("Ready.\n");
 
     try {
-        assert(Global::variables.size() == number_of_module_types);
         Global::add_module("core", core_module = new Core("core"));
     } catch (const std::runtime_error &e) {
-        echo(all, text, "error while initializing global state variables and modules: %s", e.what());
+        echo(all, text, "error while initializing core module: %s", e.what());
         exit(1);
     }
 

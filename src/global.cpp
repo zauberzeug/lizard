@@ -4,17 +4,7 @@
 std::map<const std::string, Module *> Global::modules;
 std::map<const std::string, Routine *> Global::routines;
 std::list<Rule *> Global::rules;
-std::map<const std::string, Variable *> Global::variables{
-    {"Core", new IdentifierVariable("Core")},
-    {"Input", new IdentifierVariable("Input")},
-    {"Output", new IdentifierVariable("Output")},
-    {"Can", new IdentifierVariable("Can")},
-    {"Serial", new IdentifierVariable("Serial")},
-    {"RmdMotor", new IdentifierVariable("RmdMotor")},
-    {"RoboClaw", new IdentifierVariable("RoboClaw")},
-    {"RoboClawMotor", new IdentifierVariable("RoboClawMotor")},
-    {"Proxy", new IdentifierVariable("Proxy")},
-};
+std::map<const std::string, Variable *> Global::variables;
 
 Module *Global::get_module(const std::string module_name) {
     if (!modules.count(module_name)) {
