@@ -10,11 +10,6 @@ ODriveMotor::ODriveMotor(const std::string name, Can *const can, const uint32_t 
     this->can->subscribe(this->can_id + 0x009, this);
 }
 
-void ODriveMotor::step() {
-    this->can->send(this->can_id + 0x009, 0, 0, 0, 0, 0, 0, 0, 0, true);
-    Module::step();
-}
-
 void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, const uint8_t input_mode) {
     if (this->axis_state != state) {
         this->can->send(this->can_id + 0x007, state, 0, 0, 0, 0, 0, 0, 0);

@@ -15,7 +15,6 @@ private:
 
 public:
     ODriveMotor(const std::string name, Can *const can, const uint32_t can_id);
-    void step();
     void call(const std::string method_name, const std::vector<const Expression *> arguments);
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
     void power(const float torque);
