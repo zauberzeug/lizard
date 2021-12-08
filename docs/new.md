@@ -304,6 +304,7 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | `motor.position`    | Motor position (meters) | `float`   |
 | `motor.tick_offset` | Encoder tick offset     | `float`   |
 | `motor.m_per_tick`  | Meters per encoder tick | `float`   |
+| `motor.reversed`    | Reverse motor direction | `bool`    |
 
 | Methods               | Description                           | Arguments |
 | --------------------- | ------------------------------------- | --------- |
