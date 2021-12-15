@@ -26,6 +26,9 @@ void Input::call(const std::string method_name, const std::vector<const Expressi
     } else if (method_name == "pulldown") {
         Module::expect(arguments, 0);
         gpio_set_pull_mode(this->number, GPIO_PULLDOWN_ONLY);
+    } else if (method_name == "pulloff") {
+        Module::expect(arguments, 0);
+        gpio_set_pull_mode(this->number, GPIO_FLOATING);
     } else {
         Module::call(method_name, arguments);
     }

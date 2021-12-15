@@ -257,6 +257,7 @@ The input module is associated with a digital input pin that is be connected to 
 | `input.get()`      | Output the current level           |
 | `input.pullup()`   | Add an internal pull-up resistor   |
 | `input.pulldown()` | Add an internal pull-down resistor |
+| `input.pulloff()`  | Remove internal pull resistor      |
 
 ## Output
 
