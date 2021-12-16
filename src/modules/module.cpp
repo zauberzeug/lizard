@@ -125,10 +125,10 @@ void Module::step() {
     }
     if (this->broadcast) {
         static char buffer[1024];
-        for (auto const &item : this->properties) {
+        for (auto const &[property_name, property] : this->properties) {
             int pos = 0;
-            pos += sprintf(&buffer[pos], "%s.%s = ", this->name.c_str(), item.first.c_str());
-            pos += item.second->print_to_buffer(&buffer[pos]);
+            pos += sprintf(&buffer[pos], "%s.%s = ", this->name.c_str(), property_name.c_str());
+            pos += property->print_to_buffer(&buffer[pos]);
             echo(all, code, buffer);
         }
     }
