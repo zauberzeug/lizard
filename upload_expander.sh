@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 echo "Configuring pins..."
-echo 'g13 = Output()' > /dev/ttyTHS1
-echo 'g14 = Output()' > /dev/ttyTHS1
+echo 'g13 = Output(13)' > /dev/ttyTHS1
+echo 'g14 = Output(14)' > /dev/ttyTHS1
 
 echo "Bringing microcontroller into flash mode..."
 echo 'g13.off()' > /dev/ttyTHS1
