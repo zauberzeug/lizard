@@ -406,11 +406,11 @@ void app_main() {
         process_uart(UART_NUM_0);
         process_uart(UART_NUM_1);
 
-        for (auto const &item : Global::modules) {
+        for (auto const &[module_name, module] : Global::modules) {
             try {
-                item.second->step();
+                module->step();
             } catch (const std::runtime_error &e) {
-                echo(all, text, "error in module \"%s\": %s", item.first.c_str(), e.what());
+                echo(all, text, "error in module \"%s\": %s", module_name.c_str(), e.what());
             }
         }
 
@@ -425,11 +425,11 @@ void app_main() {
             }
         }
 
-        for (auto const &item : Global::routines) {
+        for (auto const &[routine_name, routine] : Global::routines) {
             try {
-                item.second->step();
+                routine->step();
             } catch (const std::runtime_error &e) {
-                echo(all, text, "error in routine \"%s\": %s", item.first.c_str(), e.what());
+                echo(all, text, "error in routine \"%s\": %s", routine_name.c_str(), e.what());
             }
         }
 
