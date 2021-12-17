@@ -109,7 +109,7 @@ void RmdMotor::call(const std::string method_name, const std::vector<const Expre
         this->send_and_wait(this->can_id, 0x80, 0, 0, 0, 0, 0, 0, 0);
     } else if (method_name == "hold") {
         Module::expect(arguments, 0);
-        int32_t position = this->properties.at("position")->number_value * 100;
+        int32_t position = this->properties.at("position")->number_value * 100 * this->properties.at("ratio")->number_value;
         this->send_and_wait(this->can_id, 0xa3, 0,
                             0,
                             0,
