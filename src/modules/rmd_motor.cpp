@@ -90,7 +90,7 @@ void RmdMotor::call(const std::string method_name, const std::vector<const Expre
         } else {
             Module::expect(arguments, 2, numbery, numbery);
             int32_t position = arguments[0]->evaluate_number() * 100 * this->properties.at("ratio")->number_value;
-            uint16_t speed = arguments[1]->evaluate_number() * 100 * this->properties.at("ratio")->number_value;
+            uint16_t speed = arguments[1]->evaluate_number() * this->properties.at("ratio")->number_value;
             this->send_and_wait(this->can_id, 0xa4, 0,
                                 *((uint8_t *)(&speed) + 0),
                                 *((uint8_t *)(&speed) + 1),
