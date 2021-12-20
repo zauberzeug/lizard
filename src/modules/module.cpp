@@ -4,6 +4,7 @@
 #include "can.h"
 #include "driver/gpio.h"
 #include "input.h"
+#include "linear_motor.h"
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
 #include "output.h"
@@ -46,6 +47,13 @@ Module *Module::create(const std::string type, const std::string name, const std
         gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
         long baud_rate = arguments[2]->evaluate_integer();
         return new Can(name, rx_pin, tx_pin, baud_rate);
+    } else if (type == "LinearMotor") {
+        Module::expect(arguments, 4, integer, integer, integer, integer);
+        gpio_num_t move_in = (gpio_num_t)arguments[0]->evaluate_integer();
+        gpio_num_t move_out = (gpio_num_t)arguments[1]->evaluate_integer();
+        gpio_num_t end_in = (gpio_num_t)arguments[2]->evaluate_integer();
+        gpio_num_t end_out = (gpio_num_t)arguments[3]->evaluate_integer();
+        return new LinearMotor(name, move_in, move_out, end_in, end_out);
     } else if (type == "ODriveMotor") {
         Module::expect(arguments, 2, identifier, integer);
         std::string can_name = arguments[0]->evaluate_identifier();

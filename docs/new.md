@@ -292,6 +292,20 @@ The serial module allows communicating with peripherals via the specified connec
 | ------------------------------------ | ---------------------------------- | --------- |
 | `serial = Serial(rx, tx, baud, num)` | RX/TX pins, baud rate, UART number | 4x `int`  |
 
+## Linear motor
+
+This module controls a linear actuator via two output pins (move in, move out) and two input pins reading two limit switches (end in, end out).
+
+| Constructor                                               | Description                           | Arguments |
+| --------------------------------------------------------- | ------------------------------------- | --------- |
+| `motor = LinearMotor(move_in, move_out, end_in, end_out)` | motor control pins and limit switches | 4x `int`  |
+
+| Methods        | Description |
+| -------------- | ----------- |
+| `motor.in()`   | Move in     |
+| `motor.out()`  | Move out    |
+| `motor.stop()` | Stop motor  |
+
 ## ODrive Motor
 
 The ODrive motor module controls a motor using an [ODrive motor controller](https://odriverobotics.com/).
