@@ -17,8 +17,19 @@ def send(line):
 
 with serial.Serial(usb_path, baudrate=115200, timeout=1.0) as port:
     send('!-')
+    expander = False
     with open(txt_path) as f:
         for line in f.read().splitlines():
-            send(f'!+{line}')
+            if line == '---':
+                expander = True
+                send('!>!-')
+            else:
+                if expander:
+                    send(f'!>!+{line}')
+                else:
+                    send(f'!+{line}')
+    if expander:
+        send('!>!.')
+        send('!>core.restart()')
     send('!.')
     send('core.restart()')
