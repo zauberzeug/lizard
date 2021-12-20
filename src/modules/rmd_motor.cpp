@@ -35,10 +35,11 @@ void RmdMotor::step() {
 
     this->send_and_wait(this->can_id, 0x92, 0, 0, 0, 0, 0, 0, 0);
     this->send_and_wait(this->can_id, 0x9c, 0, 0, 0, 0, 0, 0, 0);
-    if (this->leader) {
+    if (this->map_leader) {
         double own_position = this->properties.at("position")->number_value;
-        double leader_position = this->leader->properties.at("position")->number_value;
-        double target_speed = (leader_position - own_position - leader_offset) / seconds_per_step;
+        double leader_position = this->map_leader->properties.at("position")->number_value;
+        double target_position = leader_position * this->map_scale + this->map_offset;
+        double target_speed = (target_position - own_position) / seconds_per_step;
         int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;
         this->send_and_wait(this->can_id, 0xa2, 0,
                             0,
@@ -117,19 +118,51 @@ void RmdMotor::call(const std::string method_name, const std::vector<const Expre
                             *((uint8_t *)(&position) + 1),
                             *((uint8_t *)(&position) + 2),
                             *((uint8_t *)(&position) + 3));
-    } else if (method_name == "follow") {
-        Module::expect(arguments, 1, identifier);
+    } else if (method_name == "map") {
+        if (arguments.size() < 1 || arguments[0]->type != identifier) {
+            throw std::runtime_error("expecting at least 1 identifier argument");
+        }
         std::string other_name = arguments[0]->evaluate_identifier();
         const Module *const other = Global::get_module(other_name);
         if (other->type != rmd_motor) {
             throw std::runtime_error("module \"" + other_name + "\" is no RMD motor");
         }
-        this->leader = (const RmdMotor *)other;
-        this->leader_offset =
-            this->leader->properties.at("position")->number_value -
-            this->properties.at("position")->number_value;
-    } else if (method_name == "unfollow") {
-        this->leader = nullptr;
+        this->map_leader = (const RmdMotor *)other;
+        switch (arguments.size()) {
+        case 1:
+            Module::expect(arguments, 1, identifier);
+            this->map_offset =
+                this->properties.at("position")->number_value -
+                this->map_leader->properties.at("position")->number_value;
+            this->map_scale = 1;
+            break;
+        case 2:
+            Module::expect(arguments, 2, identifier, numbery);
+            this->map_scale = arguments[1]->evaluate_number();
+            this->map_offset =
+                this->properties.at("position")->number_value -
+                this->map_leader->properties.at("position")->number_value * this->map_scale;
+            break;
+        case 3:
+            Module::expect(arguments, 3, identifier, numbery, numbery);
+            this->map_scale = arguments[1]->evaluate_number();
+            this->map_offset = arguments[2]->evaluate_number();
+            break;
+        case 5: {
+            Module::expect(arguments, 5, identifier, numbery, numbery, numbery, numbery);
+            double a = arguments[1]->evaluate_number();
+            double b = arguments[2]->evaluate_number();
+            double c = arguments[3]->evaluate_number();
+            double d = arguments[4]->evaluate_number();
+            this->map_scale = (d - c) / (b - a);
+            this->map_offset = c - a * (d - c) / (b - a);
+            break;
+        }
+        default:
+            throw std::runtime_error("unexpected number of arguments");
+        }
+    } else if (method_name == "unmap") {
+        this->map_leader = nullptr;
     } else if (method_name == "get_health") {
         Module::expect(arguments, 0);
         this->send_and_wait(this->can_id, 0x9a, 0, 0, 0, 0, 0, 0, 0);

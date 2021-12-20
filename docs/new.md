@@ -349,23 +349,27 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.torque`   | Current torque                                | `float`   |
 | `rmd.speed`    | Current speed                                 | `float`   |
 
-| Methods                    | Description                                               | Arguments        |
-| -------------------------- | --------------------------------------------------------- | ---------------- |
-| `rmd.power(torque)`        | Move with given `torque` (-32..32 A)                      | `float`          |
-| `rmd.speed(speed)`         | Move with given `speed` (deg/s)                           | `float`          |
-| `rmd.position(pos)`        | Move to and hold at `pos` (deg)                           | `float`          |
-| `rmd.position(pos, speed)` | Move to and hold at `pos` (deg) with max. `speed` (deg/s) | `float`, `float` |
-| `rmd.stop()`               | Stop motor (but keep operating state)                     |                  |
-| `rmd.resume()`             | Resume motor (continue in state from before stop command) |                  |
-| `rmd.off()`                | Turn motor off (clear operating state)                    |                  |
-| `rmd.hold()`               | Hold current position                                     |                  |
-| `rmd.follow(leader)`       | Follow the position of another RMD motor                  | RMD module       |
-| `rmd.get_health()`         | Print temperature (C), voltage (V) and error code         |                  |
-| `rmd.get_pid()`            | Print PID parameters Kp/Ki for position/speed/torque loop |                  |
-| `rmd.get_acceleration()`   | Print acceleration setting                                |                  |
-| `rmd.set_acceleration()`   | Set acceleration                                          | `int`            |
-| `rmd.clear_errors()`       | Clear motor error                                         |                  |
-| `rmd.zero()`               | Write position to ROM as zero position (see below)        |                  |
+| Methods                       | Description                                               | Arguments              |
+| ----------------------------- | --------------------------------------------------------- | ---------------------- |
+| `rmd.power(torque)`           | Move with given `torque` (-32..32 A)                      | `float`                |
+| `rmd.speed(speed)`            | Move with given `speed` (deg/s)                           | `float`                |
+| `rmd.position(pos)`           | Move to and hold at `pos` (deg)                           | `float`                |
+| `rmd.position(pos, speed)`    | Move to and hold at `pos` (deg) with max. `speed` (deg/s) | `float`, `float`       |
+| `rmd.stop()`                  | Stop motor (but keep operating state)                     |                        |
+| `rmd.resume()`                | Resume motor (continue in state from before stop command) |                        |
+| `rmd.off()`                   | Turn motor off (clear operating state)                    |                        |
+| `rmd.hold()`                  | Hold current position                                     |                        |
+| `rmd.map(leader)`             | Map another RMD with current offset and scale 1           | RMD module             |
+| `rmd.map(leader, m)`          | Map another RMD with current offset and scale `m`         | RMD module, 1x `float` |
+| `rmd.map(leader, m, n)`       | Map another RMD with offset `n` and scale `m`             | RMD module, 2x `float` |
+| `rmd.map(leader, a, b, c, d)` | Map another RMD from interval (a, b) to (c, d)            | RMD module, 4x `float` |
+| `rmd.unmap()`                 | Stop mapping                                              |                        |
+| `rmd.get_health()`            | Print temperature (C), voltage (V) and error code         |                        |
+| `rmd.get_pid()`               | Print PID parameters Kp/Ki for position/speed/torque loop |                        |
+| `rmd.get_acceleration()`      | Print acceleration setting                                |                        |
+| `rmd.set_acceleration()`      | Set acceleration                                          | `int`                  |
+| `rmd.clear_errors()`          | Clear motor error                                         |                        |
+| `rmd.zero()`                  | Write position to ROM as zero position (see below)        |                        |
 
 Note that the `zero()` method should be used with care!
 In contrast to other commands it blocks the main loop for up to 200 ms and requires restarting the motor to take effect.

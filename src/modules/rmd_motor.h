@@ -9,8 +9,9 @@ private:
     Can *const can;
     uint8_t last_msg = 0;
 
-    const RmdMotor *leader = nullptr;
-    double leader_offset = 0;
+    const RmdMotor *map_leader = nullptr;
+    double map_scale = 1;
+    double map_offset = 0;
     unsigned long int last_step_time = 0;
 
     void send_and_wait(const uint32_t id,
