@@ -28,10 +28,10 @@ void echo(const OutputTarget target, const OutputType type, const char *format, 
     for (unsigned int i = 0; i < pos; ++i) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
-            if (target & uart0) {
+            if (target & up) {
                 printf("%s@%02x\n", &buffer[start], checksum);
             }
-            if (target & uart1) {
+            if (target & down) {
                 const int check_len = std::sprintf(check_buffer, "@%02x\n", checksum);
                 uart_write_bytes(UART_NUM_1, &buffer[start], i - start);
                 uart_write_bytes(UART_NUM_1, check_buffer, check_len);

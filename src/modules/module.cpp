@@ -128,7 +128,7 @@ void Module::step() {
     if (this->output_on) {
         const std::string output = this->get_output();
         if (!output.empty()) {
-            echo(all, text, "%s %s", this->name.c_str(), output.c_str());
+            echo(up, text, "%s %s", this->name.c_str(), output.c_str());
         }
     }
     if (this->broadcast) {
@@ -137,7 +137,7 @@ void Module::step() {
             int pos = 0;
             pos += sprintf(&buffer[pos], "%s.%s = ", this->name.c_str(), property_name.c_str());
             pos += property->print_to_buffer(&buffer[pos]);
-            echo(all, code, buffer);
+            echo(up, code, buffer);
         }
     }
 }

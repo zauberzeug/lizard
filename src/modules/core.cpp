@@ -30,7 +30,7 @@ void Core::call(const std::string method_name, const std::vector<const Expressio
             }
             pos += argument->print_to_buffer(&buffer[pos]);
         }
-        echo(all, text, buffer);
+        echo(up, text, buffer);
     } else if (method_name == "output") {
         Module::expect(arguments, 1, string);
         this->output_list.clear();

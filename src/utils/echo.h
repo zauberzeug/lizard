@@ -1,9 +1,9 @@
 #pragma once
 
 enum OutputTarget {
-    uart0 = 1,
-    uart1 = 2,
-    all = 3,
+    up = 1,
+    down = 2,
+    both = 3,
 };
 
 enum OutputType {

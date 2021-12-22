@@ -169,7 +169,7 @@ void process_tree(owl_tree *const tree) {
             const Expression *const expression = compile_expression(statement.expression);
             static char buffer[256];
             expression->print_to_buffer(buffer);
-            echo(all, text, buffer);
+            echo(up, text, buffer);
             delete expression;
         } else if (!statement.constructor.empty) {
             const struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
@@ -258,7 +258,7 @@ void process_tree(owl_tree *const tree) {
 void process_lizard(const char *line) {
     const bool debug = core_module->get_property("debug")->boolean_value;
     if (debug) {
-        echo(all, text, ">> %s", line);
+        echo(up, text, ">> %s", line);
         tic();
     }
     struct owl_tree *const tree = owl_tree_create_from_string(line);
@@ -268,21 +268,21 @@ void process_lizard(const char *line) {
     struct source_range range;
     switch (owl_tree_get_error(tree, &range)) {
     case ERROR_INVALID_FILE:
-        echo(all, text, "error: invalid file");
+        echo(up, text, "error: invalid file");
         break;
     case ERROR_INVALID_OPTIONS:
-        echo(all, text, "error: invalid options");
+        echo(up, text, "error: invalid options");
         break;
     case ERROR_INVALID_TOKEN:
-        echo(all, text, "error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
+        echo(up, text, "error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
              std::string(line, range.start, range.end - range.start).c_str());
         break;
     case ERROR_UNEXPECTED_TOKEN:
-        echo(all, text, "error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
+        echo(up, text, "error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
              std::string(line, range.start, range.end - range.start).c_str());
         break;
     case ERROR_MORE_INPUT_NEEDED:
-        echo(all, text, "error: more input needed at range %zu %zu", range.start, range.end);
+        echo(up, text, "error: more input needed at range %zu %zu", range.start, range.end);
         break;
     default:
         if (debug) {
@@ -316,10 +316,10 @@ void process_line(const char *line, const int len, const uart_port_t uart_num) {
             process_lizard(line + 2);
             break;
         case '"':
-            echo(uart_num == UART_NUM_1 ? uart0 : all, text, line + 2);
+            echo(up, text, line + 2);
             break;
         case '>':
-            echo(uart1, raw, line + 2);
+            echo(down, raw, line + 2);
             break;
         default:
             throw std::runtime_error("unrecognized control command");
@@ -361,7 +361,7 @@ void process_uart(const uart_port_t uart_num) {
         try {
             process_line(input, len, uart_num);
         } catch (const std::runtime_error &e) {
-            echo(all, text, "error while processing line from UART %d: %s", uart_num, e.what());
+            echo(up, text, "error while processing line from UART %d: %s", uart_num, e.what());
         }
     }
 }
@@ -391,7 +391,7 @@ void app_main() {
     try {
         Global::add_module("core", core_module = new Core("core"));
     } catch (const std::runtime_error &e) {
-        echo(all, text, "error while initializing core module: %s", e.what());
+        echo(up, text, "error while initializing core module: %s", e.what());
         exit(1);
     }
 
@@ -399,7 +399,7 @@ void app_main() {
         Storage::init();
         process_lizard(Storage::startup.c_str());
     } catch (const std::runtime_error &e) {
-        echo(all, text, "error while loading startup script: %s", e.what());
+        echo(up, text, "error while loading startup script: %s", e.what());
     }
 
     while (true) {
@@ -410,7 +410,7 @@ void app_main() {
             try {
                 module->step();
             } catch (const std::runtime_error &e) {
-                echo(all, text, "error in module \"%s\": %s", module_name.c_str(), e.what());
+                echo(up, text, "error in module \"%s\": %s", module_name.c_str(), e.what());
             }
         }
 
@@ -421,7 +421,7 @@ void app_main() {
                 }
                 rule->routine->step();
             } catch (const std::runtime_error &e) {
-                echo(all, text, "error in rule: %s", e.what());
+                echo(up, text, "error in rule: %s", e.what());
             }
         }
 
@@ -429,7 +429,7 @@ void app_main() {
             try {
                 routine->step();
             } catch (const std::runtime_error &e) {
-                echo(all, text, "error in routine \"%s\": %s", routine_name.c_str(), e.what());
+                echo(up, text, "error in routine \"%s\": %s", routine_name.c_str(), e.what());
             }
         }
 
