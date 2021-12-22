@@ -297,6 +297,17 @@ void process_lizard(const char *line) {
     owl_tree_destroy(tree);
 }
 
+void deactivate_uart1() {
+    uart_driver_delete(UART_NUM_1);
+
+    gpio_reset_pin(GPIO_NUM_26);
+    gpio_reset_pin(GPIO_NUM_27);
+    gpio_set_direction(GPIO_NUM_26, GPIO_MODE_INPUT);
+    gpio_set_direction(GPIO_NUM_27, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(GPIO_NUM_26, GPIO_FLOATING);
+    gpio_set_pull_mode(GPIO_NUM_27, GPIO_FLOATING);
+}
+
 void process_line(const char *line, const int len, const uart_port_t uart_num) {
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
@@ -321,6 +332,9 @@ void process_line(const char *line, const int len, const uart_port_t uart_num) {
         case '>':
             echo(down, raw, line + 2);
             break;
+        case '~':
+            deactivate_uart1();
+            break;
         default:
             throw std::runtime_error("unrecognized control command");
         }
@@ -335,6 +349,10 @@ void process_line(const char *line, const int len, const uart_port_t uart_num) {
 
 void process_uart(const uart_port_t uart_num) {
     static char input[BUFFER_SIZE];
+
+    if (!uart_is_driver_installed(uart_num)) {
+        return;
+    }
 
     while (true) {
         int pos = uart_pattern_get_pos(uart_num);
