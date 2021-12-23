@@ -62,7 +62,7 @@ void Can::step() {
                     pos += std::sprintf(&buffer[pos], ",%02x", message.data[i]);
                 }
             }
-            echo(all, text, buffer);
+            echo(up, text, buffer);
         }
     }
     Module::step();

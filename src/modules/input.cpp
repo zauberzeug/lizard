@@ -19,7 +19,7 @@ void Input::step() {
 void Input::call(const std::string method_name, const std::vector<const Expression *> arguments) {
     if (method_name == "get") {
         Module::expect(arguments, 0);
-        echo(all, text, "%s %d", this->name.c_str(), gpio_get_level(this->number));
+        echo(up, text, "%s %d", this->name.c_str(), gpio_get_level(this->number));
     } else if (method_name == "pullup") {
         Module::expect(arguments, 0);
         gpio_set_pull_mode(this->number, GPIO_PULLUP_ONLY);

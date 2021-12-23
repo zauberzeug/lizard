@@ -182,6 +182,7 @@ Lines with a leading `!` can indicate one of the following control commands.
 | `!!abc` | Interpret `abc` as Lizard code                           |
 | `!"abc` | Print `abc` to the command-line                          |
 | `!>abc` | Send `abc` via UART1 to another microcontroller          |
+| `!~`    | Deactivate UART1 and set pins floating                   |
 
 Note that the commands `!+`, `!-` and `!?` affect the startup script in RAM, which is only written to non-volatile storage with the `!.` command.
 

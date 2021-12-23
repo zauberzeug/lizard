@@ -213,7 +213,7 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         uint16_t voltage = 0;
         std::memcpy(&voltage, data + 3, 2);
         uint8_t error = data[7];
-        echo(all, text, "%s health %d %.1f %d", this->name.c_str(), temperature, 0.1 * voltage, error);
+        echo(up, text, "%s health %d %.1f %d", this->name.c_str(), temperature, 0.1 * voltage, error);
         break;
     }
     case 0x9c: {
@@ -226,14 +226,14 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         break;
     }
     case 0x30: {
-        echo(all, text, "%s pid %3d %3d %3d %3d %3d %3d",
+        echo(up, text, "%s pid %3d %3d %3d %3d %3d %3d",
              this->name.c_str(), data[2], data[3], data[4], data[5], data[6], data[7]);
         break;
     }
     case 0x33: {
         int32_t acceleration = 0;
         std::memcpy(&acceleration, data + 4, 4);
-        echo(all, text, "%s acceleration %d", this->name.c_str(), acceleration);
+        echo(up, text, "%s acceleration %d", this->name.c_str(), acceleration);
         break;
     }
     }
