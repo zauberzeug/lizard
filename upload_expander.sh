@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
 echo "Bringing microcontroller into flash mode..."
+echo 'en = Output(14)' > /dev/ttyTHS1
+echo 'g0 = Output(25)' > /dev/ttyTHS1
+echo 'g0.off()' > /dev/ttyTHS1
+echo 'en.off()' > /dev/ttyTHS1
+echo 'en.on()' > /dev/ttyTHS1
 echo '!~' > /dev/ttyTHS1
 
 echo "Flashing microcontroller..."
