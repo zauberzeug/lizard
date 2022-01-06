@@ -10,9 +10,9 @@ fi
 if [[ "$1" == "-e" || "$1" == "--expander" ]]
 then
     shift
-    remote_command="./upload_ths1.sh"
-else
     remote_command="./upload_expander.sh"
+else
+    remote_command="./upload_ths1.sh"
 fi
 
 host=$1
