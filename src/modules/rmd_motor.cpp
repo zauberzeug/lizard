@@ -157,6 +157,9 @@ void RmdMotor::call(const std::string method_name, const std::vector<const Expre
             double b = arguments[2]->evaluate_number();
             double c = arguments[3]->evaluate_number();
             double d = arguments[4]->evaluate_number();
+            if (a == b) {
+                throw std::runtime_error("invalid mapping (leader interval is empty)");
+            }
             this->map_scale = (d - c) / (b - a);
             this->map_offset = c - a * (d - c) / (b - a);
             break;
@@ -164,6 +167,8 @@ void RmdMotor::call(const std::string method_name, const std::vector<const Expre
         default:
             throw std::runtime_error("unexpected number of arguments");
         }
+        echo(up, text, "new mapping: %s = %f * %s %+f",
+             this->name.c_str(), this->map_scale, this->map_leader->name.c_str(), this->map_offset);
     } else if (method_name == "unmap") {
         this->map_leader = nullptr;
     } else if (method_name == "get_health") {

@@ -391,6 +391,8 @@ Note that the `zero()` method should be used with care!
 In contrast to other commands it blocks the main loop for up to 200 ms and requires restarting the motor to take effect.
 Furthermore, multiple writes will affect the chip life, thus it is not recommended to use it frequently.
 
+Also note that the mapping interval (`a`, `b`) should not be empty, because the target position for the following motor would be undefined.
+
 ## RoboClaw
 
 The RoboClaw module serves as building block for more complex modules like RoboClaw motors.
