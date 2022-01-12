@@ -67,6 +67,8 @@ void RmdMotor::step() {
 }
 
 void RmdMotor::call(const std::string method_name, const std::vector<const Expression *> arguments) {
+    this->map_leader = nullptr;
+
     if (method_name == "zero") {
         Module::expect(arguments, 0);
         this->send_and_wait(this->can_id, 0x19, 0, 0, 0, 0, 0, 0, 0, 250);
