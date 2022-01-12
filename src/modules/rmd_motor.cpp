@@ -10,6 +10,7 @@ RmdMotor::RmdMotor(const std::string name, Can *const can, const uint8_t motor_i
     this->properties["ratio"] = new NumberVariable(6.0);
     this->properties["torque"] = new NumberVariable();
     this->properties["speed"] = new NumberVariable();
+    this->properties["can_age"] = new NumberVariable();
     can->subscribe(this->can_id, this);
 }
 
@@ -17,15 +18,17 @@ void RmdMotor::send_and_wait(const uint32_t id,
                              const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
                              const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
                              const unsigned long int timeout_ms) {
-    this->last_msg = 0;
+    this->last_msg_id = 0;
     this->can->send(id, d0, d1, d2, d3, d4, d5, d6, d7);
     unsigned long int start = micros();
-    while (this->last_msg != d0 && micros_since(start) < timeout_ms * 1000) {
+    while (this->last_msg_id != d0 && micros_since(start) < timeout_ms * 1000) {
         this->can->step();
     }
 }
 
 void RmdMotor::step() {
+    this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
+
     if (this->last_step_time == 0) {
         this->last_step_time = micros();
         return;
@@ -237,5 +240,6 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         break;
     }
     }
-    this->last_msg = data[0];
+    this->last_msg_id = data[0];
+    this->last_msg_millis = millis();
 }

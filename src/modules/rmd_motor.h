@@ -7,7 +7,8 @@ class RmdMotor : public Module {
 private:
     const uint32_t can_id;
     Can *const can;
-    uint8_t last_msg = 0;
+    uint8_t last_msg_id = 0;
+    unsigned long int last_msg_millis = 0;
 
     const RmdMotor *map_leader = nullptr;
     double map_scale = 1;
