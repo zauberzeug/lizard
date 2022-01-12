@@ -391,7 +391,11 @@ Note that the `zero()` method should be used with care!
 In contrast to other commands it blocks the main loop for up to 200 ms and requires restarting the motor to take effect.
 Furthermore, multiple writes will affect the chip life, thus it is not recommended to use it frequently.
 
-Also note that the mapping interval (`a`, `b`) should not be empty, because the target position for the following motor would be undefined.
+When mapping the movement of a following motor to a leading motor, the follower uses velocity control to follow the leader.
+The follower's speed is always computed such that it catches up within one loop cycle.
+When the following motor reaches its target position and the computed speed is below 1 degree per second, the follower switches to position control and holds the target position.
+
+The mapping interval (`a`, `b`) should not be empty, because the target position of the following motor would be undefined.
 
 ## RoboClaw
 
