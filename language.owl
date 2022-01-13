@@ -32,7 +32,7 @@ property_assignment = identifier@module_name '.' identifier@property_name '=' ex
 variable_assignment = identifier@variable_name '=' expression
 variable_declaration = datatype identifier@variable_name ('=' expression)?
 rule_definition = 'when' expression@condition '\n'* [ 'then' actions 'end' ]
-routine_definition = identifier@routine_name [ ':=' actions 'end' ]
+routine_definition = 'let' identifier@routine_name [ 'do' actions 'end' ]
 routine_call = identifier@routine_name [ '(' ')' ]
 await_condition = 'await' expression@condition
 await_routine = 'await' identifier@routine_name [ '(' ')' ]

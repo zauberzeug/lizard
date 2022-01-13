@@ -57,7 +57,10 @@ Some module properties are meant to be written to:
 
 Routines have a name and contain a list of actions:
 
-    all_on := green.on(); red.on(); end
+    let all_on do
+        green.on()
+        red.on()
+    end
 
 They can be called similar to module methods:
 
@@ -105,7 +108,7 @@ Like with the corresponding assignment statements, you can assign properties and
 In contrast to statements, actions can _await_ conditions, causing the execution of subsequent actions to wait until the condition is met.
 
     int t
-    blink :=
+    let blink do
         t = core.millis
         led.on()
         await core.millis > t + 1000
