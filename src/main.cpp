@@ -361,16 +361,22 @@ void process_uart(const uart_port_t uart_num) {
         }
 
         int len = uart_read_bytes(uart_num, (uint8_t *)input, pos + 1, 0);
-        if (len >= 4 && input[len - 4] == '@') {
+        int suffix = 0;
+        if (len >= 5 && input[len - 2] == '\r' && input[len - 5] == '@') {
+            suffix = 5;
+        } else if (len >= 4 && input[len - 4] == '@') {
+            suffix = 4;
+        }
+        if (suffix) {
             uint8_t checksum = 0;
-            for (int i = 0; i < len - 4; ++i) {
+            for (int i = 0; i < len - suffix; ++i) {
                 checksum ^= input[i];
             }
-            const std::string hex_number(&input[len - 3], 2);
+            const std::string hex_number(&input[len - suffix + 1], 2);
             if (std::stoi(hex_number, 0, 16) != checksum) {
                 throw std::runtime_error("checksum mismatch");
             }
-            len -= 4;
+            len -= suffix;
         } else {
             len -= 1;
         }
