@@ -107,7 +107,7 @@ double NumberExpression::evaluate_number() const {
     return this->value;
 }
 
-VariableExpression::VariableExpression(const Variable *const variable)
+VariableExpression::VariableExpression(const Variable_ptr variable)
     : Expression(variable->type), variable(variable) {
 }
 

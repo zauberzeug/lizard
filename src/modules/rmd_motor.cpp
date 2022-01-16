@@ -3,14 +3,15 @@
 #include "../utils/echo.h"
 #include "../utils/timing.h"
 #include <cstring>
+#include <memory>
 
 RmdMotor::RmdMotor(const std::string name, Can *const can, const uint8_t motor_id)
     : Module(rmd_motor, name), can_id(0x140 + motor_id), can(can) {
-    this->properties["position"] = new NumberVariable();
-    this->properties["ratio"] = new NumberVariable(6.0);
-    this->properties["torque"] = new NumberVariable();
-    this->properties["speed"] = new NumberVariable();
-    this->properties["can_age"] = new NumberVariable();
+    this->properties["position"] = std::make_shared<NumberVariable>();
+    this->properties["ratio"] = std::make_shared<NumberVariable>(6.0);
+    this->properties["torque"] = std::make_shared<NumberVariable>();
+    this->properties["speed"] = std::make_shared<NumberVariable>();
+    this->properties["can_age"] = std::make_shared<NumberVariable>();
     can->subscribe(this->can_id, this);
 }
 

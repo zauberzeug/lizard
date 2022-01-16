@@ -1,12 +1,13 @@
 #include "input.h"
 #include "../utils/echo.h"
+#include <memory>
 
 Input::Input(const std::string name, const gpio_num_t number)
     : Module(input, name), number(number) {
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_INPUT);
-    this->properties["level"] = new IntegerVariable(gpio_get_level(this->number));
-    this->properties["change"] = new IntegerVariable();
+    this->properties["level"] = std::make_shared<IntegerVariable>(gpio_get_level(this->number));
+    this->properties["change"] = std::make_shared<IntegerVariable>();
 }
 
 void Input::step() {

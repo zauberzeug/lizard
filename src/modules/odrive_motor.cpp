@@ -1,13 +1,14 @@
 #include "odrive_motor.h"
 #include <cstring>
+#include <memory>
 
 ODriveMotor::ODriveMotor(const std::string name, Can *const can, const uint32_t can_id)
     : Module(odrive_motor, name), can_id(can_id),
       can(can) {
-    this->properties["position"] = new NumberVariable();
-    this->properties["tick_offset"] = new NumberVariable();
-    this->properties["m_per_tick"] = new NumberVariable(1.0);
-    this->properties["reversed"] = new BooleanVariable();
+    this->properties["position"] = std::make_shared<NumberVariable>();
+    this->properties["tick_offset"] = std::make_shared<NumberVariable>();
+    this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
+    this->properties["reversed"] = std::make_shared<BooleanVariable>();
     this->can->subscribe(this->can_id + 0x009, this);
 }
 

@@ -136,7 +136,7 @@ std::vector<Action *> compile_actions(const struct owl_ref ref) {
         } else if (!action.variable_assignment.empty) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(action.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
-            Variable *const variable = Global::get_variable(variable_name);
+            const Variable_ptr variable = Global::get_variable(variable_name);
             const Expression_ptr expression = compile_expression(variable_assignment.expression);
             if (variable->type != expression->type) {
                 throw std::runtime_error("type mismatch for variable assignment");
@@ -205,7 +205,7 @@ void process_tree(owl_tree *const tree) {
         } else if (!statement.variable_assignment.empty) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(statement.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
-            Variable *const variable = Global::get_variable(variable_name);
+            const Variable_ptr variable = Global::get_variable(variable_name);
             const Expression_ptr expression = compile_expression(variable_assignment.expression);
             variable->assign(expression);
         } else if (!statement.variable_declaration.empty) {
@@ -214,16 +214,16 @@ void process_tree(owl_tree *const tree) {
             const std::string variable_name = identifier_to_string(variable_declaration.variable_name);
             switch (datatype.type) {
             case PARSED_BOOLEAN:
-                Global::add_variable(variable_name, new BooleanVariable());
+                Global::add_variable(variable_name, std::make_shared<BooleanVariable>());
                 break;
             case PARSED_INTEGER:
-                Global::add_variable(variable_name, new IntegerVariable());
+                Global::add_variable(variable_name, std::make_shared<IntegerVariable>());
                 break;
             case PARSED_NUMBER:
-                Global::add_variable(variable_name, new NumberVariable());
+                Global::add_variable(variable_name, std::make_shared<NumberVariable>());
                 break;
             case PARSED_STRING:
-                Global::add_variable(variable_name, new StringVariable());
+                Global::add_variable(variable_name, std::make_shared<StringVariable>());
                 break;
             default:
                 throw std::runtime_error("invalid data type for variable declaration");

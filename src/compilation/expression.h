@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 
+class Expression;
 using Expression_ptr = std::shared_ptr<Expression>;
 
 class Expression {
@@ -63,10 +64,10 @@ public:
 
 class VariableExpression : public Expression {
 private:
-    const Variable *const variable;
+    const Variable_ptr variable;
 
 public:
-    VariableExpression(const Variable *const variable);
+    VariableExpression(const Variable_ptr variable);
     bool evaluate_boolean() const;
     int64_t evaluate_integer() const;
     double evaluate_number() const;

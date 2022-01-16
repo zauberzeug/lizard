@@ -4,7 +4,7 @@
 std::map<const std::string, Module *> Global::modules;
 std::map<const std::string, Routine *> Global::routines;
 std::list<Rule *> Global::rules;
-std::map<const std::string, Variable *> Global::variables;
+std::map<const std::string, Variable_ptr> Global::variables;
 
 Module *Global::get_module(const std::string module_name) {
     if (!modules.count(module_name)) {
@@ -20,7 +20,7 @@ Routine *Global::get_routine(const std::string routine_name) {
     return routines[routine_name];
 }
 
-Variable *Global::get_variable(const std::string variable_name) {
+Variable_ptr Global::get_variable(const std::string variable_name) {
     if (!variables.count(variable_name)) {
         throw std::runtime_error("unknown variable \"" + variable_name + "\"");
     }
@@ -35,7 +35,7 @@ void Global::add_module(const std::string module_name, Module *const module) {
         throw std::runtime_error("variable \"" + module_name + "\" already exists");
     }
     modules[module_name] = module;
-    variables[module_name] = new IdentifierVariable(module_name);
+    variables[module_name] = std::make_shared<IdentifierVariable>(module_name);
 }
 
 void Global::add_routine(const std::string routine_name, Routine *const routine) {
@@ -45,7 +45,7 @@ void Global::add_routine(const std::string routine_name, Routine *const routine)
     routines[routine_name] = routine;
 }
 
-void Global::add_variable(const std::string variable_name, Variable *const variable) {
+void Global::add_variable(const std::string variable_name, const Variable_ptr variable) {
     if (variables.count(variable_name)) {
         throw std::runtime_error("variable \"" + variable_name + "\" already exists");
     }

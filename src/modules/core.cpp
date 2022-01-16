@@ -3,12 +3,13 @@
 #include "../utils/echo.h"
 #include "../utils/strings.h"
 #include "../utils/timing.h"
+#include <memory>
 #include <stdlib.h>
 
 Core::Core(const std::string name) : Module(core, name) {
-    this->properties["debug"] = new BooleanVariable(false);
-    this->properties["millis"] = new IntegerVariable();
-    this->properties["heap"] = new IntegerVariable();
+    this->properties["debug"] = std::make_shared<BooleanVariable>(false);
+    this->properties["millis"] = std::make_shared<IntegerVariable>();
+    this->properties["heap"] = std::make_shared<IntegerVariable>();
 }
 
 void Core::step() {
@@ -56,7 +57,7 @@ std::string Core::get_output() const {
         if (pos > 0) {
             pos += sprintf(&output_buffer[pos], " ");
         }
-        Variable *property = element.module->get_property(element.property_name);
+        const Variable_ptr property = element.module->get_property(element.property_name);
         switch (property->type) {
         case boolean:
             pos += sprintf(&output_buffer[pos], "%s", property->boolean_value ? "true" : "false");

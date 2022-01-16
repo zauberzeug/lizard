@@ -7,6 +7,9 @@
 class Expression; // NOTE: forward declaration to avoid cyclic include
 using Expression_ptr = std::shared_ptr<Expression>;
 
+class Variable;
+using Variable_ptr = std::shared_ptr<Variable>;
+
 class Variable {
 public:
     const Type type;

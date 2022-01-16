@@ -1,4 +1,5 @@
 #include "roboclaw_motor.h"
+#include <memory>
 
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
@@ -7,7 +8,7 @@ RoboClawMotor::RoboClawMotor(const std::string name, RoboClaw *const roboclaw, c
     if (this->motor_number != motor_number) {
         throw std::runtime_error("illegal motor number");
     }
-    this->properties["position"] = new IntegerVariable();
+    this->properties["position"] = std::make_shared<IntegerVariable>();
 }
 
 void RoboClawMotor::step() {

@@ -12,16 +12,16 @@ class Global {
 public:
     static std::map<const std::string, Module *> modules;
     static std::map<const std::string, Routine *> routines;
-    static std::map<const std::string, Variable *> variables;
+    static std::map<const std::string, Variable_ptr> variables;
     static std::list<Rule *> rules;
 
     static Module *get_module(const std::string module_name);
     static Routine *get_routine(const std::string routine_name);
-    static Variable *get_variable(const std::string variable_name);
+    static Variable_ptr get_variable(const std::string variable_name);
 
     static void add_module(const std::string module_name, Module *const module);
     static void add_routine(const std::string routine_name, Routine *const routine);
-    static void add_variable(const std::string variable_name, Variable *const variable);
+    static void add_variable(const std::string variable_name, const Variable_ptr variable);
     static void add_rule(Rule *rule);
 
     static bool has_module(const std::string module_name);

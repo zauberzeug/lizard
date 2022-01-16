@@ -1,11 +1,12 @@
 #include "odrive_wheels.h"
 #include "../utils/timing.h"
+#include <memory>
 
 ODriveWheels::ODriveWheels(const std::string name, ODriveMotor *const left_motor, ODriveMotor *const right_motor)
     : Module(odrive_wheels, name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties["width"] = new NumberVariable(1);
-    this->properties["linear_speed"] = new NumberVariable();
-    this->properties["angular_speed"] = new NumberVariable();
+    this->properties["width"] = std::make_shared<NumberVariable>(1);
+    this->properties["linear_speed"] = std::make_shared<NumberVariable>();
+    this->properties["angular_speed"] = std::make_shared<NumberVariable>();
 }
 
 void ODriveWheels::step() {

@@ -1,4 +1,5 @@
 #include "linear_motor.h"
+#include <memory>
 
 LinearMotor::LinearMotor(const std::string name,
                          const gpio_num_t move_in,
@@ -14,8 +15,8 @@ LinearMotor::LinearMotor(const std::string name,
     gpio_set_direction(move_out, GPIO_MODE_OUTPUT);
     gpio_set_direction(end_in, GPIO_MODE_INPUT);
     gpio_set_direction(end_out, GPIO_MODE_INPUT);
-    this->properties["in"] = new BooleanVariable(gpio_get_level(this->end_in) == 1);
-    this->properties["out"] = new BooleanVariable(gpio_get_level(this->end_out) == 1);
+    this->properties["in"] = std::make_shared<BooleanVariable>(gpio_get_level(this->end_in) == 1);
+    this->properties["out"] = std::make_shared<BooleanVariable>(gpio_get_level(this->end_out) == 1);
 }
 
 void LinearMotor::step() {

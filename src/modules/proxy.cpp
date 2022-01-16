@@ -1,5 +1,6 @@
 #include "proxy.h"
 #include "driver/uart.h"
+#include <memory>
 
 Proxy::Proxy(const std::string name) : Module(proxy, name) {
 }
@@ -19,7 +20,7 @@ void Proxy::call(const std::string method_name, const std::vector<Expression_ptr
 
 void Proxy::write_property(const std::string property_name, const Expression_ptr expression) {
     if (!this->properties.count(property_name)) {
-        this->properties[property_name] = new Variable(expression->type);
+        this->properties[property_name] = std::make_shared<Variable>(expression->type);
     }
     Module::get_property(property_name)->assign(expression);
 }
