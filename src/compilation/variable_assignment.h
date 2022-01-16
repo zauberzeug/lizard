@@ -7,8 +7,8 @@
 class VariableAssignment : public Action {
 public:
     const Variable_ptr variable;
-    const Expression_ptr expression;
+    const ConstExpression_ptr expression;
 
-    VariableAssignment(const Variable_ptr variable, const Expression_ptr expression);
+    VariableAssignment(const Variable_ptr variable, const ConstExpression_ptr expression);
     bool run();
 };

@@ -24,6 +24,7 @@ enum ModuleType {
 
 class Module;
 using Module_ptr = std::shared_ptr<Module>;
+using ConstModule_ptr = std::shared_ptr<const Module>;
 
 class Module {
 private:
@@ -39,13 +40,13 @@ public:
     const std::string name;
 
     Module(const ModuleType type, const std::string name);
-    static void expect(const std::vector<Expression_ptr> arguments, const int num, ...);
-    static Module_ptr create(const std::string type, const std::string name, const std::vector<Expression_ptr> arguments);
+    static void expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...);
+    static Module_ptr create(const std::string type, const std::string name, const std::vector<ConstExpression_ptr> arguments);
     virtual void step();
-    virtual void call(const std::string method_name, const std::vector<Expression_ptr> arguments);
-    void call_with_shadows(const std::string method_name, const std::vector<Expression_ptr> arguments);
+    virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     virtual std::string get_output() const;
     Variable_ptr get_property(const std::string property_name) const;
-    virtual void write_property(const std::string property_name, const Expression_ptr expression);
+    virtual void write_property(const std::string property_name, const ConstExpression_ptr expression);
     virtual void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
 };

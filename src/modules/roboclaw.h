@@ -16,7 +16,7 @@ class RoboClaw : public Module {
     uint16_t crc;
     const uint32_t timeout = 5; // [ticks]
     const uint8_t address;
-    const Serial_ptr serial;
+    const ConstSerial_ptr serial;
 
     enum {
         M1FORWARD = 0,
@@ -114,7 +114,7 @@ class RoboClaw : public Module {
     };
 
 public:
-    RoboClaw(const std::string name, const Serial_ptr serial, const uint8_t address);
+    RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address);
 
     bool ForwardM1(uint8_t speed);
     bool BackwardM1(uint8_t speed);

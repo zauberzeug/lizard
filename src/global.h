@@ -22,7 +22,7 @@ public:
     static void add_module(const std::string module_name, const Module_ptr module);
     static void add_routine(const std::string routine_name, const Routine_ptr routine);
     static void add_variable(const std::string variable_name, const Variable_ptr variable);
-    static void add_rule(Rule_ptr rule);
+    static void add_rule(const Rule_ptr rule);
 
     static bool has_module(const std::string module_name);
     static bool has_routine(const std::string routine_name);

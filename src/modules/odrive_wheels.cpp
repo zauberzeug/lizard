@@ -34,7 +34,7 @@ void ODriveWheels::step() {
     Module::step();
 }
 
-void ODriveWheels::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
+void ODriveWheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "power") {
         Module::expect(arguments, 2, numbery, numbery);
         this->left_motor->power(arguments[0]->evaluate_number());

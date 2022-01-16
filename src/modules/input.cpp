@@ -17,7 +17,7 @@ void Input::step() {
     Module::step();
 }
 
-void Input::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
+void Input::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "get") {
         Module::expect(arguments, 0);
         echo(up, text, "%s %d", this->name.c_str(), gpio_get_level(this->number));

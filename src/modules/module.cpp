@@ -18,7 +18,7 @@
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
 }
 
-void Module::Module::expect(const std::vector<Expression_ptr> arguments, const int num, ...) {
+void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
     if (arguments.size() != num) {
         throw std::runtime_error("expecting " + std::to_string(num) + " arguments, got " + std::to_string(arguments.size()));
     }
@@ -32,7 +32,7 @@ void Module::Module::expect(const std::vector<Expression_ptr> arguments, const i
     va_end(vl);
 }
 
-Module_ptr Module::create(const std::string type, const std::string name, const std::vector<Expression_ptr> arguments) {
+Module_ptr Module::create(const std::string type, const std::string name, const std::vector<ConstExpression_ptr> arguments) {
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
     } else if (type == "Output") {
@@ -142,7 +142,7 @@ void Module::step() {
     }
 }
 
-void Module::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
+void Module::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "mute") {
         Module::expect(arguments, 0);
         this->output_on = false;
@@ -167,7 +167,7 @@ void Module::call(const std::string method_name, const std::vector<Expression_pt
     }
 }
 
-void Module::call_with_shadows(const std::string method_name, const std::vector<Expression_ptr> arguments) {
+void Module::call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     this->call(method_name, arguments);
     for (auto const &module : this->shadow_modules) {
         module->call(method_name, arguments);
@@ -185,7 +185,7 @@ Variable_ptr Module::get_property(const std::string property_name) const {
     return this->properties.at(property_name);
 }
 
-void Module::write_property(const std::string property_name, const Expression_ptr expression) {
+void Module::write_property(const std::string property_name, const ConstExpression_ptr expression) {
     this->get_property(property_name)->assign(expression);
 }
 

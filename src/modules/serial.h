@@ -7,6 +7,7 @@
 
 class Serial;
 using Serial_ptr = std::shared_ptr<Serial>;
+using ConstSerial_ptr = std::shared_ptr<const Serial>;
 
 class Serial : public Module {
 private:

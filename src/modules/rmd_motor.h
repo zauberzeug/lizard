@@ -6,6 +6,7 @@
 
 class RmdMotor;
 using RmdMotor_ptr = std::shared_ptr<RmdMotor>;
+using ConstRmdMotor_ptr = std::shared_ptr<const RmdMotor>;
 
 class RmdMotor : public Module, public std::enable_shared_from_this<RmdMotor> {
 private:
@@ -14,7 +15,7 @@ private:
     uint8_t last_msg_id = 0;
     unsigned long int last_msg_millis = 0;
 
-    RmdMotor_ptr map_leader = nullptr;
+    ConstRmdMotor_ptr map_leader = nullptr;
     double map_scale = 1;
     double map_offset = 0;
     unsigned long int last_step_time = 0;
@@ -27,6 +28,6 @@ private:
 public:
     RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id);
     void step();
-    void call(const std::string method_name, const std::vector<Expression_ptr> arguments);
+    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
 };

@@ -41,8 +41,8 @@ std::string identifier_to_string(const struct owl_ref ref) {
 
 Expression_ptr compile_expression(const struct owl_ref ref);
 
-std::vector<Expression_ptr> compile_arguments(const struct owl_ref ref) {
-    std::vector<Expression_ptr> arguments;
+std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
+    std::vector<ConstExpression_ptr> arguments;
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r)) {
         arguments.push_back(compile_expression(r));
     }
@@ -126,7 +126,7 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
             const std::string module_name = identifier_to_string(method_call.module_name);
             const Module_ptr module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
-            const std::vector<Expression_ptr> arguments = compile_arguments(method_call.argument);
+            const std::vector<ConstExpression_ptr> arguments = compile_arguments(method_call.argument);
             actions.push_back(std::make_shared<MethodCall>(module, method_name, arguments));
         } else if (!action.routine_call.empty) {
             const struct parsed_routine_call routine_call = parsed_routine_call_get(action.routine_call);
@@ -137,7 +137,7 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(action.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             const Variable_ptr variable = Global::get_variable(variable_name);
-            const Expression_ptr expression = compile_expression(variable_assignment.expression);
+            const ConstExpression_ptr expression = compile_expression(variable_assignment.expression);
             if (variable->type != expression->type) {
                 throw std::runtime_error("type mismatch for variable assignment");
             }
@@ -147,7 +147,7 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
             actions.push_back(std::make_shared<VariableAssignment>(variable, expression));
         } else if (!action.await_condition.empty) {
             struct parsed_await_condition await_condition = parsed_await_condition_get(action.await_condition);
-            const Expression_ptr condition = compile_expression(await_condition.condition);
+            const ConstExpression_ptr condition = compile_expression(await_condition.condition);
             actions.push_back(std::make_shared<AwaitCondition>(condition));
         } else if (!action.await_routine.empty) {
             struct parsed_await_routine await_routine = parsed_await_routine_get(action.await_routine);
@@ -167,7 +167,7 @@ void process_tree(owl_tree *const tree) {
         const struct parsed_statement statement = parsed_statement_get(r);
         if (!statement.noop.empty) {
         } else if (!statement.expression.empty) {
-            const Expression_ptr expression = compile_expression(statement.expression);
+            const ConstExpression_ptr expression = compile_expression(statement.expression);
             static char buffer[256];
             expression->print_to_buffer(buffer);
             echo(up, text, buffer);
@@ -178,14 +178,14 @@ void process_tree(owl_tree *const tree) {
                 throw std::runtime_error("module \"" + module_name + "\" already exists");
             }
             const std::string module_type = identifier_to_string(constructor.module_type);
-            const std::vector<Expression_ptr> arguments = compile_arguments(constructor.argument);
+            const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
             Global::add_module(module_name, Module::create(module_type, module_name, arguments));
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
             const std::string module_name = identifier_to_string(method_call.module_name);
             const Module_ptr module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
-            const std::vector<Expression_ptr> arguments = compile_arguments(method_call.argument);
+            const std::vector<ConstExpression_ptr> arguments = compile_arguments(method_call.argument);
             module->call_with_shadows(method_name, arguments);
         } else if (!statement.routine_call.empty) {
             const struct parsed_routine_call routine_call = parsed_routine_call_get(statement.routine_call);
@@ -200,13 +200,13 @@ void process_tree(owl_tree *const tree) {
             const std::string module_name = identifier_to_string(property_assignment.module_name);
             const Module_ptr module = Global::get_module(module_name);
             const std::string property_name = identifier_to_string(property_assignment.property_name);
-            const Expression_ptr expression = compile_expression(property_assignment.expression);
+            const ConstExpression_ptr expression = compile_expression(property_assignment.expression);
             module->write_property(property_name, expression);
         } else if (!statement.variable_assignment.empty) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(statement.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             const Variable_ptr variable = Global::get_variable(variable_name);
-            const Expression_ptr expression = compile_expression(variable_assignment.expression);
+            const ConstExpression_ptr expression = compile_expression(variable_assignment.expression);
             variable->assign(expression);
         } else if (!statement.variable_declaration.empty) {
             const struct parsed_variable_declaration variable_declaration = parsed_variable_declaration_get(statement.variable_declaration);
@@ -229,7 +229,7 @@ void process_tree(owl_tree *const tree) {
                 throw std::runtime_error("invalid data type for variable declaration");
             }
             if (!variable_declaration.expression.empty) {
-                const Expression_ptr expression = compile_expression(variable_declaration.expression);
+                const ConstExpression_ptr expression = compile_expression(variable_declaration.expression);
                 Global::get_variable(variable_name)->assign(expression);
             }
         } else if (!statement.routine_definition.empty) {
@@ -244,7 +244,7 @@ void process_tree(owl_tree *const tree) {
             const struct parsed_rule_definition rule_definition = parsed_rule_definition_get(statement.rule_definition);
             const struct parsed_actions actions = parsed_actions_get(rule_definition.actions);
             const Routine_ptr routine = std::make_shared<Routine>(compile_actions(actions.action));
-            const Expression_ptr condition = compile_expression(rule_definition.condition);
+            const ConstExpression_ptr condition = compile_expression(rule_definition.condition);
             Global::add_rule(std::make_shared<Rule>(condition, routine));
         } else {
             throw std::runtime_error("unknown statement type");

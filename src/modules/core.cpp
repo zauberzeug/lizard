@@ -18,7 +18,7 @@ void Core::step() {
     Module::step();
 }
 
-void Core::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
+void Core::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "restart") {
         Module::expect(arguments, 0);
         esp_restart();
@@ -39,7 +39,7 @@ void Core::call(const std::string method_name, const std::vector<Expression_ptr>
         while (!format.empty()) {
             std::string element = cut_first_word(format);
             const std::string module_name = cut_first_word(element, '.');
-            const Module_ptr module = Global::get_module(module_name);
+            const ConstModule_ptr module = Global::get_module(module_name);
             const std::string method_name = cut_first_word(element, ':');
             const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
             this->output_list.push_back({module, method_name, precision});

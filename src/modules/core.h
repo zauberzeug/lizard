@@ -5,7 +5,7 @@
 #include <utility>
 
 struct output_element_t {
-    const Module_ptr module;
+    const ConstModule_ptr module;
     const std::string property_name;
     const unsigned int precision;
 };
@@ -20,7 +20,7 @@ private:
 public:
     Core(const std::string name);
     void step();
-    void call(const std::string method_name, const std::vector<Expression_ptr> arguments);
+    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     double get(const std::string property_name) const;
     void set(std::string property_name, double value);
     std::string get_output() const;

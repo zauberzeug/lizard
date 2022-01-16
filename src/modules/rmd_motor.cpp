@@ -67,7 +67,7 @@ void RmdMotor::step() {
     Module::step();
 }
 
-void RmdMotor::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
+void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     this->map_leader = nullptr;
 
     if (method_name == "zero") {
@@ -140,11 +140,11 @@ void RmdMotor::call(const std::string method_name, const std::vector<Expression_
             throw std::runtime_error("expecting at least 1 identifier argument");
         }
         std::string other_name = arguments[0]->evaluate_identifier();
-        Module_ptr other = Global::get_module(other_name);
+        ConstModule_ptr other = Global::get_module(other_name);
         if (other->type != rmd_motor) {
             throw std::runtime_error("module \"" + other_name + "\" is no RMD motor");
         }
-        this->map_leader = std::static_pointer_cast<RmdMotor>(other);
+        this->map_leader = std::static_pointer_cast<const RmdMotor>(other);
         switch (arguments.size()) {
         case 1:
             Module::expect(arguments, 1, identifier);

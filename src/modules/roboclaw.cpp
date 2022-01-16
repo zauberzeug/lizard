@@ -4,7 +4,7 @@
 #define SetDWORDval(arg) (uint8_t)(((uint32_t)arg) >> 24), (uint8_t)(((uint32_t)arg) >> 16), (uint8_t)(((uint32_t)arg) >> 8), (uint8_t)arg
 #define SetWORDval(arg) (uint8_t)(((uint16_t)arg) >> 8), (uint8_t)arg
 
-RoboClaw::RoboClaw(const std::string name, const Serial_ptr serial, const uint8_t address)
+RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address)
     : Module(roboclaw, name), address(address), serial(serial) {
 }
 

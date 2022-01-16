@@ -1,6 +1,6 @@
 #include "variable_assignment.h"
 
-VariableAssignment::VariableAssignment(const Variable_ptr variable, const Expression_ptr expression)
+VariableAssignment::VariableAssignment(const Variable_ptr variable, const ConstExpression_ptr expression)
     : variable(variable), expression(expression) {
 }
 

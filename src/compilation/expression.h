@@ -7,6 +7,7 @@
 
 class Expression;
 using Expression_ptr = std::shared_ptr<Expression>;
+using ConstExpression_ptr = std::shared_ptr<const Expression>;
 
 class Expression {
 protected:
@@ -63,10 +64,10 @@ public:
 
 class VariableExpression : public Expression {
 private:
-    const Variable_ptr variable;
+    const ConstVariable_ptr variable;
 
 public:
-    VariableExpression(const Variable_ptr variable);
+    VariableExpression(const ConstVariable_ptr variable);
     bool evaluate_boolean() const;
     int64_t evaluate_integer() const;
     double evaluate_number() const;
@@ -76,204 +77,204 @@ public:
 
 class PowerExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    PowerExpression(const Expression_ptr left, const Expression_ptr right);
+    PowerExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
 
 class NegateExpression : public Expression {
 private:
-    const Expression_ptr operand;
+    const ConstExpression_ptr operand;
 
 public:
-    NegateExpression(const Expression_ptr operand);
+    NegateExpression(const ConstExpression_ptr operand);
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
 
 class MultiplyExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    MultiplyExpression(const Expression_ptr left, const Expression_ptr right);
+    MultiplyExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
 
 class DivideExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    DivideExpression(const Expression_ptr left, const Expression_ptr right);
+    DivideExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
 
 class AddExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    AddExpression(const Expression_ptr left, const Expression_ptr right);
+    AddExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
 
 class SubtractExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    SubtractExpression(const Expression_ptr left, const Expression_ptr right);
+    SubtractExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
 
 class ShiftLeftExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    ShiftLeftExpression(const Expression_ptr left, const Expression_ptr right);
+    ShiftLeftExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
 };
 
 class ShiftRightExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    ShiftRightExpression(const Expression_ptr left, const Expression_ptr right);
+    ShiftRightExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
 };
 
 class BitAndExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    BitAndExpression(const Expression_ptr left, const Expression_ptr right);
+    BitAndExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
 };
 
 class BitXorExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    BitXorExpression(const Expression_ptr left, const Expression_ptr right);
+    BitXorExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
 };
 
 class BitOrExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    BitOrExpression(const Expression_ptr left, const Expression_ptr right);
+    BitOrExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     int64_t evaluate_integer() const;
 };
 
 class GreaterExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    GreaterExpression(const Expression_ptr left, const Expression_ptr right);
+    GreaterExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     bool evaluate_boolean() const;
 };
 
 class LessExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    LessExpression(const Expression_ptr left, const Expression_ptr right);
+    LessExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     bool evaluate_boolean() const;
 };
 
 class GreaterEqualExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    GreaterEqualExpression(const Expression_ptr left, const Expression_ptr right);
+    GreaterEqualExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     bool evaluate_boolean() const;
 };
 
 class LessEqualExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    LessEqualExpression(const Expression_ptr left, const Expression_ptr right);
+    LessEqualExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     bool evaluate_boolean() const;
 };
 
 class EqualExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    EqualExpression(const Expression_ptr left, const Expression_ptr right);
+    EqualExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     bool evaluate_boolean() const;
 };
 
 class UnequalExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    UnequalExpression(const Expression_ptr left, const Expression_ptr right);
+    UnequalExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     bool evaluate_boolean() const;
 };
 
 class NotExpression : public Expression {
 private:
-    const Expression_ptr operand;
+    const ConstExpression_ptr operand;
 
 public:
-    NotExpression(const Expression_ptr operand);
+    NotExpression(const ConstExpression_ptr operand);
     bool evaluate_boolean() const;
 };
 
 class AndExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    AndExpression(const Expression_ptr left, const Expression_ptr right);
+    AndExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     bool evaluate_boolean() const;
 };
 
 class OrExpression : public Expression {
 private:
-    const Expression_ptr left;
-    const Expression_ptr right;
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
 
 public:
-    OrExpression(const Expression_ptr left, const Expression_ptr right);
+    OrExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
     bool evaluate_boolean() const;
 };

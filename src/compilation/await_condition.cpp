@@ -1,6 +1,6 @@
 #include "await_condition.h"
 
-AwaitCondition::AwaitCondition(const Expression_ptr condition)
+AwaitCondition::AwaitCondition(const ConstExpression_ptr condition)
     : condition(condition) {
 }
 

@@ -10,7 +10,7 @@ using Rule_ptr = std::shared_ptr<Rule>;
 
 class Rule {
 public:
-    const Expression_ptr condition;
+    const ConstExpression_ptr condition;
     const Routine_ptr routine;
-    Rule(const Expression_ptr condition, const Routine_ptr routine);
+    Rule(const ConstExpression_ptr condition, const Routine_ptr routine);
 };
