@@ -21,7 +21,7 @@ void RoboClawMotor::step() {
     Module::step();
 }
 
-void RoboClawMotor::call(const std::string method_name, const std::vector<const Expression *> arguments) {
+void RoboClawMotor::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
     if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
         unsigned short int duty = (short int)(constrain(arguments[0]->evaluate_number(), -1, 1) * 32767);

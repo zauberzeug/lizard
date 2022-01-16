@@ -6,7 +6,7 @@ Output::Output(const std::string name, const gpio_num_t number)
     gpio_set_direction(number, GPIO_MODE_OUTPUT);
 }
 
-void Output::call(const std::string method_name, const std::vector<const Expression *> arguments) {
+void Output::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
     if (method_name == "on") {
         Module::expect(arguments, 0);
         gpio_set_level(this->number, 1);

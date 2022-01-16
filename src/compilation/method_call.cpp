@@ -1,14 +1,11 @@
 #include "method_call.h"
 
-MethodCall::MethodCall(Module *const module, const std::string method_name, const std::vector<const Expression *> arguments)
+MethodCall::MethodCall(Module *const module, const std::string method_name, const std::vector<Expression_ptr> arguments)
     : module(module), method_name(method_name), arguments(arguments) {
 }
 
 MethodCall::~MethodCall() {
     // NOTE: don't delete globally managed modules
-    for (auto a : this->arguments) {
-        delete a;
-    }
 }
 
 bool MethodCall::run() {

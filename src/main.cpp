@@ -17,6 +17,7 @@
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include <chrono>
+#include <memory>
 #include <stdexcept>
 #include <stdint.h>
 #include <stdio.h>
@@ -38,78 +39,78 @@ std::string identifier_to_string(const struct owl_ref ref) {
     return std::string(identifier.identifier, identifier.length);
 }
 
-Expression *compile_expression(const struct owl_ref ref);
+Expression_ptr compile_expression(const struct owl_ref ref);
 
-std::vector<const Expression *> compile_arguments(const struct owl_ref ref) {
-    std::vector<const Expression *> arguments;
+std::vector<Expression_ptr> compile_arguments(const struct owl_ref ref) {
+    std::vector<Expression_ptr> arguments;
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r)) {
         arguments.push_back(compile_expression(r));
     }
     return arguments;
 }
 
-Expression *compile_expression(const struct owl_ref ref) {
+Expression_ptr compile_expression(const struct owl_ref ref) {
     const struct parsed_expression expression = parsed_expression_get(ref);
     switch (expression.type) {
     case PARSED_TRUE:
-        return new BooleanExpression(true);
+        return std::make_shared<BooleanExpression>(true);
     case PARSED_FALSE:
-        return new BooleanExpression(false);
+        return std::make_shared<BooleanExpression>(false);
     case PARSED_STRING: {
         const struct parsed_string string = parsed_string_get(expression.string);
-        return new StringExpression(std::string(string.string, string.length));
+        return std::make_shared<StringExpression>(std::string(string.string, string.length));
     }
     case PARSED_INTEGER:
-        return new IntegerExpression(parsed_integer_get(expression.integer).integer);
+        return std::make_shared<IntegerExpression>(parsed_integer_get(expression.integer).integer);
     case PARSED_NUMBER:
-        return new NumberExpression(parsed_number_get(expression.number).number);
+        return std::make_shared<NumberExpression>(parsed_number_get(expression.number).number);
     case PARSED_VARIABLE:
-        return new VariableExpression(Global::get_variable(identifier_to_string(expression.identifier)));
+        return std::make_shared<VariableExpression>(Global::get_variable(identifier_to_string(expression.identifier)));
     case PARSED_PROPERTY:
-        return new VariableExpression(Global::get_module(identifier_to_string(expression.module_name))
-                                          ->get_property(identifier_to_string(expression.property_name)));
+        return std::make_shared<VariableExpression>(Global::get_module(identifier_to_string(expression.module_name))
+                                                        ->get_property(identifier_to_string(expression.property_name)));
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
-        return new PowerExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<PowerExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_NEGATE:
-        return new NegateExpression(compile_expression(expression.operand));
+        return std::make_shared<NegateExpression>(compile_expression(expression.operand));
     case PARSED_MULTIPLY:
-        return new MultiplyExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<MultiplyExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_DIVIDE:
-        return new DivideExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<DivideExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_ADD:
-        return new AddExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<AddExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_SUBTRACT:
-        return new SubtractExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<SubtractExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_SHIFT_LEFT:
-        return new ShiftLeftExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<ShiftLeftExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_SHIFT_RIGHT:
-        return new ShiftRightExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<ShiftRightExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_BIT_AND:
-        return new BitAndExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<BitAndExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_BIT_XOR:
-        return new BitXorExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<BitXorExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_BIT_OR:
-        return new BitOrExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<BitOrExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_GREATER:
-        return new GreaterExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<GreaterExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_LESS:
-        return new LessExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<LessExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_GREATER_EQUAL:
-        return new GreaterEqualExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<GreaterEqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_LESS_EQUAL:
-        return new LessEqualExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<LessEqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_EQUAL:
-        return new EqualExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<EqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_UNEQUAL:
-        return new UnequalExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<UnequalExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_NOT:
-        return new NotExpression(compile_expression(expression.operand));
+        return std::make_shared<NotExpression>(compile_expression(expression.operand));
     case PARSED_AND:
-        return new AndExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<AndExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_OR:
-        return new OrExpression(compile_expression(expression.left), compile_expression(expression.right));
+        return std::make_shared<OrExpression>(compile_expression(expression.left), compile_expression(expression.right));
     default:
         throw std::runtime_error("invalid expression");
     }
@@ -125,7 +126,7 @@ std::vector<Action *> compile_actions(const struct owl_ref ref) {
             const std::string module_name = identifier_to_string(method_call.module_name);
             Module *const module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
-            const std::vector<const Expression *> arguments = compile_arguments(method_call.argument);
+            const std::vector<Expression_ptr> arguments = compile_arguments(method_call.argument);
             actions.push_back(new MethodCall(module, method_name, arguments));
         } else if (!action.routine_call.empty) {
             const struct parsed_routine_call routine_call = parsed_routine_call_get(action.routine_call);
@@ -136,7 +137,7 @@ std::vector<Action *> compile_actions(const struct owl_ref ref) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(action.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             Variable *const variable = Global::get_variable(variable_name);
-            const Expression *const expression = compile_expression(variable_assignment.expression);
+            const Expression_ptr expression = compile_expression(variable_assignment.expression);
             if (variable->type != expression->type) {
                 throw std::runtime_error("type mismatch for variable assignment");
             }
@@ -146,7 +147,7 @@ std::vector<Action *> compile_actions(const struct owl_ref ref) {
             actions.push_back(new VariableAssignment(variable, expression));
         } else if (!action.await_condition.empty) {
             struct parsed_await_condition await_condition = parsed_await_condition_get(action.await_condition);
-            const Expression *const condition = compile_expression(await_condition.condition);
+            const Expression_ptr condition = compile_expression(await_condition.condition);
             actions.push_back(new AwaitCondition(condition));
         } else if (!action.await_routine.empty) {
             struct parsed_await_routine await_routine = parsed_await_routine_get(action.await_routine);
@@ -166,11 +167,10 @@ void process_tree(owl_tree *const tree) {
         const struct parsed_statement statement = parsed_statement_get(r);
         if (!statement.noop.empty) {
         } else if (!statement.expression.empty) {
-            const Expression *const expression = compile_expression(statement.expression);
+            const Expression_ptr expression = compile_expression(statement.expression);
             static char buffer[256];
             expression->print_to_buffer(buffer);
             echo(up, text, buffer);
-            delete expression;
         } else if (!statement.constructor.empty) {
             const struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
             const std::string module_name = identifier_to_string(constructor.module_name);
@@ -178,14 +178,14 @@ void process_tree(owl_tree *const tree) {
                 throw std::runtime_error("module \"" + module_name + "\" already exists");
             }
             const std::string module_type = identifier_to_string(constructor.module_type);
-            const std::vector<const Expression *> arguments = compile_arguments(constructor.argument);
+            const std::vector<Expression_ptr> arguments = compile_arguments(constructor.argument);
             Global::add_module(module_name, Module::create(module_type, module_name, arguments));
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
             const std::string module_name = identifier_to_string(method_call.module_name);
             Module *const module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
-            const std::vector<const Expression *> arguments = compile_arguments(method_call.argument);
+            const std::vector<Expression_ptr> arguments = compile_arguments(method_call.argument);
             module->call_with_shadows(method_name, arguments);
         } else if (!statement.routine_call.empty) {
             const struct parsed_routine_call routine_call = parsed_routine_call_get(statement.routine_call);
@@ -200,16 +200,14 @@ void process_tree(owl_tree *const tree) {
             const std::string module_name = identifier_to_string(property_assignment.module_name);
             Module *const module = Global::get_module(module_name);
             const std::string property_name = identifier_to_string(property_assignment.property_name);
-            const Expression *const expression = compile_expression(property_assignment.expression);
+            const Expression_ptr expression = compile_expression(property_assignment.expression);
             module->write_property(property_name, expression);
-            delete expression;
         } else if (!statement.variable_assignment.empty) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(statement.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
             Variable *const variable = Global::get_variable(variable_name);
-            const Expression *const expression = compile_expression(variable_assignment.expression);
+            const Expression_ptr expression = compile_expression(variable_assignment.expression);
             variable->assign(expression);
-            delete expression;
         } else if (!statement.variable_declaration.empty) {
             const struct parsed_variable_declaration variable_declaration = parsed_variable_declaration_get(statement.variable_declaration);
             const struct parsed_datatype datatype = parsed_datatype_get(variable_declaration.datatype);
@@ -231,9 +229,8 @@ void process_tree(owl_tree *const tree) {
                 throw std::runtime_error("invalid data type for variable declaration");
             }
             if (!variable_declaration.expression.empty) {
-                const Expression *const expression = compile_expression(variable_declaration.expression);
+                const Expression_ptr expression = compile_expression(variable_declaration.expression);
                 Global::get_variable(variable_name)->assign(expression);
-                delete expression;
             }
         } else if (!statement.routine_definition.empty) {
             const struct parsed_routine_definition routine_definition = parsed_routine_definition_get(statement.routine_definition);
@@ -247,7 +244,7 @@ void process_tree(owl_tree *const tree) {
             const struct parsed_rule_definition rule_definition = parsed_rule_definition_get(statement.rule_definition);
             const struct parsed_actions actions = parsed_actions_get(rule_definition.actions);
             Routine *const routine = new Routine(compile_actions(actions.action));
-            const Expression *const condition = compile_expression(rule_definition.condition);
+            const Expression_ptr condition = compile_expression(rule_definition.condition);
             Global::add_rule(new Rule(condition, routine));
         } else {
             throw std::runtime_error("unknown statement type");

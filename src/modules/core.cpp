@@ -17,7 +17,7 @@ void Core::step() {
     Module::step();
 }
 
-void Core::call(const std::string method_name, const std::vector<const Expression *> arguments) {
+void Core::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
     if (method_name == "restart") {
         Module::expect(arguments, 0);
         esp_restart();

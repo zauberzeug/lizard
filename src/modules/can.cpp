@@ -89,7 +89,7 @@ void Can::send(uint32_t id,
     this->send(id, data, rtr);
 }
 
-void Can::call(const std::string method_name, const std::vector<const Expression *> arguments) {
+void Can::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
     if (method_name == "send") {
         Module::expect(arguments, 9, integer, integer, integer, integer, integer, integer, integer, integer, integer);
         this->send(arguments[0]->evaluate_integer(),

@@ -1,5 +1,5 @@
 #include "rule.h"
 
-Rule::Rule(const Expression *const condition, Routine *const routine)
+Rule::Rule(const Expression_ptr condition, Routine *const routine)
     : condition(condition), routine(routine) {
 }

@@ -11,5 +11,5 @@ private:
 public:
     RoboClawMotor(const std::string name, RoboClaw *const roboclaw, const unsigned int motor_number);
     void step();
-    void call(const std::string method_name, const std::vector<const Expression *> arguments);
+    void call(const std::string method_name, const std::vector<Expression_ptr> arguments);
 };

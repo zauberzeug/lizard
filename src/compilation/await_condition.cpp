@@ -1,11 +1,10 @@
 #include "await_condition.h"
 
-AwaitCondition::AwaitCondition(const Expression *const condition)
+AwaitCondition::AwaitCondition(const Expression_ptr condition)
     : condition(condition) {
 }
 
 AwaitCondition::~AwaitCondition() {
-    delete this->condition;
 }
 
 bool AwaitCondition::run() {

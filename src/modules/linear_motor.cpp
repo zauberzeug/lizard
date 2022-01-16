@@ -24,7 +24,7 @@ void LinearMotor::step() {
     Module::step();
 }
 
-void LinearMotor::call(const std::string method_name, const std::vector<const Expression *> arguments) {
+void LinearMotor::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
     if (method_name == "in") {
         Module::expect(arguments, 0);
         gpio_set_level(this->move_in, 1);

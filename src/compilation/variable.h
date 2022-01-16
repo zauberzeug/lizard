@@ -1,9 +1,11 @@
 #pragma once
 
 #include "type.h"
+#include <memory>
 #include <string>
 
 class Expression; // NOTE: forward declaration to avoid cyclic include
+using Expression_ptr = std::shared_ptr<Expression>;
 
 class Variable {
 public:
@@ -15,7 +17,7 @@ public:
     std::string identifier_value;
 
     Variable(const Type type);
-    void assign(const Expression *const expression);
+    void assign(const Expression_ptr expression);
     int print_to_buffer(char *const buffer) const;
 };
 

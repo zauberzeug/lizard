@@ -66,7 +66,7 @@ void RmdMotor::step() {
     Module::step();
 }
 
-void RmdMotor::call(const std::string method_name, const std::vector<const Expression *> arguments) {
+void RmdMotor::call(const std::string method_name, const std::vector<Expression_ptr> arguments) {
     this->map_leader = nullptr;
 
     if (method_name == "zero") {

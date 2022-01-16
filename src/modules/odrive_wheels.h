@@ -11,5 +11,5 @@ private:
 public:
     ODriveWheels(const std::string name, ODriveMotor *const left_motor, ODriveMotor *const right_motor);
     void step();
-    void call(const std::string method_name, const std::vector<const Expression *> arguments);
+    void call(const std::string method_name, const std::vector<Expression_ptr> arguments);
 };

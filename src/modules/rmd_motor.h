@@ -23,6 +23,6 @@ private:
 public:
     RmdMotor(const std::string name, Can *const can, const uint8_t motor_id);
     void step();
-    void call(const std::string method_name, const std::vector<const Expression *> arguments);
+    void call(const std::string method_name, const std::vector<Expression_ptr> arguments);
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
 };

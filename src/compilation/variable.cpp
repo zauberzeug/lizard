@@ -5,7 +5,7 @@
 Variable::Variable(const Type type) : type(type) {
 }
 
-void Variable::assign(const Expression *const expression) {
+void Variable::assign(const Expression_ptr expression) {
     if (this->type == boolean && expression->type == boolean) {
         this->boolean_value = expression->evaluate_boolean();
     } else if (this->type == integer && expression->type == integer) {
