@@ -3,7 +3,7 @@
 
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
-RoboClawMotor::RoboClawMotor(const std::string name, RoboClaw *const roboclaw, const unsigned int motor_number)
+RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number)
     : Module(roboclaw_motor, name), motor_number(constrain(motor_number, 1, 2)), roboclaw(roboclaw) {
     if (this->motor_number != motor_number) {
         throw std::runtime_error("illegal motor number");

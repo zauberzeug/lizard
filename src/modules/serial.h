@@ -3,6 +3,10 @@
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "module.h"
+#include <memory>
+
+class Serial;
+using Serial_ptr = std::shared_ptr<Serial>;
 
 class Serial : public Module {
 private:

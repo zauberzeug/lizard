@@ -1,13 +1,17 @@
 #pragma once
 
 #include "module.h"
+#include <memory>
 #include <utility>
 
 struct output_element_t {
-    const Module *const module;
+    const Module_ptr module;
     const std::string property_name;
     const unsigned int precision;
 };
+
+class Core;
+using Core_ptr = std::shared_ptr<Core>;
 
 class Core : public Module {
 private:

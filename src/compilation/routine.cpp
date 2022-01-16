@@ -1,13 +1,10 @@
 #include "routine.h"
 
-Routine::Routine(const std::vector<Action *> actions)
+Routine::Routine(const std::vector<Action_ptr> actions)
     : actions(actions) {
 }
 
 Routine::~Routine() {
-    for (auto a : this->actions) {
-        delete a;
-    }
 }
 
 bool Routine::is_running() const {

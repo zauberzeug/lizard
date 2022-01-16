@@ -5,14 +5,14 @@
 #include <cstring>
 #include <memory>
 
-RmdMotor::RmdMotor(const std::string name, Can *const can, const uint8_t motor_id)
+RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id)
     : Module(rmd_motor, name), can_id(0x140 + motor_id), can(can) {
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["ratio"] = std::make_shared<NumberVariable>(6.0);
     this->properties["torque"] = std::make_shared<NumberVariable>();
     this->properties["speed"] = std::make_shared<NumberVariable>();
     this->properties["can_age"] = std::make_shared<NumberVariable>();
-    can->subscribe(this->can_id, this);
+    can->subscribe(this->can_id, this->shared_from_this());
 }
 
 void RmdMotor::send_and_wait(const uint32_t id,
@@ -140,11 +140,11 @@ void RmdMotor::call(const std::string method_name, const std::vector<Expression_
             throw std::runtime_error("expecting at least 1 identifier argument");
         }
         std::string other_name = arguments[0]->evaluate_identifier();
-        const Module *const other = Global::get_module(other_name);
+        Module_ptr other = Global::get_module(other_name);
         if (other->type != rmd_motor) {
             throw std::runtime_error("module \"" + other_name + "\" is no RMD motor");
         }
-        this->map_leader = (const RmdMotor *)other;
+        this->map_leader = std::static_pointer_cast<RmdMotor>(other);
         switch (arguments.size()) {
         case 1:
             Module::expect(arguments, 1, identifier);

@@ -6,10 +6,10 @@
 class RoboClawMotor : public Module {
 private:
     const unsigned int motor_number;
-    RoboClaw *const roboclaw;
+    const RoboClaw_ptr roboclaw;
 
 public:
-    RoboClawMotor(const std::string name, RoboClaw *const roboclaw, const unsigned int motor_number);
+    RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number);
     void step();
     void call(const std::string method_name, const std::vector<Expression_ptr> arguments);
 };

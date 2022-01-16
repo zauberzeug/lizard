@@ -5,9 +5,9 @@
 
 class AwaitRoutine : public Action {
 public:
-    Routine *const routine;
+    const Routine_ptr routine;
 
-    AwaitRoutine(Routine *const routine);
+    AwaitRoutine(const Routine_ptr routine);
     ~AwaitRoutine();
     bool run();
 };

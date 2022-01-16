@@ -1,6 +1,6 @@
 #include "await_routine.h"
 
-AwaitRoutine::AwaitRoutine(Routine *const routine)
+AwaitRoutine::AwaitRoutine(const Routine_ptr routine)
     : routine(routine) {
 }
 

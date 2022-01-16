@@ -22,9 +22,12 @@ enum ModuleType {
     number_of_module_types,
 };
 
+class Module;
+using Module_ptr = std::shared_ptr<Module>;
+
 class Module {
 private:
-    std::list<Module *> shadow_modules;
+    std::list<Module_ptr> shadow_modules;
 
 protected:
     std::map<std::string, Variable_ptr> properties;
@@ -37,7 +40,7 @@ public:
 
     Module(const ModuleType type, const std::string name);
     static void expect(const std::vector<Expression_ptr> arguments, const int num, ...);
-    static Module *create(const std::string type, const std::string name, const std::vector<Expression_ptr> arguments);
+    static Module_ptr create(const std::string type, const std::string name, const std::vector<Expression_ptr> arguments);
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<Expression_ptr> arguments);
     void call_with_shadows(const std::string method_name, const std::vector<Expression_ptr> arguments);

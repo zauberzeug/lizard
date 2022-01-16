@@ -1,6 +1,6 @@
 #include "method_call.h"
 
-MethodCall::MethodCall(Module *const module, const std::string method_name, const std::vector<Expression_ptr> arguments)
+MethodCall::MethodCall(const Module_ptr module, const std::string method_name, const std::vector<Expression_ptr> arguments)
     : module(module), method_name(method_name), arguments(arguments) {
 }
 

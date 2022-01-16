@@ -5,11 +5,11 @@
 
 class ODriveWheels : public Module {
 private:
-    ODriveMotor *const left_motor;
-    ODriveMotor *const right_motor;
+    const ODriveMotor_ptr left_motor;
+    const ODriveMotor_ptr right_motor;
 
 public:
-    ODriveWheels(const std::string name, ODriveMotor *const left_motor, ODriveMotor *const right_motor);
+    ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor);
     void step();
     void call(const std::string method_name, const std::vector<Expression_ptr> arguments);
 };

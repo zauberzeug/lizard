@@ -1,19 +1,19 @@
 #include "global.h"
 #include <stdexcept>
 
-std::map<const std::string, Module *> Global::modules;
-std::map<const std::string, Routine *> Global::routines;
-std::list<Rule *> Global::rules;
+std::map<const std::string, Module_ptr> Global::modules;
+std::map<const std::string, Routine_ptr> Global::routines;
+std::list<Rule_ptr> Global::rules;
 std::map<const std::string, Variable_ptr> Global::variables;
 
-Module *Global::get_module(const std::string module_name) {
+Module_ptr Global::get_module(const std::string module_name) {
     if (!modules.count(module_name)) {
         throw std::runtime_error("unknown module \"" + module_name + "\"");
     }
     return modules[module_name];
 }
 
-Routine *Global::get_routine(const std::string routine_name) {
+Routine_ptr Global::get_routine(const std::string routine_name) {
     if (!routines.count(routine_name)) {
         throw std::runtime_error("unknown routine \"" + routine_name + "\"");
     }
@@ -27,7 +27,7 @@ Variable_ptr Global::get_variable(const std::string variable_name) {
     return variables[variable_name];
 }
 
-void Global::add_module(const std::string module_name, Module *const module) {
+void Global::add_module(const std::string module_name, const Module_ptr module) {
     if (modules.count(module_name)) {
         throw std::runtime_error("module \"" + module_name + "\" already exists");
     }
@@ -38,7 +38,7 @@ void Global::add_module(const std::string module_name, Module *const module) {
     variables[module_name] = std::make_shared<IdentifierVariable>(module_name);
 }
 
-void Global::add_routine(const std::string routine_name, Routine *const routine) {
+void Global::add_routine(const std::string routine_name, const Routine_ptr routine) {
     if (routines.count(routine_name)) {
         throw std::runtime_error("routine \"" + routine_name + "\" already exists");
     }
@@ -52,7 +52,7 @@ void Global::add_variable(const std::string variable_name, const Variable_ptr va
     variables[variable_name] = variable;
 }
 
-void Global::add_rule(Rule *const rule) {
+void Global::add_rule(const Rule_ptr rule) {
     rules.push_back(rule);
 }
 

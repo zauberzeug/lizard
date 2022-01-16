@@ -106,7 +106,7 @@ void Can::call(const std::string method_name, const std::vector<Expression_ptr> 
     }
 }
 
-void Can::subscribe(const uint32_t id, Module *const module) {
+void Can::subscribe(const uint32_t id, const Module_ptr module) {
     if (this->subscribers.count(id)) {
         throw std::runtime_error("there is already a subscriber for this CAN ID");
     }

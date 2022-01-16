@@ -1,6 +1,6 @@
 #include "routine_call.h"
 
-RoutineCall::RoutineCall(Routine *const routine) : routine(routine) {
+RoutineCall::RoutineCall(const Routine_ptr routine) : routine(routine) {
 }
 
 RoutineCall::~RoutineCall() {

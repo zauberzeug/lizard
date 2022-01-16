@@ -5,9 +5,9 @@
 
 class RoutineCall : public Action {
 public:
-    Routine *const routine;
+    const Routine_ptr routine;
 
-    RoutineCall(Routine *const routine);
+    RoutineCall(const Routine_ptr routine);
     ~RoutineCall();
     bool run();
 };

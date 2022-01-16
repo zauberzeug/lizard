@@ -2,7 +2,7 @@
 #include "../utils/timing.h"
 #include <memory>
 
-ODriveWheels::ODriveWheels(const std::string name, ODriveMotor *const left_motor, ODriveMotor *const right_motor)
+ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor)
     : Module(odrive_wheels, name), left_motor(left_motor), right_motor(right_motor) {
     this->properties["width"] = std::make_shared<NumberVariable>(1);
     this->properties["linear_speed"] = std::make_shared<NumberVariable>();

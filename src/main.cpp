@@ -27,7 +27,7 @@
 
 #define BUFFER_SIZE 1024
 
-Core *core_module;
+Core_ptr core_module;
 
 extern "C" {
 #include "parser.h"
@@ -116,23 +116,23 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
     }
 }
 
-std::vector<Action *> compile_actions(const struct owl_ref ref) {
-    std::vector<Action *> actions;
+std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
+    std::vector<Action_ptr> actions;
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r)) {
         const struct parsed_action action = parsed_action_get(r);
         if (!action.noop.empty) {
         } else if (!action.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
             const std::string module_name = identifier_to_string(method_call.module_name);
-            Module *const module = Global::get_module(module_name);
+            const Module_ptr module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
             const std::vector<Expression_ptr> arguments = compile_arguments(method_call.argument);
-            actions.push_back(new MethodCall(module, method_name, arguments));
+            actions.push_back(std::make_shared<MethodCall>(module, method_name, arguments));
         } else if (!action.routine_call.empty) {
             const struct parsed_routine_call routine_call = parsed_routine_call_get(action.routine_call);
             const std::string routine_name = identifier_to_string(routine_call.routine_name);
-            Routine *const routine = Global::get_routine(routine_name);
-            actions.push_back(new RoutineCall(routine));
+            const Routine_ptr routine = Global::get_routine(routine_name);
+            actions.push_back(std::make_shared<RoutineCall>(routine));
         } else if (!action.variable_assignment.empty) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(action.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
@@ -144,16 +144,16 @@ std::vector<Action *> compile_actions(const struct owl_ref ref) {
             if (variable->type == identifier) {
                 throw std::runtime_error("assignment of identifiers is forbidden");
             }
-            actions.push_back(new VariableAssignment(variable, expression));
+            actions.push_back(std::make_shared<VariableAssignment>(variable, expression));
         } else if (!action.await_condition.empty) {
             struct parsed_await_condition await_condition = parsed_await_condition_get(action.await_condition);
             const Expression_ptr condition = compile_expression(await_condition.condition);
-            actions.push_back(new AwaitCondition(condition));
+            actions.push_back(std::make_shared<AwaitCondition>(condition));
         } else if (!action.await_routine.empty) {
             struct parsed_await_routine await_routine = parsed_await_routine_get(action.await_routine);
             const std::string routine_name = identifier_to_string(await_routine.routine_name);
-            Routine *const routine = Global::get_routine(routine_name);
-            actions.push_back(new AwaitRoutine(routine));
+            const Routine_ptr routine = Global::get_routine(routine_name);
+            actions.push_back(std::make_shared<AwaitRoutine>(routine));
         } else {
             throw std::runtime_error("unknown action type");
         }
@@ -183,14 +183,14 @@ void process_tree(owl_tree *const tree) {
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
             const std::string module_name = identifier_to_string(method_call.module_name);
-            Module *const module = Global::get_module(module_name);
+            const Module_ptr module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
             const std::vector<Expression_ptr> arguments = compile_arguments(method_call.argument);
             module->call_with_shadows(method_name, arguments);
         } else if (!statement.routine_call.empty) {
             const struct parsed_routine_call routine_call = parsed_routine_call_get(statement.routine_call);
             const std::string routine_name = identifier_to_string(routine_call.routine_name);
-            Routine *const routine = Global::get_routine(routine_name);
+            const Routine_ptr routine = Global::get_routine(routine_name);
             if (routine->is_running()) {
                 throw std::runtime_error("routine \"" + routine_name + "\" is already running");
             }
@@ -198,7 +198,7 @@ void process_tree(owl_tree *const tree) {
         } else if (!statement.property_assignment.empty) {
             const struct parsed_property_assignment property_assignment = parsed_property_assignment_get(statement.property_assignment);
             const std::string module_name = identifier_to_string(property_assignment.module_name);
-            Module *const module = Global::get_module(module_name);
+            const Module_ptr module = Global::get_module(module_name);
             const std::string property_name = identifier_to_string(property_assignment.property_name);
             const Expression_ptr expression = compile_expression(property_assignment.expression);
             module->write_property(property_name, expression);
@@ -239,13 +239,13 @@ void process_tree(owl_tree *const tree) {
                 throw std::runtime_error("routine \"" + routine_name + "\" already exists");
             }
             const struct parsed_actions actions = parsed_actions_get(routine_definition.actions);
-            Global::add_routine(routine_name, new Routine(compile_actions(actions.action)));
+            Global::add_routine(routine_name, std::make_shared<Routine>(compile_actions(actions.action)));
         } else if (!statement.rule_definition.empty) {
             const struct parsed_rule_definition rule_definition = parsed_rule_definition_get(statement.rule_definition);
             const struct parsed_actions actions = parsed_actions_get(rule_definition.actions);
-            Routine *const routine = new Routine(compile_actions(actions.action));
+            const Routine_ptr routine = std::make_shared<Routine>(compile_actions(actions.action));
             const Expression_ptr condition = compile_expression(rule_definition.condition);
-            Global::add_rule(new Rule(condition, routine));
+            Global::add_rule(std::make_shared<Rule>(condition, routine));
         } else {
             throw std::runtime_error("unknown statement type");
         }
@@ -410,7 +410,7 @@ void app_main() {
     printf("Ready.\n");
 
     try {
-        Global::add_module("core", core_module = new Core("core"));
+        Global::add_module("core", core_module = std::make_shared<Core>("core"));
     } catch (const std::runtime_error &e) {
         echo(up, text, "error while initializing core module: %s", e.what());
         exit(1);

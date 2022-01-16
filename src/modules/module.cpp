@@ -32,93 +32,93 @@ void Module::Module::expect(const std::vector<Expression_ptr> arguments, const i
     va_end(vl);
 }
 
-Module *Module::create(const std::string type, const std::string name, const std::vector<Expression_ptr> arguments) {
+Module_ptr Module::create(const std::string type, const std::string name, const std::vector<Expression_ptr> arguments) {
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
     } else if (type == "Output") {
         Module::expect(arguments, 1, integer);
-        return new Output(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        return std::make_shared<Output>(name, (gpio_num_t)arguments[0]->evaluate_integer());
     } else if (type == "Input") {
         Module::expect(arguments, 1, integer);
-        return new Input(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        return std::make_shared<Input>(name, (gpio_num_t)arguments[0]->evaluate_integer());
     } else if (type == "Can") {
         Module::expect(arguments, 3, integer, integer, integer, integer);
         gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
         gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
         long baud_rate = arguments[2]->evaluate_integer();
-        return new Can(name, rx_pin, tx_pin, baud_rate);
+        return std::make_shared<Can>(name, rx_pin, tx_pin, baud_rate);
     } else if (type == "LinearMotor") {
         Module::expect(arguments, 4, integer, integer, integer, integer);
         gpio_num_t move_in = (gpio_num_t)arguments[0]->evaluate_integer();
         gpio_num_t move_out = (gpio_num_t)arguments[1]->evaluate_integer();
         gpio_num_t end_in = (gpio_num_t)arguments[2]->evaluate_integer();
         gpio_num_t end_out = (gpio_num_t)arguments[3]->evaluate_integer();
-        return new LinearMotor(name, move_in, move_out, end_in, end_out);
+        return std::make_shared<LinearMotor>(name, move_in, move_out, end_in, end_out);
     } else if (type == "ODriveMotor") {
         Module::expect(arguments, 2, identifier, integer);
         std::string can_name = arguments[0]->evaluate_identifier();
-        Module *module = Global::get_module(can_name);
+        Module_ptr module = Global::get_module(can_name);
         if (module->type != can) {
             throw std::runtime_error("module \"" + can_name + "\" is no can connection");
         }
-        Can *can = (Can *)module;
+        Can_ptr can = std::static_pointer_cast<Can>(module);
         uint32_t can_id = arguments[1]->evaluate_integer();
-        return new ODriveMotor(name, can, can_id);
+        return std::make_shared<ODriveMotor>(name, can, can_id);
     } else if (type == "ODriveWheels") {
         Module::expect(arguments, 2, identifier, identifier);
         std::string left_name = arguments[0]->evaluate_identifier();
         std::string right_name = arguments[1]->evaluate_identifier();
-        Module *left_module = Global::get_module(left_name);
-        Module *right_module = Global::get_module(right_name);
+        Module_ptr left_module = Global::get_module(left_name);
+        Module_ptr right_module = Global::get_module(right_name);
         if (left_module->type != odrive_motor) {
             throw std::runtime_error("module \"" + left_name + "\" is no ODrive motor");
         }
         if (right_module->type != odrive_motor) {
             throw std::runtime_error("module \"" + right_name + "\" is no ODrive motor");
         }
-        ODriveMotor *left_motor = (ODriveMotor *)left_module;
-        ODriveMotor *right_motor = (ODriveMotor *)right_module;
-        return new ODriveWheels(name, left_motor, right_motor);
+        ODriveMotor_ptr left_motor = std::static_pointer_cast<ODriveMotor>(left_module);
+        ODriveMotor_ptr right_motor = std::static_pointer_cast<ODriveMotor>(right_module);
+        return std::make_shared<ODriveWheels>(name, left_motor, right_motor);
     } else if (type == "RmdMotor") {
         Module::expect(arguments, 2, identifier, integer);
         std::string can_name = arguments[0]->evaluate_identifier();
-        Module *module = Global::get_module(can_name);
+        Module_ptr module = Global::get_module(can_name);
         if (module->type != can) {
             throw std::runtime_error("module \"" + can_name + "\" is no can connection");
         }
-        Can *can = (Can *)module;
+        Can_ptr can = std::static_pointer_cast<Can>(module);
         uint8_t motor_id = arguments[1]->evaluate_integer();
-        return new RmdMotor(name, can, motor_id);
+        return std::make_shared<RmdMotor>(name, can, motor_id);
     } else if (type == "Serial") {
         Module::expect(arguments, 4, integer, integer, integer, integer);
         gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
         gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
         long baud_rate = arguments[2]->evaluate_integer();
         gpio_port_t uart_num = (gpio_port_t)arguments[3]->evaluate_integer();
-        return new Serial(name, rx_pin, tx_pin, baud_rate, uart_num);
+        return std::make_shared<Serial>(name, rx_pin, tx_pin, baud_rate, uart_num);
     } else if (type == "RoboClaw") {
         Module::expect(arguments, 2, identifier, integer);
         std::string serial_name = arguments[0]->evaluate_identifier();
-        Module *module = Global::get_module(serial_name);
+        Module_ptr module = Global::get_module(serial_name);
         if (module->type != serial) {
             throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
         }
-        Serial *serial = (Serial *)module;
+        Serial_ptr serial = std::static_pointer_cast<Serial>(module);
         uint8_t address = arguments[1]->evaluate_integer();
-        return new RoboClaw(name, serial, address);
+        return std::make_shared<RoboClaw>(name, serial, address);
     } else if (type == "RoboClawMotor") {
         Module::expect(arguments, 2, identifier, integer);
         std::string roboclaw_name = arguments[0]->evaluate_identifier();
-        Module *module = Global::get_module(roboclaw_name);
+        Module_ptr module = Global::get_module(roboclaw_name);
         if (module->type != roboclaw) {
             throw std::runtime_error("module \"" + roboclaw_name + "\" is no RoboClaw");
         }
-        RoboClaw *roboclaw = (RoboClaw *)module;
+        RoboClaw_ptr roboclaw = std::static_pointer_cast<RoboClaw>(module);
         int64_t motor_number = arguments[1]->evaluate_integer();
-        return new RoboClawMotor(name, roboclaw, motor_number);
+        return std::make_shared<RoboClawMotor>(name, roboclaw, motor_number);
     } else if (type == "Proxy") {
         Module::expect(arguments, 0);
-        return new Proxy(name);
+        return std::make_shared<Proxy>(name);
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
@@ -155,11 +155,11 @@ void Module::call(const std::string method_name, const std::vector<Expression_pt
     } else if (method_name == "shadow") {
         Module::expect(arguments, 1, identifier);
         std::string target_name = arguments[0]->evaluate_identifier();
-        Module *target_module = Global::get_module(target_name);
+        Module_ptr target_module = Global::get_module(target_name);
         if (this->type != target_module->type) {
             throw std::runtime_error("shadow module is not of same type");
         }
-        if (this != target_module) {
+        if (this != target_module.get()) {
             this->shadow_modules.push_back(target_module);
         }
     } else {
