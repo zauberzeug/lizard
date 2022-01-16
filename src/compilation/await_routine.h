@@ -8,6 +8,5 @@ public:
     const Routine_ptr routine;
 
     AwaitRoutine(const Routine_ptr routine);
-    ~AwaitRoutine();
     bool run();
 };

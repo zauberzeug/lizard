@@ -4,10 +4,6 @@ VariableAssignment::VariableAssignment(const Variable_ptr variable, const Expres
     : variable(variable), expression(expression) {
 }
 
-VariableAssignment::~VariableAssignment() {
-    // NOTE: don't delete globally managed variables
-}
-
 bool VariableAssignment::run() {
     this->variable->assign(this->expression);
     return true;

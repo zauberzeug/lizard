@@ -15,7 +15,6 @@ protected:
 public:
     const Type type;
 
-    virtual ~Expression();
     virtual bool evaluate_boolean() const;
     virtual int64_t evaluate_integer() const;
     virtual double evaluate_number() const;
@@ -82,7 +81,6 @@ private:
 
 public:
     PowerExpression(const Expression_ptr left, const Expression_ptr right);
-    ~PowerExpression();
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
@@ -93,7 +91,6 @@ private:
 
 public:
     NegateExpression(const Expression_ptr operand);
-    ~NegateExpression();
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
@@ -105,7 +102,6 @@ private:
 
 public:
     MultiplyExpression(const Expression_ptr left, const Expression_ptr right);
-    ~MultiplyExpression();
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
@@ -117,7 +113,6 @@ private:
 
 public:
     DivideExpression(const Expression_ptr left, const Expression_ptr right);
-    ~DivideExpression();
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
@@ -129,7 +124,6 @@ private:
 
 public:
     AddExpression(const Expression_ptr left, const Expression_ptr right);
-    ~AddExpression();
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
@@ -141,7 +135,6 @@ private:
 
 public:
     SubtractExpression(const Expression_ptr left, const Expression_ptr right);
-    ~SubtractExpression();
     int64_t evaluate_integer() const;
     double evaluate_number() const;
 };
@@ -153,7 +146,6 @@ private:
 
 public:
     ShiftLeftExpression(const Expression_ptr left, const Expression_ptr right);
-    ~ShiftLeftExpression();
     int64_t evaluate_integer() const;
 };
 
@@ -164,7 +156,6 @@ private:
 
 public:
     ShiftRightExpression(const Expression_ptr left, const Expression_ptr right);
-    ~ShiftRightExpression();
     int64_t evaluate_integer() const;
 };
 
@@ -175,7 +166,6 @@ private:
 
 public:
     BitAndExpression(const Expression_ptr left, const Expression_ptr right);
-    ~BitAndExpression();
     int64_t evaluate_integer() const;
 };
 
@@ -186,7 +176,6 @@ private:
 
 public:
     BitXorExpression(const Expression_ptr left, const Expression_ptr right);
-    ~BitXorExpression();
     int64_t evaluate_integer() const;
 };
 
@@ -197,7 +186,6 @@ private:
 
 public:
     BitOrExpression(const Expression_ptr left, const Expression_ptr right);
-    ~BitOrExpression();
     int64_t evaluate_integer() const;
 };
 
@@ -208,7 +196,6 @@ private:
 
 public:
     GreaterExpression(const Expression_ptr left, const Expression_ptr right);
-    ~GreaterExpression();
     bool evaluate_boolean() const;
 };
 
@@ -219,7 +206,6 @@ private:
 
 public:
     LessExpression(const Expression_ptr left, const Expression_ptr right);
-    ~LessExpression();
     bool evaluate_boolean() const;
 };
 
@@ -230,7 +216,6 @@ private:
 
 public:
     GreaterEqualExpression(const Expression_ptr left, const Expression_ptr right);
-    ~GreaterEqualExpression();
     bool evaluate_boolean() const;
 };
 
@@ -241,7 +226,6 @@ private:
 
 public:
     LessEqualExpression(const Expression_ptr left, const Expression_ptr right);
-    ~LessEqualExpression();
     bool evaluate_boolean() const;
 };
 
@@ -252,7 +236,6 @@ private:
 
 public:
     EqualExpression(const Expression_ptr left, const Expression_ptr right);
-    ~EqualExpression();
     bool evaluate_boolean() const;
 };
 
@@ -263,7 +246,6 @@ private:
 
 public:
     UnequalExpression(const Expression_ptr left, const Expression_ptr right);
-    ~UnequalExpression();
     bool evaluate_boolean() const;
 };
 
@@ -273,7 +255,6 @@ private:
 
 public:
     NotExpression(const Expression_ptr operand);
-    ~NotExpression();
     bool evaluate_boolean() const;
 };
 
@@ -284,7 +265,6 @@ private:
 
 public:
     AndExpression(const Expression_ptr left, const Expression_ptr right);
-    ~AndExpression();
     bool evaluate_boolean() const;
 };
 
@@ -295,6 +275,5 @@ private:
 
 public:
     OrExpression(const Expression_ptr left, const Expression_ptr right);
-    ~OrExpression();
     bool evaluate_boolean() const;
 };

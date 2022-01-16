@@ -27,9 +27,6 @@ void check_boolean_types(const Expression_ptr left, const Expression_ptr right) 
 Expression::Expression(const Type type) : type(type) {
 }
 
-Expression::~Expression() {
-}
-
 bool Expression::evaluate_boolean() const {
     throw std::runtime_error("not implemented");
 }
@@ -150,9 +147,6 @@ PowerExpression::PowerExpression(const Expression_ptr left, const Expression_ptr
     : Expression(get_common_number_type(left, right)), left(left), right(right) {
 }
 
-PowerExpression::~PowerExpression() {
-}
-
 int64_t PowerExpression::evaluate_integer() const {
     return pow(this->left->evaluate_integer(), this->right->evaluate_integer());
 }
@@ -163,9 +157,6 @@ double PowerExpression::evaluate_number() const {
 
 NegateExpression::NegateExpression(const Expression_ptr operand)
     : Expression(get_common_number_type(operand, operand)), operand(operand) {
-}
-
-NegateExpression::~NegateExpression() {
 }
 
 int64_t NegateExpression::evaluate_integer() const {
@@ -180,9 +171,6 @@ MultiplyExpression::MultiplyExpression(const Expression_ptr left, const Expressi
     : Expression(get_common_number_type(left, right)), left(left), right(right) {
 }
 
-MultiplyExpression::~MultiplyExpression() {
-}
-
 int64_t MultiplyExpression::evaluate_integer() const {
     return this->left->evaluate_integer() * this->right->evaluate_integer();
 }
@@ -193,9 +181,6 @@ double MultiplyExpression::evaluate_number() const {
 
 DivideExpression::DivideExpression(const Expression_ptr left, const Expression_ptr right)
     : Expression(get_common_number_type(left, right)), left(left), right(right) {
-}
-
-DivideExpression::~DivideExpression() {
 }
 
 int64_t DivideExpression::evaluate_integer() const {
@@ -210,9 +195,6 @@ AddExpression::AddExpression(const Expression_ptr left, const Expression_ptr rig
     : Expression(get_common_number_type(left, right)), left(left), right(right) {
 }
 
-AddExpression::~AddExpression() {
-}
-
 int64_t AddExpression::evaluate_integer() const {
     return this->left->evaluate_integer() + this->right->evaluate_integer();
 }
@@ -223,9 +205,6 @@ double AddExpression::evaluate_number() const {
 
 SubtractExpression::SubtractExpression(const Expression_ptr left, const Expression_ptr right)
     : Expression(get_common_number_type(left, right)), left(left), right(right) {
-}
-
-SubtractExpression::~SubtractExpression() {
 }
 
 int64_t SubtractExpression::evaluate_integer() const {
@@ -240,18 +219,12 @@ ShiftLeftExpression::ShiftLeftExpression(const Expression_ptr left, const Expres
     : Expression(integer), left(left), right(right) {
 }
 
-ShiftLeftExpression::~ShiftLeftExpression() {
-}
-
 int64_t ShiftLeftExpression::evaluate_integer() const {
     return this->left->evaluate_integer() << this->right->evaluate_integer();
 }
 
 ShiftRightExpression::ShiftRightExpression(const Expression_ptr left, const Expression_ptr right)
     : Expression(integer), left(left), right(right) {
-}
-
-ShiftRightExpression::~ShiftRightExpression() {
 }
 
 int64_t ShiftRightExpression::evaluate_integer() const {
@@ -262,9 +235,6 @@ BitAndExpression::BitAndExpression(const Expression_ptr left, const Expression_p
     : Expression(integer), left(left), right(right) {
 }
 
-BitAndExpression::~BitAndExpression() {
-}
-
 int64_t BitAndExpression::evaluate_integer() const {
     return this->left->evaluate_integer() & this->right->evaluate_integer();
 }
@@ -273,18 +243,12 @@ BitXorExpression::BitXorExpression(const Expression_ptr left, const Expression_p
     : Expression(integer), left(left), right(right) {
 }
 
-BitXorExpression::~BitXorExpression() {
-}
-
 int64_t BitXorExpression::evaluate_integer() const {
     return this->left->evaluate_integer() ^ this->right->evaluate_integer();
 }
 
 BitOrExpression::BitOrExpression(const Expression_ptr left, const Expression_ptr right)
     : Expression(integer), left(left), right(right) {
-}
-
-BitOrExpression::~BitOrExpression() {
 }
 
 int64_t BitOrExpression::evaluate_integer() const {
@@ -296,9 +260,6 @@ GreaterExpression::GreaterExpression(const Expression_ptr left, const Expression
     check_number_types(left, right);
 }
 
-GreaterExpression::~GreaterExpression() {
-}
-
 bool GreaterExpression::evaluate_boolean() const {
     return this->left->evaluate_number() > this->right->evaluate_number();
 }
@@ -306,9 +267,6 @@ bool GreaterExpression::evaluate_boolean() const {
 LessExpression::LessExpression(const Expression_ptr left, const Expression_ptr right)
     : Expression(boolean), left(left), right(right) {
     check_number_types(left, right);
-}
-
-LessExpression::~LessExpression() {
 }
 
 bool LessExpression::evaluate_boolean() const {
@@ -320,9 +278,6 @@ GreaterEqualExpression::GreaterEqualExpression(const Expression_ptr left, const 
     check_number_types(left, right);
 }
 
-GreaterEqualExpression::~GreaterEqualExpression() {
-}
-
 bool GreaterEqualExpression::evaluate_boolean() const {
     return this->left->evaluate_number() >= this->right->evaluate_number();
 }
@@ -330,9 +285,6 @@ bool GreaterEqualExpression::evaluate_boolean() const {
 LessEqualExpression::LessEqualExpression(const Expression_ptr left, const Expression_ptr right)
     : Expression(boolean), left(left), right(right) {
     check_number_types(left, right);
-}
-
-LessEqualExpression::~LessEqualExpression() {
 }
 
 bool LessEqualExpression::evaluate_boolean() const {
@@ -344,9 +296,6 @@ EqualExpression::EqualExpression(const Expression_ptr left, const Expression_ptr
     check_number_types(left, right);
 }
 
-EqualExpression::~EqualExpression() {
-}
-
 bool EqualExpression::evaluate_boolean() const {
     return this->left->evaluate_number() == this->right->evaluate_number();
 }
@@ -354,9 +303,6 @@ bool EqualExpression::evaluate_boolean() const {
 UnequalExpression::UnequalExpression(const Expression_ptr left, const Expression_ptr right)
     : Expression(boolean), left(left), right(right) {
     check_number_types(left, right);
-}
-
-UnequalExpression::~UnequalExpression() {
 }
 
 bool UnequalExpression::evaluate_boolean() const {
@@ -368,9 +314,6 @@ NotExpression::NotExpression(const Expression_ptr operand)
     check_boolean_types(operand, operand);
 }
 
-NotExpression::~NotExpression() {
-}
-
 bool NotExpression::evaluate_boolean() const {
     return !this->operand->evaluate_boolean();
 }
@@ -380,9 +323,6 @@ AndExpression::AndExpression(const Expression_ptr left, const Expression_ptr rig
     check_boolean_types(left, right);
 }
 
-AndExpression::~AndExpression() {
-}
-
 bool AndExpression::evaluate_boolean() const {
     return this->left->evaluate_boolean() && this->right->evaluate_boolean();
 }
@@ -390,9 +330,6 @@ bool AndExpression::evaluate_boolean() const {
 OrExpression::OrExpression(const Expression_ptr left, const Expression_ptr right)
     : Expression(boolean), left(left), right(right) {
     check_boolean_types(left, right);
-}
-
-OrExpression::~OrExpression() {
 }
 
 bool OrExpression::evaluate_boolean() const {

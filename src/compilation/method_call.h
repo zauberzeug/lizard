@@ -13,6 +13,5 @@ public:
     const std::vector<Expression_ptr> arguments;
 
     MethodCall(const Module_ptr module, const std::string method_name, const std::vector<Expression_ptr> arguments);
-    ~MethodCall();
     bool run();
 };

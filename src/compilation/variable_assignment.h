@@ -10,6 +10,5 @@ public:
     const Expression_ptr expression;
 
     VariableAssignment(const Variable_ptr variable, const Expression_ptr expression);
-    ~VariableAssignment();
     bool run();
 };

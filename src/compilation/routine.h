@@ -14,7 +14,6 @@ private:
 
 public:
     Routine(const std::vector<Action_ptr> actions);
-    ~Routine();
     bool is_running() const;
     void start();
     void step();

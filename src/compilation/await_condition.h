@@ -8,6 +8,5 @@ public:
     const Expression_ptr condition;
 
     AwaitCondition(const Expression_ptr condition);
-    ~AwaitCondition();
     bool run();
 };

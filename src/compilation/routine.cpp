@@ -4,9 +4,6 @@ Routine::Routine(const std::vector<Action_ptr> actions)
     : actions(actions) {
 }
 
-Routine::~Routine() {
-}
-
 bool Routine::is_running() const {
     return 0 <= this->instruction_index && this->instruction_index < this->actions.size();
 }
