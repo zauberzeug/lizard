@@ -454,6 +454,6 @@ void app_main() {
             }
         }
 
-        delay(10);
+        delay(1); // NOTE: loop will continue at next timer tick, which is every 10ms by default
     }
 }
