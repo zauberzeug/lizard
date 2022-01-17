@@ -3,13 +3,15 @@
 #include <memory>
 
 ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id)
-    : Module(odrive_motor, name), can_id(can_id),
-      can(can) {
+    : Module(odrive_motor, name), can_id(can_id), can(can) {
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["tick_offset"] = std::make_shared<NumberVariable>();
     this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
     this->properties["reversed"] = std::make_shared<BooleanVariable>();
-    this->can->subscribe(this->can_id + 0x009, this->shared_from_this());
+}
+
+void ODriveMotor::subscribe_to_can() {
+    this->can->subscribe(this->can_id + 0x009, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
 void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, const uint8_t input_mode) {

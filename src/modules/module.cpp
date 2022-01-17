@@ -61,9 +61,11 @@ Module_ptr Module::create(const std::string type, const std::string name, const 
         if (module->type != can) {
             throw std::runtime_error("module \"" + can_name + "\" is no can connection");
         }
-        Can_ptr can = std::static_pointer_cast<Can>(module);
+        const Can_ptr can = std::static_pointer_cast<Can>(module);
         uint32_t can_id = arguments[1]->evaluate_integer();
-        return std::make_shared<ODriveMotor>(name, can, can_id);
+        ODriveMotor_ptr odrive_motor = std::make_shared<ODriveMotor>(name, can, can_id);
+        odrive_motor->subscribe_to_can();
+        return odrive_motor;
     } else if (type == "ODriveWheels") {
         Module::expect(arguments, 2, identifier, identifier);
         std::string left_name = arguments[0]->evaluate_identifier();
@@ -76,8 +78,8 @@ Module_ptr Module::create(const std::string type, const std::string name, const 
         if (right_module->type != odrive_motor) {
             throw std::runtime_error("module \"" + right_name + "\" is no ODrive motor");
         }
-        ODriveMotor_ptr left_motor = std::static_pointer_cast<ODriveMotor>(left_module);
-        ODriveMotor_ptr right_motor = std::static_pointer_cast<ODriveMotor>(right_module);
+        const ODriveMotor_ptr left_motor = std::static_pointer_cast<ODriveMotor>(left_module);
+        const ODriveMotor_ptr right_motor = std::static_pointer_cast<ODriveMotor>(right_module);
         return std::make_shared<ODriveWheels>(name, left_motor, right_motor);
     } else if (type == "RmdMotor") {
         Module::expect(arguments, 2, identifier, integer);
@@ -86,9 +88,11 @@ Module_ptr Module::create(const std::string type, const std::string name, const 
         if (module->type != can) {
             throw std::runtime_error("module \"" + can_name + "\" is no can connection");
         }
-        Can_ptr can = std::static_pointer_cast<Can>(module);
+        const Can_ptr can = std::static_pointer_cast<Can>(module);
         uint8_t motor_id = arguments[1]->evaluate_integer();
-        return std::make_shared<RmdMotor>(name, can, motor_id);
+        RmdMotor_ptr rmd_motor = std::make_shared<RmdMotor>(name, can, motor_id);
+        rmd_motor->subscribe_to_can();
+        return rmd_motor;
     } else if (type == "Serial") {
         Module::expect(arguments, 4, integer, integer, integer, integer);
         gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
@@ -103,7 +107,7 @@ Module_ptr Module::create(const std::string type, const std::string name, const 
         if (module->type != serial) {
             throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
         }
-        Serial_ptr serial = std::static_pointer_cast<Serial>(module);
+        const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
         uint8_t address = arguments[1]->evaluate_integer();
         return std::make_shared<RoboClaw>(name, serial, address);
     } else if (type == "RoboClawMotor") {
@@ -113,7 +117,7 @@ Module_ptr Module::create(const std::string type, const std::string name, const 
         if (module->type != roboclaw) {
             throw std::runtime_error("module \"" + roboclaw_name + "\" is no RoboClaw");
         }
-        RoboClaw_ptr roboclaw = std::static_pointer_cast<RoboClaw>(module);
+        const RoboClaw_ptr roboclaw = std::static_pointer_cast<RoboClaw>(module);
         int64_t motor_number = arguments[1]->evaluate_integer();
         return std::make_shared<RoboClawMotor>(name, roboclaw, motor_number);
     } else if (type == "Proxy") {

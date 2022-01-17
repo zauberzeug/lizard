@@ -12,7 +12,10 @@ RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t moto
     this->properties["torque"] = std::make_shared<NumberVariable>();
     this->properties["speed"] = std::make_shared<NumberVariable>();
     this->properties["can_age"] = std::make_shared<NumberVariable>();
-    can->subscribe(this->can_id, this->shared_from_this());
+}
+
+void RmdMotor::subscribe_to_can() {
+    can->subscribe(this->can_id, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
 void RmdMotor::send_and_wait(const uint32_t id,
