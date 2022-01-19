@@ -57,7 +57,7 @@ void RmdMotor::step() {
                                 *((uint8_t *)(&speed) + 2),
                                 *((uint8_t *)(&speed) + 3));
         } else {
-            int32_t position = target_position * 100 * this->properties.at("ratio")->number_value;
+            int32_t position = own_position * 100 * this->properties.at("ratio")->number_value;
             this->send_and_wait(this->can_id, 0xa3, 0,
                                 0,
                                 0,
