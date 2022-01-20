@@ -4,7 +4,7 @@
 #
 
 PROJECT_NAME := lizard
-PROJECT_VER := $(shell git describe --always | git log -1 --format=%ci) $(shell git describe --always --tags --dirty)
+PROJECT_VER := $(shell date -d"`git log -1 --format=%ci`" +"%Y-%m-%d %H:%M") $(shell git describe --always --tags --dirty)
 EXTRA_COMPONENT_DIRS += $(PROJECT_PATH)/src
 
 include $(IDF_PATH)/make/project.mk
