@@ -3,6 +3,7 @@
 #include "../utils/echo.h"
 #include "../utils/strings.h"
 #include "../utils/timing.h"
+#include "esp_ota_ops.h"
 #include <memory>
 #include <stdlib.h>
 
@@ -22,6 +23,12 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     if (method_name == "restart") {
         Module::expect(arguments, 0);
         esp_restart();
+    } else if (method_name == "info") {
+        Module::expect(arguments, 0);
+        const esp_app_desc_t *app_desc = esp_ota_get_app_description();
+        echo(up, text, "lizard version: %s", app_desc->version);
+        echo(up, text, "compile time: %s, %s", app_desc->date, app_desc->time);
+        echo(up, text, "idf version: %s", app_desc->idf_ver);
     } else if (method_name == "print") {
         static char buffer[1024];
         int pos = 0;

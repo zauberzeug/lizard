@@ -236,6 +236,7 @@ It is automatically created right after the boot sequence.
 | Methods               | Description                                   | Arguments |
 | --------------------- | --------------------------------------------- | --------- |
 | `core.restart()`      | Restart the microcontroller                   |           |
+| `core.info()`         | Show lizard version and compile time          |           |
 | `core.print(...)`     | Print arbitrary arguments to the command line | arbitrary |
 | `core.output(format)` | Define the output format                      | `str`     |
 
