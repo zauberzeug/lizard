@@ -387,6 +387,14 @@ void process_uart(const uart_port_t uart_num) {
     }
 }
 
+void run_step(Module_ptr module) {
+    try {
+        module->step();
+    } catch (const std::runtime_error &e) {
+        echo(up, text, "error in module \"%s\": %s", module->name.c_str(), e.what());
+    }
+}
+
 void app_main() {
     const uart_config_t uart_config = {
         .baud_rate = 115200,
@@ -428,12 +436,11 @@ void app_main() {
         process_uart(UART_NUM_1);
 
         for (auto const &[module_name, module] : Global::modules) {
-            try {
-                module->step();
-            } catch (const std::runtime_error &e) {
-                echo(up, text, "error in module \"%s\": %s", module_name.c_str(), e.what());
+            if (module != core_module) {
+                run_step(module);
             }
         }
+        run_step(core_module);
 
         for (auto const &rule : Global::rules) {
             try {
