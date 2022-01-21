@@ -28,7 +28,10 @@ void RmdMotor::send_and_wait(const uint32_t id,
     this->can->send(id, d0, d1, d2, d3, d4, d5, d6, d7);
     unsigned long int start = micros();
     while (this->last_msg_id != d0 && micros_since(start) < timeout_ms * 1000) {
-        this->can->step();
+        this->can->receive();
+    }
+    if (this->last_msg_id != d0) {
+        echo(up, text, "warning: CAN timeout for msg id 0x%02x", d0);
     }
 }
 

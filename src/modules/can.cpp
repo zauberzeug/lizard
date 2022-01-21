@@ -45,27 +45,36 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
 }
 
 void Can::step() {
-    twai_message_t message;
-    while (twai_receive(&message, pdMS_TO_TICKS(0)) == ESP_OK) {
-        if (this->subscribers.count(message.identifier)) {
-            this->subscribers[message.identifier]->handle_can_msg(
-                message.identifier,
-                message.data_length_code,
-                message.data);
-        }
-
-        if (this->output_on) {
-            static char buffer[256];
-            int pos = std::sprintf(buffer, "can %03x", message.identifier);
-            if (!(message.flags & TWAI_MSG_FLAG_RTR)) {
-                for (int i = 0; i < message.data_length_code; ++i) {
-                    pos += std::sprintf(&buffer[pos], ",%02x", message.data[i]);
-                }
-            }
-            echo(up, text, buffer);
-        }
+    while (this->receive()) {
     }
     Module::step();
+}
+
+bool Can::receive() {
+    twai_message_t message;
+    if (twai_receive(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
+        return false;
+    }
+
+    if (this->subscribers.count(message.identifier)) {
+        this->subscribers[message.identifier]->handle_can_msg(
+            message.identifier,
+            message.data_length_code,
+            message.data);
+    }
+
+    if (this->output_on) {
+        static char buffer[256];
+        int pos = std::sprintf(buffer, "can %03x", message.identifier);
+        if (!(message.flags & TWAI_MSG_FLAG_RTR)) {
+            for (int i = 0; i < message.data_length_code; ++i) {
+                pos += std::sprintf(&buffer[pos], ",%02x", message.data[i]);
+            }
+        }
+        echo(up, text, buffer);
+    }
+
+    return true;
 }
 
 void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr) const {
