@@ -25,13 +25,18 @@ void RmdMotor::send_and_wait(const uint32_t id,
                              const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
                              const unsigned long int timeout_ms) {
     this->last_msg_id = 0;
-    this->can->send(id, d0, d1, d2, d3, d4, d5, d6, d7);
-    unsigned long int start = micros();
-    while (this->last_msg_id != d0 && micros_since(start) < timeout_ms * 1000) {
-        this->can->receive();
-    }
-    if (this->last_msg_id != d0) {
-        echo(up, text, "warning: CAN timeout for msg id 0x%02x", d0);
+    const int max_attempts = 3;
+    for (int i = 0; i < max_attempts; ++i) {
+        this->can->send(id, d0, d1, d2, d3, d4, d5, d6, d7);
+        unsigned long int start = micros();
+        while (this->last_msg_id != d0 && micros_since(start) < timeout_ms * 1000) {
+            this->can->receive();
+        }
+        if (this->last_msg_id == d0) {
+            return;
+        } else {
+            echo(up, text, "%s warning: CAN timeout for msg id 0x%02x (attempt %d/%d)", this->name.c_str(), d0, i + 1, max_attempts);
+        }
     }
 }
 
