@@ -45,42 +45,13 @@ void RmdMotor::step() {
 
     this->send_and_wait(this->can_id, 0x92, 0, 0, 0, 0, 0, 0, 0);
     this->send_and_wait(this->can_id, 0x9c, 0, 0, 0, 0, 0, 0, 0);
-    if (this->map_leader) {
-        double own_position = this->properties.at("position")->number_value;
-        double leader_position = this->map_leader->properties.at("position")->number_value;
-        double target_position = leader_position * this->map_scale + this->map_offset;
-        double target_speed = (target_position - own_position) / 0.01;
-        this->properties.at("map_distance")->number_value = target_position - own_position;
-        if (abs(target_speed) > 1) {
-            int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;
-            this->send_and_wait(this->can_id, 0xa2, 0,
-                                0,
-                                0,
-                                *((uint8_t *)(&speed) + 0),
-                                *((uint8_t *)(&speed) + 1),
-                                *((uint8_t *)(&speed) + 2),
-                                *((uint8_t *)(&speed) + 3));
-            this->properties.at("map_speed")->number_value = target_speed;
-        } else {
-            int32_t position = own_position * 100 * this->properties.at("ratio")->number_value;
-            this->send_and_wait(this->can_id, 0xa3, 0,
-                                0,
-                                0,
-                                *((uint8_t *)(&position) + 0),
-                                *((uint8_t *)(&position) + 1),
-                                *((uint8_t *)(&position) + 2),
-                                *((uint8_t *)(&position) + 3));
-            this->properties.at("map_speed")->number_value = 0;
-        }
-    } else {
-        this->properties.at("map_distance")->number_value = 0;
-        this->properties.at("map_speed")->number_value = 0;
-    }
     Module::step();
 }
 
 void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    this->map_leader = nullptr;
+    if (method_name != "map_") {
+        this->map_leader = nullptr;
+    }
 
     if (method_name == "zero") {
         Module::expect(arguments, 0);
@@ -228,6 +199,39 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
         this->send_and_wait(this->can_id, 0x9b, 0, 0, 0, 0, 0, 0, 0);
+    } else if (method_name == "map_") {
+        Module::expect(arguments, 0);
+        if (this->map_leader) {
+            double own_position = this->properties.at("position")->number_value;
+            double leader_position = this->map_leader->properties.at("position")->number_value;
+            double target_position = leader_position * this->map_scale + this->map_offset;
+            double target_speed = (target_position - own_position) / 0.01;
+            this->properties.at("map_distance")->number_value = target_position - own_position;
+            if (abs(target_speed) > 1) {
+                int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;
+                this->send_and_wait(this->can_id, 0xa2, 0,
+                                    0,
+                                    0,
+                                    *((uint8_t *)(&speed) + 0),
+                                    *((uint8_t *)(&speed) + 1),
+                                    *((uint8_t *)(&speed) + 2),
+                                    *((uint8_t *)(&speed) + 3));
+                this->properties.at("map_speed")->number_value = target_speed;
+            } else {
+                int32_t position = own_position * 100 * this->properties.at("ratio")->number_value;
+                this->send_and_wait(this->can_id, 0xa3, 0,
+                                    0,
+                                    0,
+                                    *((uint8_t *)(&position) + 0),
+                                    *((uint8_t *)(&position) + 1),
+                                    *((uint8_t *)(&position) + 2),
+                                    *((uint8_t *)(&position) + 3));
+                this->properties.at("map_speed")->number_value = 0;
+            }
+        } else {
+            this->properties.at("map_distance")->number_value = 0;
+            this->properties.at("map_speed")->number_value = 0;
+        }
     } else {
         Module::call(method_name, arguments);
     }
