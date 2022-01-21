@@ -12,6 +12,8 @@ RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t moto
     this->properties["torque"] = std::make_shared<NumberVariable>();
     this->properties["speed"] = std::make_shared<NumberVariable>();
     this->properties["can_age"] = std::make_shared<NumberVariable>();
+    this->properties["map_distance"] = std::make_shared<NumberVariable>();
+    this->properties["map_speed"] = std::make_shared<NumberVariable>();
 }
 
 void RmdMotor::subscribe_to_can() {
@@ -47,6 +49,7 @@ void RmdMotor::step() {
         double leader_position = this->map_leader->properties.at("position")->number_value;
         double target_position = leader_position * this->map_scale + this->map_offset;
         double target_speed = (target_position - own_position) / seconds_per_step;
+        this->properties.at("map_distance")->number_value = target_position - own_position;
         if (abs(target_speed) > 1) {
             int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;
             this->send_and_wait(this->can_id, 0xa2, 0,
@@ -56,6 +59,7 @@ void RmdMotor::step() {
                                 *((uint8_t *)(&speed) + 1),
                                 *((uint8_t *)(&speed) + 2),
                                 *((uint8_t *)(&speed) + 3));
+            this->properties.at("map_speed")->number_value = target_speed;
         } else {
             int32_t position = own_position * 100 * this->properties.at("ratio")->number_value;
             this->send_and_wait(this->can_id, 0xa3, 0,
@@ -65,7 +69,11 @@ void RmdMotor::step() {
                                 *((uint8_t *)(&position) + 1),
                                 *((uint8_t *)(&position) + 2),
                                 *((uint8_t *)(&position) + 3));
+            this->properties.at("map_speed")->number_value = 0;
         }
+    } else {
+        this->properties.at("map_distance")->number_value = 0;
+        this->properties.at("map_speed")->number_value = 0;
     }
     Module::step();
 }

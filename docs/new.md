@@ -361,13 +361,15 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | ------------------------------- | ------------------------------ | ----------------- |
 | `rmd = RmdMotor(can, motor_id)` | CAN module and motor ID (1..8) | CAN module, `int` |
 
-| Properties     | Description                                   | Data type |
-| -------------- | --------------------------------------------- | --------- |
-| `rmd.position` | Multi-turn motor position (deg)               | `float`   |
-| `rmd.ratio`    | Transmission from motor to shaft (default: 6) | `float`   |
-| `rmd.torque`   | Current torque                                | `float`   |
-| `rmd.speed`    | Current speed                                 | `float`   |
-| `rmd.can_age`  | Time since last CAN message from motor (s)    | `float`   |
+| Properties         | Description                                    | Data type |
+| ------------------ | ---------------------------------------------- | --------- |
+| `rmd.position`     | Multi-turn motor position (deg)                | `float`   |
+| `rmd.ratio`        | Transmission from motor to shaft (default: 6)  | `float`   |
+| `rmd.torque`       | Current torque                                 | `float`   |
+| `rmd.speed`        | Current speed (deg/s)                          | `float`   |
+| `rmd.can_age`      | Time since last CAN message from motor (s)     | `float`   |
+| `rmd.map_distance` | Distance to leading motor (deg)                | `float`   |
+| `rmd.map_speed`    | Computed speed to follow leading motor (deg/s) | `float`   |
 
 | Methods                       | Description                                               | Arguments              |
 | ----------------------------- | --------------------------------------------------------- | ---------------------- |
