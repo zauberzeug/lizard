@@ -43,20 +43,13 @@ void RmdMotor::send_and_wait(const uint32_t id,
 void RmdMotor::step() {
     this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
 
-    if (this->last_step_time == 0) {
-        this->last_step_time = micros();
-        return;
-    }
-    double seconds_per_step = micros_since(this->last_step_time) / 1e6;
-    this->last_step_time = micros();
-
     this->send_and_wait(this->can_id, 0x92, 0, 0, 0, 0, 0, 0, 0);
     this->send_and_wait(this->can_id, 0x9c, 0, 0, 0, 0, 0, 0, 0);
     if (this->map_leader) {
         double own_position = this->properties.at("position")->number_value;
         double leader_position = this->map_leader->properties.at("position")->number_value;
         double target_position = leader_position * this->map_scale + this->map_offset;
-        double target_speed = (target_position - own_position) / seconds_per_step;
+        double target_speed = (target_position - own_position) / 0.01;
         this->properties.at("map_distance")->number_value = target_position - own_position;
         if (abs(target_speed) > 1) {
             int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;

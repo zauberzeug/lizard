@@ -18,7 +18,6 @@ private:
     ConstRmdMotor_ptr map_leader = nullptr;
     double map_scale = 1;
     double map_offset = 0;
-    unsigned long int last_step_time = 0;
 
     void send_and_wait(const uint32_t id,
                        const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,

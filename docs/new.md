@@ -403,7 +403,7 @@ Furthermore, multiple writes will affect the chip life, thus it is not recommend
 
 When mapping the movement of a following motor to a leading motor, the follower uses velocity control to follow the leader.
 The follower's target speed is always computed such that it catches up within one loop cycle.
-When the following motor reaches its target position and the computed speed is below 1 degree per second, the follower switches to position control and holds the target position.
+When the following motor reaches its target position and the computed speed is below 1 degree per second, the follower switches to position control and holds the current position.
 
 The mapping interval (`a`, `b`) should not be empty, because the target position of the following motor would be undefined.
 
