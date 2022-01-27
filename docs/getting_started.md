@@ -1,12 +1,16 @@
 # Getting Started
 
-You can use monitor.py to launch an interactive shell to try out configurations. Normally the ESP will write its output to the console for processing on the Jetson. To stop these messages you can call
-    
-    esp mute
+You launch an interactive shell with monitor.py to try out configurations.
+To verify that the communication is working, use one of the following commands to generate some output:
 
-See the ESP module reference for other commands. Do not forget to unmute the esp afterwards to make sure you can read back the data on the Jetson.
-To try out individual modules, you can get their current state or unmute them for continuous output, e.g.:
-	
-    new button estop MCP_A3
-	estop get
-	estop unmute
+    core.info()
+    core.millis
+    core.print("Hello, Lizard!")
+
+See the [module reference](module_reference.md) for other commands.
+
+To try out individual modules, you can get their current properties or unmute them for continuous output, e.g.:
+
+    estop = Input(34)
+    estop.level
+    estop.unmute()

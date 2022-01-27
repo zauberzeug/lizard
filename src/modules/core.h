@@ -16,6 +16,7 @@ using Core_ptr = std::shared_ptr<Core>;
 class Core : public Module {
 private:
     std::list<struct output_element_t> output_list;
+    unsigned long int last_message_millis = 0;
 
 public:
     Core(const std::string name);
@@ -24,4 +25,5 @@ public:
     double get(const std::string property_name) const;
     void set(std::string property_name, double value);
     std::string get_output() const;
+    void keep_alive();
 };
