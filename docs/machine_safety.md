@@ -16,5 +16,9 @@ The 8-bit checksum is computed as the bitwise XOR of all characters excluding th
 
 ## Keep-alive signal
 
-This feature is not implemented, yet.
-It will allow stopping critical hardware modules when the connection to the host system is lost.
+The `core` module provides a property `last_message_age`, which holds the time in milliseconds since the last input message was received, parsed and successfully interpreted.
+It allows formulating rules that stop critical hardware modules when the connection to the host system is lost.
+
+The following example stops a motor when there is no serial communication for 500 ms:
+
+    when core.last_message_age > 500 then motor.stop(); end
