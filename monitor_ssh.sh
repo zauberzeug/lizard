@@ -3,7 +3,7 @@
 if [ $# -lt 1 ]
 then
     echo "Usage:"
-    echo "`basename $0` [-e/--expander] user@host"
+    echo "`basename $0` [-e/--expander] <user@host>"
     exit
 fi
 

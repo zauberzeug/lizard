@@ -1,12 +1,13 @@
 site_name: Lizard
 site_url: https://lizard.dev/
 nav:
-    - About: index.md
-    - messages.md
-    - examples.md
-    - getting_started.md
-    - pinout.md
-    - module_reference.md
+  - About: index.md
+  - getting_started.md
+  - language.md
+  - examples.md
+  - module_reference.md
+  - machine_safety.md
+  - tools.md
 repo_url: https://github.com/zauberzeug/lizard
 edit_uri: edit/main/docs/
 theme:
