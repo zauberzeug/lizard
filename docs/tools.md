@@ -30,15 +30,6 @@ Note that the configure script cannot communicate while the serial interface is 
 
 ## Development
 
-### Get OWL
-
-In order to make changes to the Lizard language file, you need to install OWL.
-The following script clones the current version from [Github](https://github.com/ianh/owl).
-
-```bash
-./get_owl.sh
-```
-
 ### Compile script
 
 After making changes to the Lizard language definition or its C++ implementation, you can use the compile script to generate a new parser and executing the compilation in an Espressif IDF Docker container.

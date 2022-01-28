@@ -3,6 +3,10 @@
 echo "Generating parser..."
 if [[ "language.owl" -nt main/parser.h ]]
 then
+    pushd owl
+    make
+    popd
+
     owl/owl -c language.owl -o main/parser.h
     if [[ $? -ne 0 ]]
     then
