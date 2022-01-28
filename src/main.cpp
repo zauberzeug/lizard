@@ -17,6 +17,7 @@
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <stdint.h>
@@ -258,12 +259,12 @@ void process_lizard(const char *line) {
         echo(up, text, ">> %s", line);
         tic();
     }
-    struct owl_tree *const tree = owl_tree_create_from_string(line);
+    auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(line), owl_tree_destroy);
     if (debug) {
         toc("Tree creation");
     }
     struct source_range range;
-    switch (owl_tree_get_error(tree, &range)) {
+    switch (owl_tree_get_error(tree.get(), &range)) {
     case ERROR_INVALID_FILE:
         echo(up, text, "error: invalid file");
         break;
@@ -283,15 +284,14 @@ void process_lizard(const char *line) {
         break;
     default:
         if (debug) {
-            owl_tree_print(tree);
+            owl_tree_print(tree.get());
             tic();
         }
-        process_tree(tree);
+        process_tree(tree.get());
         if (debug) {
             toc("Tree traversal");
         }
     }
-    owl_tree_destroy(tree);
 }
 
 void deactivate_uart1() {
