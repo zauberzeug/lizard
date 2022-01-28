@@ -10,5 +10,5 @@ public:
     const ConstExpression_ptr expression;
 
     VariableAssignment(const Variable_ptr variable, const ConstExpression_ptr expression);
-    bool run();
+    bool run() override;
 };

@@ -11,5 +11,5 @@ idf_component_register(
     INCLUDE_DIRS "." "compilation" "modules" "utils"
 )
 
-component_compile_options(-std=gnu++17)
+component_compile_options(-std=gnu++17 -Wsuggest-override)
 set_source_files_properties(parser.c PROPERTIES COMPILE_FLAGS -Wno-missing-field-initializers)

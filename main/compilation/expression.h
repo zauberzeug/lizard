@@ -31,7 +31,7 @@ private:
 
 public:
     BooleanExpression(const bool value);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
 
 class StringExpression : public Expression {
@@ -40,7 +40,7 @@ private:
 
 public:
     StringExpression(const std::string value);
-    std::string evaluate_string() const;
+    std::string evaluate_string() const override;
 };
 
 class IntegerExpression : public Expression {
@@ -49,8 +49,8 @@ private:
 
 public:
     IntegerExpression(const int64_t value);
-    int64_t evaluate_integer() const;
-    double evaluate_number() const;
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
 };
 
 class NumberExpression : public Expression {
@@ -59,7 +59,7 @@ private:
 
 public:
     NumberExpression(const double value);
-    double evaluate_number() const;
+    double evaluate_number() const override;
 };
 
 class VariableExpression : public Expression {
@@ -68,11 +68,11 @@ private:
 
 public:
     VariableExpression(const ConstVariable_ptr variable);
-    bool evaluate_boolean() const;
-    int64_t evaluate_integer() const;
-    double evaluate_number() const;
-    std::string evaluate_string() const;
-    std::string evaluate_identifier() const;
+    bool evaluate_boolean() const override;
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
+    std::string evaluate_string() const override;
+    std::string evaluate_identifier() const override;
 };
 
 class PowerExpression : public Expression {
@@ -82,8 +82,8 @@ private:
 
 public:
     PowerExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
-    double evaluate_number() const;
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
 };
 
 class NegateExpression : public Expression {
@@ -92,8 +92,8 @@ private:
 
 public:
     NegateExpression(const ConstExpression_ptr operand);
-    int64_t evaluate_integer() const;
-    double evaluate_number() const;
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
 };
 
 class MultiplyExpression : public Expression {
@@ -103,8 +103,8 @@ private:
 
 public:
     MultiplyExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
-    double evaluate_number() const;
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
 };
 
 class DivideExpression : public Expression {
@@ -114,8 +114,8 @@ private:
 
 public:
     DivideExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
-    double evaluate_number() const;
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
 };
 
 class AddExpression : public Expression {
@@ -125,8 +125,8 @@ private:
 
 public:
     AddExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
-    double evaluate_number() const;
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
 };
 
 class SubtractExpression : public Expression {
@@ -136,8 +136,8 @@ private:
 
 public:
     SubtractExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
-    double evaluate_number() const;
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
 };
 
 class ShiftLeftExpression : public Expression {
@@ -147,7 +147,7 @@ private:
 
 public:
     ShiftLeftExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
+    int64_t evaluate_integer() const override;
 };
 
 class ShiftRightExpression : public Expression {
@@ -157,7 +157,7 @@ private:
 
 public:
     ShiftRightExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
+    int64_t evaluate_integer() const override;
 };
 
 class BitAndExpression : public Expression {
@@ -167,7 +167,7 @@ private:
 
 public:
     BitAndExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
+    int64_t evaluate_integer() const override;
 };
 
 class BitXorExpression : public Expression {
@@ -177,7 +177,7 @@ private:
 
 public:
     BitXorExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
+    int64_t evaluate_integer() const override;
 };
 
 class BitOrExpression : public Expression {
@@ -187,7 +187,7 @@ private:
 
 public:
     BitOrExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    int64_t evaluate_integer() const;
+    int64_t evaluate_integer() const override;
 };
 
 class GreaterExpression : public Expression {
@@ -197,7 +197,7 @@ private:
 
 public:
     GreaterExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
 
 class LessExpression : public Expression {
@@ -207,7 +207,7 @@ private:
 
 public:
     LessExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
 
 class GreaterEqualExpression : public Expression {
@@ -217,7 +217,7 @@ private:
 
 public:
     GreaterEqualExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
 
 class LessEqualExpression : public Expression {
@@ -227,7 +227,7 @@ private:
 
 public:
     LessEqualExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
 
 class EqualExpression : public Expression {
@@ -237,7 +237,7 @@ private:
 
 public:
     EqualExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
 
 class UnequalExpression : public Expression {
@@ -247,7 +247,7 @@ private:
 
 public:
     UnequalExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
 
 class NotExpression : public Expression {
@@ -256,7 +256,7 @@ private:
 
 public:
     NotExpression(const ConstExpression_ptr operand);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
 
 class AndExpression : public Expression {
@@ -266,7 +266,7 @@ private:
 
 public:
     AndExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
 
 class OrExpression : public Expression {
@@ -276,5 +276,5 @@ private:
 
 public:
     OrExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
-    bool evaluate_boolean() const;
+    bool evaluate_boolean() const override;
 };
