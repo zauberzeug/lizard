@@ -2,4 +2,5 @@ build/
 sdkconfig
 *.swp
 *.bin
+owl_executable
 config.txt

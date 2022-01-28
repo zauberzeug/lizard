@@ -6,8 +6,9 @@ then
     pushd owl
     make
     popd
+    mv owl/owl ./owl_executable
 
-    owl/owl -c language.owl -o main/parser.h
+    ./owl_executable -c language.owl -o main/parser.h
     if [[ $? -ne 0 ]]
     then
         rm -f main/parser.h 
