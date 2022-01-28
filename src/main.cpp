@@ -380,11 +380,7 @@ void process_uart(const uart_port_t uart_num) {
         }
         input[len] = 0;
 
-        try {
-            process_line(input, len, uart_num);
-        } catch (const std::runtime_error &e) {
-            echo(up, text, "error while processing line from UART %d: %s", uart_num, e.what());
-        }
+        process_line(input, len, uart_num);
     }
 }
 
@@ -433,8 +429,16 @@ void app_main() {
     }
 
     while (true) {
-        process_uart(UART_NUM_0);
-        process_uart(UART_NUM_1);
+        try {
+            process_uart(UART_NUM_0);
+        } catch (const std::runtime_error &e) {
+            echo(up, text, "error processing uart0: %s", e.what());
+        }
+        try {
+            process_uart(UART_NUM_1);
+        } catch (const std::runtime_error &e) {
+            echo(up, text, "error processing uart1: %s", e.what());
+        }
 
         for (auto const &[module_name, module] : Global::modules) {
             if (module != core_module) {
