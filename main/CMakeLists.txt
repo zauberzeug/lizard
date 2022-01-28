@@ -12,3 +12,4 @@ idf_component_register(
 )
 
 component_compile_options(-std=gnu++17)
+set_source_files_properties(parser.c PROPERTIES COMPILE_FLAGS -Wno-missing-field-initializers)
