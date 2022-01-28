@@ -22,7 +22,7 @@ dev=/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_f27
     --flash_freq 40m \
     --flash_size detect \
     0x1000 build/bootloader/bootloader.bin \
-    0x8000 build/partitions_singleapp.bin \
+    0x8000 build/partition_table/partition_table.bin \
     0x10000 build/lizard.bin
 
 echo "Bringing microcontroller back into normal operation mode..."
