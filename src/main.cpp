@@ -342,7 +342,9 @@ void process_line(const char *line, const int len, const uart_port_t uart_num) {
             process_lizard(line);
         }
     }
-    core_module->keep_alive();
+    if (uart_num == UART_NUM_0) {
+        core_module->keep_alive();
+    }
 }
 
 void process_uart(const uart_port_t uart_num) {
