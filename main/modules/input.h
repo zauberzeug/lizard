@@ -9,7 +9,7 @@ private:
 
 public:
     Input(const std::string name, const gpio_num_t number);
-    void step();
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
-    std::string get_output() const;
+    void step() override;
+    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    std::string get_output() const override;
 };

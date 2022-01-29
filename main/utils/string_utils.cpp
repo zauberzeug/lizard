@@ -1,4 +1,4 @@
-#include "strings.h"
+#include "string_utils.h"
 #include <string>
 
 std::string cut_first_word(std::string &msg, const char delimiter) {

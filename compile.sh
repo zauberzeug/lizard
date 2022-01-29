@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 
 echo "Generating parser..."
-if [[ "language.owl" -nt src/parser.h ]]
+if [[ "language.owl" -nt main/parser.h ]]
 then
-    owl/owl -c language.owl -o src/parser.h
+    pushd owl
+    make
+    popd
+    mv owl/owl ./owl_executable
+
+    ./owl_executable -c language.owl -o main/parser.h
     if [[ $? -ne 0 ]]
     then
-        rm -f src/parser.h 
+        rm -f main/parser.h 
         exit 1
     fi
 else
@@ -14,4 +19,4 @@ else
 fi
 
 echo "Compiling Lizard..."
-docker run --rm -v $PWD:/project -w /project espressif/idf:v4.2 make -j4 || exit 1
+docker run --rm -v $PWD:/project -w /project espressif/idf:v4.4 idf.py build || exit 1

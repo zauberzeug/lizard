@@ -1,7 +1,7 @@
 #include "core.h"
 #include "../global.h"
 #include "../utils/echo.h"
-#include "../utils/strings.h"
+#include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "esp_ota_ops.h"
 #include <memory>
@@ -11,11 +11,13 @@ Core::Core(const std::string name) : Module(core, name) {
     this->properties["debug"] = std::make_shared<BooleanVariable>(false);
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
+    this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
 }
 
 void Core::step() {
     this->properties.at("millis")->integer_value = millis();
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
+    this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
 }
 
@@ -83,4 +85,8 @@ std::string Core::get_output() const {
         }
     }
     return std::string(output_buffer);
+}
+
+void Core::keep_alive() {
+    this->last_message_millis = millis();
 }

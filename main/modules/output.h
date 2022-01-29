@@ -9,5 +9,5 @@ private:
 
 public:
     Output(const std::string name, const gpio_num_t number);
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 };
