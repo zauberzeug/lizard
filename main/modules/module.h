@@ -8,6 +8,7 @@
 #include <vector>
 
 enum ModuleType {
+    bluetooth,
     core,
     input,
     output,

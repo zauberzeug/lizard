@@ -10,6 +10,7 @@
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "global.h"
+#include "modules/bluetooth.h"
 #include "modules/core.h"
 #include "modules/module.h"
 #include "storage.h"
@@ -34,6 +35,8 @@ extern "C" {
 #include "parser.h"
 void app_main();
 }
+
+void process_lizard(const char *line);
 
 std::string identifier_to_string(const struct owl_ref ref) {
     const struct parsed_identifier identifier = parsed_identifier_get(ref);
@@ -180,7 +183,11 @@ void process_tree(owl_tree *const tree) {
             }
             const std::string module_type = identifier_to_string(constructor.module_type);
             const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-            Global::add_module(module_name, Module::create(module_type, module_name, arguments));
+            const Module_ptr module = Module::create(module_type, module_name, arguments);
+            if (module->type == bluetooth) {
+                std::static_pointer_cast<Bluetooth>(module)->init(process_lizard);
+            }
+            Global::add_module(module_name, module);
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
             const std::string module_name = identifier_to_string(method_call.module_name);

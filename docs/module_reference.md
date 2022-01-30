@@ -35,6 +35,17 @@ The output `format` is a string with multiple space-separated elements of the pa
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789`.
 
+## Bluetooth
+
+Lizard can receive messages via Bluetooth Low Energy.
+Simply create a Bluetooth module with a device name of your choice.
+
+| Constructor                          | Description                                        | Arguments |
+| ------------------------------------ | -------------------------------------------------- | --------- |
+| `bluetooth = Bluetooth(device_name)` | initialize bluetooth with advertised `device_name` | `str`     |
+
+Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0 that allows writing Lizard statements like on the command line.
+
 ## Input
 
 The input module is associated with a digital input pin that is be connected to a pushbutton, sensor or other input signal.
