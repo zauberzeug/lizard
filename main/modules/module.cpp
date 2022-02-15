@@ -1,6 +1,7 @@
 #include "module.h"
 #include "../global.h"
 #include "../utils/echo.h"
+#include "bluetooth.h"
 #include "can.h"
 #include "driver/gpio.h"
 #include "input.h"
@@ -35,6 +36,10 @@ void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, co
 Module_ptr Module::create(const std::string type, const std::string name, const std::vector<ConstExpression_ptr> arguments) {
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
+    } else if (type == "Bluetooth") {
+        Module::expect(arguments, 1, string);
+        std::string device_name = arguments[0]->evaluate_string();
+        return std::make_shared<Bluetooth>(name, device_name);
     } else if (type == "Output") {
         Module::expect(arguments, 1, integer);
         return std::make_shared<Output>(name, (gpio_num_t)arguments[0]->evaluate_integer());
