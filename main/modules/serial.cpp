@@ -1,4 +1,5 @@
 #include "serial.h"
+#include "utils/echo.h"
 
 #define RX_BUF_SIZE 1024
 #define TX_BUF_SIZE 1024
@@ -60,7 +61,7 @@ std::string Serial::get_output() const {
     static char buffer[256];
     int byte;
     int pos = 0;
-    while ((byte = this->read()) > 0) {
+    while ((byte = this->read()) >= 0) {
         pos += std::sprintf(&buffer[pos], pos == 0 ? "%02x" : " %02x", byte);
     }
     return buffer;
@@ -74,6 +75,9 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
             }
             this->write(argument->evaluate_integer());
         }
+    } else if (method_name == "read") {
+        const std::string output = this->get_output();
+        echo(up, text, "%s %s", this->name.c_str(), output.c_str());
     } else {
         Module::call(method_name, arguments);
     }
