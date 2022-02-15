@@ -23,6 +23,6 @@ public:
     size_t write(const uint8_t byte) const;
     void flush() const;
     void clear() const;
-    std::string get_output() const;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    std::string get_output() const override;
+    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 };
