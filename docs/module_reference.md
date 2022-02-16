@@ -99,6 +99,14 @@ The serial module allows communicating with peripherals via the specified connec
 | ------------------------------------ | ---------------------------------- | --------- |
 | `serial = Serial(rx, tx, baud, num)` | RX/TX pins, baud rate, UART number | 4x `int`  |
 
+| Methods                        | Description                    | Arguments |
+| ------------------------------ | ------------------------------ | --------- |
+| `serial.send(b0, b1, b2, ...)` | Send a number of bytes         | `int`s    |
+| `serial.read()`                | Read and output current buffer |           |
+
+This module might be used by other modules that communicate with peripherals via serial.
+You can, however, unmute the serial module to have incoming messages printed to the command line instead of keeping them buffered for other modules.
+
 ## Linear motor
 
 This module controls a linear actuator via two output pins (move in, move out) and two input pins reading two limit switches (end in, end out).

@@ -1,4 +1,5 @@
 #include "serial.h"
+#include "utils/echo.h"
 
 #define RX_BUF_SIZE 1024
 #define TX_BUF_SIZE 1024
@@ -49,5 +50,35 @@ int Serial::read(uint32_t timeout) const {
 void Serial::clear() const {
     while (this->available()) {
         this->read();
+    }
+}
+
+std::string Serial::get_output() const {
+    if (!this->available()) {
+        return "";
+    }
+
+    static char buffer[256];
+    int byte;
+    int pos = 0;
+    while ((byte = this->read()) >= 0) {
+        pos += std::sprintf(&buffer[pos], pos == 0 ? "%02x" : " %02x", byte);
+    }
+    return buffer;
+}
+
+void Serial::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+    if (method_name == "send") {
+        for (auto const &argument : arguments) {
+            if ((argument->type & integer) == 0) {
+                throw std::runtime_error("type mismatch at argument");
+            }
+            this->write(argument->evaluate_integer());
+        }
+    } else if (method_name == "read") {
+        const std::string output = this->get_output();
+        echo(up, text, "%s %s", this->name.c_str(), output.c_str());
+    } else {
+        Module::call(method_name, arguments);
     }
 }
