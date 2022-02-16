@@ -77,7 +77,7 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
         }
     } else if (method_name == "read") {
         const std::string output = this->get_output();
-        echo(up, text, "%s %s", this->name.c_str(), output.c_str());
+        echo("%s %s", this->name.c_str(), output.c_str());
     } else {
         Module::call(method_name, arguments);
     }

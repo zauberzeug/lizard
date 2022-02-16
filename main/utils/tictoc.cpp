@@ -11,5 +11,5 @@ void tic() {
 void toc(const char *msg) {
     const auto dt = std::chrono::high_resolution_clock::now() - t;
     const auto us = std::chrono::duration_cast<std::chrono::microseconds>(dt);
-    echo(up, text, "%s took %.3f ms", msg, 0.001 * us.count());
+    echo("%s took %.3f ms", msg, 0.001 * us.count());
 }

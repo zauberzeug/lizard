@@ -137,16 +137,16 @@ void Module::step() {
     if (this->output_on) {
         const std::string output = this->get_output();
         if (!output.empty()) {
-            echo(up, text, "%s %s", this->name.c_str(), output.c_str());
+            echo("%s %s", this->name.c_str(), output.c_str());
         }
     }
     if (this->broadcast) {
         static char buffer[1024];
         for (auto const &[property_name, property] : this->properties) {
             int pos = 0;
-            pos += sprintf(&buffer[pos], "%s.%s = ", this->name.c_str(), property_name.c_str());
+            pos += sprintf(&buffer[pos], "!!%s.%s = ", this->name.c_str(), property_name.c_str());
             pos += property->print_to_buffer(&buffer[pos]);
-            echo(up, code, buffer);
+            echo(buffer);
         }
     }
 }

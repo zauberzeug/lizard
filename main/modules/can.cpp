@@ -71,7 +71,7 @@ bool Can::receive() {
                 pos += std::sprintf(&buffer[pos], ",%02x", message.data[i]);
             }
         }
-        echo(up, text, buffer);
+        echo(buffer);
     }
 
     return true;

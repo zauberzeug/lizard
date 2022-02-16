@@ -11,7 +11,7 @@ void Bluetooth::init(void (*message_handler)(const char *)) {
             std::string message_string(message.data(), message.length());
             message_handler(message_string.c_str());
         } catch (const std::exception &e) {
-            echo(up, text, "error in bluetooth message handler: %s", e.what());
+            echo("error in bluetooth message handler: %s", e.what());
         }
     });
 }
