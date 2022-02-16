@@ -12,6 +12,7 @@
 #include "global.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
+#include "modules/expander.h"
 #include "modules/module.h"
 #include "proxy.h"
 #include "storage.h"
@@ -199,9 +200,18 @@ void process_tree(owl_tree *const tree) {
                 }
                 Global::add_module(module_name, module);
             } else {
-                const std::string module_name = proxy_identifier_to_string(constructor.expander_name, constructor.module_name);
-                const Module_ptr module = std::make_shared<Proxy>(module_name);
-                Global::add_module(module_name, module);
+                const std::string proxy_name = proxy_identifier_to_string(constructor.expander_name, constructor.module_name);
+                const std::string expander_name = identifier_to_string(constructor.expander_name);
+                const std::string module_name = identifier_to_string(constructor.module_name);
+                const std::string module_type = identifier_to_string(constructor.module_type);
+                const Module_ptr expander_module = Global::get_module(expander_name);
+                if (expander_module->type != expander) {
+                    throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
+                }
+                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
+                const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
+                const Module_ptr proxy = std::make_shared<Proxy>(proxy_name, expander_name, module_name, module_type, expander, arguments);
+                Global::add_module(proxy_name, proxy);
             }
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);

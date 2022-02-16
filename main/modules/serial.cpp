@@ -31,6 +31,10 @@ size_t Serial::write(const uint8_t byte) const {
     return 1;
 }
 
+void Serial::write_chars(const char *message, const int length) const {
+    uart_write_bytes(this->uart_num, message, length);
+}
+
 int Serial::available() const {
     size_t available;
     uart_get_buffered_data_len(this->uart_num, &available);
