@@ -4,6 +4,7 @@
 #include "bluetooth.h"
 #include "can.h"
 #include "driver/gpio.h"
+#include "expander.h"
 #include "input.h"
 #include "linear_motor.h"
 #include "odrive_motor.h"
@@ -36,6 +37,17 @@ void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, co
 Module_ptr Module::create(const std::string type, const std::string name, const std::vector<ConstExpression_ptr> arguments) {
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
+    } else if (type == "Expander") {
+        Module::expect(arguments, 3, identifier, integer, integer);
+        std::string serial_name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(serial_name);
+        if (module->type != serial) {
+            throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
+        }
+        const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
+        const gpio_num_t boot_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+        const gpio_num_t enable_pin = (gpio_num_t)arguments[2]->evaluate_integer();
+        return std::make_shared<Expander>(name, serial, boot_pin, enable_pin);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();

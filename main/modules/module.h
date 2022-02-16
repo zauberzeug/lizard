@@ -10,6 +10,7 @@
 enum ModuleType {
     bluetooth,
     core,
+    expander,
     input,
     output,
     can,
