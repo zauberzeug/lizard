@@ -10,7 +10,6 @@
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
 #include "output.h"
-#include "proxy.h"
 #include "rmd_motor.h"
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
@@ -137,9 +136,6 @@ Module_ptr Module::create(const std::string type, const std::string name, const 
         const RoboClaw_ptr roboclaw = std::static_pointer_cast<RoboClaw>(module);
         int64_t motor_number = arguments[1]->evaluate_integer();
         return std::make_shared<RoboClawMotor>(name, roboclaw, motor_number);
-    } else if (type == "Proxy") {
-        Module::expect(arguments, 0);
-        return std::make_shared<Proxy>(name);
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }

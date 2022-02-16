@@ -27,8 +27,8 @@ action =
   await_routine
 
 noop = ''
-constructor = identifier@module_name '=' identifier@module_type [ '(' expression@argument{','} ')' ]
-property_assignment = identifier@module_name '.' identifier@property_name '=' expression
+constructor = (identifier@expander_name '.')? identifier@module_name '=' identifier@module_type [ '(' expression@argument{','} ')' ]
+property_assignment = (identifier@expander_name '.')? identifier@module_name '.' identifier@property_name '=' expression
 variable_assignment = identifier@variable_name '=' expression
 variable_declaration = datatype identifier@variable_name ('=' expression)?
 rule_definition = 'when' expression@condition '\n'* [ 'then' actions 'end' ]
@@ -36,7 +36,7 @@ routine_definition = 'let' identifier@routine_name [ 'do' actions 'end' ]
 routine_call = identifier@routine_name [ '(' ')' ]
 await_condition = 'await' expression@condition
 await_routine = 'await' identifier@routine_name [ '(' ')' ]
-method_call = identifier@module_name '.' identifier@method_name [ '(' expression@argument{','} ')' ]
+method_call = (identifier@expander_name '.')? identifier@module_name '.' identifier@method_name [ '(' expression@argument{','} ')' ]
 
 datatype =
     'bool' : boolean
@@ -51,7 +51,7 @@ expression =
     integer : integer
     number : number
     identifier : variable
-    identifier@module_name '.' identifier@property_name : property
+    (identifier@expander_name '.')? identifier@module_name '.' identifier@property_name : property
     [ '(' expression ')' ] : parentheses
   .operators infix left
     '**' : power

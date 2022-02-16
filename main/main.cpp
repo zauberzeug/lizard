@@ -13,6 +13,7 @@
 #include "modules/bluetooth.h"
 #include "modules/core.h"
 #include "modules/module.h"
+#include "proxy.h"
 #include "storage.h"
 #include "utils/echo.h"
 #include "utils/tictoc.h"
@@ -43,6 +44,13 @@ std::string identifier_to_string(const struct owl_ref ref) {
     return std::string(identifier.identifier, identifier.length);
 }
 
+std::string proxy_identifier_to_string(const struct owl_ref expander, const struct owl_ref module) {
+    if (expander.empty) {
+        return identifier_to_string(module);
+    }
+    return identifier_to_string(expander) + '.' + identifier_to_string(module);
+}
+
 Expression_ptr compile_expression(const struct owl_ref ref);
 
 std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
@@ -71,8 +79,9 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
     case PARSED_VARIABLE:
         return std::make_shared<VariableExpression>(Global::get_variable(identifier_to_string(expression.identifier)));
     case PARSED_PROPERTY:
-        return std::make_shared<VariableExpression>(Global::get_module(identifier_to_string(expression.module_name))
-                                                        ->get_property(identifier_to_string(expression.property_name)));
+        return std::make_shared<VariableExpression>(
+            Global::get_module(proxy_identifier_to_string(expression.expander_name, expression.module_name))
+                ->get_property(identifier_to_string(expression.property_name)));
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
@@ -127,7 +136,7 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
         if (!action.noop.empty) {
         } else if (!action.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(action.method_call);
-            const std::string module_name = identifier_to_string(method_call.module_name);
+            const std::string module_name = proxy_identifier_to_string(method_call.expander_name, method_call.module_name);
             const Module_ptr module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
             const std::vector<ConstExpression_ptr> arguments = compile_arguments(method_call.argument);
@@ -177,20 +186,26 @@ void process_tree(owl_tree *const tree) {
             echo(buffer);
         } else if (!statement.constructor.empty) {
             const struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
-            const std::string module_name = identifier_to_string(constructor.module_name);
-            if (Global::has_module(module_name)) {
-                throw std::runtime_error("module \"" + module_name + "\" already exists");
+            if (constructor.expander_name.empty) {
+                const std::string module_name = identifier_to_string(constructor.module_name);
+                if (Global::has_module(module_name)) {
+                    throw std::runtime_error("module \"" + module_name + "\" already exists");
+                }
+                const std::string module_type = identifier_to_string(constructor.module_type);
+                const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
+                const Module_ptr module = Module::create(module_type, module_name, arguments);
+                if (module->type == bluetooth) {
+                    std::static_pointer_cast<Bluetooth>(module)->init(process_lizard);
+                }
+                Global::add_module(module_name, module);
+            } else {
+                const std::string module_name = proxy_identifier_to_string(constructor.expander_name, constructor.module_name);
+                const Module_ptr module = std::make_shared<Proxy>(module_name);
+                Global::add_module(module_name, module);
             }
-            const std::string module_type = identifier_to_string(constructor.module_type);
-            const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-            const Module_ptr module = Module::create(module_type, module_name, arguments);
-            if (module->type == bluetooth) {
-                std::static_pointer_cast<Bluetooth>(module)->init(process_lizard);
-            }
-            Global::add_module(module_name, module);
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
-            const std::string module_name = identifier_to_string(method_call.module_name);
+            const std::string module_name = proxy_identifier_to_string(method_call.expander_name, method_call.module_name);
             const Module_ptr module = Global::get_module(module_name);
             const std::string method_name = identifier_to_string(method_call.method_name);
             const std::vector<ConstExpression_ptr> arguments = compile_arguments(method_call.argument);
@@ -205,7 +220,7 @@ void process_tree(owl_tree *const tree) {
             routine->start();
         } else if (!statement.property_assignment.empty) {
             const struct parsed_property_assignment property_assignment = parsed_property_assignment_get(statement.property_assignment);
-            const std::string module_name = identifier_to_string(property_assignment.module_name);
+            const std::string module_name = proxy_identifier_to_string(property_assignment.expander_name, property_assignment.module_name);
             const Module_ptr module = Global::get_module(module_name);
             const std::string property_name = identifier_to_string(property_assignment.property_name);
             const ConstExpression_ptr expression = compile_expression(property_assignment.expression);
