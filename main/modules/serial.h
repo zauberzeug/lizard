@@ -22,7 +22,7 @@ public:
     int read(const uint32_t timeout = 0) const;
     int read_line(char *buffer) const;
     size_t write(const uint8_t byte) const;
-    void write_chars(const char *message, const int length) const;
+    void write_checked_line(const char *message, const int length) const;
     void flush() const;
     void clear() const;
     std::string get_output() const override;

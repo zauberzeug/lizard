@@ -1,5 +1,6 @@
 #include "serial.h"
 #include "utils/uart.h"
+#include <cstring>
 
 #define RX_BUF_SIZE 1024
 #define TX_BUF_SIZE 1024
@@ -36,8 +37,12 @@ size_t Serial::write(const uint8_t byte) const {
     return 1;
 }
 
-void Serial::write_chars(const char *message, const int length) const {
-    uart_write_bytes(this->uart_num, message, length);
+void Serial::write_checked_line(const char *message, const int length) const {
+    char buffer[1024];
+    strncpy(buffer, message, length);
+    int len = check(buffer, length);
+    buffer[len++] = '\n';
+    uart_write_bytes(this->uart_num, buffer, len);
 }
 
 int Serial::available() const {
