@@ -25,6 +25,11 @@ Serial::Serial(const std::string name,
     uart_driver_install(uart_num, RX_BUF_SIZE, TX_BUF_SIZE, 0, NULL, 0);
 }
 
+void Serial::enable_line_detection() const {
+    uart_enable_pattern_det_baud_intr(this->uart_num, '\n', 1, 9, 0, 0);
+    uart_pattern_queue_reset(this->uart_num, 100);
+}
+
 size_t Serial::write(const uint8_t byte) const {
     const char send = byte;
     uart_write_bytes(this->uart_num, &send, 1);
@@ -49,6 +54,11 @@ int Serial::read(uint32_t timeout) const {
     uint8_t data = 0;
     const int length = uart_read_bytes(this->uart_num, &data, 1, timeout);
     return length > 0 ? data : -1;
+}
+
+int Serial::read_line(char *buffer) const {
+    int pos = uart_pattern_get_pos(this->uart_num);
+    return pos >= 0 ? uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0) : 0;
 }
 
 void Serial::clear() const {
