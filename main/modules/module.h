@@ -43,7 +43,10 @@ public:
 
     Module(const ModuleType type, const std::string name);
     static void expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...);
-    static Module_ptr create(const std::string type, const std::string name, const std::vector<ConstExpression_ptr> arguments);
+    static Module_ptr create(const std::string type,
+                             const std::string name,
+                             const std::vector<ConstExpression_ptr> arguments,
+                             void (*message_handler)(const char *));
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);

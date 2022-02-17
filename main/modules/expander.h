@@ -12,7 +12,12 @@ public:
     const ConstSerial_ptr serial;
     const gpio_num_t boot_pin;
     const gpio_num_t enable_pin;
+    void (*message_handler)(const char *);
 
-    Expander(const std::string name, const ConstSerial_ptr serial, const gpio_num_t boot_pin, const gpio_num_t enable_pin);
+    Expander(const std::string name,
+             const ConstSerial_ptr serial,
+             const gpio_num_t boot_pin,
+             const gpio_num_t enable_pin,
+             void (*message_handler)(const char *));
     void step() override;
 };

@@ -33,7 +33,10 @@ void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, co
     va_end(vl);
 }
 
-Module_ptr Module::create(const std::string type, const std::string name, const std::vector<ConstExpression_ptr> arguments) {
+Module_ptr Module::create(const std::string type,
+                          const std::string name,
+                          const std::vector<ConstExpression_ptr> arguments,
+                          void (*message_handler)(const char *)) {
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
     } else if (type == "Expander") {
@@ -46,11 +49,12 @@ Module_ptr Module::create(const std::string type, const std::string name, const 
         const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
         const gpio_num_t boot_pin = (gpio_num_t)arguments[1]->evaluate_integer();
         const gpio_num_t enable_pin = (gpio_num_t)arguments[2]->evaluate_integer();
-        return std::make_shared<Expander>(name, serial, boot_pin, enable_pin);
+        return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();
-        return std::make_shared<Bluetooth>(name, device_name);
+        Bluetooth_ptr bluetooth = std::make_shared<Bluetooth>(name, device_name, message_handler);
+        return bluetooth;
     } else if (type == "Output") {
         Module::expect(arguments, 1, integer);
         return std::make_shared<Output>(name, (gpio_num_t)arguments[0]->evaluate_integer());

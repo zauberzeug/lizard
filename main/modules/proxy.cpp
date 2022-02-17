@@ -13,12 +13,11 @@ int write_arguments_to_buffer(const std::vector<ConstExpression_ptr> arguments, 
     return pos;
 }
 
-Proxy::Proxy(
-    const std::string name,
-    const std::string expander_name,
-    const std::string module_type,
-    const Expander_ptr expander,
-    const std::vector<ConstExpression_ptr> arguments)
+Proxy::Proxy(const std::string name,
+             const std::string expander_name,
+             const std::string module_type,
+             const Expander_ptr expander,
+             const std::vector<ConstExpression_ptr> arguments)
     : Module(proxy, name), expander(expander) {
     static char buffer[256];
     int pos = std::sprintf(buffer, "%s = %s(", name.c_str(), module_type.c_str());

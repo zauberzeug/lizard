@@ -186,10 +186,7 @@ void process_tree(owl_tree *const tree) {
                 }
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr module = Module::create(module_type, module_name, arguments);
-                if (module->type == bluetooth) {
-                    std::static_pointer_cast<Bluetooth>(module)->init(process_lizard);
-                }
+                const Module_ptr module = Module::create(module_type, module_name, arguments, process_lizard);
                 Global::add_module(module_name, module);
             } else {
                 const std::string module_name = identifier_to_string(constructor.module_name);

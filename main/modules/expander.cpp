@@ -14,8 +14,12 @@ void strip(char *buffer, int len) {
     }
 }
 
-Expander::Expander(const std::string name, const ConstSerial_ptr serial, const gpio_num_t boot_pin, const gpio_num_t enable_pin)
-    : Module(expander, name), serial(serial), boot_pin(boot_pin), enable_pin(enable_pin) {
+Expander::Expander(const std::string name,
+                   const ConstSerial_ptr serial,
+                   const gpio_num_t boot_pin,
+                   const gpio_num_t enable_pin,
+                   void (*message_handler)(const char *))
+    : Module(expander, name), serial(serial), boot_pin(boot_pin), enable_pin(enable_pin), message_handler(message_handler) {
     serial->enable_line_detection();
     gpio_reset_pin(boot_pin);
     gpio_reset_pin(enable_pin);
