@@ -5,13 +5,11 @@
 
 class Proxy : public Module {
 private:
-    const std::string module_name;
     const Expander_ptr expander;
 
 public:
     Proxy(const std::string name,
           const std::string expander_name,
-          const std::string module_name,
           const std::string module_type,
           const Expander_ptr expander,
           const std::vector<ConstExpression_ptr> arguments);
