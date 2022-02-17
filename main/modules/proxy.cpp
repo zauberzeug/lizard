@@ -22,7 +22,8 @@ Proxy::Proxy(const std::string name,
     static char buffer[256];
     int pos = std::sprintf(buffer, "%s = %s(", name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos]);
-    pos += std::sprintf(&buffer[pos], ")\n");
+    pos += std::sprintf(&buffer[pos], "); ");
+    pos += std::sprintf(&buffer[pos], "%s.broadcast()\n", name.c_str());
     expander->serial->write_chars(buffer, pos);
 }
 

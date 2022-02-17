@@ -353,7 +353,6 @@ void process_uart() {
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
         len = check(input, len);
-        input[len] = 0;
         process_line(input, len);
     }
 }

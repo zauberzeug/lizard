@@ -4,16 +4,6 @@
 #include "utils/uart.h"
 #include <cstring>
 
-void strip(char *buffer, int len) {
-    buffer[len] = 0;
-    if (buffer[len - 1] == 10) {
-        buffer[len - 1] = 0;
-        if (buffer[len - 2] == 13) {
-            buffer[len - 2] = 0;
-        }
-    }
-}
-
 Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
                    const gpio_num_t boot_pin,
@@ -48,8 +38,12 @@ void Expander::step() {
     static char buffer[1024];
     if (this->serial->available()) {
         int len = this->serial->read_line(buffer);
-        strip(buffer, len);
-        echo("%s: %s", this->name.c_str(), buffer);
+        check(buffer, len);
+        if (buffer[0] == '!' && buffer[1] == '!') {
+            this->message_handler(&buffer[2]);
+        } else {
+            echo("%s: %s", this->name.c_str(), buffer);
+        }
     }
     Module::step();
 }

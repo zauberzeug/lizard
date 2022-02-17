@@ -1,4 +1,5 @@
 #pragma once
 
 void echo(const char *fmt, ...);
-int check(const char *buffer, int len);
+int strip(char *buffer, int len);
+int check(char *buffer, int len);

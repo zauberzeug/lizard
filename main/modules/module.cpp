@@ -152,14 +152,15 @@ void Module::step() {
             echo("%s %s", this->name.c_str(), output.c_str());
         }
     }
-    if (this->broadcast) {
+    if (this->broadcast && !this->properties.empty()) {
         static char buffer[1024];
+        int pos = sprintf(buffer, "!!");
         for (auto const &[property_name, property] : this->properties) {
-            int pos = 0;
-            pos += sprintf(&buffer[pos], "!!%s.%s = ", this->name.c_str(), property_name.c_str());
+            pos += sprintf(&buffer[pos], "%s.%s=", this->name.c_str(), property_name.c_str());
             pos += property->print_to_buffer(&buffer[pos]);
-            echo(buffer);
+            pos += sprintf(&buffer[pos], ";");
         }
+        echo(buffer);
     }
 }
 

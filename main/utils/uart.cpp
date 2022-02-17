@@ -29,25 +29,30 @@ void echo(const char *format, ...) {
     }
 }
 
-int check(const char *buffer, int len) {
-    int suffix = 0;
-    if (len >= 5 && buffer[len - 2] == '\r' && buffer[len - 5] == '@') {
-        suffix = 5;
-    } else if (len >= 4 && buffer[len - 4] == '@') {
-        suffix = 4;
+int strip(char *buffer, int len) {
+    while (buffer[len - 1] == ' ' ||
+           buffer[len - 1] == '\t' ||
+           buffer[len - 1] == '\r' ||
+           buffer[len - 1] == '\n') {
+        len--;
     }
-    if (suffix) {
+    buffer[len] = 0;
+    return len;
+}
+
+int check(char *buffer, int len) {
+    len = strip(buffer, len);
+    if (len > 3 && buffer[len - 3] == '@') {
         uint8_t checksum = 0;
-        for (int i = 0; i < len - suffix; ++i) {
+        for (int i = 0; i < len - 3; ++i) {
             checksum ^= buffer[i];
         }
-        const std::string hex_number(&buffer[len - suffix + 1], 2);
+        const std::string hex_number(&buffer[len - 2], 2);
         if (std::stoi(hex_number, 0, 16) != checksum) {
             throw std::runtime_error("checksum mismatch");
         }
-        len -= suffix;
-    } else {
-        len -= 1;
+        len -= 3;
     }
+    buffer[len] = 0;
     return len;
 }
