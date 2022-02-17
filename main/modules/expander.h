@@ -20,4 +20,5 @@ public:
              const gpio_num_t enable_pin,
              void (*message_handler)(const char *));
     void step() override;
+    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 };

@@ -47,3 +47,11 @@ void Expander::step() {
     }
     Module::step();
 }
+
+void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+    static char buffer[1024];
+    int pos = std::sprintf(buffer, "core.%s(", method_name.c_str());
+    pos += write_arguments_to_buffer(arguments, &buffer[pos]);
+    pos += std::sprintf(&buffer[pos], ")\n");
+    this->serial->write_chars(buffer, pos);
+}
