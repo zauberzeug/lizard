@@ -1,5 +1,5 @@
 #include "input.h"
-#include "../utils/echo.h"
+#include "../utils/uart.h"
 #include <memory>
 
 Input::Input(const std::string name, const gpio_num_t number)

@@ -1,7 +1,7 @@
 #include "storage.h"
 #include "nvs_flash.h"
-#include "utils/echo.h"
 #include "utils/string_utils.h"
+#include "utils/uart.h"
 #include <stdexcept>
 #include <string>
 

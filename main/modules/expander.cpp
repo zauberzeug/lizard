@@ -1,7 +1,7 @@
 #include "expander.h"
 
-#include "utils/echo.h"
 #include "utils/timing.h"
+#include "utils/uart.h"
 #include <cstring>
 
 void strip(char *buffer, int len) {

@@ -1,8 +1,8 @@
 #include "core.h"
 #include "../global.h"
-#include "../utils/echo.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
+#include "../utils/uart.h"
 #include "esp_ota_ops.h"
 #include <memory>
 #include <stdlib.h>

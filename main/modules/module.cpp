@@ -1,6 +1,6 @@
 #include "module.h"
 #include "../global.h"
-#include "../utils/echo.h"
+#include "../utils/uart.h"
 #include "bluetooth.h"
 #include "can.h"
 #include "driver/gpio.h"

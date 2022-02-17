@@ -16,9 +16,9 @@
 #include "modules/module.h"
 #include "proxy.h"
 #include "storage.h"
-#include "utils/echo.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
+#include "utils/uart.h"
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -346,35 +346,14 @@ void process_line(const char *line, const int len) {
 
 void process_uart() {
     static char input[BUFFER_SIZE];
-
     while (true) {
         int pos = uart_pattern_get_pos(UART_NUM_0);
         if (pos < 0) {
             break;
         }
-
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        int suffix = 0;
-        if (len >= 5 && input[len - 2] == '\r' && input[len - 5] == '@') {
-            suffix = 5;
-        } else if (len >= 4 && input[len - 4] == '@') {
-            suffix = 4;
-        }
-        if (suffix) {
-            uint8_t checksum = 0;
-            for (int i = 0; i < len - suffix; ++i) {
-                checksum ^= input[i];
-            }
-            const std::string hex_number(&input[len - suffix + 1], 2);
-            if (std::stoi(hex_number, 0, 16) != checksum) {
-                throw std::runtime_error("checksum mismatch");
-            }
-            len -= suffix;
-        } else {
-            len -= 1;
-        }
+        len = check(input, len);
         input[len] = 0;
-
         process_line(input, len);
     }
 }

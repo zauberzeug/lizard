@@ -1,7 +1,7 @@
 #include "rmd_motor.h"
 #include "../global.h"
-#include "../utils/echo.h"
 #include "../utils/timing.h"
+#include "../utils/uart.h"
 #include <cstring>
 #include <memory>
 

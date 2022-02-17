@@ -1,5 +1,5 @@
 #include "serial.h"
-#include "utils/echo.h"
+#include "utils/uart.h"
 
 #define RX_BUF_SIZE 1024
 #define TX_BUF_SIZE 1024

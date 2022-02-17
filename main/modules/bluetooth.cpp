@@ -1,5 +1,5 @@
 #include "bluetooth.h"
-#include "echo.h"
+#include "uart.h"
 
 Bluetooth::Bluetooth(const std::string name, const std::string device_name, void (*message_handler)(const char *))
     : Module(bluetooth, name), device_name(device_name) {
