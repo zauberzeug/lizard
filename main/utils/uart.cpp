@@ -42,7 +42,7 @@ int strip(char *buffer, int len) {
 
 int check(char *buffer, int len) {
     len = strip(buffer, len);
-    if (len > 3 && buffer[len - 3] == '@') {
+    if (len >= 3 && buffer[len - 3] == '@') {
         uint8_t checksum = 0;
         for (int i = 0; i < len - 3; ++i) {
             checksum ^= buffer[i];
