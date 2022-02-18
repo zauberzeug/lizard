@@ -1,8 +1,8 @@
 #include "core.h"
 #include "../global.h"
-#include "../utils/echo.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
+#include "../utils/uart.h"
 #include "esp_ota_ops.h"
 #include <memory>
 #include <stdlib.h>
@@ -28,9 +28,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "info") {
         Module::expect(arguments, 0);
         const esp_app_desc_t *app_desc = esp_ota_get_app_description();
-        echo(up, text, "lizard version: %s", app_desc->version);
-        echo(up, text, "compile time: %s, %s", app_desc->date, app_desc->time);
-        echo(up, text, "idf version: %s", app_desc->idf_ver);
+        echo("lizard version: %s", app_desc->version);
+        echo("compile time: %s, %s", app_desc->date, app_desc->time);
+        echo("idf version: %s", app_desc->idf_ver);
     } else if (method_name == "print") {
         static char buffer[1024];
         int pos = 0;
@@ -40,7 +40,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             }
             pos += argument->print_to_buffer(&buffer[pos]);
         }
-        echo(up, text, buffer);
+        echo(buffer);
     } else if (method_name == "output") {
         Module::expect(arguments, 1, string);
         this->output_list.clear();

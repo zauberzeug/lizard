@@ -2,16 +2,16 @@
 
 All Lizard modules have the following methods in common.
 
-| Methods              | Description                                          |
-| -------------------- | ---------------------------------------------------- |
-| `module.mute()`      | Turn output off                                      |
-| `module.unmute()`    | Turn output on                                       |
-| `module.broadcast()` | Regularly send properties to another microcontroller |
-| `module.shadow()`    | Send all method calls also to another module         |
-
-Broadcasting allows connecting modules across multiple microcontrollers.
+| Methods              | Description                                                             |
+| -------------------- | ----------------------------------------------------------------------- |
+| `module.mute()`      | Turn output off                                                         |
+| `module.unmute()`    | Turn output on                                                          |
+| `module.shadow()`    | Send all method calls also to another module                            |
+| `module.broadcast()` | Regularly send properties to another microcontroller (for internal use) |
 
 Shadows are useful if multiple modules should behave exactly the same, e.g. two actuators that should always move synchronously.
+
+The `broadcast` method is used internally with [port expanders](#expander).
 
 ## Core
 
@@ -247,7 +247,23 @@ The RoboClaw motor module controls a motor using a RoboClaw module.
 | `motor.speed(speed)`  | Move with given `speed` (-32767..32767) | `float`   |
 | `motor.zero()`        | Store position as zero position         |           |
 
+## Expander
+
+The expander module allows communication with another microcontroller connected via [serial](#serial-interface).
+
+| Constructor                                 | Description                        | Arguments               |
+| ------------------------------------------- | ---------------------------------- | ----------------------- |
+| `expander = Expander(serial, boot, enable)` | Serial module and boot/enable pins | Serial module, 2x `int` |
+
+| Methods                 | Description                                    | Arguments |
+| ----------------------- | ---------------------------------------------- | --------- |
+| `expander.run(command)` | Run any `command` on the other microcontroller | `string`  |
+
+Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
+
 ## Proxy
+
+-- _This module is mainly for internal use with the expander module._ --
 
 Proxy modules serve as handles for remote modules running on another microcontroller.
 Declaring a module `x = Proxy()` will allow formulating rules like `when x.level == 0 then ...`.
@@ -257,3 +273,5 @@ Note that the remote module has to have turned on broadcasting: `x.broadcast()`.
 | Constructor        |
 | ------------------ |
 | `module = Proxy()` |
+
+Note that the proxy module forwards all method calls to the remote module.

@@ -12,11 +12,13 @@
 #include "global.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
+#include "modules/expander.h"
 #include "modules/module.h"
+#include "proxy.h"
 #include "storage.h"
-#include "utils/echo.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
+#include "utils/uart.h"
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -174,20 +176,31 @@ void process_tree(owl_tree *const tree) {
             const ConstExpression_ptr expression = compile_expression(statement.expression);
             static char buffer[256];
             expression->print_to_buffer(buffer);
-            echo(up, text, buffer);
+            echo(buffer);
         } else if (!statement.constructor.empty) {
             const struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
-            const std::string module_name = identifier_to_string(constructor.module_name);
-            if (Global::has_module(module_name)) {
-                throw std::runtime_error("module \"" + module_name + "\" already exists");
+            if (constructor.expander_name.empty) {
+                const std::string module_name = identifier_to_string(constructor.module_name);
+                if (Global::has_module(module_name)) {
+                    throw std::runtime_error("module \"" + module_name + "\" already exists");
+                }
+                const std::string module_type = identifier_to_string(constructor.module_type);
+                const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
+                const Module_ptr module = Module::create(module_type, module_name, arguments, process_lizard);
+                Global::add_module(module_name, module);
+            } else {
+                const std::string module_name = identifier_to_string(constructor.module_name);
+                const std::string module_type = identifier_to_string(constructor.module_type);
+                const std::string expander_name = identifier_to_string(constructor.expander_name);
+                const Module_ptr expander_module = Global::get_module(expander_name);
+                if (expander_module->type != expander) {
+                    throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
+                }
+                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
+                const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
+                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                Global::add_module(module_name, proxy);
             }
-            const std::string module_type = identifier_to_string(constructor.module_type);
-            const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-            const Module_ptr module = Module::create(module_type, module_name, arguments);
-            if (module->type == bluetooth) {
-                std::static_pointer_cast<Bluetooth>(module)->init(process_lizard);
-            }
-            Global::add_module(module_name, module);
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
             const std::string module_name = identifier_to_string(method_call.module_name);
@@ -263,7 +276,7 @@ void process_tree(owl_tree *const tree) {
 void process_lizard(const char *line) {
     const bool debug = core_module->get_property("debug")->boolean_value;
     if (debug) {
-        echo(up, text, ">> %s", line);
+        echo(">> %s", line);
         tic();
     }
     auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(line), owl_tree_destroy);
@@ -273,21 +286,21 @@ void process_lizard(const char *line) {
     struct source_range range;
     switch (owl_tree_get_error(tree.get(), &range)) {
     case ERROR_INVALID_FILE:
-        echo(up, text, "error: invalid file");
+        echo("error: invalid file");
         break;
     case ERROR_INVALID_OPTIONS:
-        echo(up, text, "error: invalid options");
+        echo("error: invalid options");
         break;
     case ERROR_INVALID_TOKEN:
-        echo(up, text, "error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
+        echo("error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
              std::string(line, range.start, range.end - range.start).c_str());
         break;
     case ERROR_UNEXPECTED_TOKEN:
-        echo(up, text, "error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
+        echo("error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
              std::string(line, range.start, range.end - range.start).c_str());
         break;
     case ERROR_MORE_INPUT_NEEDED:
-        echo(up, text, "error: more input needed at range %zu %zu", range.start, range.end);
+        echo("error: more input needed at range %zu %zu", range.start, range.end);
         break;
     default:
         if (debug) {
@@ -301,18 +314,7 @@ void process_lizard(const char *line) {
     }
 }
 
-void deactivate_uart1() {
-    uart_driver_delete(UART_NUM_1);
-
-    gpio_reset_pin(GPIO_NUM_26);
-    gpio_reset_pin(GPIO_NUM_27);
-    gpio_set_direction(GPIO_NUM_26, GPIO_MODE_INPUT);
-    gpio_set_direction(GPIO_NUM_27, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(GPIO_NUM_26, GPIO_FLOATING);
-    gpio_set_pull_mode(GPIO_NUM_27, GPIO_FLOATING);
-}
-
-void process_line(const char *line, const int len, const uart_port_t uart_num) {
+void process_line(const char *line, const int len) {
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
         case '+':
@@ -331,65 +333,27 @@ void process_line(const char *line, const int len, const uart_port_t uart_num) {
             process_lizard(line + 2);
             break;
         case '"':
-            echo(up, text, line + 2);
-            break;
-        case '>':
-            echo(down, raw, line + 2);
-            break;
-        case '~':
-            deactivate_uart1();
+            echo(line + 2);
             break;
         default:
             throw std::runtime_error("unrecognized control command");
         }
     } else {
-        if (uart_num == UART_NUM_1) {
-            printf("%s\n", line);
-        } else {
-            process_lizard(line);
-        }
+        process_lizard(line);
     }
-    if (uart_num == UART_NUM_0) {
-        core_module->keep_alive();
-    }
+    core_module->keep_alive();
 }
 
-void process_uart(const uart_port_t uart_num) {
+void process_uart() {
     static char input[BUFFER_SIZE];
-
-    if (!uart_is_driver_installed(uart_num)) {
-        return;
-    }
-
     while (true) {
-        int pos = uart_pattern_get_pos(uart_num);
+        int pos = uart_pattern_get_pos(UART_NUM_0);
         if (pos < 0) {
             break;
         }
-
-        int len = uart_read_bytes(uart_num, (uint8_t *)input, pos + 1, 0);
-        int suffix = 0;
-        if (len >= 5 && input[len - 2] == '\r' && input[len - 5] == '@') {
-            suffix = 5;
-        } else if (len >= 4 && input[len - 4] == '@') {
-            suffix = 4;
-        }
-        if (suffix) {
-            uint8_t checksum = 0;
-            for (int i = 0; i < len - suffix; ++i) {
-                checksum ^= input[i];
-            }
-            const std::string hex_number(&input[len - suffix + 1], 2);
-            if (std::stoi(hex_number, 0, 16) != checksum) {
-                throw std::runtime_error("checksum mismatch");
-            }
-            len -= suffix;
-        } else {
-            len -= 1;
-        }
-        input[len] = 0;
-
-        process_line(input, len, uart_num);
+        int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+        len = check(input, len);
+        process_line(input, len);
     }
 }
 
@@ -397,7 +361,7 @@ void run_step(Module_ptr module) {
     try {
         module->step();
     } catch (const std::runtime_error &e) {
-        echo(up, text, "error in module \"%s\": %s", module->name.c_str(), e.what());
+        echo("error in module \"%s\": %s", module->name.c_str(), e.what());
     }
 }
 
@@ -412,21 +376,16 @@ void app_main() {
         .use_ref_tick = false,
     };
     uart_param_config(UART_NUM_0, &uart_config);
-    uart_param_config(UART_NUM_1, &uart_config);
-    uart_set_pin(UART_NUM_1, GPIO_NUM_27, GPIO_NUM_26, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
-    uart_driver_install(UART_NUM_1, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
-    uart_enable_pattern_det_baud_intr(UART_NUM_1, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
-    uart_pattern_queue_reset(UART_NUM_1, 100);
 
     printf("Ready.\n");
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
     } catch (const std::runtime_error &e) {
-        echo(up, text, "error while initializing core module: %s", e.what());
+        echo("error while initializing core module: %s", e.what());
         exit(1);
     }
 
@@ -434,19 +393,14 @@ void app_main() {
         Storage::init();
         process_lizard(Storage::startup.c_str());
     } catch (const std::runtime_error &e) {
-        echo(up, text, "error while loading startup script: %s", e.what());
+        echo("error while loading startup script: %s", e.what());
     }
 
     while (true) {
         try {
-            process_uart(UART_NUM_0);
+            process_uart();
         } catch (const std::runtime_error &e) {
-            echo(up, text, "error processing uart0: %s", e.what());
-        }
-        try {
-            process_uart(UART_NUM_1);
-        } catch (const std::runtime_error &e) {
-            echo(up, text, "error processing uart1: %s", e.what());
+            echo("error processing uart0: %s", e.what());
         }
 
         for (auto const &[module_name, module] : Global::modules) {
@@ -463,7 +417,7 @@ void app_main() {
                 }
                 rule->routine->step();
             } catch (const std::runtime_error &e) {
-                echo(up, text, "error in rule: %s", e.what());
+                echo("error in rule: %s", e.what());
             }
         }
 
@@ -471,7 +425,7 @@ void app_main() {
             try {
                 routine->step();
             } catch (const std::runtime_error &e) {
-                echo(up, text, "error in routine \"%s\": %s", routine_name.c_str(), e.what());
+                echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
             }
         }
 

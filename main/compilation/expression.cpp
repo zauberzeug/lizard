@@ -2,6 +2,17 @@
 #include "math.h"
 #include <stdexcept>
 
+int write_arguments_to_buffer(const std::vector<ConstExpression_ptr> arguments, char *buffer) {
+    int pos = 0;
+    for (auto const &argument : arguments) {
+        if (argument != arguments[0]) {
+            pos += std::sprintf(&buffer[pos], ", ");
+        }
+        pos += argument->print_to_buffer(&buffer[pos]);
+    }
+    return pos;
+}
+
 Type get_common_number_type(const ConstExpression_ptr left, const ConstExpression_ptr right) {
     if (left->type == integer && right->type == integer) {
         return integer;

@@ -1,7 +1,7 @@
 #include "rmd_motor.h"
 #include "../global.h"
-#include "../utils/echo.h"
 #include "../utils/timing.h"
+#include "../utils/uart.h"
 #include <cstring>
 #include <memory>
 
@@ -35,7 +35,7 @@ void RmdMotor::send_and_wait(const uint32_t id,
         if (this->last_msg_id == d0) {
             return;
         } else {
-            echo(up, text, "%s warning: CAN timeout for msg id 0x%02x (attempt %d/%d)", this->name.c_str(), d0, i + 1, max_attempts);
+            echo("%s warning: CAN timeout for msg id 0x%02x (attempt %d/%d)", this->name.c_str(), d0, i + 1, max_attempts);
         }
     }
 }
@@ -164,7 +164,7 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
         default:
             throw std::runtime_error("unexpected number of arguments");
         }
-        echo(up, text, "new mapping: %s = %f * %s %+f",
+        echo("new mapping: %s = %f * %s %+f",
              this->name.c_str(), this->map_scale, this->map_leader->name.c_str(), this->map_offset);
     } else if (method_name == "unmap") {
         this->map_leader = nullptr;
@@ -251,7 +251,7 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         uint16_t voltage = 0;
         std::memcpy(&voltage, data + 3, 2);
         uint8_t error = data[7];
-        echo(up, text, "%s health %d %.1f %d", this->name.c_str(), temperature, 0.1 * voltage, error);
+        echo("%s health %d %.1f %d", this->name.c_str(), temperature, 0.1 * voltage, error);
         break;
     }
     case 0x9c: {
@@ -264,14 +264,14 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         break;
     }
     case 0x30: {
-        echo(up, text, "%s pid %3d %3d %3d %3d %3d %3d",
+        echo("%s pid %3d %3d %3d %3d %3d %3d",
              this->name.c_str(), data[2], data[3], data[4], data[5], data[6], data[7]);
         break;
     }
     case 0x33: {
         int32_t acceleration = 0;
         std::memcpy(&acceleration, data + 4, 4);
-        echo(up, text, "%s acceleration %d", this->name.c_str(), acceleration);
+        echo("%s acceleration %d", this->name.c_str(), acceleration);
         break;
     }
     }

@@ -1,5 +1,5 @@
 #include "input.h"
-#include "../utils/echo.h"
+#include "../utils/uart.h"
 #include <memory>
 
 Input::Input(const std::string name, const gpio_num_t number)
@@ -20,7 +20,7 @@ void Input::step() {
 void Input::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "get") {
         Module::expect(arguments, 0);
-        echo(up, text, "%s %d", this->name.c_str(), gpio_get_level(this->number));
+        echo("%s %d", this->name.c_str(), gpio_get_level(this->number));
     } else if (method_name == "pullup") {
         Module::expect(arguments, 0);
         gpio_set_pull_mode(this->number, GPIO_PULLUP_ONLY);
