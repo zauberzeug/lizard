@@ -45,6 +45,10 @@ Constructors are used to create module instances:
 
 See the module reference for more details about individual modules and their argument lists.
 
+Constructors can also be used with [expander modules](module_reference.md#expander) to instantiate a remote module that can be controlled from the main microcontroller:
+
+    led = expander.Output(15)
+
 You can call module methods as follows:
 
     led.on()
