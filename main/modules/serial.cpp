@@ -7,7 +7,7 @@
 
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
-    : Module(serial, name), uart_num(uart_num) {
+    : Module(serial, name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
     if (uart_is_driver_installed(uart_num)) {
         throw std::runtime_error("serial interface is already in use");
     }
@@ -31,6 +31,16 @@ void Serial::enable_line_detection() const {
     uart_pattern_queue_reset(this->uart_num, 100);
 }
 
+void Serial::deinstall() const {
+    uart_driver_delete(this->uart_num);
+    gpio_reset_pin(this->rx_pin);
+    gpio_reset_pin(this->tx_pin);
+    gpio_set_direction(this->rx_pin, GPIO_MODE_INPUT);
+    gpio_set_direction(this->tx_pin, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(this->rx_pin, GPIO_FLOATING);
+    gpio_set_pull_mode(this->tx_pin, GPIO_FLOATING);
+}
+
 size_t Serial::write(const uint8_t byte) const {
     const char send = byte;
     uart_write_bytes(this->uart_num, &send, 1);
@@ -46,6 +56,9 @@ void Serial::write_checked_line(const char *message, const int length) const {
 }
 
 int Serial::available() const {
+    if (!uart_is_driver_installed(this->uart_num)) {
+        return 0;
+    }
     size_t available;
     uart_get_buffered_data_len(this->uart_num, &available);
     return available;

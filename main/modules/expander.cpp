@@ -31,7 +31,7 @@ Expander::Expander(const std::string name,
             strip(buffer, len);
             echo("%s: %s", name.c_str(), buffer);
         }
-    } while (strncmp("Ready.", &buffer[1], 6));
+    } while (strncmp("Ready.", buffer, 6));
 }
 
 void Expander::step() {
@@ -53,6 +53,14 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         Module::expect(arguments, 1, string);
         std::string command = arguments[0]->evaluate_string();
         this->serial->write_checked_line(command.c_str(), command.length());
+    } else if (method_name == "disconnect") {
+        this->serial->deinstall();
+        gpio_reset_pin(this->boot_pin);
+        gpio_reset_pin(this->enable_pin);
+        gpio_set_direction(this->boot_pin, GPIO_MODE_INPUT);
+        gpio_set_direction(this->enable_pin, GPIO_MODE_INPUT);
+        gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
+        gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
     } else {
         static char buffer[1024];
         int pos = std::sprintf(buffer, "core.%s(", method_name.c_str());
