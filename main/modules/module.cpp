@@ -1,15 +1,15 @@
 #include "module.h"
 #include "../global.h"
-#include "../utils/echo.h"
+#include "../utils/uart.h"
 #include "bluetooth.h"
 #include "can.h"
 #include "driver/gpio.h"
+#include "expander.h"
 #include "input.h"
 #include "linear_motor.h"
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
 #include "output.h"
-#include "proxy.h"
 #include "rmd_motor.h"
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
@@ -33,13 +33,28 @@ void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, co
     va_end(vl);
 }
 
-Module_ptr Module::create(const std::string type, const std::string name, const std::vector<ConstExpression_ptr> arguments) {
+Module_ptr Module::create(const std::string type,
+                          const std::string name,
+                          const std::vector<ConstExpression_ptr> arguments,
+                          void (*message_handler)(const char *)) {
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
+    } else if (type == "Expander") {
+        Module::expect(arguments, 3, identifier, integer, integer);
+        std::string serial_name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(serial_name);
+        if (module->type != serial) {
+            throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
+        }
+        const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
+        const gpio_num_t boot_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+        const gpio_num_t enable_pin = (gpio_num_t)arguments[2]->evaluate_integer();
+        return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();
-        return std::make_shared<Bluetooth>(name, device_name);
+        Bluetooth_ptr bluetooth = std::make_shared<Bluetooth>(name, device_name, message_handler);
+        return bluetooth;
     } else if (type == "Output") {
         Module::expect(arguments, 1, integer);
         return std::make_shared<Output>(name, (gpio_num_t)arguments[0]->evaluate_integer());
@@ -125,9 +140,6 @@ Module_ptr Module::create(const std::string type, const std::string name, const 
         const RoboClaw_ptr roboclaw = std::static_pointer_cast<RoboClaw>(module);
         int64_t motor_number = arguments[1]->evaluate_integer();
         return std::make_shared<RoboClawMotor>(name, roboclaw, motor_number);
-    } else if (type == "Proxy") {
-        Module::expect(arguments, 0);
-        return std::make_shared<Proxy>(name);
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
@@ -137,17 +149,18 @@ void Module::step() {
     if (this->output_on) {
         const std::string output = this->get_output();
         if (!output.empty()) {
-            echo(up, text, "%s %s", this->name.c_str(), output.c_str());
+            echo("%s %s", this->name.c_str(), output.c_str());
         }
     }
-    if (this->broadcast) {
+    if (this->broadcast && !this->properties.empty()) {
         static char buffer[1024];
+        int pos = sprintf(buffer, "!!");
         for (auto const &[property_name, property] : this->properties) {
-            int pos = 0;
-            pos += sprintf(&buffer[pos], "%s.%s = ", this->name.c_str(), property_name.c_str());
+            pos += sprintf(&buffer[pos], "%s.%s=", this->name.c_str(), property_name.c_str());
             pos += property->print_to_buffer(&buffer[pos]);
-            echo(up, code, buffer);
+            pos += sprintf(&buffer[pos], ";");
         }
+        echo(buffer);
     }
 }
 

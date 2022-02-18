@@ -1,7 +1,7 @@
 #include "storage.h"
 #include "nvs_flash.h"
-#include "utils/echo.h"
 #include "utils/string_utils.h"
+#include "utils/uart.h"
 #include <stdexcept>
 #include <string>
 
@@ -83,7 +83,7 @@ void Storage::print_startup(const std::string substring) {
     while (!startup.empty()) {
         std::string line = cut_first_word(startup, '\n');
         if (starts_with(line, substring)) {
-            echo(up, text, line.c_str());
+            echo(line.c_str());
         }
     }
 }

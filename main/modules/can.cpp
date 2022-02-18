@@ -1,5 +1,5 @@
 #include "can.h"
-#include "../utils/echo.h"
+#include "../utils/uart.h"
 #include "driver/twai.h"
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
@@ -71,7 +71,7 @@ bool Can::receive() {
                 pos += std::sprintf(&buffer[pos], ",%02x", message.data[i]);
             }
         }
-        echo(up, text, buffer);
+        echo(buffer);
     }
 
     return true;

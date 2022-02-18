@@ -62,15 +62,6 @@ To upload the compiled firmware you can use one of the following scripts.
 
 This script is useful on [Robot Brains](https://www.zauberzeug.com/product-robot-brain.html) where the microcontroller is connected to the pin header of an NVIDIA Jetson computer.
 
-#### Upload to an expander
-
-```bash
-./upload_expander.sh
-```
-
-This script is still work in progress.
-It is useful on [Robot Brains](https://www.zauberzeug.com/product-robot-brain.html) that come with a second microcontroller as port expander.
-
 ### Backtrace
 
 In case Lizard terminates with a backtrace printed to the serial terminal, you can use the following script to print corresponding source code lines.

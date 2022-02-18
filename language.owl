@@ -27,7 +27,7 @@ action =
   await_routine
 
 noop = ''
-constructor = identifier@module_name '=' identifier@module_type [ '(' expression@argument{','} ')' ]
+constructor = identifier@module_name '=' (identifier@expander_name '.')? identifier@module_type [ '(' expression@argument{','} ')' ]
 property_assignment = identifier@module_name '.' identifier@property_name '=' expression
 variable_assignment = identifier@variable_name '=' expression
 variable_declaration = datatype identifier@variable_name ('=' expression)?
