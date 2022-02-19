@@ -12,6 +12,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          submodules: "recursive"
+          token: ${{ secrets.ACCESS_TOKEN }}
       - name: Determine version
         id: version_id
         run: echo "::set-output name=value::$(git describe --always --tags --dirty)"
