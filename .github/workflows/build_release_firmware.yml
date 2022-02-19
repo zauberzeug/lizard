@@ -2,9 +2,10 @@
 name: Release
 on:
   workflow_dispatch:
-  release:
-    types: [created, edited]
-
+  push:
+    tags:
+      - v**
+      
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,15 +18,26 @@ jobs:
       - name: Build firmware
         uses: espressif/esp-idf-ci-action@release-v4.2
         env:
-          GIT_VERSIONID: ${{ steps.version_id.outputs.value }}
-      - name: Upload artifacts
+          PROJECT_NAME: lizard_${{ steps.version_id.outputs.value }}
+        run: compile.sh
+      - name: Create release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: lizard_${{ steps.version_id.outputs.value }}
+          tag_name: lizard_${{ steps.version_id.outputs.value }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}      
+        - name: Upload artifacts
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build/microcam-firmware.bin
-          asset_name: lizard-${{ steps.version_id.outputs.value }}.bin
+          asset_path: build/*.bin
+          asset_name: lizard_${{ steps.version_id.outputs.value }}.bin
           asset_content_type: application/octet-stream
 
   docs:
