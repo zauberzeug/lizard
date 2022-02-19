@@ -1,0 +1,39 @@
+:root {
+    --md-primary-fg-color: #3A3E42;
+    --md-default-fg-color: #3A3E42;
+    --md-accent-fg-color: #53B689;
+}
+
+/* definition lists are used in the module reference */
+
+dl {
+    display: grid;
+    grid-template-columns: max-content auto;
+  }
+  
+  dt {
+    grid-column-start: 1;
+  }
+  
+  dd {
+    grid-column-start: 2;
+  }
+
+.md-typeset dd {
+    margin: 0;
+}
+
+dd {
+    display: inline;
+    clear:both;
+}
+dt {
+    width:16em;
+    display: inline;
+    margin-right: 1em;
+}
+
+dl.inline dd {
+    display: inline;
+    margin: 0;
+}
