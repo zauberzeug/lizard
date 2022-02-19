@@ -5,7 +5,7 @@ on:
   push:
     tags:
       - v**
-      
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,7 +19,7 @@ jobs:
         uses: espressif/idf:v4.4
         env:
           PROJECT_NAME: lizard_${{ steps.version_id.outputs.value }}
-        commands: compile.sh
+        run: compile.sh
       - name: Create release
         uses: actions/create-release@v1
         id: create_release
@@ -29,8 +29,8 @@ jobs:
           release_name: lizard_${{ steps.version_id.outputs.value }}
           tag_name: lizard_${{ steps.version_id.outputs.value }}
         env:
-          GITHUB_TOKEN: ${{ github.token }}      
-        - name: Upload artifacts
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Upload artifacts
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -41,7 +41,7 @@ jobs:
           asset_content_type: application/octet-stream
 
   docs:
-    run-on: ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -55,6 +55,6 @@ jobs:
         run: mkdocs build
       - name: Deploy gh-pages
         uses: JamesIves/github-pages-deploy-action@v4.2.5
-          with:
-            branch: gh-pages
-            folder: site
+        with:
+          branch: gh-pages
+          folder: site
