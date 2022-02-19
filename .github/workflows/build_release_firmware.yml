@@ -1,0 +1,48 @@
+---
+name: Release
+on:
+  workflow_dispatch:
+  release:
+    types: [created, edited]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Determine version
+        id: version_id
+        run: echo "::set-output name=value::$(git describe --always --tags --dirty)"
+      - name: Build firmware
+        uses: espressif/esp-idf-ci-action@release-v4.2
+        env:
+          GIT_VERSIONID: ${{ steps.version_id.outputs.value }}
+      - name: Upload artifacts
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: build/microcam-firmware.bin
+          asset_name: lizard-${{ steps.version_id.outputs.value }}.bin
+          asset_content_type: application/octet-stream
+
+  docs:
+    run-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.x"
+      - name: Install dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Build docs
+        run: mkdocs build
+      - name: Deploy gh-pages
+        uses: JamesIves/github-pages-deploy-action@v4.2.5
+          with:
+            branch: gh-pages
+            folder: site
