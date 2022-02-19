@@ -23,7 +23,7 @@ do
             --flash_freq 40m \
             --flash_size detect \
             0x1000 build/bootloader/bootloader.bin \
-            0x8000 build/partitions_singleapp.bin \
+            0x8000 build/partition_table/partition-table.bin \
             0x10000 build/lizard.bin \
             || exit 1
     fi

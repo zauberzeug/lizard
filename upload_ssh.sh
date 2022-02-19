@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-if [ $# -ne 1 ]
+if [ $# -lt 1 ]
 then
     echo "Usage:"
-    echo "`basename $0` user@host"
+    echo "`basename $0` <user@host>"
     exit
 fi
 

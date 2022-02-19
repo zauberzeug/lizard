@@ -15,7 +15,7 @@ class LineReader:
         self.s = s
 
     def readline(self):
-        i = self.buf.find(b"\n")
+        i = self.buf.find(b'\n')
         if i >= 0:
             r = self.buf[:i+1]
             self.buf = self.buf[i+1:]
@@ -23,7 +23,7 @@ class LineReader:
         while True:
             i = max(1, min(2048, self.s.in_waiting))
             data = self.s.read(i)
-            i = data.find(b"\n")
+            i = data.find(b'\n')
             if i >= 0:
                 r = self.buf + data[:i+1]
                 self.buf[0:] = data[i+1:]
@@ -45,10 +45,7 @@ def receive():
                     checksum ^= ord(c)
                 if checksum != check:
                     print(f'ERROR: CHECKSUM MISSMATCH ({checksum} vs. {check} for "{line}")')
-                else:
-                    print(line[2:] if line[:2] in ['!"', '!!'] else line)
-            else:
-                print(line)
+            print(line)
         except UnicodeDecodeError as e:
             print(e)
 
@@ -58,7 +55,7 @@ async def send():
     while True:
         try:
             with patch_stdout():
-                line = await session.prompt_async("> ") + '\n'
+                line = await session.prompt_async('> ') + '\n'
                 checksum = 0
                 start = 0
                 for i, c in enumerate(line):
@@ -69,7 +66,7 @@ async def send():
                     else:
                         checksum ^= ord(c)
         except (KeyboardInterrupt, EOFError):
-            print("Bye!")
+            print('Bye!')
             loop.stop()
             return
 
@@ -79,18 +76,18 @@ def serial_connection() -> serial.Serial:
         usb_path = sys.argv[1]
     else:
         usb_paths = [
-            "/dev/ttyTHS1",
-            "/dev/ttyUSB0",
-            "/dev/tty.SLAB_USBtoUART",
-            "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0",
+            '/dev/ttyTHS1',
+            '/dev/ttyUSB0',
+            '/dev/tty.SLAB_USBtoUART',
+            '/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0',
         ]
         for usb_path in usb_paths:
             if os.path.exists(usb_path):
                 break
         else:
-            raise Exception("No serial port found")
+            raise Exception('No serial port found')
 
-    print(f"Connecting to {usb_path}")
+    print(f'Connecting to {usb_path}')
     return serial.Serial(usb_path, baudrate=115200, timeout=0.1)
 
 

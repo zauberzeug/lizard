@@ -1,40 +1,54 @@
 # Examples
 
-Create a new LED “green” at pin 14 and pulse it twice a second:
+## Turn on an LED
 
-    new led green 14
-    set green.interval=0.5
-    green pulse
+Create a new LED "green" at pin 14 and turn it on:
 
-Create a button “b1” at pin 25 with internal pull-up resistor and read its value:
+    green = Output(14)
+    green.on()
 
-    new button b1 25
-    set b1.pullup=1
-    b1 get
+## Read a button
 
-Clear the persistent storage, configure a button and an LED, restart the ESP with these two new modules and print the stored configuration:
+Create a button "b1" at pin 25 with internal pull-up resistor and read its value:
 
-    esp erase
-    +new led green 14
-    +new button b1 25
-    esp restart
-    ?
+    b1 = Input(25)
+    b1.pullup()
+    b1.level
 
-Create a pulsing LED “red”, a button “b1” with pull-up resistor as well as a condition “c1” that turns off the LED as soon as the button is pressed:
+## Write a persistent startup script
 
-    new led red 14
-    red pulse
-    new button b1 25
-    set b1.pullup=1
-    if b1 != 1 red off
+Clear the persistent storage, configure a button and an LED, write the new startup script to the persistent storage, restart the microcontroller with these two new modules and print the stored configuration:
 
-Create a “red” LED that shadows a “green” LED, i.e. will receive a copy of each command:
+    !-
+    !+green = Output(14)
+    !+b1 = Input(25)
+    !.
+    core.restart()
+    !?
 
-	new led red 13
-	new led green 14
-	shadow green > red
+## Define a rule
 
-Create an E-Stop switch at pin “MCP_A3” that is HIGH by default and triggers an esp stop command when LOW to stop all actuators:
+Create an LED "red", a button "b1" with pull-up resistor as well as a condition "c1" that turns off the LED as soon as the button is pressed:
 
-	new button estop MCP_A3
-	if estop == 0 esp stop
+    red = Output(14)
+    red.on()
+    b1 = Input(25)
+    b1.pullup()
+    when b1.level == 0 then red.off(); end
+
+## Create a shadow module
+
+Create a "green" LED that shadows a "red" LED, i.e. will receive a copy of each command:
+
+    green = Output(13)
+    red = Output(14)
+    red.shadow(green)
+
+## Use a port expander
+
+Create a serial connection as well as a port expander with an LED at pin 15 and turn it on:
+
+    serial = Serial(26, 27, 11500, 1)
+    expander = Expander(serial, 32, 33)
+    led = expander.Output(15)
+    led.on()
