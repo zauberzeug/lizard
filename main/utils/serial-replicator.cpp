@@ -4,8 +4,6 @@
 #include <numeric>
 #include <vector>
 
-#include <driver/gpio.h>
-#include <driver/uart.h>
 #include <esp_err.h>
 #include <esp_flash_partitions.h>
 #include <esp_log.h>
@@ -17,14 +15,6 @@
 namespace ZZ::Replicator {
 
 static constexpr char TAG[]{"replicator"};
-
-const uint32_t localUartPort{UART_NUM_1};
-const gpio_num_t remoteEnable{GPIO_NUM_14};
-const gpio_num_t remoteGpio0{GPIO_NUM_25};
-const gpio_num_t remoteTxPin{GPIO_NUM_26};
-const gpio_num_t remoteRxPin{GPIO_NUM_27};
-const uint32_t baseBaudrate{115200};
-const uint32_t transferBlockSize{0x1000};
 
 static constexpr char const *errorStrings[]{
     "SUCCESS",          /*!< Success */
@@ -55,14 +45,20 @@ static constexpr char const *errorStrings[]{
         }                                                                      \
     } while (false)
 
-static auto initConnection() -> bool {
+static auto initConnection(const uart_port_t uart_num,
+                           const gpio_num_t enable_pin,
+                           const gpio_num_t boot_pin,
+                           const gpio_num_t rx_pin,
+                           const gpio_num_t tx_pin,
+                           const uint32_t baud_rate,
+                           const uint32_t block_size) -> bool {
     loader_esp32_config_t conf{};
-    conf.baud_rate = baseBaudrate;
-    conf.uart_port = localUartPort;
-    conf.uart_rx_pin = remoteTxPin;
-    conf.uart_tx_pin = remoteRxPin;
-    conf.reset_trigger_pin = remoteEnable;
-    conf.gpio0_trigger_pin = remoteGpio0;
+    conf.baud_rate = baud_rate;
+    conf.uart_port = uart_num;
+    conf.uart_rx_pin = rx_pin;
+    conf.uart_tx_pin = tx_pin;
+    conf.reset_trigger_pin = enable_pin;
+    conf.gpio0_trigger_pin = boot_pin;
 
     esp_loader_error_t status{loader_port_esp32_init(&conf)};
     ESP_LOGD(TAG, "loader_port_esp32_init() -> %u", status);
@@ -84,8 +80,8 @@ static auto connect() -> bool {
     return true;
 }
 
-static auto upBaudrate() -> bool {
-    const uint32_t higherRate{baseBaudrate * 8};
+static auto upBaudrate(uint32_t base_baud_rate) -> bool {
+    const uint32_t higherRate{base_baud_rate * 8};
     esp_loader_error_t status{esp_loader_change_baudrate(higherRate)};
 
     ESP_LOGD(TAG, "esp_loader_change_baudrate(%u)", higherRate);
@@ -131,7 +127,7 @@ static auto getUsedFlashSize(uint32_t &usedSize) -> esp_err_t {
     auto partitionPtr{reinterpret_cast<const esp_partition_info_t *>(bytePtr)};
     usedSize = 0;
 
-    /* walk all parition entries */
+    /* walk all partition entries */
     for (; partitionPtr->magic == ESP_PARTITION_MAGIC; ++partitionPtr) {
         ESP_LOGD(TAG, "Visiting partition: [%*.s] [%X/%X]", sizeof(partitionPtr->label),
                  partitionPtr->label, partitionPtr->pos.offset, partitionPtr->pos.size);
@@ -152,7 +148,7 @@ static auto neededBlocks(const uint32_t value, const uint32_t blockSize) -> uint
     return blockCount;
 }
 
-static auto flash(uint32_t usedSize) -> bool {
+static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
     const uint32_t pageCount{neededBlocks(usedSize, SPI_FLASH_MMU_PAGE_SIZE)};
     const uint32_t blockCount{neededBlocks(usedSize, transferBlockSize)};
 
@@ -177,7 +173,11 @@ static auto flash(uint32_t usedSize) -> bool {
     uint32_t toSend = usedSize;
 
     /* Send all non-partial block */
+    int count = 0;
     while (toSend >= transferBlockSize) {
+        if ((count++) % 10 == 0) {
+            ESP_LOGI(TAG, "%d/%d kb", (usedSize - toSend) / 1000, usedSize / 1000);
+        }
         status = esp_loader_flash_write(bytePtr, transferBlockSize);
         ESP_LOGD(TAG, "esp_loader_flash_write(0x%08X)", usedSize - toSend);
 
@@ -212,9 +212,15 @@ public:
     }
 };
 
-auto flashReplica() -> bool {
+auto flashReplica(const uart_port_t uart_num,
+                  const gpio_num_t enable_pin,
+                  const gpio_num_t boot_pin,
+                  const gpio_num_t rx_pin,
+                  const gpio_num_t tx_pin,
+                  const uint32_t baud_rate,
+                  const uint32_t block_size) -> bool {
     ESP_LOGI(TAG, "Initializing pins..");
-    if (!initConnection()) {
+    if (!initConnection(uart_num, enable_pin, boot_pin, rx_pin, tx_pin, baud_rate, block_size)) {
         return false;
     }
 
@@ -226,7 +232,7 @@ auto flashReplica() -> bool {
     }
 
     ESP_LOGI(TAG, "Raising baudrate..");
-    if (!upBaudrate()) {
+    if (!upBaudrate(baud_rate)) {
         return false;
     }
 
@@ -235,7 +241,7 @@ auto flashReplica() -> bool {
 
     HANDLE_ESP_ERROR(ec, "querying used flash size");
 
-    if (!flash(usedSize)) {
+    if (!flash(usedSize, block_size)) {
         return false;
     }
 

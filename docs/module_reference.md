@@ -255,9 +255,13 @@ The expander module allows communication with another microcontroller connected 
 | ------------------------------------------- | ---------------------------------- | ----------------------- |
 | `expander = Expander(serial, boot, enable)` | Serial module and boot/enable pins | Serial module, 2x `int` |
 
-| Methods                 | Description                                    | Arguments |
-| ----------------------- | ---------------------------------------------- | --------- |
-| `expander.run(command)` | Run any `command` on the other microcontroller | `string`  |
+| Methods                 | Description                                      | Arguments |
+| ----------------------- | ------------------------------------------------ | --------- |
+| `expander.run(command)` | Run any `command` on the other microcontroller   | `string`  |
+| `expander.disconned()`  | Disconnect serial connection and pins            |           |
+| `expander.flash()`      | Flash other microcontroller with own binary data |           |
+
+The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 
