@@ -91,3 +91,7 @@ void Storage::print_startup(const std::string substring) {
 void Storage::save_startup() {
     Storage::put(Storage::startup);
 }
+
+void Storage::clear_nvs() {
+    Storage::put("");
+}

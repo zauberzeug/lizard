@@ -380,7 +380,7 @@ void app_main() {
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
 
-    printf("Ready.\n");
+    printf("\nReady.\n");
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));

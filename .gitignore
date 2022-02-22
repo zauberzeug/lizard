@@ -1,4 +1,6 @@
 build/
+owl/
+site/
 sdkconfig
 *.swp
 *.bin

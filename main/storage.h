@@ -15,4 +15,5 @@ public:
     static void remove_from_startup(const std::string substring = "");
     static void print_startup(const std::string substring = "");
     static void save_startup();
+    static void clear_nvs();
 };
