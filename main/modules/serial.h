@@ -11,13 +11,12 @@ using Serial_ptr = std::shared_ptr<Serial>;
 using ConstSerial_ptr = std::shared_ptr<const Serial>;
 
 class Serial : public Module {
-private:
+public:
     const gpio_num_t rx_pin;
     const gpio_num_t tx_pin;
     const long baud_rate;
     const uart_port_t uart_num;
 
-public:
     Serial(const std::string name,
            const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num);
     void enable_line_detection() const;

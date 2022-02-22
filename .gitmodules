@@ -7,3 +7,6 @@
 [submodule "components/esp32-zauber"]
 	path = components/esp32-zauber
 	url = git@github.com:zauberzeug/esp32-zauber.git
+[submodule "components/esp-serial-flasher"]
+	path = components/esp-serial-flasher
+	url = https://github.com/amakuzaze/esp-serial-flasher

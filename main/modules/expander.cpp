@@ -1,5 +1,7 @@
 #include "expander.h"
 
+#include "storage.h"
+#include "utils/serial-replicator.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include <cstring>
@@ -24,14 +26,15 @@ Expander::Expander(const std::string name,
     const unsigned long int start = millis();
     do {
         if (millis_since(start) > 1000) {
-            throw std::runtime_error("expander is not booting");
+            echo("warning: expander is not booting");
+            break;
         }
         if (serial->available()) {
             len = serial->read_line(buffer);
             strip(buffer, len);
             echo("%s: %s", name.c_str(), buffer);
         }
-    } while (strncmp("Ready.", buffer, 6));
+    } while (strcmp("Ready.", buffer));
 }
 
 void Expander::step() {
@@ -54,6 +57,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         std::string command = arguments[0]->evaluate_string();
         this->serial->write_checked_line(command.c_str(), command.length());
     } else if (method_name == "disconnect") {
+        Module::expect(arguments, 0);
         this->serial->deinstall();
         gpio_reset_pin(this->boot_pin);
         gpio_reset_pin(this->enable_pin);
@@ -61,6 +65,20 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         gpio_set_direction(this->enable_pin, GPIO_MODE_INPUT);
         gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
         gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
+    } else if (method_name == "flash") {
+        Storage::clear_nvs();
+        this->serial->deinstall();
+        Module::expect(arguments, 0);
+        bool success = ZZ::Replicator::flashReplica(this->serial->uart_num,
+                                                    this->enable_pin,
+                                                    this->boot_pin,
+                                                    this->serial->rx_pin,
+                                                    this->serial->tx_pin,
+                                                    this->serial->baud_rate);
+        Storage::save_startup();
+        if (!success) {
+            throw std::runtime_error("could not flash expander \"" + this->name + "\"");
+        }
     } else {
         static char buffer[1024];
         int pos = std::sprintf(buffer, "core.%s(", method_name.c_str());
