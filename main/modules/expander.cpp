@@ -26,7 +26,8 @@ Expander::Expander(const std::string name,
     const unsigned long int start = millis();
     do {
         if (millis_since(start) > 1000) {
-            throw std::runtime_error("expander is not booting");
+            echo("warning: expander is not booting");
+            break;
         }
         if (serial->available()) {
             len = serial->read_line(buffer);
