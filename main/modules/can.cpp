@@ -110,6 +110,41 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
                    arguments[6]->evaluate_integer(),
                    arguments[7]->evaluate_integer(),
                    arguments[8]->evaluate_integer());
+    } else if (method_name == "get_status") {
+        Module::expect(arguments, 0);
+        twai_status_info_t status_info;
+        if (twai_get_status_info(&status_info) != ESP_OK) {
+            throw std::runtime_error("could not get status info");
+        }
+        echo("state:            %s", status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
+                                     : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
+                                     : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+                                     : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                                                  : "UNKNOWN");
+        echo("msgs_to_tx:       %d", status_info.msgs_to_tx);
+        echo("msgs_to_rx:       %d", status_info.msgs_to_rx);
+        echo("tx_error_counter: %d", status_info.tx_error_counter);
+        echo("rx_error_counter: %d", status_info.rx_error_counter);
+        echo("tx_failed_count:  %d", status_info.tx_failed_count);
+        echo("rx_missed_count:  %d", status_info.rx_missed_count);
+        echo("rx_overrun_count: %d", status_info.rx_overrun_count);
+        echo("arb_lost_count:   %d", status_info.arb_lost_count);
+        echo("bus_error_count:  %d", status_info.bus_error_count);
+    } else if (method_name == "start") {
+        Module::expect(arguments, 0);
+        if (twai_start() != ESP_OK) {
+            throw std::runtime_error("could not start twai driver");
+        }
+    } else if (method_name == "stop") {
+        Module::expect(arguments, 0);
+        if (twai_stop() != ESP_OK) {
+            throw std::runtime_error("could not stop twai driver");
+        }
+    } else if (method_name == "recover") {
+        Module::expect(arguments, 0);
+        if (twai_initiate_recovery() != ESP_OK) {
+            throw std::runtime_error("could not initiate recovery");
+        }
     } else {
         Module::call(method_name, arguments);
     }

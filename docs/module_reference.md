@@ -90,6 +90,26 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | Methods                                             | Description                    | Arguments |
 | --------------------------------------------------- | ------------------------------ | --------- |
 | `can.send(node_id, d0, d1, d2, d3, d4, d5, d6, d7)` | Send a frame with 8 data bytes | 9x `int`  |
+| `can.get_status()`                                  | Print the driver status        |           |
+| `can.start()`                                       | Start the driver               |           |
+| `can.stop()`                                        | Stop the driver                |           |
+| `can.recover()`                                     | Recover the driver             |           |
+
+The method `get_status()` prints the following information:
+
+- `state` ("STOPPED", "RUNNING", "BUS_OFF" or "RECOVERING"),
+- `msgs_to_tx`,
+- `msgs_to_rx`,
+- `tx_error_counter`,
+- `rx_error_counter`,
+- `tx_failed_count`,
+- `rx_missed_count`,
+- `rx_overrun_count`,
+- `arb_lost_count` and
+- `bus_error_count`.
+
+After creating a CAN module, the driver is started automatically.
+The `start()` and `stop()` methods are primarily for debugging purposes.
 
 ## Serial interface
 
