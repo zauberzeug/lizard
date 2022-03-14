@@ -7,6 +7,7 @@ ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_mo
     this->properties["width"] = std::make_shared<NumberVariable>(1);
     this->properties["linear_speed"] = std::make_shared<NumberVariable>();
     this->properties["angular_speed"] = std::make_shared<NumberVariable>();
+    this->properties["enabled"] = std::make_shared<BooleanVariable>(true);
 }
 
 void ODriveWheels::step() {
@@ -37,15 +38,19 @@ void ODriveWheels::step() {
 void ODriveWheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "power") {
         Module::expect(arguments, 2, numbery, numbery);
-        this->left_motor->power(arguments[0]->evaluate_number());
-        this->right_motor->power(arguments[1]->evaluate_number());
+        if (this->properties.at("enabled")->boolean_value) {
+            this->left_motor->power(arguments[0]->evaluate_number());
+            this->right_motor->power(arguments[1]->evaluate_number());
+        }
     } else if (method_name == "speed") {
         Module::expect(arguments, 2, numbery, numbery);
-        double linear = arguments[0]->evaluate_number();
-        double angular = arguments[1]->evaluate_number();
-        double width = this->properties.at("width")->number_value;
-        this->left_motor->speed(linear - angular * width / 2.0);
-        this->right_motor->speed(linear + angular * width / 2.0);
+        if (this->properties.at("enabled")->boolean_value) {
+            double linear = arguments[0]->evaluate_number();
+            double angular = arguments[1]->evaluate_number();
+            double width = this->properties.at("width")->number_value;
+            this->left_motor->speed(linear - angular * width / 2.0);
+            this->right_motor->speed(linear + angular * width / 2.0);
+        }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->left_motor->off();
