@@ -2,6 +2,7 @@
 #include "compilation/await_routine.h"
 #include "compilation/expression.h"
 #include "compilation/method_call.h"
+#include "compilation/property_assignment.h"
 #include "compilation/routine.h"
 #include "compilation/routine_call.h"
 #include "compilation/rule.h"
@@ -139,6 +140,13 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
             const std::string routine_name = identifier_to_string(routine_call.routine_name);
             const Routine_ptr routine = Global::get_routine(routine_name);
             actions.push_back(std::make_shared<RoutineCall>(routine));
+        } else if (!action.property_assignment.empty) {
+            const struct parsed_property_assignment property_assignment = parsed_property_assignment_get(action.property_assignment);
+            const std::string module_name = identifier_to_string(property_assignment.module_name);
+            const Module_ptr module = Global::get_module(module_name);
+            const std::string property_name = identifier_to_string(property_assignment.property_name);
+            const ConstExpression_ptr expression = compile_expression(property_assignment.expression);
+            actions.push_back(std::make_shared<PropertyAssignment>(module, property_name, expression));
         } else if (!action.variable_assignment.empty) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(action.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
