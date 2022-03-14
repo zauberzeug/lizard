@@ -171,17 +171,22 @@ The ODrive wheels module combines to ODrive motors and provides odometry and ste
 | ----------------------------------------------- | ------------------------ | ------------------------ |
 | `wheels = ODriveWheels(left_motor, left_motor)` | Two ODrive motor modules | two ODrive motor modules |
 
-| Properties             | Description           | Data type |
-| ---------------------- | --------------------- | --------- |
-| `wheels.width`         | wheel distance (m)    | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)   | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s) | `float`   |
+| Properties             | Description                      | Data type |
+| ---------------------- | -------------------------------- | --------- |
+| `wheels.width`         | wheel distance (m)               | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)              | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)            | `float`   |
+| `wheels.enabled`       | Whether motors react to commands | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
 | `wheels.power(left, right)`     | Move with torque per wheel                      | `float`, `float` |
 | `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
 | `wheels.off()`                  | Turn both motors off (idle state)               |                  |
+
+When the wheels are not `enabled`, `power` and `speed` method calls are ignored.
+This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
+Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
 
 ## RMD Motor
 
