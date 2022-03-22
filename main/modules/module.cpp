@@ -14,6 +14,7 @@
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
 #include "serial.h"
+#include "stepper_motor.h"
 #include <stdarg.h>
 
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
@@ -140,6 +141,12 @@ Module_ptr Module::create(const std::string type,
         const RoboClaw_ptr roboclaw = std::static_pointer_cast<RoboClaw>(module);
         int64_t motor_number = arguments[1]->evaluate_integer();
         return std::make_shared<RoboClawMotor>(name, roboclaw, motor_number);
+    } else if (type == "StepperMotor") {
+        Module::expect(arguments, 2, integer, integer);
+        gpio_num_t step_pin = (gpio_num_t)arguments[0]->evaluate_integer();
+        gpio_num_t dir_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+        return std::make_shared<StepperMotor>(name, step_pin, dir_pin);
+
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
