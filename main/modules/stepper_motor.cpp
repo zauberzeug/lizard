@@ -1,5 +1,6 @@
 #include "stepper_motor.h"
 #include "../utils/uart.h"
+#include <algorithm>
 #include <driver/ledc.h>
 #include <driver/pcnt.h>
 #include <memory>
@@ -81,9 +82,15 @@ void StepperMotor::read_position() {
 }
 
 void StepperMotor::set_frequency() {
-    uint32_t frequency = this->target_speed;
-    gpio_set_level(this->dir_pin, frequency > 0 ? 1 : 0);
-    ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, frequency);
+    static int32_t speed = 0;
+    if (speed < this->target_speed) {
+        speed = std::min(speed + 100, this->target_speed);
+    }
+    if (speed > this->target_speed) {
+        speed = std::max(speed - 100, this->target_speed);
+    }
+    gpio_set_level(this->dir_pin, speed > 0 ? 1 : 0);
+    ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, speed);
 }
 
 void StepperMotor::step() {
