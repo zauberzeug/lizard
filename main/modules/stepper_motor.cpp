@@ -4,8 +4,20 @@
 #include <driver/pcnt.h>
 #include <memory>
 
-StepperMotor::StepperMotor(const std::string name, const gpio_num_t step_pin, const gpio_num_t dir_pin)
-    : Module(output, name), step_pin(step_pin), dir_pin(dir_pin) {
+StepperMotor::StepperMotor(const std::string name,
+                           const gpio_num_t step_pin,
+                           const gpio_num_t dir_pin,
+                           const pcnt_unit_t pcnt_unit,
+                           const pcnt_channel_t pcnt_channel,
+                           const ledc_timer_t ledc_timer,
+                           const ledc_channel_t ledc_channel)
+    : Module(output, name),
+      step_pin(step_pin),
+      dir_pin(dir_pin),
+      pcnt_unit(pcnt_unit),
+      pcnt_channel(pcnt_channel),
+      ledc_timer(ledc_timer),
+      ledc_channel(ledc_channel) {
     gpio_reset_pin(step_pin);
     gpio_reset_pin(dir_pin);
 
@@ -20,43 +32,43 @@ StepperMotor::StepperMotor(const std::string name, const gpio_num_t step_pin, co
         .neg_mode = PCNT_COUNT_DIS,
         .counter_h_lim = 30000,
         .counter_l_lim = -30000,
-        .unit = PCNT_UNIT_0,
-        .channel = PCNT_CHANNEL_0,
+        .unit = this->pcnt_unit,
+        .channel = this->pcnt_channel,
     };
     pcnt_unit_config(&pcnt_config);
-    pcnt_counter_pause(PCNT_UNIT_0);
-    pcnt_counter_clear(PCNT_UNIT_0);
-    pcnt_counter_resume(PCNT_UNIT_0);
+    pcnt_counter_pause(this->pcnt_unit);
+    pcnt_counter_clear(this->pcnt_unit);
+    pcnt_counter_resume(this->pcnt_unit);
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_1_BIT,
-        .timer_num = LEDC_TIMER_0,
+        .timer_num = this->ledc_timer,
         .freq_hz = 1000,
         .clk_cfg = LEDC_AUTO_CLK,
     };
     ledc_channel_config_t channel_config = {
         .gpio_num = step_pin,
         .speed_mode = LEDC_HIGH_SPEED_MODE,
-        .channel = LEDC_CHANNEL_0,
+        .channel = this->ledc_channel,
         .intr_type = LEDC_INTR_DISABLE,
-        .timer_sel = LEDC_TIMER_0,
+        .timer_sel = this->ledc_timer,
         .duty = 1,
         .hpoint = 0,
         .flags = {},
     };
     ledc_timer_config(&timer_config);
     ledc_channel_config(&channel_config);
-    ledc_timer_pause(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
+    ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
-    gpio_matrix_out(step_pin, LEDC_HS_SIG_OUT0_IDX + LEDC_CHANNEL_0, 0, 0);
+    gpio_matrix_out(step_pin, LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0, 0);
 }
 
 void StepperMotor::step() {
     static int16_t last_count = 0;
     int16_t count;
-    pcnt_get_counter_value(PCNT_UNIT_0, &count);
+    pcnt_get_counter_value(this->pcnt_unit, &count);
     int16_t d_count = count - last_count;
     if (d_count > 15000) {
         d_count -= 30000;
@@ -75,14 +87,14 @@ void StepperMotor::call(const std::string method_name, const std::vector<ConstEx
         double frequency = arguments[0]->evaluate_number();
         if (frequency != 0) {
             gpio_set_level(this->dir_pin, frequency > 0 ? 1 : 0);
-            ledc_set_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0, (uint32_t)frequency);
-            ledc_timer_resume(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
+            ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, (uint32_t)frequency);
+            ledc_timer_resume(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
         } else {
-            ledc_timer_pause(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
+            ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
         }
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0);
+        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
     } else {
         Module::call(method_name, arguments);
     }
