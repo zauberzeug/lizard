@@ -65,7 +65,7 @@ StepperMotor::StepperMotor(const std::string name,
     gpio_matrix_out(step_pin, LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0, 0);
 }
 
-void StepperMotor::step() {
+void StepperMotor::read_position() {
     static int16_t last_count = 0;
     int16_t count;
     pcnt_get_counter_value(this->pcnt_unit, &count);
@@ -78,23 +78,45 @@ void StepperMotor::step() {
     }
     this->properties.at("position")->integer_value += d_count;
     last_count = count;
+}
+
+void StepperMotor::set_frequency() {
+    uint32_t frequency = this->target_speed;
+    gpio_set_level(this->dir_pin, frequency > 0 ? 1 : 0);
+    ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, frequency);
+}
+
+void StepperMotor::step() {
+    this->read_position();
+
+    switch (this->state) {
+    case Idle:
+        break;
+    case Starting:
+        this->set_frequency();
+        ledc_timer_resume(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+        this->state = Running;
+        break;
+    case Running:
+        this->set_frequency();
+        break;
+    case Stopping:
+        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+        this->state = Idle;
+        break;
+    }
+
     Module::step();
 }
 
 void StepperMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "speed") {
         Module::expect(arguments, 1, numbery);
-        double frequency = arguments[0]->evaluate_number();
-        if (frequency != 0) {
-            gpio_set_level(this->dir_pin, frequency > 0 ? 1 : 0);
-            ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, (uint32_t)frequency);
-            ledc_timer_resume(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
-        } else {
-            ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
-        }
+        this->target_speed = arguments[0]->evaluate_number();
+        this->state = this->target_speed != 0 ? Starting : Stopping;
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+        this->state = Stopping;
     } else {
         Module::call(method_name, arguments);
     }

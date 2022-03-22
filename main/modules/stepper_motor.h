@@ -5,6 +5,18 @@
 #include "driver/pcnt.h"
 #include "module.h"
 
+enum StepperState {
+    Idle,
+    Starting,
+    Running,
+    Stopping,
+};
+
+enum StepperMode {
+    Speed,
+    Position,
+};
+
 class StepperMotor : public Module {
 private:
     const gpio_num_t step_pin;
@@ -13,6 +25,13 @@ private:
     const pcnt_channel_t pcnt_channel;
     const ledc_timer_t ledc_timer;
     const ledc_channel_t ledc_channel;
+
+    StepperState state = Idle;
+    StepperState mode;
+    double target_speed;
+
+    void read_position();
+    void set_frequency();
 
 public:
     StepperMotor(const std::string name,
