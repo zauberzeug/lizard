@@ -5,13 +5,6 @@
 #include "driver/pcnt.h"
 #include "module.h"
 
-enum StepperState {
-    Idle,
-    Starting,
-    Running,
-    Stopping,
-};
-
 enum StepperMode {
     Speed,
     Position,
@@ -26,8 +19,8 @@ private:
     const ledc_timer_t ledc_timer;
     const ledc_channel_t ledc_channel;
 
-    StepperState state = Idle;
-    StepperState mode;
+    bool is_running = false;
+    StepperMode mode;
     int32_t target_speed;
     uint32_t target_acceleration;
 

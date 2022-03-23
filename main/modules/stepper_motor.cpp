@@ -113,21 +113,8 @@ void StepperMotor::set_frequency() {
 void StepperMotor::step() {
     this->read_position();
 
-    switch (this->state) {
-    case Idle:
-        break;
-    case Starting:
+    if (this->is_running) {
         this->set_frequency();
-        ledc_timer_resume(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
-        this->state = Running;
-        break;
-    case Running:
-        this->set_frequency();
-        break;
-    case Stopping:
-        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
-        this->state = Idle;
-        break;
     }
 
     Module::step();
@@ -145,12 +132,11 @@ void StepperMotor::call(const std::string method_name, const std::vector<ConstEx
         }
         this->target_speed = target_speed;
         this->target_acceleration = arguments.size() > 1 ? std::abs(arguments[1]->evaluate_number()) : 0;
-        if (this->state != Running) {
-            this->state = Starting;
-        }
+        this->is_running = true;
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        this->state = Stopping;
+        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+        this->is_running = false;
     } else {
         Module::call(method_name, arguments);
     }
