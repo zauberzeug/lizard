@@ -5,9 +5,10 @@
 #include "driver/pcnt.h"
 #include "module.h"
 
-enum StepperMode {
-    Speed,
-    Position,
+enum StepperState {
+    Idle,
+    Speeding,
+    Positioning,
 };
 
 class StepperMotor : public Module {
@@ -19,8 +20,8 @@ private:
     const ledc_timer_t ledc_timer;
     const ledc_channel_t ledc_channel;
 
-    bool is_running = false;
-    StepperMode mode;
+    StepperState state;
+    int32_t target_position;
     int32_t target_speed;
     uint32_t target_acceleration;
 
@@ -37,4 +38,5 @@ public:
                  const ledc_channel_t ledc_channel);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void stop();
 };
