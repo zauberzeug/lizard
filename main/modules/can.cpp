@@ -77,12 +77,12 @@ bool Can::receive() {
     return true;
 }
 
-void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr) const {
+void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
     twai_message_t message;
     message.identifier = id;
     message.flags = rtr ? TWAI_MSG_FLAG_RTR : TWAI_MSG_FLAG_NONE;
-    message.data_length_code = 8;
-    for (int i = 0; i < 8; ++i) {
+    message.data_length_code = dlc;
+    for (int i = 0; i < dlc; ++i) {
         message.data[i] = data[i];
     }
     if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
