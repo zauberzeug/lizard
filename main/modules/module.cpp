@@ -4,6 +4,8 @@
 #include "bluetooth.h"
 #include "can.h"
 #include "driver/gpio.h"
+#include "driver/ledc.h"
+#include "driver/pcnt.h"
 #include "expander.h"
 #include "input.h"
 #include "linear_motor.h"
@@ -14,18 +16,19 @@
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
 #include "serial.h"
+#include "stepper_motor.h"
 #include <stdarg.h>
 
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
 }
 
 void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
-    if (arguments.size() != num) {
+    if (num >= 0 && arguments.size() != num) {
         throw std::runtime_error("expecting " + std::to_string(num) + " arguments, got " + std::to_string(arguments.size()));
     }
     va_list vl;
     va_start(vl, num);
-    for (int i = 0; i < num; i++) {
+    for (int i = 0; i < arguments.size(); i++) {
         if ((arguments[i]->type & va_arg(vl, int)) == 0) {
             throw std::runtime_error("type mismatch at argument " + std::to_string(i));
         }
@@ -140,6 +143,19 @@ Module_ptr Module::create(const std::string type,
         const RoboClaw_ptr roboclaw = std::static_pointer_cast<RoboClaw>(module);
         int64_t motor_number = arguments[1]->evaluate_integer();
         return std::make_shared<RoboClawMotor>(name, roboclaw, motor_number);
+    } else if (type == "StepperMotor") {
+        if (arguments.size() < 2 || arguments.size() > 6) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer, integer, integer, integer, integer, integer);
+        gpio_num_t step_pin = (gpio_num_t)arguments[0]->evaluate_integer();
+        gpio_num_t dir_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+        pcnt_unit_t pcnt_unit = arguments.size() > 2 ? (pcnt_unit_t)arguments[2]->evaluate_integer() : PCNT_UNIT_0;
+        pcnt_channel_t pcnt_channel = arguments.size() > 3 ? (pcnt_channel_t)arguments[3]->evaluate_integer() : PCNT_CHANNEL_0;
+        ledc_timer_t ledc_timer = arguments.size() > 4 ? (ledc_timer_t)arguments[4]->evaluate_integer() : LEDC_TIMER_0;
+        ledc_channel_t ledc_channel = arguments.size() > 5 ? (ledc_channel_t)arguments[5]->evaluate_integer() : LEDC_CHANNEL_0;
+        return std::make_shared<StepperMotor>(name, step_pin, dir_pin, pcnt_unit, pcnt_channel, ledc_timer, ledc_channel);
+
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
