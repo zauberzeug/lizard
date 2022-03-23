@@ -297,6 +297,86 @@ When using multiple stepper motors, they can be set to different values to avoid
 
 The optional speed and acceleration arguments default to 0, which means full speed and maximum acceleration.
 
+## CanOpenMaster
+
+The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
+
+| Constructor                      | Description | Arguments  |
+| -------------------------------- | ----------  | ---------- |
+| `co_master = CanOpenMaster(can)` | CAN module  | CAN module |
+
+| Properties                | Description                                | Data type |
+|---------------------------|--------------------------------------------|-----------|
+| `co_master.sync_interval` | Amount of lizard steps inbetween each SYNC | `int`     |
+
+## CanOpenMotor
+
+The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402. Positional and velocity units are currently undefined and must by manually measured. Once the configuration sequence has been executed, current status, position and velocity are queried on every SYNC.
+
+| Constructor                          | Description                     | Arguments           |
+|--------------------------------------|---------------------------------|---------------------|
+| `motor = CanOpenMotor(can, node_id)` | CAN module and node ID (1..127) | `CAN module`, `int` |
+
+| Methods                           | Description                                                                               | Arguments |
+|-----------------------------------|-------------------------------------------------------------------------------------------|-----------|
+| `motor.configure_constants()`     | Set up acceleration parameters and PDO mapping                                            |           |
+| `motor.enter_operational()`       | Instruct node to transition into operational state (NMT)                                  |           |
+| `motor.enter_pp_mode()`           | Set 402 operating mode to profile position                                                |           |
+| `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity                                                |           |
+| `motor.set_target_position(pos)`  | Set target position to `pos` (signed)                                                     | `int`     |
+| `motor.set_target_velocity(velo)` | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode.                  | `int`     |
+| `motor.commit_target_position()`  | Comfirm a previously set target position.                                                 | `int`     |
+| `motor.set_ctrl_halt(mode)`       | Latches / resets the "halt" bit and sends the updated control word to the node            | `bool`    |
+| `motor.set_ctrl_enable(mode)`     | Latches / resets the "enable operation" bit and sends an updated control word to the node | `bool`    |
+| `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
+
+| Properties              | Description                                              | Data type |
+|-------------------------|----------------------------------------------------------|-----------|
+| `last_heartbeat`        | Time in µs since bootup when last heartbeat was received | `int`     |
+| `is_booting`            | Node is in booting state                                 | `bool`    |
+| `is_preoperational`     | Node is in pre-operational state                         | `bool`    |
+| `is_operational`        | Node is in operational state                             | `bool`    |
+| `actual_position`       | Motor position at last SYNC                              | `int`     |
+| `actual_velocity`       | Motor velocity at last SYNC                              | `int`     |
+| `status_enabled`        | Operation enabled bit of status word since last SYNC     | `bool`    |
+| `status_fault`          | Fault bit of status word since last SYNC                 | `bool`    |
+| `status_target_reached` | Target reached bit of status word since last SYNC        | `bool`    |
+| `ctrl_enable`           | Latched operation enable bit of every sent control word  | `bool`    |
+| `ctrl_halt`             | Latched halt bit of every sent control word              | `bool`    |
+
+**Configuration sequence**
+
+Ensure that at least one heartbeat was received and device is not in booting state. Then configure constants, transition to operational, and instruct a CanOpenMaster module to start sending SYNC messages.
+
+**Target position sequence**
+
+Note: The target velocity must be positive regardless of target point direction.
+
+```
+motor.set_ctrl_enable(true)
+motor.enter_pp_mode()
+motor.set_target_velocity(10)
+motor.set_target_position(<some position>)
+motor.set_ctrl_halt(false)
+await motor.status_target_reached
+motor.set_ctrl_halt(true)
+motor.commit_target_position()
+```
+
+**Target velocity sequence**
+
+Unlike in the profile position mode, here the sign of the velocity does controls the direction.
+
+```
+motor.set_ctrl_enable(true)
+motor.set_ctrl_halt(true)
+motor.enter_pv_mode()
+motor.set_target_velocity(<some signed velocity>)
+motor.set_ctrl_halt(false)
+// await some condition
+motor.set_ctrl_halt(true)
+```
+
 ## Expander
 
 The expander module allows communication with another microcontroller connected via [serial](#serial-interface).
