@@ -98,7 +98,6 @@ void StepperMotor::step() {
         // current state
         int32_t position = this->properties.at("position")->integer_value;
         int32_t speed = this->properties.at("speed")->integer_value;
-        int32_t d_speed = std::max(dt * (double)this->target_acceleration, 1.0);
 
         // current target speed
         int32_t target_speed = this->target_speed;
@@ -107,21 +106,26 @@ void StepperMotor::step() {
                 if ((target_speed > 0 && position + dt * speed / 2 > this->target_position) ||
                     (target_speed < 0 && position + dt * speed / 2 < this->target_position)) {
                     target_speed = 0;
-                    this->stop();
                 }
             } else {
-                int32_t braking_distance = speed / this->target_acceleration * speed;
-                // TODO: CONTINUE HERE
+                int32_t braking_distance = (double)speed * (double)speed / (double)this->target_acceleration / 2.0;
+                int32_t remaining_distance = this->target_position - position;
+                if (std::abs(remaining_distance) < std::abs(braking_distance)) {
+                    target_speed = 0;
+                }
             }
         }
 
         // update speed based on target speed and target acceleration
         if (this->target_acceleration == 0) {
             speed = target_speed;
-        } else if (speed < target_speed) {
-            speed = std::min(speed + d_speed, target_speed);
-        } else if (speed > target_speed) {
-            speed = std::max(speed - d_speed, target_speed);
+        } else {
+            int32_t d_speed = std::max(dt * (double)this->target_acceleration, 1.0);
+            if (speed < target_speed) {
+                speed = std::min(speed + d_speed, target_speed);
+            } else if (speed > target_speed) {
+                speed = std::max(speed - d_speed, target_speed);
+            }
         }
 
         // set frequency and pause/resume LED controller
@@ -131,6 +135,11 @@ void StepperMotor::step() {
             gpio_set_level(this->dir_pin, speed > 0 ? 1 : 0);
             ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, std::abs(speed));
             ledc_timer_resume(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+        }
+
+        // stop if target is reached
+        if (target_speed == 0 && -MIN_SPEED < speed && speed < MIN_SPEED) {
+            this->state = Idle;
         }
 
         this->properties.at("speed")->integer_value = speed;
@@ -160,13 +169,9 @@ void StepperMotor::call(const std::string method_name, const std::vector<ConstEx
         this->state = Speeding;
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        this->stop();
+        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+        this->state = Idle;
     } else {
         Module::call(method_name, arguments);
     }
-}
-
-void StepperMotor::stop() {
-    ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
-    this->state = Idle;
 }
