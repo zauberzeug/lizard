@@ -29,6 +29,7 @@ private:
     StepperState state = Idle;
     StepperState mode;
     int32_t target_speed;
+    uint32_t target_acceleration;
 
     void read_position();
     void set_frequency();
