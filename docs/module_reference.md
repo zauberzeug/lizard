@@ -272,6 +272,31 @@ The RoboClaw motor module controls a motor using a RoboClaw module.
 | `motor.speed(speed)`  | Move with given `speed` (-32767..32767) | `float`   |
 | `motor.zero()`        | Store position as zero position         |           |
 
+## Stepper Motor
+
+The stepper motor module controls a stepper motor via "step" and "direction" pins.
+It uses the ESP LED Control API to generate pulses with sufficiently high frequencies and the Pulse Counter API to count steps.
+
+| Constructor                                               | Description             | Arguments |
+| --------------------------------------------------------- | ----------------------- | --------- |
+| `motor = StepperMotor(step, dir[, pu[, cp[, lt[, lc]]]])` | Step and direction pins | 6x `int`  |
+
+The constructor arguments `pu` (pulse counter unit), `pc` (pulse counter channel), `lt` (LED timer) and `lc` (LED channel) are optional and default to 0.
+When using multiple stepper motors, they can be set to different values to avoid conflicts.
+
+| Properties       | Description                    | Data type |
+| ---------------- | ------------------------------ | --------- |
+| `motor.position` | Motor position (steps)         | `int`     |
+| `motor.speed`    | Motor speed (steps per second) | `int`     |
+
+| Methods                                             | Description              | Arguments  |
+| --------------------------------------------------- | ------------------------ | ---------- |
+| `motor.speed(speed[, acceleration])`                | Move with given `speed`  | 2x `float` |
+| `motor.position(position[, speed[, acceleration]])` | Move to given `position` | 3x `float` |
+| `motor.stop()`                                      | Stop                     |            |
+
+The optional speed and acceleration arguments default to 0, which means full speed and maximum acceleration.
+
 ## Expander
 
 The expander module allows communication with another microcontroller connected via [serial](#serial-interface).

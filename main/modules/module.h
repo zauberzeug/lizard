@@ -20,6 +20,7 @@ enum ModuleType {
     rmd_motor,
     roboclaw,
     roboclaw_motor,
+    stepper_motor,
     proxy,
     number_of_module_types,
 };
