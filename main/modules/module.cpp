@@ -3,6 +3,8 @@
 #include "../utils/uart.h"
 #include "bluetooth.h"
 #include "can.h"
+#include "canopen_master.h"
+#include "canopen_motor.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/pcnt.h"
@@ -34,6 +36,18 @@ void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, co
         }
     }
     va_end(vl);
+}
+
+template <typename M>
+static std::shared_ptr<M> get_module_paramter(const ConstExpression_ptr &arg, ModuleType type, const std::string &type_name) {
+    const std::string name = arg->evaluate_identifier();
+    Module_ptr module = Global::get_module(name);
+    if (module->type != type) {
+        throw std::runtime_error("module \"" + name + "\" is no " + type_name);
+    }
+
+    const std::shared_ptr<M> typed_module = std::static_pointer_cast<M>(module);
+    return typed_module;
 }
 
 Module_ptr Module::create(const std::string type,
@@ -155,7 +169,18 @@ Module_ptr Module::create(const std::string type,
         ledc_timer_t ledc_timer = arguments.size() > 4 ? (ledc_timer_t)arguments[4]->evaluate_integer() : LEDC_TIMER_0;
         ledc_channel_t ledc_channel = arguments.size() > 5 ? (ledc_channel_t)arguments[5]->evaluate_integer() : LEDC_CHANNEL_0;
         return std::make_shared<StepperMotor>(name, step_pin, dir_pin, pcnt_unit, pcnt_channel, ledc_timer, ledc_channel);
-
+    } else if (type == "CanOpenMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t node_id = arguments[1]->evaluate_integer();
+        CanOpenMotor_ptr motor = std::make_shared<CanOpenMotor>(name, can_module, node_id);
+        motor->subscribe_to_can();
+        return motor;
+    } else if (type == "CanOpenMaster") {
+        Module::expect(arguments, 1, identifier);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
+        return master;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
