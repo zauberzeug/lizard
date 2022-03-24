@@ -2,6 +2,7 @@
 #include "timing.h"
 #include "uart.h"
 #include <cassert>
+#include <cinttypes>
 #include <esp_timer.h>
 #include <stdexcept>
 
@@ -176,10 +177,11 @@ static const std::string PROP_CTRL_ENA_OP{"ctrl_enable"};
 static const std::string PROP_CTRL_HALT{"ctrl_halt"};
 
 CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id)
-    : Module(canopen_motor, name), can(can), node_id(check_node_id(node_id)) {
+    : Module(canopen_motor, name), can(can), node_id(check_node_id(node_id)),
+      current_op_mode_disp(OP_MODE_NONE), current_op_mode(OP_MODE_NONE) {
     this->properties[PROP_PENDING_READS] = std::make_shared<IntegerVariable>(0);
     this->properties[PROP_PENDING_WRITES] = std::make_shared<IntegerVariable>(0);
-    this->properties[PROP_HEARTBEAT] = std::make_shared<IntegerVariable>(0);
+    this->properties[PROP_HEARTBEAT] = std::make_shared<IntegerVariable>(-1);
     this->properties[PROP_301_STATE] = std::make_shared<IntegerVariable>(-1);
     this->properties[PROP_301_STATE_BOOTING] = std::make_shared<BooleanVariable>(false);
     this->properties[PROP_301_STATE_PREOP] = std::make_shared<BooleanVariable>(false);
@@ -195,6 +197,93 @@ CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id
     this->properties[PROP_CTRL_HALT] = std::make_shared<BooleanVariable>(true);
 }
 
+void CanOpenMotor::init() {
+    wait_for_heartbeat();
+
+    int state = this->properties[PROP_301_STATE]->integer_value;
+    switch (state) {
+    case -1:
+        /* No heartbeat received at all, abort */
+        throw std::runtime_error("CanOpenMotor: No heartbeat received after 1s, init failed");
+
+    case Booting:
+        /* Booting heartbeat received, give node one more second */
+        wait_for_heartbeat();
+        break;
+
+    default:
+        break;
+    }
+
+    switch (state) {
+
+    case Preoperational:
+        transition_operational();
+        configure_constants();
+        break;
+
+    case Operational:
+        configure_constants();
+        break;
+
+    default:
+        throw std::runtime_error("Unexpected node state during init. Aborting.");
+    }
+}
+
+void CanOpenMotor::wait_for_heartbeat() {
+    /* Wait a bit more than a second (= default heartbeat interval) */
+    for (int i = 0; i < 200; ++i) {
+        while (this->can->receive())
+            ;
+
+        if (this->properties[PROP_HEARTBEAT]->integer_value > 0) {
+            return;
+        }
+
+        delay(10);
+    }
+
+    throw std::runtime_error("CanOpenMotor: No heartbeat received after 2s, init failed");
+}
+
+void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
+    const uint32_t ms_per_sleep = 10;
+    uint32_t cycles = timeout_ms / ms_per_sleep;
+
+    for (uint32_t i = 0; i < cycles; ++i) {
+        while (this->can->receive())
+            ;
+        delay(ms_per_sleep);
+
+        if (this->properties[PROP_PENDING_WRITES]->integer_value == 0) {
+            return;
+        }
+    }
+
+    throw std::runtime_error("SDO writes timed out. Aborting.");
+}
+
+void CanOpenMotor::enter_position_mode(int velocity) {
+    write_od_u8(OP_MODE_U8, 0x00, OP_MODE_PROFILE_POSITION);
+    send_target_velocity(velocity);
+    /* Take off halt (=brake) for positioning by default */
+    this->properties[PROP_CTRL_HALT]->boolean_value = false;
+    send_control_word(build_ctrl_word(false));
+
+    current_op_mode = OP_MODE_PROFILE_POSITION;
+}
+
+void CanOpenMotor::enter_velocity_mode(int velocity) {
+    /* Put in halt for velocity mode since it directly controls motion */
+    this->properties[PROP_CTRL_HALT]->boolean_value = true;
+    send_control_word(build_ctrl_word(false));
+    send_target_velocity(velocity);
+    write_od_u8(OP_MODE_U8, 0x00, OP_MODE_PROFILE_VELOCITY);
+
+    current_op_mode = OP_MODE_PROFILE_VELOCITY;
+}
+
 void CanOpenMotor::subscribe_to_can() {
     can->subscribe(wrap_cob_id(COB_HEARTBEAT, node_id), this->shared_from_this());
     can->subscribe(wrap_cob_id(COB_SDO_SERVER2CLIENT, node_id), this->shared_from_this());
@@ -206,17 +295,24 @@ void CanOpenMotor::step() {
 }
 
 void CanOpenMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    if (method_name == "configure_constants") {
-        configure_constants();
-    } else if (method_name == "enter_operational") {
-        expect(arguments, 0);
-        transition_operational();
-    } else if (method_name == "enter_pp_mode") {
-        expect(arguments, 0);
-        write_od_u8(OP_MODE_U8, 0x00, OP_MODE_PROFILE_POSITION);
+    if (method_name == "init") {
+        this->init();
+        initialized = true;
+        return;
+    }
+
+    if (!initialized) {
+        throw std::runtime_error("CanOpenMotor: Not initialized!");
+    }
+
+    if (method_name == "enter_pp_mode") {
+        expect(arguments, 1, integer);
+        int64_t velocity = arguments[0]->evaluate_integer();
+        enter_position_mode(velocity);
     } else if (method_name == "enter_pv_mode") {
-        expect(arguments, 0);
-        write_od_u8(OP_MODE_U8, 0x00, OP_MODE_PROFILE_VELOCITY);
+        expect(arguments, 1, integer);
+        int64_t velocity = arguments[0]->evaluate_integer();
+        enter_velocity_mode(velocity);
     } else if (method_name == "set_target_position") {
         expect(arguments, 1, integer);
         int32_t target_position = arguments[0]->evaluate_integer();
@@ -261,7 +357,7 @@ void CanOpenMotor::write_od_u8(uint16_t index, uint8_t sub, uint8_t value) {
 
     can->send(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data);
     this->properties[PROP_PENDING_WRITES]->integer_value++;
-    delay(10);
+    wait_for_sdo_writes(100);
 }
 
 void CanOpenMotor::write_od_u16(uint16_t index, uint8_t sub, uint16_t value) {
@@ -272,7 +368,7 @@ void CanOpenMotor::write_od_u16(uint16_t index, uint8_t sub, uint16_t value) {
 
     can->send(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data);
     this->properties[PROP_PENDING_WRITES]->integer_value++;
-    delay(10);
+    wait_for_sdo_writes(100);
 }
 
 void CanOpenMotor::write_od_u32(uint16_t index, uint8_t sub, uint32_t value) {
@@ -283,7 +379,7 @@ void CanOpenMotor::write_od_u32(uint16_t index, uint8_t sub, uint32_t value) {
 
     can->send(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data);
     this->properties[PROP_PENDING_WRITES]->integer_value++;
-    delay(10);
+    wait_for_sdo_writes(100);
 }
 
 void CanOpenMotor::write_od_i32(uint16_t index, uint8_t sub, int32_t value) {
@@ -294,7 +390,7 @@ void CanOpenMotor::write_od_i32(uint16_t index, uint8_t sub, int32_t value) {
 
     can->send(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data);
     this->properties[PROP_PENDING_WRITES]->integer_value++;
-    delay(10);
+    wait_for_sdo_writes(100);
 }
 
 void CanOpenMotor::sdo_read(uint16_t index, uint8_t sub) {
@@ -332,6 +428,7 @@ void CanOpenMotor::configure_rpdos() {
 }
 
 void CanOpenMotor::configure_constants() {
+    write_od_u8(OP_MODE_U8, 0x00, OP_MODE_NONE);
     write_od_u16(PROFILE_ACCELERATION_U32, 0x00, 100);
     write_od_u16(PROFILE_DECELERATION_U32, 0x00, 100);
     write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, 500);
@@ -360,7 +457,7 @@ void CanOpenMotor::handle_sdo_reply(const uint8_t *const data) {
         echo("Incoming read: [%02X.%01X]: %04X (%d)", index, sub_index, value, *reinterpret_cast<int32_t *>(&value));
         switch (index) {
         case OP_MODE_DISP_U16:
-            this->current_op_mode = static_cast<uint16_t>(value);
+            this->current_op_mode_disp = static_cast<uint16_t>(value);
             break;
         }
         break;
@@ -398,6 +495,13 @@ void CanOpenMotor::handle_tpdo1(const uint8_t *const data) {
     int32_t actual_position = demarshal_i32(data + 2);
 
     process_status_word_generic(status_word);
+
+    if (current_op_mode == OP_MODE_PROFILE_POSITION) {
+        process_status_word_pp(status_word);
+    } else if (current_op_mode == OP_MODE_PROFILE_VELOCITY) {
+        process_status_word_pv(status_word);
+    }
+
     this->properties[PROP_POSITION]->integer_value = actual_position;
 }
 

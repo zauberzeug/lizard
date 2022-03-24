@@ -317,18 +317,17 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 |--------------------------------------|---------------------------------|---------------------|
 | `motor = CanOpenMotor(can, node_id)` | CAN module and node ID (1..127) | `CAN module`, `int` |
 
-| Methods                           | Description                                                                               | Arguments |
-|-----------------------------------|-------------------------------------------------------------------------------------------|-----------|
-| `motor.configure_constants()`     | Set up acceleration parameters and PDO mapping                                            |           |
-| `motor.enter_operational()`       | Instruct node to transition into operational state (NMT)                                  |           |
-| `motor.enter_pp_mode()`           | Set 402 operating mode to profile position                                                |           |
-| `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity                                                |           |
-| `motor.set_target_position(pos)`  | Set target position to `pos` (signed)                                                     | `int`     |
-| `motor.set_target_velocity(velo)` | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode.                  | `int`     |
-| `motor.commit_target_position()`  | Comfirm a previously set target position.                                                 | `int`     |
-| `motor.set_ctrl_halt(mode)`       | Latches / resets the "halt" bit and sends the updated control word to the node            | `bool`    |
-| `motor.set_ctrl_enable(mode)`     | Latches / resets the "enable operation" bit and sends an updated control word to the node | `bool`    |
-| `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
+| Methods                           | Description                                                                                 | Arguments |
+|-----------------------------------|---------------------------------------------------------------------------------------------|-----------|
+| `motor.init()`                    | Set up acceleration parameters, PDO mapping, and transition node to operational state (NMT) |           |
+| `motor.enter_pp_mode(velo)`       | Set 402 operating mode to profile position, halt off, and target velocity to `velo`         | `int`     |
+| `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`          | `int`     |
+| `motor.set_target_position(pos)`  | Set target position to `pos` (signed). [pp mode]                                            | `int`     |
+| `motor.commit_target_position()`  | Instruct motor to move to previously set target position. [pp mode]                         |           |
+| `motor.set_target_velocity(velo)` | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                     | `int`     |
+| `motor.set_ctrl_halt(mode)`       | Latches / resets the "halt" bit and sends the updated control word to the node              | `bool`    |
+| `motor.set_ctrl_enable(mode)`     | Latches / resets the "enable operation" bit and sends an updated control word to the node   | `bool`    |
+| `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                  | `int`     |
 
 | Properties              | Description                                              | Data type |
 |-------------------------|----------------------------------------------------------|-----------|
@@ -346,32 +345,32 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 
 **Configuration sequence**
 
-Ensure that at least one heartbeat was received and device is not in booting state. Then configure constants, transition to operational, and instruct a CanOpenMaster module to start sending SYNC messages.
+Before any other method can be invoked, `init()` must be called at least once. The module will listen for at most two heartbeats (= 2s). Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
 
 **Target position sequence**
 
-Note: The target velocity must be positive regardless of target point direction.
+Note: The target velocity must be positive regardless of target point direction. The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.
 
 ```
+// First time, assuming motor is disabled and not in pp mode
 motor.set_ctrl_enable(true)
-motor.enter_pp_mode()
-motor.set_target_velocity(10)
+motor.enter_pp_mode(<some positive velocity>)
+
+// All further set points only need these
 motor.set_target_position(<some position>)
-motor.set_ctrl_halt(false)
-await motor.status_target_reached
-motor.set_ctrl_halt(true)
 motor.commit_target_position()
 ```
 
 **Target velocity sequence**
 
-Unlike in the profile position mode, here the sign of the velocity does controls the direction.
+Unlike in the profile position mode, here the sign of the velocity does controls the direction. The halt bit is set when entering pv. To start moving, clear it (and set again to stop).
 
 ```
+// First time, assuming motor is disabled and not in pv mode
 motor.set_ctrl_enable(true)
-motor.set_ctrl_halt(true)
-motor.enter_pv_mode()
-motor.set_target_velocity(<some signed velocity>)
+motor.enter_pv_mode(<some signed velocity>)
+
+// Further movements only need these
 motor.set_ctrl_halt(false)
 // await some condition
 motor.set_ctrl_halt(true)
