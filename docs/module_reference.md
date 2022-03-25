@@ -289,24 +289,24 @@ When using multiple stepper motors, they can be set to different values to avoid
 | `motor.position` | Motor position (steps)         | `int`     |
 | `motor.speed`    | Motor speed (steps per second) | `int`     |
 
-| Methods                                             | Description              | Arguments  |
-| --------------------------------------------------- | ------------------------ | ---------- |
-| `motor.speed(speed[, acceleration])`                | Move with given `speed`  | 2x `float` |
-| `motor.position(position[, speed[, acceleration]])` | Move to given `position` | 3x `float` |
-| `motor.stop()`                                      | Stop                     |            |
+| Methods                                           | Description              | Arguments  |
+| ------------------------------------------------- | ------------------------ | ---------- |
+| `motor.speed(speed[, acceleration])`              | Move with given `speed`  | 2x `float` |
+| `motor.position(position, speed[, acceleration])` | Move to given `position` | 3x `float` |
+| `motor.stop()`                                    | Stop                     |            |
 
-The optional speed and acceleration arguments default to 0, which means full speed and maximum acceleration.
+The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.
 
 ## CanOpenMaster
 
 The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
 
 | Constructor                      | Description | Arguments  |
-| -------------------------------- | ----------  | ---------- |
+| -------------------------------- | ----------- | ---------- |
 | `co_master = CanOpenMaster(can)` | CAN module  | CAN module |
 
 | Properties                | Description                                | Data type |
-|---------------------------|--------------------------------------------|-----------|
+| ------------------------- | ------------------------------------------ | --------- |
 | `co_master.sync_interval` | Amount of lizard steps inbetween each SYNC | `int`     |
 
 ## CanOpenMotor
@@ -314,11 +314,11 @@ The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At c
 The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402. Positional and velocity units are currently undefined and must by manually measured. Once the configuration sequence has been executed, current status, position and velocity are queried on every SYNC.
 
 | Constructor                          | Description                     | Arguments           |
-|--------------------------------------|---------------------------------|---------------------|
+| ------------------------------------ | ------------------------------- | ------------------- |
 | `motor = CanOpenMotor(can, node_id)` | CAN module and node ID (1..127) | `CAN module`, `int` |
 
 | Methods                           | Description                                                                                 | Arguments |
-|-----------------------------------|---------------------------------------------------------------------------------------------|-----------|
+| --------------------------------- | ------------------------------------------------------------------------------------------- | --------- |
 | `motor.init()`                    | Set up acceleration parameters, PDO mapping, and transition node to operational state (NMT) |           |
 | `motor.enter_pp_mode(velo)`       | Set 402 operating mode to profile position, halt off, and target velocity to `velo`         | `int`     |
 | `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`          | `int`     |
@@ -330,7 +330,7 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 | `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                  | `int`     |
 
 | Properties              | Description                                              | Data type |
-|-------------------------|----------------------------------------------------------|-----------|
+| ----------------------- | -------------------------------------------------------- | --------- |
 | `last_heartbeat`        | Time in µs since bootup when last heartbeat was received | `int`     |
 | `is_booting`            | Node is in booting state                                 | `bool`    |
 | `is_preoperational`     | Node is in pre-operational state                         | `bool`    |
