@@ -311,7 +311,7 @@ The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At c
 
 ## CanOpenMotor
 
-The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402. Positional and velocity units are currently undefined and must by manually measured. Once the configuration sequence has been executed, current status, position and velocity are queried on every SYNC.
+The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402. Positional and velocity units are currently undefined and must by manually measured. Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
 
 | Constructor                          | Description                     | Arguments           |
 | ------------------------------------ | ------------------------------- | ------------------- |
@@ -319,7 +319,6 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 
 | Methods                           | Description                                                                                 | Arguments |
 | --------------------------------- | ------------------------------------------------------------------------------------------- | --------- |
-| `motor.init()`                    | Set up acceleration parameters, PDO mapping, and transition node to operational state (NMT) |           |
 | `motor.enter_pp_mode(velo)`       | Set 402 operating mode to profile position, halt off, and target velocity to `velo`         | `int`     |
 | `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`          | `int`     |
 | `motor.set_target_position(pos)`  | Set target position to `pos` (signed). [pp mode]                                            | `int`     |
@@ -331,6 +330,7 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 
 | Properties              | Description                                              | Data type |
 | ----------------------- | -------------------------------------------------------- | --------- |
+| `initialized`           | Concurrent init sequence has finished, motor is ready    | `bool`    |
 | `last_heartbeat`        | Time in µs since bootup when last heartbeat was received | `int`     |
 | `is_booting`            | Node is in booting state                                 | `bool`    |
 | `is_preoperational`     | Node is in pre-operational state                         | `bool`    |
@@ -345,7 +345,7 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 
 **Configuration sequence**
 
-Before any other method can be invoked, `init()` must be called at least once. The module will listen for at most two heartbeats (= 2s). Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
+After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`. Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
 
 **Target position sequence**
 

@@ -159,6 +159,7 @@ static uint8_t check_node_id(int64_t id) {
     return static_cast<uint8_t>(id);
 }
 
+static const std::string PROP_INITIALIZED{"initialized"};
 static const std::string PROP_PENDING_READS{"pending_sdo_reads"};
 static const std::string PROP_PENDING_WRITES{"pending_sdo_writes"};
 static const std::string PROP_HEARTBEAT{"last_heartbeat"};
@@ -179,6 +180,7 @@ static const std::string PROP_CTRL_HALT{"ctrl_halt"};
 CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(canopen_motor, name), can(can), node_id(check_node_id(node_id)),
       current_op_mode_disp(OP_MODE_NONE), current_op_mode(OP_MODE_NONE) {
+    this->properties[PROP_INITIALIZED] = std::make_shared<BooleanVariable>(false);
     this->properties[PROP_PENDING_READS] = std::make_shared<IntegerVariable>(0);
     this->properties[PROP_PENDING_WRITES] = std::make_shared<IntegerVariable>(0);
     this->properties[PROP_HEARTBEAT] = std::make_shared<IntegerVariable>(-1);
@@ -195,56 +197,6 @@ CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id
     this->properties[PROP_PV_IS_MOVING] = std::make_shared<BooleanVariable>(false);
     this->properties[PROP_CTRL_ENA_OP] = std::make_shared<BooleanVariable>(false);
     this->properties[PROP_CTRL_HALT] = std::make_shared<BooleanVariable>(true);
-}
-
-void CanOpenMotor::init() {
-    wait_for_heartbeat();
-
-    int state = this->properties[PROP_301_STATE]->integer_value;
-    switch (state) {
-    case -1:
-        /* No heartbeat received at all, abort */
-        throw std::runtime_error("CanOpenMotor: No heartbeat received after 1s, init failed");
-
-    case Booting:
-        /* Booting heartbeat received, give node one more second */
-        wait_for_heartbeat();
-        break;
-
-    default:
-        break;
-    }
-
-    switch (state) {
-
-    case Preoperational:
-        transition_operational();
-        configure_constants();
-        break;
-
-    case Operational:
-        configure_constants();
-        break;
-
-    default:
-        throw std::runtime_error("Unexpected node state during init. Aborting.");
-    }
-}
-
-void CanOpenMotor::wait_for_heartbeat() {
-    /* Wait a bit more than a second (= default heartbeat interval) */
-    for (int i = 0; i < 200; ++i) {
-        while (this->can->receive())
-            ;
-
-        if (this->properties[PROP_HEARTBEAT]->integer_value > 0) {
-            return;
-        }
-
-        delay(10);
-    }
-
-    throw std::runtime_error("CanOpenMotor: No heartbeat received after 2s, init failed");
 }
 
 void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
@@ -295,13 +247,7 @@ void CanOpenMotor::step() {
 }
 
 void CanOpenMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    if (method_name == "init") {
-        this->init();
-        initialized = true;
-        return;
-    }
-
-    if (!initialized) {
+    if (!this->properties[PROP_INITIALIZED]->boolean_value) {
         throw std::runtime_error("CanOpenMotor: Not initialized!");
     }
 
@@ -341,6 +287,12 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void CanOpenMotor::transition_preoperational() {
+    uint8_t data[2]{STATE_CHANGE_PREOPERATIONAL, this->node_id};
+    /* COB-ID 0 = NMT state transition */
+    this->can->send(0, data, false, sizeof(data));
 }
 
 void CanOpenMotor::transition_operational() {
@@ -438,12 +390,69 @@ void CanOpenMotor::configure_constants() {
 }
 
 void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
-    this->properties[PROP_HEARTBEAT]->integer_value = esp_timer_get_time();
-    this->properties[PROP_301_STATE]->integer_value = data[0];
+    uint8_t actual_state = data[0];
 
-    this->properties[PROP_301_STATE_BOOTING]->boolean_value = (data[0] == Booting);
-    this->properties[PROP_301_STATE_PREOP]->boolean_value = (data[0] == Preoperational);
-    this->properties[PROP_301_STATE_OP]->boolean_value = (data[0] == Operational);
+    this->properties[PROP_HEARTBEAT]->integer_value = esp_timer_get_time();
+    this->properties[PROP_301_STATE]->integer_value = actual_state;
+
+    this->properties[PROP_301_STATE_BOOTING]->boolean_value = (actual_state == Booting);
+    this->properties[PROP_301_STATE_PREOP]->boolean_value = (actual_state == Preoperational);
+    this->properties[PROP_301_STATE_OP]->boolean_value = (actual_state == Operational);
+
+    switch (init_state) {
+    case WaitingForPreoperational:
+        switch (actual_state) {
+        case Operational:
+            transition_preoperational();
+            break;
+
+        case Preoperational:
+            configure_constants();
+            init_state = WaitingForSdoWrites;
+            break;
+
+        case Stopped:
+            throw std::runtime_error("CanOpenMotor: Unexpected stopped state");
+
+        default:
+            break;
+        }
+        break;
+
+    case WaitingForSdoWrites:
+        switch (actual_state) {
+        case Preoperational:
+            if (this->properties[PROP_PENDING_WRITES]->integer_value > 0) {
+                break;
+            }
+
+            transition_operational();
+            init_state = WaitingForOperational;
+            break;
+
+        default:
+            throw std::runtime_error("CanOpenMotor: Unexpected state waiting for SDO writes");
+        }
+        break;
+
+    case WaitingForOperational:
+        switch (actual_state) {
+        case Operational:
+            init_state = InitDone;
+            this->properties[PROP_INITIALIZED]->boolean_value = true;
+            break;
+
+        case Preoperational:
+            break;
+
+        default:
+            throw std::runtime_error("CanOpenMotor: Unexpected state waiting for operational");
+        }
+        break;
+
+    case InitDone:
+        break;
+    }
 }
 
 void CanOpenMotor::handle_sdo_reply(const uint8_t *const data) {

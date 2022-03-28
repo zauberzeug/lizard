@@ -11,7 +11,17 @@ using CanOpenMotor_ptr = std::shared_ptr<CanOpenMotor>;
 class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenMotor> {
     Can_ptr can;
     const uint8_t node_id;
-    bool initialized = false;
+
+    enum {
+        /* No preop HB received yet */
+        WaitingForPreoperational,
+        /* preop HB received, SDOs written */
+        WaitingForSdoWrites,
+        /* NMT preop -> op transition requested */
+        WaitingForOperational,
+        /* node reports op state */
+        InitDone,
+    } init_state = WaitingForPreoperational;
 
     /* What the motor says it's in (currently not regularly polled) */
     uint16_t current_op_mode_disp;
@@ -19,6 +29,7 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
     /* What we last requested */
     uint16_t current_op_mode;
 
+    void transition_preoperational();
     void transition_operational();
     void write_od_u8(uint16_t index, uint8_t sub, uint8_t value);
     void write_od_u16(uint16_t index, uint8_t sub, uint16_t value);
@@ -40,14 +51,12 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
     void send_target_velocity(int32_t value);
     uint16_t build_ctrl_word(bool new_set_point);
 
-    void wait_for_heartbeat();
     void wait_for_sdo_writes(uint32_t timeout_ms);
     void enter_position_mode(int velocity);
     void enter_velocity_mode(int velocity);
 
 public:
     CanOpenMotor(const std::string &name, const Can_ptr can, int64_t node_id);
-    void init();
     void subscribe_to_can();
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
