@@ -167,6 +167,7 @@ static const std::string PROP_301_STATE{"raw_state"};
 static const std::string PROP_301_STATE_BOOTING{"is_booting"};
 static const std::string PROP_301_STATE_PREOP{"is_preoperational"};
 static const std::string PROP_301_STATE_OP{"is_operational"};
+static const std::string PROP_OFFSET{"position_offset"};
 static const std::string PROP_POSITION{"actual_position"};
 static const std::string PROP_VELOCITY{"actual_velocity"};
 static const std::string PROP_402_OP_ENA{"status_enabled"};
@@ -188,6 +189,7 @@ CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id
     this->properties[PROP_301_STATE_BOOTING] = std::make_shared<BooleanVariable>(false);
     this->properties[PROP_301_STATE_PREOP] = std::make_shared<BooleanVariable>(false);
     this->properties[PROP_301_STATE_OP] = std::make_shared<BooleanVariable>(false);
+    this->properties[PROP_OFFSET] = std::make_shared<IntegerVariable>(0);
     this->properties[PROP_POSITION] = std::make_shared<IntegerVariable>(0);
     this->properties[PROP_VELOCITY] = std::make_shared<IntegerVariable>(0);
     this->properties[PROP_402_OP_ENA] = std::make_shared<BooleanVariable>(false);
@@ -262,7 +264,8 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
     } else if (method_name == "set_target_position") {
         expect(arguments, 1, integer);
         int32_t target_position = arguments[0]->evaluate_integer();
-        send_target_position(target_position);
+        int32_t offset = this->properties[PROP_OFFSET]->integer_value;
+        send_target_position(target_position + offset);
     } else if (method_name == "commit_target_position") {
         expect(arguments, 0);
         /* toggle new set point bit in control word */
@@ -502,6 +505,7 @@ void CanOpenMotor::handle_sdo_reply(const uint8_t *const data) {
 void CanOpenMotor::handle_tpdo1(const uint8_t *const data) {
     uint16_t status_word = data[0] | data[1] << 8;
     int32_t actual_position = demarshal_i32(data + 2);
+    actual_position -= this->properties[PROP_OFFSET]->integer_value;
 
     process_status_word_generic(status_word);
 

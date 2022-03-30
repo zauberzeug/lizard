@@ -336,6 +336,7 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 | `is_preoperational`     | Node is in pre-operational state                         | `bool`    |
 | `is_operational`        | Node is in operational state                             | `bool`    |
 | `actual_position`       | Motor position at last SYNC                              | `int`     |
+| `position_offset`       | Offset implicitly added to target/reported position      | `int`     |
 | `actual_velocity`       | Motor velocity at last SYNC                              | `int`     |
 | `status_enabled`        | Operation enabled bit of status word since last SYNC     | `bool`    |
 | `status_fault`          | Fault bit of status word since last SYNC                 | `bool`    |
