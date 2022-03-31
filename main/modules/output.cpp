@@ -13,6 +13,9 @@ void Output::call(const std::string method_name, const std::vector<ConstExpressi
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         gpio_set_level(this->number, 0);
+    } else if (method_name == "level") {
+        Module::expect(arguments, 1, boolean);
+        gpio_set_level(this->number, arguments[0]->evaluate_boolean());
     } else {
         Module::call(method_name, arguments);
     }

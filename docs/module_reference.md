@@ -74,10 +74,11 @@ The output module is associated with a digital output pin that is connected to a
 | ---------------------- | -------------------------------------- | --------- |
 | `output = Output(pin)` | `pin` is the corresponding GPIO number | `int`     |
 
-| Methods        | Description             |
-| -------------- | ----------------------- |
-| `output.on()`  | Set the output pin high |
-| `output.off()` | Set the output pin low  |
+| Methods               | Description                               | Arguments |
+| --------------------- | ----------------------------------------- | --------- |
+| `output.on()`         | Set the output pin high                   |           |
+| `output.off()`        | Set the output pin low                    |           |
+| `output.level(value)` | Set the output level to the given `value` | `bool`    |
 
 ## CAN interface
 
@@ -317,16 +318,16 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 | ------------------------------------ | ------------------------------- | ------------------- |
 | `motor = CanOpenMotor(can, node_id)` | CAN module and node ID (1..127) | `CAN module`, `int` |
 
-| Methods                           | Description                                                                                 | Arguments |
-| --------------------------------- | ------------------------------------------------------------------------------------------- | --------- |
-| `motor.enter_pp_mode(velo)`       | Set 402 operating mode to profile position, halt off, and target velocity to `velo`         | `int`     |
-| `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`          | `int`     |
-| `motor.set_target_position(pos)`  | Set target position to `pos` (signed). [pp mode]                                            | `int`     |
-| `motor.commit_target_position()`  | Instruct motor to move to previously set target position. [pp mode]                         |           |
-| `motor.set_target_velocity(velo)` | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                     | `int`     |
-| `motor.set_ctrl_halt(mode)`       | Latches / resets the "halt" bit and sends the updated control word to the node              | `bool`    |
-| `motor.set_ctrl_enable(mode)`     | Latches / resets the "enable operation" bit and sends an updated control word to the node   | `bool`    |
-| `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                  | `int`     |
+| Methods                           | Description                                                                               | Arguments |
+| --------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
+| `motor.enter_pp_mode(velo)`       | Set 402 operating mode to profile position, halt off, and target velocity to `velo`       | `int`     |
+| `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
+| `motor.set_target_position(pos)`  | Set target position to `pos` (signed). [pp mode]                                          | `int`     |
+| `motor.commit_target_position()`  | Instruct motor to move to previously set target position. [pp mode]                       |           |
+| `motor.set_target_velocity(velo)` | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
+| `motor.set_ctrl_halt(mode)`       | Latches / resets the "halt" bit and sends the updated control word to the node            | `bool`    |
+| `motor.set_ctrl_enable(mode)`     | Latches / resets the "enable operation" bit and sends an updated control word to the node | `bool`    |
+| `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
 
 | Properties              | Description                                              | Data type |
 | ----------------------- | -------------------------------------------------------- | --------- |
