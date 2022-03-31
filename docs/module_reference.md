@@ -74,6 +74,11 @@ The output module is associated with a digital output pin that is connected to a
 | ---------------------- | -------------------------------------- | --------- |
 | `output = Output(pin)` | `pin` is the corresponding GPIO number | `int`     |
 
+| Properties      | Description                           | Data type |
+| --------------- | ------------------------------------- | --------- |
+| `output.level`  | Current signal level (0 or 1)         | `int`     |
+| `output.change` | Level change since last cycle (-1..1) | `int`     |
+
 | Methods               | Description                               | Arguments |
 | --------------------- | ----------------------------------------- | --------- |
 | `output.on()`         | Set the output pin high                   |           |
