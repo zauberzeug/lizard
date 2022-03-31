@@ -60,6 +60,8 @@ expression =
   .operators infix left
     '*' : multiply
     '/' : divide
+    '%' : modulo
+    '//' : floor_divide
   .operators infix left
     '+' : add
     '-' : subtract

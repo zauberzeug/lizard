@@ -121,6 +121,28 @@ public:
     double evaluate_number() const override;
 };
 
+class ModuloExpression : public Expression {
+private:
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
+
+public:
+    ModuloExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
+};
+
+class FloorDivideExpression : public Expression {
+private:
+    const ConstExpression_ptr left;
+    const ConstExpression_ptr right;
+
+public:
+    FloorDivideExpression(const ConstExpression_ptr left, const ConstExpression_ptr right);
+    int64_t evaluate_integer() const override;
+    double evaluate_number() const override;
+};
+
 class AddExpression : public Expression {
 private:
     const ConstExpression_ptr left;
