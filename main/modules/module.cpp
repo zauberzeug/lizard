@@ -11,6 +11,7 @@
 #include "expander.h"
 #include "input.h"
 #include "linear_motor.h"
+#include "mcp23017.h"
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
 #include "output.h"
@@ -78,6 +79,17 @@ Module_ptr Module::create(const std::string type,
     } else if (type == "Input") {
         Module::expect(arguments, 1, integer);
         return std::make_shared<Input>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+    } else if (type == "Mcp23017") {
+        if (arguments.size() > 5) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer, integer, integer, integer, integer);
+        i2c_port_t port = arguments.size() > 0 ? (i2c_port_t)arguments[0]->evaluate_integer() : I2C_NUM_0;
+        gpio_num_t sda_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_21;
+        gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_22;
+        uint8_t address = arguments.size() > 3 ? arguments[3]->evaluate_integer() : 0x20;
+        int clk_speed = arguments.size() > 4 ? arguments[4]->evaluate_integer() : 100000;
+        return std::make_shared<Mcp23017>(name, port, sda_pin, scl_pin, address, clk_speed);
     } else if (type == "Can") {
         Module::expect(arguments, 3, integer, integer, integer, integer);
         gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();

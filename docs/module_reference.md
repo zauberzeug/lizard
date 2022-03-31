@@ -89,6 +89,41 @@ The output module is associated with a digital output pin that is connected to a
 The `pulse()` method allows pulsing an output with a given interval in seconds and an optional duty cycle between 0 and 1 (0.5 by default).
 Note that the pulsing frequency is limited by the main loop to around 20 Hz.
 
+## MCP23017 Port Expander
+
+The MCP23017 allows controlling up to 16 general purpose input or output pins via I2C.
+
+| Constructor                                                    | Description | Arguments |
+| -------------------------------------------------------------- | ----------- | --------- |
+| `mcp = Mcp23017([port[, sda[, scl[, address[, clk_speed]]]]])` | See below   | `int`s    |
+
+The constructor expects up to five arguments:
+
+- `port`: 0 or 1, since the ESP32 has two I2C ports (default: 0)
+- `sda`: SDA pin (default: 21)
+- `scl`: SCL pin (default: 22)
+- `address`: client address of the MCP (0x20..0x28, default: 0x20)
+- `clk_speed`: I2C clock speed (default: 100000)
+
+| Properties    | Description                       | Data type |
+| ------------- | --------------------------------- | --------- |
+| `mcp.levels`  | Levels of all 16 pins             | `int`     |
+| `mcp.inputs`  | Input mode of all 16 pins         | `int`     |
+| `mcp.pullups` | Pull-up resistors for all 16 pins | `int`     |
+
+The properties `levels`, `inputs` and `pullups` contain binary information for all 16 pins in form of a 16 bit unsigned integer.
+
+| Methods              | Description                           | Arguments |
+| -------------------- | ------------------------------------- | --------- |
+| `mcp.levels(value)`  | Set levels of all 16 pins             | `int`     |
+| `mcp.inputs(value)`  | Set input mode of all 16 pins         | `int`     |
+| `mcp.pullups(value)` | Set pull-up resistors for all 16 pins | `int`     |
+
+The methods `levels()`, `inputs()` and `pullups()` expect a 16 bit unsigned integer `value` containing binary information for all 16 pins.
+
+Use `inputs()` to configure input and output pins, e.g. `inputs(0xffff)` all inputs or `inputs(0x0000)` all outputs.
+While `levels()` will only affect output pins, `pullups()` will only affect the levels of input pins.
+
 ## CAN interface
 
 The CAN module allows communicating with peripherals on the specified CAN bus.

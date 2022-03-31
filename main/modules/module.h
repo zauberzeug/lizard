@@ -13,6 +13,7 @@ enum ModuleType {
     expander,
     input,
     output,
+    mcp23017,
     can,
     serial,
     odrive_motor,
