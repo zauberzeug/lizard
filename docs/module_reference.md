@@ -79,11 +79,15 @@ The output module is associated with a digital output pin that is connected to a
 | `output.level`  | Current signal level (0 or 1)         | `int`     |
 | `output.change` | Level change since last cycle (-1..1) | `int`     |
 
-| Methods               | Description                               | Arguments |
-| --------------------- | ----------------------------------------- | --------- |
-| `output.on()`         | Set the output pin high                   |           |
-| `output.off()`        | Set the output pin low                    |           |
-| `output.level(value)` | Set the output level to the given `value` | `bool`    |
+| Methods                                | Description                               | Arguments |
+| -------------------------------------- | ----------------------------------------- | --------- |
+| `output.on()`                          | Set the output pin high                   |           |
+| `output.off()`                         | Set the output pin low                    |           |
+| `output.level(value)`                  | Set the output level to the given `value` | `bool`    |
+| `output.pulse(interval[, duty_cycle])` | Switch output on and off                  | `float`s  |
+
+The `pulse()` method allows pulsing an output with a given interval in seconds and an optional duty cycle between 0 and 1 (0.5 by default).
+Note that the pulsing frequency is limited by the main loop to around 20 Hz.
 
 ## CAN interface
 
