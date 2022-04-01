@@ -180,6 +180,11 @@ This module controls a linear actuator via two output pins (move in, move out) a
 | --------------------------------------------------------- | ------------------------------------- | --------- |
 | `motor = LinearMotor(move_in, move_out, end_in, end_out)` | motor control pins and limit switches | 4x `int`  |
 
+| Properties  | Description                | Data type |
+| ----------- | -------------------------- | --------- |
+| `motor.in`  | Motor is in "in" position  | `bool`    |
+| `motor.out` | Motor is in "out" position | `bool`    |
+
 | Methods        | Description |
 | -------------- | ----------- |
 | `motor.in()`   | Move in     |
