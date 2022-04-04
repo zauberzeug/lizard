@@ -108,7 +108,8 @@ void StepperMotor::step() {
                     target_speed = 0;
                 }
             } else {
-                int32_t braking_distance = (double)speed * (double)speed / (double)this->target_acceleration / 2.0;
+                double squared_speed = (double)this->target_speed * this->target_speed;
+                int32_t braking_distance = squared_speed / this->target_acceleration / 2.0;
                 int32_t remaining_distance = this->target_position - position;
                 if (std::abs(remaining_distance) < std::abs(braking_distance)) {
                     target_speed = 0;
