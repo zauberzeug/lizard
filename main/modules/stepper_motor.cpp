@@ -28,6 +28,7 @@ StepperMotor::StepperMotor(const std::string name,
 
     this->properties["position"] = std::make_shared<IntegerVariable>();
     this->properties["speed"] = std::make_shared<IntegerVariable>();
+    this->properties["idle"] = std::make_shared<BooleanVariable>(true);
 
     pcnt_config_t pcnt_config = {
         .pulse_gpio_num = step_pin,
@@ -86,6 +87,11 @@ void StepperMotor::read_position() {
     last_count = count;
 }
 
+void StepperMotor::set_state(StepperState new_state) {
+    this->state = new_state;
+    this->properties.at("idle")->boolean_value = (new_state == Idle);
+}
+
 void StepperMotor::step() {
     this->read_position();
 
@@ -140,7 +146,7 @@ void StepperMotor::step() {
 
         // stop if target is reached
         if (target_speed == 0 && -MIN_SPEED < speed && speed < MIN_SPEED) {
-            this->state = Idle;
+            set_state(Idle);
         }
 
         this->properties.at("speed")->integer_value = speed;
@@ -159,7 +165,7 @@ void StepperMotor::call(const std::string method_name, const std::vector<ConstEx
         bool forward = this->target_position > this->properties.at("position")->integer_value;
         this->target_speed = arguments[1]->evaluate_number() * (forward ? 1 : -1);
         this->target_acceleration = arguments.size() > 2 ? std::abs(arguments[2]->evaluate_number()) : 0;
-        this->state = Positioning;
+        set_state(Positioning);
     } else if (method_name == "speed") {
         if (arguments.size() < 1 || arguments.size() > 2) {
             throw std::runtime_error("unexpected number of arguments");
@@ -167,11 +173,11 @@ void StepperMotor::call(const std::string method_name, const std::vector<ConstEx
         Module::expect(arguments, -1, numbery, numbery);
         this->target_speed = arguments[0]->evaluate_number();
         this->target_acceleration = arguments.size() > 1 ? std::abs(arguments[1]->evaluate_number()) : 0;
-        this->state = Speeding;
+        set_state(Speeding);
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
         ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
-        this->state = Idle;
+        set_state(Idle);
     } else {
         Module::call(method_name, arguments);
     }

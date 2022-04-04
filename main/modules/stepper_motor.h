@@ -27,6 +27,7 @@ private:
 
     void read_position();
     void set_frequency();
+    void set_state(StepperState new_state);
 
 public:
     StepperMotor(const std::string name,

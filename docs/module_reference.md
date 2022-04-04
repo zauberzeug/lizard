@@ -338,6 +338,7 @@ When using multiple stepper motors, they can be set to different values to avoid
 | ---------------- | ------------------------------ | --------- |
 | `motor.position` | Motor position (steps)         | `int`     |
 | `motor.speed`    | Motor speed (steps per second) | `int`     |
+| `motor.idle`     | Motor idle state               | `bool`    |
 
 | Methods                                           | Description              | Arguments  |
 | ------------------------------------------------- | ------------------------ | ---------- |
