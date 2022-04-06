@@ -20,10 +20,10 @@ private:
     const ledc_timer_t ledc_timer;
     const ledc_channel_t ledc_channel;
 
-    StepperState state;
-    int32_t target_position;
-    int32_t target_speed;
-    uint32_t target_acceleration;
+    StepperState state = Idle;
+    int32_t target_position = 0;
+    int32_t target_speed = 0;
+    uint32_t target_acceleration = 0;
 
     void read_position();
     void set_frequency();
