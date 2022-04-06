@@ -402,6 +402,13 @@ void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
     this->properties[PROP_301_STATE_PREOP]->boolean_value = (actual_state == Preoperational);
     this->properties[PROP_301_STATE_OP]->boolean_value = (actual_state == Operational);
 
+    if (actual_state == Booting) {
+        /* Possible reboot, restart initialization */
+        init_state = WaitingForPreoperational;
+        this->properties[PROP_INITIALIZED]->boolean_value = false;
+        return;
+    }
+
     switch (init_state) {
     case WaitingForPreoperational:
         switch (actual_state) {
