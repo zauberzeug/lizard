@@ -113,3 +113,29 @@ void Mcp23017::set_pullups(uint16_t pullups) const {
     this->write_register(MCP23017_REG_GPPUA, pullups);
     this->write_register(MCP23017_REG_GPPUB, pullups >> 8);
 }
+
+bool Mcp23017::get_level(const uint8_t number) const {
+    return this->properties.at("levels")->integer_value & (1 << number);
+}
+
+void Mcp23017::set_input(const uint8_t number, const bool value) const {
+    uint8_t inputs = this->properties.at("inputs")->integer_value;
+    if (value) {
+        inputs |= 1 << number;
+    } else {
+        inputs &= 1 << number;
+    }
+    this->properties.at("inputs")->integer_value = inputs;
+    this->set_inputs(inputs);
+}
+
+void Mcp23017::set_pullup(const uint8_t number, const bool value) const {
+    uint8_t pullups = this->properties.at("pullups")->integer_value;
+    if (value) {
+        pullups |= 1 << number;
+    } else {
+        pullups &= 1 << number;
+    }
+    this->properties.at("pullups")->integer_value = pullups;
+    this->set_pullups(pullups);
+}
