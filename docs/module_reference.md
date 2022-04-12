@@ -31,7 +31,7 @@ It is automatically created right after the boot sequence.
 | `core.print(...)`     | Print arbitrary arguments to the command line | arbitrary |
 | `core.output(format)` | Define the output format                      | `str`     |
 
-The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]`.
+The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789`.
 

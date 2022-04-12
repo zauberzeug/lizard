@@ -47,11 +47,19 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         std::string format = arguments[0]->evaluate_string();
         while (!format.empty()) {
             std::string element = cut_first_word(format);
-            const std::string module_name = cut_first_word(element, '.');
-            const ConstModule_ptr module = Global::get_module(module_name);
-            const std::string method_name = cut_first_word(element, ':');
-            const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
-            this->output_list.push_back({module, method_name, precision});
+            if (element.find('.') == std::string::npos) {
+                // variable[:precision]
+                std::string variable_name = cut_first_word(element, ':');
+                const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
+                this->output_list.push_back({nullptr, variable_name, precision});
+            } else {
+                // module.property[:precision]
+                std::string module_name = cut_first_word(element, '.');
+                const ConstModule_ptr module = Global::get_module(module_name);
+                const std::string property_name = cut_first_word(element, ':');
+                const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
+                this->output_list.push_back({module, property_name, precision});
+            }
         }
         this->output_on = true;
     } else {
@@ -66,22 +74,23 @@ std::string Core::get_output() const {
         if (pos > 0) {
             pos += sprintf(&output_buffer[pos], " ");
         }
-        const Variable_ptr property = element.module->get_property(element.property_name);
-        switch (property->type) {
+        const Variable_ptr variable =
+            element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
+        switch (variable->type) {
         case boolean:
-            pos += sprintf(&output_buffer[pos], "%s", property->boolean_value ? "true" : "false");
+            pos += sprintf(&output_buffer[pos], "%s", variable->boolean_value ? "true" : "false");
             break;
         case integer:
-            pos += sprintf(&output_buffer[pos], "%lld", property->integer_value);
+            pos += sprintf(&output_buffer[pos], "%lld", variable->integer_value);
             break;
         case number:
-            pos += sprintf(&output_buffer[pos], "%.*f", element.precision, property->number_value);
+            pos += sprintf(&output_buffer[pos], "%.*f", element.precision, variable->number_value);
             break;
         case string:
-            pos += sprintf(&output_buffer[pos], "\"%s\"", property->string_value.c_str());
+            pos += sprintf(&output_buffer[pos], "\"%s\"", variable->string_value.c_str());
             break;
         default:
-            throw std::runtime_error("invalid property type");
+            throw std::runtime_error("invalid type");
         }
     }
     return std::string(output_buffer);
