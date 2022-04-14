@@ -377,6 +377,7 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 | `motor.set_target_velocity(velo)` | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
 | `motor.set_ctrl_halt(mode)`       | Latches / resets the "halt" bit and sends the updated control word to the node            | `bool`    |
 | `motor.set_ctrl_enable(mode)`     | Latches / resets the "enable operation" bit and sends an updated control word to the node | `bool`    |
+| `motor.reset_fault()`             | Clear any faults (like positioning errors). Implicitly sets the "halt" bit.               |           |
 | `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
 
 | Properties              | Description                                              | Data type |

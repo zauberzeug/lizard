@@ -283,6 +283,17 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
         expect(arguments, 1, boolean);
         this->properties[PROP_CTRL_ENA_OP]->boolean_value = arguments[0]->evaluate_boolean();
         send_control_word(build_ctrl_word(false));
+    } else if (method_name == "reset_fault") {
+        expect(arguments, 0);
+        /* implicitly set halt bit so we don't start moving immediately after the fault is cleared */
+        this->properties[PROP_CTRL_HALT]->boolean_value = true;
+        uint16_t ctrl_word = build_ctrl_word(false);
+        /* set fault reset bit */
+        ctrl_word |= (1 << 7);
+        send_control_word(ctrl_word);
+        /* and clear it */
+        ctrl_word &= ~(1 << 7);
+        send_control_word(ctrl_word);
     } else if (method_name == "sdo_read") {
         expect(arguments, 1, integer);
         uint16_t index = arguments[0]->evaluate_integer();
