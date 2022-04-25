@@ -119,12 +119,27 @@ Module_ptr Module::create(const std::string type,
         long baud_rate = arguments[2]->evaluate_integer();
         return std::make_shared<Can>(name, rx_pin, tx_pin, baud_rate);
     } else if (type == "LinearMotor") {
-        Module::expect(arguments, 4, integer, integer, integer, integer);
-        gpio_num_t move_in = (gpio_num_t)arguments[0]->evaluate_integer();
-        gpio_num_t move_out = (gpio_num_t)arguments[1]->evaluate_integer();
-        gpio_num_t end_in = (gpio_num_t)arguments[2]->evaluate_integer();
-        gpio_num_t end_out = (gpio_num_t)arguments[3]->evaluate_integer();
-        return std::make_shared<LinearMotor>(name, move_in, move_out, end_in, end_out);
+        if (arguments.size() == 4) {
+            Module::expect(arguments, 4, integer, integer, integer, integer);
+            gpio_num_t move_in = (gpio_num_t)arguments[0]->evaluate_integer();
+            gpio_num_t move_out = (gpio_num_t)arguments[1]->evaluate_integer();
+            gpio_num_t end_in = (gpio_num_t)arguments[2]->evaluate_integer();
+            gpio_num_t end_out = (gpio_num_t)arguments[3]->evaluate_integer();
+            return std::make_shared<GpioLinearMotor>(name, move_in, move_out, end_in, end_out);
+        } else {
+            Module::expect(arguments, 5, identifier, integer, integer, integer, integer);
+            std::string mcp_name = arguments[0]->evaluate_identifier();
+            Module_ptr module = Global::get_module(mcp_name);
+            if (module->type != mcp23017) {
+                throw std::runtime_error("module \"" + mcp_name + "\" is no mcp23017 port expander");
+            }
+            const Mcp23017_ptr mcp = std::static_pointer_cast<Mcp23017>(module);
+            uint8_t move_in = (gpio_num_t)arguments[1]->evaluate_integer();
+            uint8_t move_out = (gpio_num_t)arguments[2]->evaluate_integer();
+            uint8_t end_in = (gpio_num_t)arguments[3]->evaluate_integer();
+            uint8_t end_out = (gpio_num_t)arguments[4]->evaluate_integer();
+            return std::make_shared<McpLinearMotor>(name, mcp, move_in, move_out, end_in, end_out);
+        }
     } else if (type == "ODriveMotor") {
         Module::expect(arguments, 2, identifier, integer);
         std::string can_name = arguments[0]->evaluate_identifier();
