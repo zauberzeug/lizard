@@ -74,8 +74,19 @@ Module_ptr Module::create(const std::string type,
         Bluetooth_ptr bluetooth = std::make_shared<Bluetooth>(name, device_name, message_handler);
         return bluetooth;
     } else if (type == "Output") {
-        Module::expect(arguments, 1, integer);
-        return std::make_shared<Output>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        if (arguments.size() == 1) {
+            Module::expect(arguments, 1, integer);
+            return std::make_shared<GpioOutput>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        } else {
+            Module::expect(arguments, 2, identifier, integer);
+            std::string mcp_name = arguments[0]->evaluate_identifier();
+            Module_ptr module = Global::get_module(mcp_name);
+            if (module->type != mcp23017) {
+                throw std::runtime_error("module \"" + mcp_name + "\" is no mcp23017 port expander");
+            }
+            const Mcp23017_ptr mcp = std::static_pointer_cast<Mcp23017>(module);
+            return std::make_shared<McpOutput>(name, mcp, arguments[1]->evaluate_integer());
+        }
     } else if (type == "Input") {
         if (arguments.size() == 1) {
             Module::expect(arguments, 1, integer);

@@ -33,6 +33,7 @@ public:
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 
     bool get_level(const uint8_t number) const;
+    void set_level(const uint8_t number, const bool value) const;
     void set_input(const uint8_t number, const bool value) const;
     void set_pullup(const uint8_t number, const bool value) const;
 };
