@@ -53,7 +53,7 @@ void GpioInput::set_pull_mode(const gpio_pull_mode_t mode) const {
     gpio_set_pull_mode(this->number, mode);
 }
 
-McpInput::McpInput(const std::string name, const Mcp23017_ptr mcp, const int number)
+McpInput::McpInput(const std::string name, const Mcp23017_ptr mcp, const uint8_t number)
     : Input(name), mcp(mcp), number(number) {
     this->mcp->set_input(this->number, true);
     this->properties.at("level")->integer_value = this->get_level();

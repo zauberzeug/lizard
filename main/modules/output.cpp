@@ -52,7 +52,7 @@ void GpioOutput::set_level(bool level) const {
     gpio_set_level(this->number, level);
 }
 
-McpOutput::McpOutput(const std::string name, const Mcp23017_ptr mcp, const int number)
+McpOutput::McpOutput(const std::string name, const Mcp23017_ptr mcp, const uint8_t number)
     : Output(name), mcp(mcp), number(number) {
     this->mcp->set_input(this->number, false);
 }

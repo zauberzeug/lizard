@@ -31,10 +31,10 @@ public:
 class McpInput : public Input {
 private:
     const Mcp23017_ptr mcp;
-    const int number;
+    const uint8_t number;
     bool get_level() const override;
     void set_pull_mode(const gpio_pull_mode_t mode) const override;
 
 public:
-    McpInput(const std::string name, const Mcp23017_ptr mcp, const int number);
+    McpInput(const std::string name, const Mcp23017_ptr mcp, const uint8_t number);
 };

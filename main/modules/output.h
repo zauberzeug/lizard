@@ -31,9 +31,9 @@ public:
 class McpOutput : public Output {
 private:
     const Mcp23017_ptr mcp;
-    const int number;
+    const uint8_t number;
     void set_level(bool level) const override;
 
 public:
-    McpOutput(const std::string name, const Mcp23017_ptr mcp, const int number);
+    McpOutput(const std::string name, const Mcp23017_ptr mcp, const uint8_t number);
 };
