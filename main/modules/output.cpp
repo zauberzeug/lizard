@@ -2,10 +2,7 @@
 #include "utils/timing.h"
 #include <math.h>
 
-Output::Output(const std::string name, const gpio_num_t number)
-    : Module(output, name), number(number) {
-    gpio_reset_pin(number);
-    gpio_set_direction(number, GPIO_MODE_OUTPUT);
+Output::Output(const std::string name) : Module(output, name) {
     this->properties["level"] = std::make_shared<IntegerVariable>();
     this->properties["change"] = std::make_shared<IntegerVariable>();
 }
@@ -15,7 +12,7 @@ void Output::step() {
         this->target_level = fmod(millis() / 1000.0, this->pulse_interval) / this->pulse_interval < this->pulse_duty_cycle;
     }
 
-    gpio_set_level(this->number, this->target_level);
+    this->set_level(this->target_level);
     this->properties.at("change")->integer_value = this->target_level - this->properties.at("level")->integer_value;
     this->properties.at("level")->integer_value = this->target_level;
 }
@@ -43,4 +40,23 @@ void Output::call(const std::string method_name, const std::vector<ConstExpressi
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+GpioOutput::GpioOutput(const std::string name, const gpio_num_t number)
+    : Output(name), number(number) {
+    gpio_reset_pin(number);
+    gpio_set_direction(number, GPIO_MODE_OUTPUT);
+}
+
+void GpioOutput::set_level(bool level) const {
+    gpio_set_level(this->number, level);
+}
+
+McpOutput::McpOutput(const std::string name, const Mcp23017_ptr mcp, const uint8_t number)
+    : Output(name), mcp(mcp), number(number) {
+    this->mcp->set_input(this->number, false);
+}
+
+void McpOutput::set_level(bool level) const {
+    this->mcp->set_level(this->number, level);
 }

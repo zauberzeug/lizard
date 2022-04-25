@@ -124,6 +124,15 @@ The methods `levels()`, `inputs()` and `pullups()` expect a 16 bit unsigned inte
 Use `inputs()` to configure input and output pins, e.g. `inputs(0xffff)` all inputs or `inputs(0x0000)` all outputs.
 While `levels()` will only affect output pins, `pullups()` will only affect the levels of input pins.
 
+Using an MCP23017 port expander module you can not only access individual pins.
+You can also instantiate the following modules passing the `mcp` instance as the first argument:
+
+- Input: `input = Input(mcp, pin)`
+- Output: `output = Output(mcp, pin)`
+- Linear motor: `motor = LinearMotor(mcp, move_in, move_out, end_in, end_out)`
+
+The pins `pin`, `move_in`, `move_out`, `end_in` and `end_out` are numbers from 0 to 15 referring to A0...A7 and B0...B7 on the MCP23017.
+
 ## CAN interface
 
 The CAN module allows communicating with peripherals on the specified CAN bus.
