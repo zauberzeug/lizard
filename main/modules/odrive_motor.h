@@ -24,6 +24,8 @@ public:
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
     void power(const float torque);
     void speed(const float speed);
+    void position(const float position);
+    void limits(const float speed, const float current);
     void off();
     double get_position();
 };

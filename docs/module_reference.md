@@ -215,12 +215,14 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | `motor.m_per_tick`  | Meters per encoder tick | `float`   |
 | `motor.reversed`    | Reverse motor direction | `bool`    |
 
-| Methods               | Description                           | Arguments |
-| --------------------- | ------------------------------------- | --------- |
-| `motor.zero()`        | Set current position as zero position |           |
-| `motor.power(torque)` | Move with given `torque`              | `float`   |
-| `motor.speed(speed)`  | Move with given `speed` (m/s)         | `float`   |
-| `motor.off()`         | Turn motor off (idle state)           |           |
+| Methods                        | Description                            | Arguments        |
+| ------------------------------ | -------------------------------------- | ---------------- |
+| `motor.zero()`                 | Set current position as zero position  |                  |
+| `motor.power(torque)`          | Move with given `torque`               | `float`          |
+| `motor.speed(speed)`           | Move with given `speed` (m/s)          | `float`          |
+| `motor.position(position)`     | Move to given `position` (m)           | `float`          |
+| `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits | `float`, `float` |
+| `motor.off()`                  | Turn motor off (idle state)            |                  |
 
 ## ODrive Wheels
 
