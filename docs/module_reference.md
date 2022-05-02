@@ -31,7 +31,7 @@ It is automatically created right after the boot sequence.
 | `core.print(...)`     | Print arbitrary arguments to the command line | arbitrary |
 | `core.output(format)` | Define the output format                      | `str`     |
 
-The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]`.
+The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789`.
 
@@ -74,10 +74,64 @@ The output module is associated with a digital output pin that is connected to a
 | ---------------------- | -------------------------------------- | --------- |
 | `output = Output(pin)` | `pin` is the corresponding GPIO number | `int`     |
 
-| Methods        | Description             |
-| -------------- | ----------------------- |
-| `output.on()`  | Set the output pin high |
-| `output.off()` | Set the output pin low  |
+| Properties      | Description                           | Data type |
+| --------------- | ------------------------------------- | --------- |
+| `output.level`  | Current signal level (0 or 1)         | `int`     |
+| `output.change` | Level change since last cycle (-1..1) | `int`     |
+
+| Methods                                | Description                               | Arguments |
+| -------------------------------------- | ----------------------------------------- | --------- |
+| `output.on()`                          | Set the output pin high                   |           |
+| `output.off()`                         | Set the output pin low                    |           |
+| `output.level(value)`                  | Set the output level to the given `value` | `bool`    |
+| `output.pulse(interval[, duty_cycle])` | Switch output on and off                  | `float`s  |
+
+The `pulse()` method allows pulsing an output with a given interval in seconds and an optional duty cycle between 0 and 1 (0.5 by default).
+Note that the pulsing frequency is limited by the main loop to around 20 Hz.
+
+## MCP23017 Port Expander
+
+The MCP23017 allows controlling up to 16 general purpose input or output pins via I2C.
+
+| Constructor                                                    | Description | Arguments |
+| -------------------------------------------------------------- | ----------- | --------- |
+| `mcp = Mcp23017([port[, sda[, scl[, address[, clk_speed]]]]])` | See below   | `int`s    |
+
+The constructor expects up to five arguments:
+
+- `port`: 0 or 1, since the ESP32 has two I2C ports (default: 0)
+- `sda`: SDA pin (default: 21)
+- `scl`: SCL pin (default: 22)
+- `address`: client address of the MCP (0x20..0x28, default: 0x20)
+- `clk_speed`: I2C clock speed (default: 100000)
+
+| Properties    | Description                       | Data type |
+| ------------- | --------------------------------- | --------- |
+| `mcp.levels`  | Levels of all 16 pins             | `int`     |
+| `mcp.inputs`  | Input mode of all 16 pins         | `int`     |
+| `mcp.pullups` | Pull-up resistors for all 16 pins | `int`     |
+
+The properties `levels`, `inputs` and `pullups` contain binary information for all 16 pins in form of a 16 bit unsigned integer.
+
+| Methods              | Description                           | Arguments |
+| -------------------- | ------------------------------------- | --------- |
+| `mcp.levels(value)`  | Set levels of all 16 pins             | `int`     |
+| `mcp.inputs(value)`  | Set input mode of all 16 pins         | `int`     |
+| `mcp.pullups(value)` | Set pull-up resistors for all 16 pins | `int`     |
+
+The methods `levels()`, `inputs()` and `pullups()` expect a 16 bit unsigned integer `value` containing binary information for all 16 pins.
+
+Use `inputs()` to configure input and output pins, e.g. `inputs(0xffff)` all inputs or `inputs(0x0000)` all outputs.
+While `levels()` will only affect output pins, `pullups()` will only affect the levels of input pins.
+
+Using an MCP23017 port expander module you can not only access individual pins.
+You can also instantiate the following modules passing the `mcp` instance as the first argument:
+
+- Input: `input = Input(mcp, pin)`
+- Output: `output = Output(mcp, pin)`
+- Linear motor: `motor = LinearMotor(mcp, move_in, move_out, end_in, end_out)`
+
+The pins `pin`, `move_in`, `move_out`, `end_in` and `end_out` are numbers from 0 to 15 referring to A0...A7 and B0...B7 on the MCP23017.
 
 ## CAN interface
 
@@ -135,6 +189,11 @@ This module controls a linear actuator via two output pins (move in, move out) a
 | --------------------------------------------------------- | ------------------------------------- | --------- |
 | `motor = LinearMotor(move_in, move_out, end_in, end_out)` | motor control pins and limit switches | 4x `int`  |
 
+| Properties  | Description                | Data type |
+| ----------- | -------------------------- | --------- |
+| `motor.in`  | Motor is in "in" position  | `bool`    |
+| `motor.out` | Motor is in "out" position | `bool`    |
+
 | Methods        | Description |
 | -------------- | ----------- |
 | `motor.in()`   | Move in     |
@@ -156,12 +215,14 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | `motor.m_per_tick`  | Meters per encoder tick | `float`   |
 | `motor.reversed`    | Reverse motor direction | `bool`    |
 
-| Methods               | Description                           | Arguments |
-| --------------------- | ------------------------------------- | --------- |
-| `motor.zero()`        | Set current position as zero position |           |
-| `motor.power(torque)` | Move with given `torque`              | `float`   |
-| `motor.speed(speed)`  | Move with given `speed` (m/s)         | `float`   |
-| `motor.off()`         | Turn motor off (idle state)           |           |
+| Methods                        | Description                            | Arguments        |
+| ------------------------------ | -------------------------------------- | ---------------- |
+| `motor.zero()`                 | Set current position as zero position  |                  |
+| `motor.power(torque)`          | Move with given `torque`               | `float`          |
+| `motor.speed(speed)`           | Move with given `speed` (m/s)          | `float`          |
+| `motor.position(position)`     | Move to given `position` (m)           | `float`          |
+| `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits | `float`, `float` |
+| `motor.off()`                  | Turn motor off (idle state)            |                  |
 
 ## ODrive Wheels
 
@@ -288,14 +349,96 @@ When using multiple stepper motors, they can be set to different values to avoid
 | ---------------- | ------------------------------ | --------- |
 | `motor.position` | Motor position (steps)         | `int`     |
 | `motor.speed`    | Motor speed (steps per second) | `int`     |
+| `motor.idle`     | Motor idle state               | `bool`    |
 
-| Methods                                             | Description              | Arguments  |
-| --------------------------------------------------- | ------------------------ | ---------- |
-| `motor.speed(speed[, acceleration])`                | Move with given `speed`  | 2x `float` |
-| `motor.position(position[, speed[, acceleration]])` | Move to given `position` | 3x `float` |
-| `motor.stop()`                                      | Stop                     |            |
+| Methods                                           | Description              | Arguments  |
+| ------------------------------------------------- | ------------------------ | ---------- |
+| `motor.speed(speed[, acceleration])`              | Move with given `speed`  | 2x `float` |
+| `motor.position(position, speed[, acceleration])` | Move to given `position` | 3x `float` |
+| `motor.stop()`                                    | Stop                     |            |
 
-The optional speed and acceleration arguments default to 0, which means full speed and maximum acceleration.
+The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.
+
+## CanOpenMaster
+
+The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
+
+| Constructor                      | Description | Arguments  |
+| -------------------------------- | ----------- | ---------- |
+| `co_master = CanOpenMaster(can)` | CAN module  | CAN module |
+
+| Properties                | Description                                | Data type |
+| ------------------------- | ------------------------------------------ | --------- |
+| `co_master.sync_interval` | Amount of lizard steps inbetween each SYNC | `int`     |
+
+## CanOpenMotor
+
+The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402. Positional and velocity units are currently undefined and must by manually measured. Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
+
+| Constructor                          | Description                     | Arguments           |
+| ------------------------------------ | ------------------------------- | ------------------- |
+| `motor = CanOpenMotor(can, node_id)` | CAN module and node ID (1..127) | `CAN module`, `int` |
+
+| Methods                           | Description                                                                               | Arguments |
+| --------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
+| `motor.enter_pp_mode(velo)`       | Set 402 operating mode to profile position, halt off, and target velocity to `velo`       | `int`     |
+| `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
+| `motor.set_target_position(pos)`  | Set target position to `pos` (signed). [pp mode]                                          | `int`     |
+| `motor.commit_target_position()`  | Instruct motor to move to previously set target position. [pp mode]                       |           |
+| `motor.set_target_velocity(velo)` | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
+| `motor.set_ctrl_halt(mode)`       | Latches / resets the "halt" bit and sends the updated control word to the node            | `bool`    |
+| `motor.set_ctrl_enable(mode)`     | Latches / resets the "enable operation" bit and sends an updated control word to the node | `bool`    |
+| `motor.reset_fault()`             | Clear any faults (like positioning errors). Implicitly sets the "halt" bit.               |           |
+| `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
+
+| Properties              | Description                                              | Data type |
+| ----------------------- | -------------------------------------------------------- | --------- |
+| `initialized`           | Concurrent init sequence has finished, motor is ready    | `bool`    |
+| `last_heartbeat`        | Time in µs since bootup when last heartbeat was received | `int`     |
+| `is_booting`            | Node is in booting state                                 | `bool`    |
+| `is_preoperational`     | Node is in pre-operational state                         | `bool`    |
+| `is_operational`        | Node is in operational state                             | `bool`    |
+| `actual_position`       | Motor position at last SYNC                              | `int`     |
+| `position_offset`       | Offset implicitly added to target/reported position      | `int`     |
+| `actual_velocity`       | Motor velocity at last SYNC                              | `int`     |
+| `status_enabled`        | Operation enabled bit of status word since last SYNC     | `bool`    |
+| `status_fault`          | Fault bit of status word since last SYNC                 | `bool`    |
+| `status_target_reached` | Target reached bit of status word since last SYNC        | `bool`    |
+| `ctrl_enable`           | Latched operation enable bit of every sent control word  | `bool`    |
+| `ctrl_halt`             | Latched halt bit of every sent control word              | `bool`    |
+
+**Configuration sequence**
+
+After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`. Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
+
+**Target position sequence**
+
+Note: The target velocity must be positive regardless of target point direction. The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.
+
+```
+// First time, assuming motor is disabled and not in pp mode
+motor.set_ctrl_enable(true)
+motor.enter_pp_mode(<some positive velocity>)
+
+// All further set points only need these
+motor.set_target_position(<some position>)
+motor.commit_target_position()
+```
+
+**Target velocity sequence**
+
+Unlike in the profile position mode, here the sign of the velocity does controls the direction. The halt bit is set when entering pv. To start moving, clear it (and set again to stop).
+
+```
+// First time, assuming motor is disabled and not in pv mode
+motor.set_ctrl_enable(true)
+motor.enter_pv_mode(<some signed velocity>)
+
+// Further movements only need these
+motor.set_ctrl_halt(false)
+// await some condition
+motor.set_ctrl_halt(true)
+```
 
 ## Expander
 

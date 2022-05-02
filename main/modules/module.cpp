@@ -3,12 +3,15 @@
 #include "../utils/uart.h"
 #include "bluetooth.h"
 #include "can.h"
+#include "canopen_master.h"
+#include "canopen_motor.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/pcnt.h"
 #include "expander.h"
 #include "input.h"
 #include "linear_motor.h"
+#include "mcp23017.h"
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
 #include "output.h"
@@ -36,6 +39,18 @@ void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, co
     va_end(vl);
 }
 
+template <typename M>
+static std::shared_ptr<M> get_module_paramter(const ConstExpression_ptr &arg, ModuleType type, const std::string &type_name) {
+    const std::string name = arg->evaluate_identifier();
+    Module_ptr module = Global::get_module(name);
+    if (module->type != type) {
+        throw std::runtime_error("module \"" + name + "\" is no " + type_name);
+    }
+
+    const std::shared_ptr<M> typed_module = std::static_pointer_cast<M>(module);
+    return typed_module;
+}
+
 Module_ptr Module::create(const std::string type,
                           const std::string name,
                           const std::vector<ConstExpression_ptr> arguments,
@@ -59,11 +74,44 @@ Module_ptr Module::create(const std::string type,
         Bluetooth_ptr bluetooth = std::make_shared<Bluetooth>(name, device_name, message_handler);
         return bluetooth;
     } else if (type == "Output") {
-        Module::expect(arguments, 1, integer);
-        return std::make_shared<Output>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        if (arguments.size() == 1) {
+            Module::expect(arguments, 1, integer);
+            return std::make_shared<GpioOutput>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        } else {
+            Module::expect(arguments, 2, identifier, integer);
+            std::string mcp_name = arguments[0]->evaluate_identifier();
+            Module_ptr module = Global::get_module(mcp_name);
+            if (module->type != mcp23017) {
+                throw std::runtime_error("module \"" + mcp_name + "\" is no mcp23017 port expander");
+            }
+            const Mcp23017_ptr mcp = std::static_pointer_cast<Mcp23017>(module);
+            return std::make_shared<McpOutput>(name, mcp, arguments[1]->evaluate_integer());
+        }
     } else if (type == "Input") {
-        Module::expect(arguments, 1, integer);
-        return std::make_shared<Input>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        if (arguments.size() == 1) {
+            Module::expect(arguments, 1, integer);
+            return std::make_shared<GpioInput>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+        } else {
+            Module::expect(arguments, 2, identifier, integer);
+            std::string mcp_name = arguments[0]->evaluate_identifier();
+            Module_ptr module = Global::get_module(mcp_name);
+            if (module->type != mcp23017) {
+                throw std::runtime_error("module \"" + mcp_name + "\" is no mcp23017 port expander");
+            }
+            const Mcp23017_ptr mcp = std::static_pointer_cast<Mcp23017>(module);
+            return std::make_shared<McpInput>(name, mcp, arguments[1]->evaluate_integer());
+        }
+    } else if (type == "Mcp23017") {
+        if (arguments.size() > 5) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer, integer, integer, integer, integer);
+        i2c_port_t port = arguments.size() > 0 ? (i2c_port_t)arguments[0]->evaluate_integer() : I2C_NUM_0;
+        gpio_num_t sda_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_21;
+        gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_22;
+        uint8_t address = arguments.size() > 3 ? arguments[3]->evaluate_integer() : 0x20;
+        int clk_speed = arguments.size() > 4 ? arguments[4]->evaluate_integer() : 100000;
+        return std::make_shared<Mcp23017>(name, port, sda_pin, scl_pin, address, clk_speed);
     } else if (type == "Can") {
         Module::expect(arguments, 3, integer, integer, integer, integer);
         gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
@@ -71,12 +119,27 @@ Module_ptr Module::create(const std::string type,
         long baud_rate = arguments[2]->evaluate_integer();
         return std::make_shared<Can>(name, rx_pin, tx_pin, baud_rate);
     } else if (type == "LinearMotor") {
-        Module::expect(arguments, 4, integer, integer, integer, integer);
-        gpio_num_t move_in = (gpio_num_t)arguments[0]->evaluate_integer();
-        gpio_num_t move_out = (gpio_num_t)arguments[1]->evaluate_integer();
-        gpio_num_t end_in = (gpio_num_t)arguments[2]->evaluate_integer();
-        gpio_num_t end_out = (gpio_num_t)arguments[3]->evaluate_integer();
-        return std::make_shared<LinearMotor>(name, move_in, move_out, end_in, end_out);
+        if (arguments.size() == 4) {
+            Module::expect(arguments, 4, integer, integer, integer, integer);
+            gpio_num_t move_in = (gpio_num_t)arguments[0]->evaluate_integer();
+            gpio_num_t move_out = (gpio_num_t)arguments[1]->evaluate_integer();
+            gpio_num_t end_in = (gpio_num_t)arguments[2]->evaluate_integer();
+            gpio_num_t end_out = (gpio_num_t)arguments[3]->evaluate_integer();
+            return std::make_shared<GpioLinearMotor>(name, move_in, move_out, end_in, end_out);
+        } else {
+            Module::expect(arguments, 5, identifier, integer, integer, integer, integer);
+            std::string mcp_name = arguments[0]->evaluate_identifier();
+            Module_ptr module = Global::get_module(mcp_name);
+            if (module->type != mcp23017) {
+                throw std::runtime_error("module \"" + mcp_name + "\" is no mcp23017 port expander");
+            }
+            const Mcp23017_ptr mcp = std::static_pointer_cast<Mcp23017>(module);
+            uint8_t move_in = (gpio_num_t)arguments[1]->evaluate_integer();
+            uint8_t move_out = (gpio_num_t)arguments[2]->evaluate_integer();
+            uint8_t end_in = (gpio_num_t)arguments[3]->evaluate_integer();
+            uint8_t end_out = (gpio_num_t)arguments[4]->evaluate_integer();
+            return std::make_shared<McpLinearMotor>(name, mcp, move_in, move_out, end_in, end_out);
+        }
     } else if (type == "ODriveMotor") {
         Module::expect(arguments, 2, identifier, integer);
         std::string can_name = arguments[0]->evaluate_identifier();
@@ -155,7 +218,18 @@ Module_ptr Module::create(const std::string type,
         ledc_timer_t ledc_timer = arguments.size() > 4 ? (ledc_timer_t)arguments[4]->evaluate_integer() : LEDC_TIMER_0;
         ledc_channel_t ledc_channel = arguments.size() > 5 ? (ledc_channel_t)arguments[5]->evaluate_integer() : LEDC_CHANNEL_0;
         return std::make_shared<StepperMotor>(name, step_pin, dir_pin, pcnt_unit, pcnt_channel, ledc_timer, ledc_channel);
-
+    } else if (type == "CanOpenMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t node_id = arguments[1]->evaluate_integer();
+        CanOpenMotor_ptr motor = std::make_shared<CanOpenMotor>(name, can_module, node_id);
+        motor->subscribe_to_can();
+        return motor;
+    } else if (type == "CanOpenMaster") {
+        Module::expect(arguments, 1, identifier);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
+        return master;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }

@@ -152,7 +152,7 @@ Tabs and spaces are treated as whitespace.
 
 Blank lines are interpreted as no-op and do nothing.
 
-Line comments start with `//`.
+Line comments start with `#`.
 
 Multiple statements or actions are separated with `;` or a newline.
 

@@ -1,7 +1,7 @@
 #using owl.v4
 
 .whitespace ' ' '\t'
-.line-comment-token '//'
+.line-comment-token '#'
 
 statements = statement{';' | '\n', 1+}
 statement =
@@ -60,6 +60,8 @@ expression =
   .operators infix left
     '*' : multiply
     '/' : divide
+    '%' : modulo
+    '//' : floor_divide
   .operators infix left
     '+' : add
     '-' : subtract

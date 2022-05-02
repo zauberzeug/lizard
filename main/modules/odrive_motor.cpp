@@ -38,6 +38,12 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "speed") {
         Module::expect(arguments, 1, numbery);
         this->speed(arguments[0]->evaluate_number());
+    } else if (method_name == "position") {
+        Module::expect(arguments, 1, numbery);
+        this->position(arguments[0]->evaluate_number());
+    } else if (method_name == "limits") {
+        Module::expect(arguments, 2, numbery, numbery);
+        this->limits(arguments[0]->evaluate_number(), arguments[1]->evaluate_number());
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->off();
@@ -63,18 +69,38 @@ void ODriveMotor::power(const float torque) {
     this->set_mode(8, 1, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_TORQUE_CONTROL, INPUT_MODE_PASSTHROUGH
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
-    float torque_ = sign * torque;
-    std::memcpy(data, &torque_, 4);
+    const float motor_torque = sign * torque;
+    std::memcpy(data, &motor_torque, 4);
     this->can->send(this->can_id + 0x00e, data); // "Set Input Torque"
 }
 
 void ODriveMotor::speed(const float speed) {
     this->set_mode(8, 2, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_VELOCITY_CONTROL, INPUT_MODE_PASSTHROUGH
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-    int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
-    float speed_ = sign * speed / this->properties.at("m_per_tick")->number_value;
-    std::memcpy(data, &speed_, 4);
+    const float motor_speed = speed /
+                              this->properties.at("m_per_tick")->number_value /
+                              (this->properties.at("reversed")->boolean_value ? -1 : 1);
+    std::memcpy(data, &motor_speed, 4);
     this->can->send(this->can_id + 0x00d, data); // "Set Input Vel"
+}
+
+void ODriveMotor::position(const float position) {
+    this->set_mode(8, 3, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_POSITION_CONTROL, INPUT_MODE_PASSTHROUGH
+    uint8_t pos_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    const float motor_position = position /
+                                     (this->properties.at("reversed")->boolean_value ? -1 : 1) /
+                                     this->properties.at("m_per_tick")->number_value +
+                                 this->properties.at("tick_offset")->number_value;
+    std::memcpy(pos_data, &motor_position, 4);
+    this->can->send(this->can_id + 0x00c, pos_data); // "Set Input Pos"
+}
+
+void ODriveMotor::limits(const float speed, const float current) {
+    uint8_t limit_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    const float motor_speed = speed / this->properties.at("m_per_tick")->number_value;
+    std::memcpy(limit_data, &motor_speed, 4);
+    std::memcpy(limit_data + 4, &current, 4);
+    this->can->send(this->can_id + 0x00f, limit_data); // "Set Limits"
 }
 
 void ODriveMotor::off() {

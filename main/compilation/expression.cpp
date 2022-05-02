@@ -202,6 +202,30 @@ double DivideExpression::evaluate_number() const {
     return this->left->evaluate_number() / this->right->evaluate_number();
 }
 
+ModuloExpression::ModuloExpression(const ConstExpression_ptr left, const ConstExpression_ptr right)
+    : Expression(get_common_number_type(left, right)), left(left), right(right) {
+}
+
+int64_t ModuloExpression::evaluate_integer() const {
+    return this->left->evaluate_integer() % this->right->evaluate_integer();
+}
+
+double ModuloExpression::evaluate_number() const {
+    return fmod(this->left->evaluate_number(), this->right->evaluate_number());
+}
+
+FloorDivideExpression::FloorDivideExpression(const ConstExpression_ptr left, const ConstExpression_ptr right)
+    : Expression(get_common_number_type(left, right)), left(left), right(right) {
+}
+
+int64_t FloorDivideExpression::evaluate_integer() const {
+    return this->left->evaluate_integer() / this->right->evaluate_integer();
+}
+
+double FloorDivideExpression::evaluate_number() const {
+    return floor(this->left->evaluate_number() / this->right->evaluate_number());
+}
+
 AddExpression::AddExpression(const ConstExpression_ptr left, const ConstExpression_ptr right)
     : Expression(get_common_number_type(left, right)), left(left), right(right) {
 }

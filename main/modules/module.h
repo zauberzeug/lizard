@@ -13,6 +13,7 @@ enum ModuleType {
     expander,
     input,
     output,
+    mcp23017,
     can,
     serial,
     odrive_motor,
@@ -21,6 +22,8 @@ enum ModuleType {
     roboclaw,
     roboclaw_motor,
     stepper_motor,
+    canopen_motor,
+    canopen_master,
     proxy,
     number_of_module_types,
 };

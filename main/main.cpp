@@ -86,6 +86,10 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
         return std::make_shared<MultiplyExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_DIVIDE:
         return std::make_shared<DivideExpression>(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_MODULO:
+        return std::make_shared<ModuloExpression>(compile_expression(expression.left), compile_expression(expression.right));
+    case PARSED_FLOOR_DIVIDE:
+        return std::make_shared<FloorDivideExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_ADD:
         return std::make_shared<AddExpression>(compile_expression(expression.left), compile_expression(expression.right));
     case PARSED_SUBTRACT:
