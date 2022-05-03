@@ -39,7 +39,7 @@ Expander::Expander(const std::string name,
 
 void Expander::step() {
     static char buffer[1024];
-    if (this->serial->available()) {
+    while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer);
         check(buffer, len);
         if (buffer[0] == '!' && buffer[1] == '!') {

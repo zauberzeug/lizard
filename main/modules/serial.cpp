@@ -64,6 +64,10 @@ int Serial::available() const {
     return available;
 }
 
+bool Serial::has_buffered_lines() const {
+    return uart_pattern_get_pos(this->uart_num) != -1;
+}
+
 void Serial::flush() const {
     uart_flush(this->uart_num);
 }
@@ -75,7 +79,7 @@ int Serial::read(uint32_t timeout) const {
 }
 
 int Serial::read_line(char *buffer) const {
-    int pos = uart_pattern_get_pos(this->uart_num);
+    int pos = uart_pattern_pop_pos(this->uart_num);
     return pos >= 0 ? uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0) : 0;
 }
 
