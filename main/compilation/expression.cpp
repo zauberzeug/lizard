@@ -43,11 +43,11 @@ bool Expression::evaluate_boolean() const {
 }
 
 int64_t Expression::evaluate_integer() const {
-    throw std::runtime_error("not implemented");
+    return evaluate_boolean() ? 1 : 0;
 }
 
 double Expression::evaluate_number() const {
-    throw std::runtime_error("not implemented");
+    return evaluate_integer();
 }
 
 std::string Expression::evaluate_identifier() const {
@@ -59,7 +59,7 @@ std::string Expression::evaluate_string() const {
 }
 
 bool Expression::is_numbery() const {
-    return this->type == number || this->type == integer;
+    return this->type == number || this->type == integer || this->type == boolean;
 }
 
 int Expression::print_to_buffer(char *buffer) const {
