@@ -11,26 +11,21 @@ ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_mo
 }
 
 void ODriveWheels::step() {
-    static unsigned long int last_micros;
-    static double last_left_position;
-    static double last_right_position;
-    static bool initialized = false;
-
     double left_position = this->left_motor->get_position();
     double right_position = this->right_motor->get_position();
 
-    if (initialized) {
-        unsigned long int d_micros = micros_since(last_micros);
-        double left_speed = (left_position - last_left_position) / d_micros * 1000000;
-        double right_speed = (right_position - last_right_position) / d_micros * 1000000;
+    if (this->initialized) {
+        unsigned long int d_micros = micros_since(this->last_micros);
+        double left_speed = (left_position - this->last_left_position) / d_micros * 1000000;
+        double right_speed = (right_position - this->last_right_position) / d_micros * 1000000;
         this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
         this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
     }
 
-    last_micros = micros();
-    last_left_position = left_position;
-    last_right_position = right_position;
-    initialized = true;
+    this->last_micros = micros();
+    this->last_left_position = left_position;
+    this->last_right_position = right_position;
+    this->initialized = true;
 
     Module::step();
 }
