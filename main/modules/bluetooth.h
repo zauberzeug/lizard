@@ -14,4 +14,6 @@ private:
 
 public:
     Bluetooth(const std::string name, const std::string device_name, void (*message_handler)(const char *));
+
+    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 };
