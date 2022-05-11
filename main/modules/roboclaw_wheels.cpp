@@ -8,6 +8,7 @@ RoboClawWheels::RoboClawWheels(const std::string name, const RoboClawMotor_ptr l
     this->properties["linear_speed"] = std::make_shared<NumberVariable>();
     this->properties["angular_speed"] = std::make_shared<NumberVariable>();
     this->properties["enabled"] = std::make_shared<BooleanVariable>(true);
+    this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1);
 }
 
 void RoboClawWheels::step() {
@@ -21,8 +22,9 @@ void RoboClawWheels::step() {
         /* Catch unsigned wrap-around by detecting large jumps in encoder deltas */
         if (std::abs(d_left_position) < (UINT32_MAX / 2) && std::abs(d_right_position) < (UINT32_MAX / 2)) {
             unsigned long int d_micros = micros_since(last_micros);
-            double left_speed = d_left_position / d_micros * 1000000;
-            double right_speed = d_right_position / d_micros * 1000000;
+            const double scale = this->properties.at("m_per_tick")->number_value;
+            double left_speed = (d_left_position * scale) / d_micros * 1000000;
+            double right_speed = (d_right_position * scale) / d_micros * 1000000;
             this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
             this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
         }
