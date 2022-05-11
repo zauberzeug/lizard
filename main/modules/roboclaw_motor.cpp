@@ -25,18 +25,10 @@ void RoboClawMotor::step() {
 void RoboClawMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
-        unsigned short int duty = (short int)(constrain(arguments[0]->evaluate_number(), -1, 1) * 32767);
-        bool success = this->motor_number == 1 ? this->roboclaw->DutyM1(duty) : this->roboclaw->DutyM2(duty);
-        if (!success) {
-            throw std::runtime_error("could not set duty cycle");
-        }
+        this->power(arguments[0]->evaluate_number());
     } else if (method_name == "speed") {
         Module::expect(arguments, 1, numbery);
-        unsigned int counts_per_second = constrain(arguments[0]->evaluate_number(), -32767, 32767);
-        bool success = this->motor_number == 1 ? this->roboclaw->DutyM1(counts_per_second) : this->roboclaw->DutyM2(counts_per_second);
-        if (!success) {
-            throw std::runtime_error("could not set speed");
-        }
+        this->speed(arguments[0]->evaluate_number());
     } else if (method_name == "zero") {
         bool success = this->motor_number == 1 ? this->roboclaw->SetEncM1(0) : this->roboclaw->SetEncM2(0);
         if (!success) {
@@ -44,5 +36,47 @@ void RoboClawMotor::call(const std::string method_name, const std::vector<ConstE
         }
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+int RoboClawMotor::get_position() const {
+    return this->properties.at("position")->integer_value;
+}
+
+void RoboClawMotor::power(double value) {
+    unsigned short int duty = (short int)(constrain(value, -1, 1) * 32767);
+
+    int retries;
+    const int max_retries = 4;
+    for (retries = 0; retries < max_retries; ++retries) {
+        bool success = this->motor_number == 1 ? this->roboclaw->DutyM1(duty) : this->roboclaw->DutyM2(duty);
+        if (success) {
+            break;
+        }
+    }
+
+    if (retries == max_retries) {
+        throw std::runtime_error("could not set duty cycle after " + std::to_string(max_retries) + " retries");
+    }
+}
+
+void RoboClawMotor::speed(int value) {
+    unsigned int counts_per_second = constrain(value, -32767, 32767);
+    bool success = this->motor_number == 1 ? this->roboclaw->DutyM1(counts_per_second) : this->roboclaw->DutyM2(counts_per_second);
+    if (!success) {
+        throw std::runtime_error("could not set speed");
+    }
+
+    int retries;
+    const int max_retries = 4;
+    for (retries = 0; retries < max_retries; ++retries) {
+        bool success = this->motor_number == 1 ? this->roboclaw->DutyM1(counts_per_second) : this->roboclaw->DutyM2(counts_per_second);
+        if (success) {
+            break;
+        }
+    }
+
+    if (retries == max_retries) {
+        throw std::runtime_error("could not set speed after " + std::to_string(max_retries) + " retries");
     }
 }

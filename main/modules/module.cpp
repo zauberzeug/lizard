@@ -18,6 +18,7 @@
 #include "rmd_motor.h"
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
+#include "roboclaw_wheels.h"
 #include "serial.h"
 #include "stepper_motor.h"
 #include <stdarg.h>
@@ -206,6 +207,11 @@ Module_ptr Module::create(const std::string type,
         const RoboClaw_ptr roboclaw = std::static_pointer_cast<RoboClaw>(module);
         int64_t motor_number = arguments[1]->evaluate_integer();
         return std::make_shared<RoboClawMotor>(name, roboclaw, motor_number);
+    } else if (type == "RoboClawWheels") {
+        Module::expect(arguments, 2, identifier, identifier);
+        const RoboClawMotor_ptr left_motor = get_module_paramter<RoboClawMotor>(arguments[0], roboclaw_motor, "roboclaw motor");
+        const RoboClawMotor_ptr right_motor = get_module_paramter<RoboClawMotor>(arguments[1], roboclaw_motor, "roboclaw motor");
+        return std::make_shared<RoboClawWheels>(name, left_motor, right_motor);
     } else if (type == "StepperMotor") {
         if (arguments.size() < 2 || arguments.size() > 6) {
             throw std::runtime_error("unexpected number of arguments");
