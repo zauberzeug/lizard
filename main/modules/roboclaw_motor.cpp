@@ -14,7 +14,7 @@ RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw
 void RoboClawMotor::step() {
     uint8_t status;
     bool valid;
-    int32_t position = this->motor_number == 1 ? this->roboclaw->ReadEncM1(&status, &valid) : this->roboclaw->ReadEncM2(&status, &valid);
+    int64_t position = this->motor_number == 1 ? this->roboclaw->ReadEncM1(&status, &valid) : this->roboclaw->ReadEncM2(&status, &valid);
     if (!valid) {
         throw std::runtime_error("could not read motor position");
     }
@@ -39,7 +39,7 @@ void RoboClawMotor::call(const std::string method_name, const std::vector<ConstE
     }
 }
 
-int RoboClawMotor::get_position() const {
+int64_t RoboClawMotor::get_position() const {
     return this->properties.at("position")->integer_value;
 }
 
