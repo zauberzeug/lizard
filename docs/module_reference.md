@@ -334,6 +334,30 @@ The RoboClaw motor module controls a motor using a RoboClaw module.
 | `motor.speed(speed)`  | Move with given `speed` (-32767..32767) | `float`   |
 | `motor.zero()`        | Store position as zero position         |           |
 
+## RoboClaw Wheels
+
+The RoboClaw wheels module combines two RoboClaw motors and provides odometry and steering for differential wheeled robots.
+
+| Constructor                                       | Description              | Arguments                  |
+| ------------------------------------------------- | ------------------------ | -------------------------- |
+| `wheels = RoboClawWheels(left_motor, left_motor)` | left and right motors    | two RoboClaw motor modules |
+
+| Properties             | Description                                                | Data type |
+| ---------------------- | ---------------------------------------------------------- | --------- |
+| `wheels.width`         | wheel distance (m)                                         | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)                                        | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)                                      | `float`   |
+| `wheels.m_per_tick`    | Meters per encoder tick                                    | `float`   |
+| `wheels.enabled`       | Whether motors react to commands                           | `bool`    |
+
+| Methods                         | Description                                     | Arguments        |
+| ------------------------------- | ----------------------------------------------- | ---------------- |
+| `wheels.power(left, right)`     | Move with torque per wheel (-1..1)              | `float`, `float` |
+| `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
+| `wheels.off()`                  | Turn both motors off (idle state)               |                  |
+
+When the wheels are not `enabled`, `power` and `speed` method calls are ignored.
+
 ## Stepper Motor
 
 The stepper motor module controls a stepper motor via "step" and "direction" pins.
