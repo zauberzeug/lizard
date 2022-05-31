@@ -22,14 +22,17 @@ void Output::call(const std::string method_name, const std::vector<ConstExpressi
         Module::expect(arguments, 0);
         this->target_level = 1;
         this->pulse_interval = 0;
+        this->step();
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->target_level = 0;
         this->pulse_interval = 0;
+        this->step();
     } else if (method_name == "level") {
         Module::expect(arguments, 1, boolean);
         this->target_level = arguments[0]->evaluate_boolean();
         this->pulse_interval = 0;
+        this->step();
     } else if (method_name == "pulse") {
         if (arguments.size() < 1 || arguments.size() > 2) {
             throw std::runtime_error("unexpected number of arguments");

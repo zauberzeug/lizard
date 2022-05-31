@@ -18,6 +18,8 @@ jobs:
       - name: Determine version
         id: version_id
         run: echo "::set-output name=value::$(git describe --always --tags --dirty)"
+      - name: Generate parser
+        run: "./gen_parser.sh"
       - name: Build firmware
         uses: espressif/esp-idf-ci-action@release-v4.4
         env:
@@ -29,18 +31,29 @@ jobs:
           draft: false
           prerelease: false
           release_name: lizard_${{ steps.version_id.outputs.value }}
-          tag_name: lizard_${{ steps.version_id.outputs.value }}
+          tag_name: ${{ steps.version_id.outputs.value }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Zip devtools
+        run: "zip devtools.zip -@ < .github/devtools.txt"
       - name: Upload artifacts
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build/*.bin
+          asset_path: build/lizard.bin
           asset_name: lizard_${{ steps.version_id.outputs.value }}.bin
           asset_content_type: application/octet-stream
+      - name: Upload devtools
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: devtools.zip
+          asset_name: lizard_devtools_${{ steps.version_id.outputs.value }}.zip
+          asset_content_type: application/zip
 
   docs:
     runs-on: ubuntu-latest

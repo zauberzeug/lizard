@@ -22,6 +22,7 @@ public:
     void enable_line_detection() const;
     void deinstall() const;
     int available() const;
+    bool has_buffered_lines() const;
     int read(const uint32_t timeout = 0) const;
     int read_line(char *buffer) const;
     size_t write(const uint8_t byte) const;

@@ -359,7 +359,7 @@ void process_line(const char *line, const int len) {
 void process_uart() {
     static char input[BUFFER_SIZE];
     while (true) {
-        int pos = uart_pattern_get_pos(UART_NUM_0);
+        int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
             break;
         }

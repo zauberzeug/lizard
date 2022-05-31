@@ -78,6 +78,7 @@ def serial_connection() -> serial.Serial:
         usb_paths = [
             '/dev/ttyTHS1',
             '/dev/ttyUSB0',
+            '/dev/ttyUSB1',
             '/dev/tty.SLAB_USBtoUART',
             '/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0',
         ]

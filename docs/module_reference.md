@@ -37,14 +37,15 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 
 ## Bluetooth
 
-Lizard can receive messages via Bluetooth Low Energy.
+Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
 Simply create a Bluetooth module with a device name of your choice.
 
 | Constructor                          | Description                                        | Arguments |
 | ------------------------------------ | -------------------------------------------------- | --------- |
 | `bluetooth = Bluetooth(device_name)` | initialize bluetooth with advertised `device_name` | `str`     |
+| `bluetooth.send(data)`               | send `data` via notification                       | `str`     |
 
-Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0 that allows writing Lizard statements like on the command line.
+Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0 that allows writing Lizard statements like on the command line. On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
 
 ## Input
 
@@ -332,6 +333,30 @@ The RoboClaw motor module controls a motor using a RoboClaw module.
 | `motor.power(torque)` | Move with given `torque` (-1..1)        | `float`   |
 | `motor.speed(speed)`  | Move with given `speed` (-32767..32767) | `float`   |
 | `motor.zero()`        | Store position as zero position         |           |
+
+## RoboClaw Wheels
+
+The RoboClaw wheels module combines two RoboClaw motors and provides odometry and steering for differential wheeled robots.
+
+| Constructor                                       | Description              | Arguments                  |
+| ------------------------------------------------- | ------------------------ | -------------------------- |
+| `wheels = RoboClawWheels(left_motor, left_motor)` | left and right motors    | two RoboClaw motor modules |
+
+| Properties             | Description                                                | Data type |
+| ---------------------- | ---------------------------------------------------------- | --------- |
+| `wheels.width`         | wheel distance (m)                                         | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)                                        | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)                                      | `float`   |
+| `wheels.m_per_tick`    | Meters per encoder tick                                    | `float`   |
+| `wheels.enabled`       | Whether motors react to commands                           | `bool`    |
+
+| Methods                         | Description                                     | Arguments        |
+| ------------------------------- | ----------------------------------------------- | ---------------- |
+| `wheels.power(left, right)`     | Move with torque per wheel (-1..1)              | `float`, `float` |
+| `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
+| `wheels.off()`                  | Turn both motors off (idle state)               |                  |
+
+When the wheels are not `enabled`, `power` and `speed` method calls are ignored.
 
 ## Stepper Motor
 

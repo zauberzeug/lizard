@@ -20,6 +20,9 @@ private:
     const ledc_timer_t ledc_timer;
     const ledc_channel_t ledc_channel;
 
+    uint32_t last_micros = 0;
+    int16_t last_count = 0;
+
     StepperState state = Idle;
     int32_t target_position = 0;
     int32_t target_speed = 0;

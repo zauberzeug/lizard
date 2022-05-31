@@ -73,10 +73,9 @@ StepperMotor::StepperMotor(const std::string name,
 }
 
 void StepperMotor::read_position() {
-    static int16_t last_count = 0;
     int16_t count;
     pcnt_get_counter_value(this->pcnt_unit, &count);
-    int16_t d_count = count - last_count;
+    int16_t d_count = count - this->last_count;
     if (d_count > 15000) {
         d_count -= 30000;
     }
@@ -84,7 +83,7 @@ void StepperMotor::read_position() {
         d_count += 30000;
     }
     this->properties.at("position")->integer_value += d_count;
-    last_count = count;
+    this->last_count = count;
 }
 
 void StepperMotor::set_state(StepperState new_state) {
@@ -96,9 +95,8 @@ void StepperMotor::step() {
     this->read_position();
 
     // time since last call
-    static uint32_t last_micros = 0;
-    double dt = micros_since(last_micros) * 1e-6;
-    last_micros = micros();
+    double dt = micros_since(this->last_micros) * 1e-6;
+    this->last_micros = micros();
 
     if (this->state != Idle) {
         // current state
