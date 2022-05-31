@@ -86,6 +86,9 @@ void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t
         message.data[i] = data[i];
     }
     if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
+        if (twai_stop() != ESP_OK || twai_start() != ESP_OK) {
+            throw std::runtime_error("could not send CAN message and could not restart twai driver");
+        }
         throw std::runtime_error("could not send CAN message");
     }
 }
