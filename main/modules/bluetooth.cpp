@@ -1,17 +1,12 @@
 #include "bluetooth.h"
-#include "core.h"
 #include "uart.h"
 
-// somewhat of a hack, maybe call ->keep_alive in parse_lizard?
-extern Core_ptr core_module;
-
-Bluetooth::Bluetooth(const std::string name, const std::string device_name, void (*message_handler)(const char *))
+Bluetooth::Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler)
     : Module(bluetooth, name), device_name(device_name) {
     ZZ::BleCommand::init(device_name, [message_handler](const std::string_view &message) {
         try {
             std::string message_string(message.data(), message.length());
-            message_handler(message_string.c_str());
-            core_module->keep_alive();
+            message_handler(message_string.c_str(), true);
         } catch (const std::exception &e) {
             echo("error in bluetooth message handler: %s", e.what());
         }

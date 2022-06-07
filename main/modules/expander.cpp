@@ -10,7 +10,7 @@ Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
                    const gpio_num_t boot_pin,
                    const gpio_num_t enable_pin,
-                   void (*message_handler)(const char *))
+                   MessageHandler message_handler)
     : Module(expander, name), serial(serial), boot_pin(boot_pin), enable_pin(enable_pin), message_handler(message_handler) {
     serial->enable_line_detection();
     gpio_reset_pin(boot_pin);
@@ -43,7 +43,8 @@ void Expander::step() {
         int len = this->serial->read_line(buffer);
         check(buffer, len);
         if (buffer[0] == '!' && buffer[1] == '!') {
-            this->message_handler(&buffer[2]);
+            /* Don't trigger keep-alive from expander updates */
+            this->message_handler(&buffer[2], false);
         } else {
             echo("%s: %s", this->name.c_str(), buffer);
         }

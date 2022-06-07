@@ -55,7 +55,7 @@ static std::shared_ptr<M> get_module_paramter(const ConstExpression_ptr &arg, Mo
 Module_ptr Module::create(const std::string type,
                           const std::string name,
                           const std::vector<ConstExpression_ptr> arguments,
-                          void (*message_handler)(const char *)) {
+                          MessageHandler message_handler) {
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
     } else if (type == "Expander") {
