@@ -28,15 +28,15 @@
 #ifndef _BNO055ESP32_H_
 #define _BNO055ESP32_H_
 
-#define BNO055_DEBUG_OFF  // uncomment this to DISABLE DEBUG LOGS
+#define BNO055_DEBUG_OFF // uncomment this to DISABLE DEBUG LOGS
 
-#include <cstring>  //memset, memcpy
-#include <exception>
-#include <string>
 #include "driver/i2c.h"
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <cstring> //memset, memcpy
+#include <exception>
+#include <string>
 
 #define ACK_EN 0x01
 
@@ -45,7 +45,7 @@
 #endif
 #include "esp_log.h"
 
-#define DEFAULT_UART_TIMEOUT_MS 30  // you can try to decrease/increase this. (DEFAULT: 30)
+#define DEFAULT_UART_TIMEOUT_MS 30 // you can try to decrease/increase this. (DEFAULT: 30)
 
 // BNO055 Registers(Table 4-1, Pag 51)
 typedef enum {
@@ -282,17 +282,21 @@ typedef struct {
 } bno055_quaternion_t;
 
 typedef enum {
-    BNO055_UNIT_ACCEL_MS2 = 0x00,  // m/s²
+    BNO055_UNIT_ACCEL_MS2 = 0x00, // m/s²
     BNO055_UNIT_ACCEL_MG = 0X01
 } bno055_accel_unit_t;
 
-typedef enum { BNO055_UNIT_ANGULAR_RATE_DPS = 0x00, BNO055_UNIT_ANGULAR_RATE_RPS = 0x02 } bno055_angular_rate_unit_t;
+typedef enum { BNO055_UNIT_ANGULAR_RATE_DPS = 0x00,
+               BNO055_UNIT_ANGULAR_RATE_RPS = 0x02 } bno055_angular_rate_unit_t;
 
-typedef enum { BNO055_UNIT_EULER_DEGREES = 0x00, BNO055_UNIT_EULER_RADIANS = 0x04 } bno055_euler_unit_t;
+typedef enum { BNO055_UNIT_EULER_DEGREES = 0x00,
+               BNO055_UNIT_EULER_RADIANS = 0x04 } bno055_euler_unit_t;
 
-typedef enum { BNO055_UNIT_TEMP_C = 0x00, BNO055_UNIT_TEMP_F = 0x10 } bno055_temperature_unit_t;
+typedef enum { BNO055_UNIT_TEMP_C = 0x00,
+               BNO055_UNIT_TEMP_F = 0x10 } bno055_temperature_unit_t;
 
-typedef enum { BNO055_DATA_FORMAT_WINDOWS = 0x00, BNO055_DATA_FORMAT_ANDROID = 0x80 } bno055_data_output_format_t;
+typedef enum { BNO055_DATA_FORMAT_WINDOWS = 0x00,
+               BNO055_DATA_FORMAT_ANDROID = 0x80 } bno055_data_output_format_t;
 
 typedef enum {
     BNO055_CONF_ACCEL_RANGE_2G = 0x00,
@@ -446,16 +450,16 @@ typedef struct {
 } bno055_interrupts_status_t;
 
 class BNO055BaseException : public std::exception {
-   protected:
+protected:
     std::string _msg;
 
-   public:
+public:
     BNO055BaseException(std::string message = ":-(, an error is occurred.") { _msg = message; };
-    virtual const char *what() const throw() { return _msg.c_str(); }
+    virtual const char *what() const throw() override { return _msg.c_str(); }
 };
 
 class BNO055ReadFail : public BNO055BaseException {
-   public:
+public:
     BNO055ReadFail(std::string message =
                        "(!*)this is specified in datasheet, but it is not in UART Application note, so it doesn't have an "
                        "official description.")
@@ -463,83 +467,83 @@ class BNO055ReadFail : public BNO055BaseException {
 };
 
 class BNO055WriteFail : public BNO055BaseException {
-   public:
+public:
     BNO055WriteFail(std::string message = "Check connection, protocol settings and operation mode of the BNO055.")
         : BNO055BaseException(message){};
 };
 
 class BNO055RegmapInvalidAddress : public BNO055BaseException {
-   public:
+public:
     BNO055RegmapInvalidAddress(
         std::string message = "Check the if the register is addressable. example in Page 0, should be from 0x38 to 0x6A.")
         : BNO055BaseException(message){};
 };
 
 class BNO055RegmapWriteDisabled : public BNO055BaseException {
-   public:
+public:
     BNO055RegmapWriteDisabled(std::string message = "Check the property of register.") : BNO055BaseException(message){};
 };
 
 class BNO055WrongStartByte : public BNO055BaseException {
-   public:
+public:
     BNO055WrongStartByte(std::string message = "Check if the first byte sent is 0xAA.") : BNO055BaseException(message){};
 };
 
 class BNO055BusOverRunError : public BNO055BaseException {
-   public:
+public:
     BNO055BusOverRunError(std::string message = "Resend the command") : BNO055BaseException(message){};
 };
 
 class BNO055MaxLengthError : public BNO055BaseException {
-   public:
+public:
     BNO055MaxLengthError(std::string message = "Split the command,a single frame must have < 128 Bytes.")
         : BNO055BaseException(message){};
 };
 
 class BNO055MinLengthError : public BNO055BaseException {
-   public:
+public:
     BNO055MinLengthError(std::string message = "Send a valid frame.") : BNO055BaseException(message){};
 };
 
 class BNO055ReceiveCharacterTimeout : public BNO055BaseException {
-   public:
+public:
     BNO055ReceiveCharacterTimeout(std::string message = "Decrease waiting time between sending of two bytes of one frame.")
         : BNO055BaseException(message){};
 };
 
 class BNO055UnknowError : public BNO055BaseException {
-   public:
+public:
     BNO055UnknowError(std::string message = ".") : BNO055BaseException(message){};
 };
 
 class BNO055UartTimeout : public BNO055BaseException {
-   public:
+public:
     BNO055UartTimeout(std::string message = "timeout expired, if you see this often, try to increase timeoutMS.")
         : BNO055BaseException(message){};
 };
 
 class BNO055UartInitFailed : public BNO055BaseException {
-   public:
+public:
     BNO055UartInitFailed(std::string message = "ESP32's UART Interface cannot be initialized.") : BNO055BaseException(message){};
 };
 
 class BNO055ChipNotDetected : public BNO055BaseException {
-   public:
+public:
     BNO055ChipNotDetected(std::string message = "Check your wiring.") : BNO055BaseException(message){};
 };
 
 class BNO055WrongOprMode : public BNO055BaseException {
-   public:
+public:
     BNO055WrongOprMode(std::string message = "Check the OperationMode.") : BNO055BaseException(message){};
 };
 
 class BNO055I2CError : public BNO055BaseException {
-   public:
+public:
     BNO055I2CError(std::string message = "I2CError: Check your wiring.") : BNO055BaseException(message){};
 };
 
 class BNO055 {
-   public:
+public:
     BNO055(i2c_port_t i2cPort, uint8_t i2cAddr, gpio_num_t rstPin = GPIO_NUM_MAX, gpio_num_t intPin = GPIO_NUM_MAX);
     BNO055(uart_port_t uartPort, gpio_num_t txPin = GPIO_NUM_17, gpio_num_t rxPin = GPIO_NUM_16, gpio_num_t rstPin = GPIO_NUM_MAX,
            gpio_num_t intPin = GPIO_NUM_MAX);
@@ -650,13 +654,13 @@ class BNO055 {
 
     void uart_readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint32_t timeoutMS);
     void uart_writeLen(bno055_reg_t reg, uint8_t *data, uint8_t len, uint32_t timeoutMS);
-    
+
     void readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len = 1, uint8_t page = 0, uint32_t timeoutMS = DEFAULT_UART_TIMEOUT_MS);
     void writeLen(bno055_reg_t reg, uint8_t *data, uint8_t len = 1, uint8_t page = 0, uint32_t timeoutMS = DEFAULT_UART_TIMEOUT_MS);
 
     bool interruptFlag = false;
 
-   protected:
+protected:
     const uart_config_t uart_config = {.baud_rate = 115200,
                                        .data_bits = UART_DATA_8_BITS,
                                        .parity = UART_PARITY_DISABLE,
@@ -666,12 +670,12 @@ class BNO055 {
                                        .use_ref_tick = false};
 
     typedef enum {
-        BNO055_VECTOR_ACCELEROMETER = 0x08,  // Default: m/s²
-        BNO055_VECTOR_MAGNETOMETER = 0x0E,   // Default: uT
-        BNO055_VECTOR_GYROSCOPE = 0x14,      // Default: rad/s
-        BNO055_VECTOR_EULER = 0x1A,          // Default: degrees
-        BNO055_VECTOR_LINEARACCEL = 0x28,    // Default: m/s²
-        BNO055_VECTOR_GRAVITY = 0x2E         // Default: m/s²
+        BNO055_VECTOR_ACCELEROMETER = 0x08, // Default: m/s²
+        BNO055_VECTOR_MAGNETOMETER = 0x0E,  // Default: uT
+        BNO055_VECTOR_GYROSCOPE = 0x14,     // Default: rad/s
+        BNO055_VECTOR_EULER = 0x1A,         // Default: degrees
+        BNO055_VECTOR_LINEARACCEL = 0x28,   // Default: m/s²
+        BNO055_VECTOR_GRAVITY = 0x2E        // Default: m/s²
     } bno055_vector_type_t;
 
     typedef enum {
