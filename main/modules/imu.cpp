@@ -26,17 +26,23 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
     try {
         this->bno->begin();
         this->bno->enableExternalCrystal();
-        this->bno->setOprModeNdof();
+        this->bno->setOprModeAccOnly();
     } catch (BNO055BaseException &ex) {
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     } catch (std::exception &ex) {
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     }
+
+    this->properties["acc_x"] = std::make_shared<NumberVariable>();
+    this->properties["acc_y"] = std::make_shared<NumberVariable>();
+    this->properties["acc_z"] = std::make_shared<NumberVariable>();
 }
 
 void Imu::step() {
-    bno055_vector_t v = this->bno->getVectorEuler();
-    printf("%8.3f %8.3f %8.3f\n", v.x, v.y, v.z);
+    bno055_vector_t v = this->bno->getVectorAccelerometer();
+    this->properties.at("acc_x")->number_value = v.x;
+    this->properties.at("acc_y")->number_value = v.y;
+    this->properties.at("acc_z")->number_value = v.z;
 
     Module::step();
 }
