@@ -14,6 +14,7 @@ enum ModuleType {
     input,
     output,
     mcp23017,
+    imu,
     can,
     serial,
     odrive_motor,
