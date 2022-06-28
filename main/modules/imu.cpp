@@ -19,7 +19,7 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
     if (i2c_driver_install(i2c_port, I2C_MODE_MASTER, I2C_MASTER_TX_BUF_DISABLE, I2C_MASTER_RX_BUF_DISABLE, 0) != ESP_OK) {
         throw std::runtime_error("could not install i2c driver");
     }
-    if (i2c_set_timeout(i2c_port, 30000) != ESP_OK) {
+    if (i2c_set_timeout(i2c_port, 1048575) != ESP_OK) {
         throw std::runtime_error("could not set i2c timeout");
     }
     this->bno = std::make_shared<BNO055>((i2c_port_t)i2c_port, address);
