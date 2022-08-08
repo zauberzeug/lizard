@@ -35,9 +35,9 @@ void RoboClawWheels::step() {
         double d_right_position = difference_wrapped_u32(right_position, last_right_position);
 
         unsigned long int d_micros = micros_since(last_micros);
-        const double scale = this->properties.at("m_per_tick")->number_value;
-        double left_speed = (d_left_position * scale) / d_micros * 1000000;
-        double right_speed = (d_right_position * scale) / d_micros * 1000000;
+        const double m_per_tick = this->properties.at("m_per_tick")->number_value;
+        double left_speed = (d_left_position * m_per_tick) / d_micros * 1000000;
+        double right_speed = (d_right_position * m_per_tick) / d_micros * 1000000;
         this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
         this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
     }
@@ -63,8 +63,9 @@ void RoboClawWheels::call(const std::string method_name, const std::vector<Const
             double linear = arguments[0]->evaluate_number();
             double angular = arguments[1]->evaluate_number();
             double width = this->properties.at("width")->number_value;
-            this->left_motor->speed(linear - angular * width / 2.0);
-            this->right_motor->speed(linear + angular * width / 2.0);
+            const double m_per_tick = this->properties.at("m_per_tick")->number_value;
+            this->left_motor->speed((linear - angular * width / 2.0) / m_per_tick);
+            this->right_motor->speed((linear + angular * width / 2.0) / m_per_tick);
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
