@@ -339,6 +339,12 @@ It communicates with a [Basicmicro](https://www.basicmicro.com/) RoboClaw motor 
 | ---------------------------------- | ------------------------- | -------------------- |
 | `claw = RoboClaw(serial, address)` | Serial module and address | Serial module, `int` |
 
+| Properties         | Description                         | Data type |
+| ------------------ | ----------------------------------- | --------- |
+| `claw.temperature` | Board temperature (degrees Celsius) | `float`   |
+
+The temperature property is updated every 1 second.
+
 ## RoboClaw Motor
 
 The RoboClaw motor module controls a motor using a RoboClaw module.
