@@ -14,15 +14,10 @@ RoboClawWheels::RoboClawWheels(const std::string name, const RoboClawMotor_ptr l
 /* Catch unsigned wrap-around by detecting large jumps in encoder deltas */
 static double difference_wrapped_u32(double current_value, double last_value) {
     double diff = current_value - last_value;
-
-    if (diff > (double(UINT32_MAX / 2))) {
-        /* Underflow */
-        diff = diff - double(UINT32_MAX) - 1;
-    } else if (diff < -double(UINT32_MAX / 2)) {
-        /* Overflow */
-        diff = double(UINT32_MAX) + diff + 1;
-    }
-
+    if (diff > double(UINT32_MAX / 2))
+        diff -= double(UINT32_MAX) + 1; // Underflow
+    if (diff < -double(UINT32_MAX / 2))
+        diff += double(UINT32_MAX) + 1; // Overflow
     return diff;
 }
 
@@ -62,10 +57,10 @@ void RoboClawWheels::call(const std::string method_name, const std::vector<Const
         if (this->properties.at("enabled")->boolean_value) {
             double linear = arguments[0]->evaluate_number();
             double angular = arguments[1]->evaluate_number();
-            double width = this->properties.at("width")->number_value;
+            const double half_width = this->properties.at("width")->number_value / 2.0;
             const double m_per_tick = this->properties.at("m_per_tick")->number_value;
-            this->left_motor->speed((linear - angular * width / 2.0) / m_per_tick);
-            this->right_motor->speed((linear + angular * width / 2.0) / m_per_tick);
+            this->left_motor->speed((linear - angular * half_width) / m_per_tick);
+            this->right_motor->speed((linear + angular * half_width) / m_per_tick);
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
