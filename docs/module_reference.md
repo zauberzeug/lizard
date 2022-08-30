@@ -134,6 +134,29 @@ You can also instantiate the following modules passing the `mcp` instance as the
 
 The pins `pin`, `move_in`, `move_out`, `end_in` and `end_out` are numbers from 0 to 15 referring to A0...A7 and B0...B7 on the MCP23017.
 
+## IMU
+
+The IMU module provides access to a Bosch BNO055 9-axis absolute orientation sensor.
+Currently, only reading the accelerometer is implemented.
+
+| Constructor                                               | Description | Arguments |
+| --------------------------------------------------------- | ----------- | --------- |
+| `imu = Imu([port[, sda[, scl[, address[, clk_speed]]]]])` | See below   | `int`s    |
+
+The constructor expects up to five arguments:
+
+- `port`: 0 or 1, since the ESP32 has two I2C ports (default: 0)
+- `sda`: SDA pin (default: 21)
+- `scl`: SCL pin (default: 22)
+- `address`: client address of the MCP (0x28 or 0x29, default: 0x28)
+- `clk_speed`: I2C clock speed (default: 100000)
+
+| Properties    | Description                         | Data type |
+| ------------- | ----------------------------------- | --------- |
+| `imu.accel_x` | acceleration in x direction (m/s^2) | `float`   |
+| `imu.accel_y` | acceleration in y direction (m/s^2) | `float`   |
+| `imu.accel_z` | acceleration in z direction (m/s^2) | `float`   |
+
 ## CAN interface
 
 The CAN module allows communicating with peripherals on the specified CAN bus.
@@ -316,6 +339,12 @@ It communicates with a [Basicmicro](https://www.basicmicro.com/) RoboClaw motor 
 | ---------------------------------- | ------------------------- | -------------------- |
 | `claw = RoboClaw(serial, address)` | Serial module and address | Serial module, `int` |
 
+| Properties         | Description                         | Data type |
+| ------------------ | ----------------------------------- | --------- |
+| `claw.temperature` | Board temperature (degrees Celsius) | `float`   |
+
+The temperature property is updated every 1 second.
+
 ## RoboClaw Motor
 
 The RoboClaw motor module controls a motor using a RoboClaw module.
@@ -338,17 +367,17 @@ The RoboClaw motor module controls a motor using a RoboClaw module.
 
 The RoboClaw wheels module combines two RoboClaw motors and provides odometry and steering for differential wheeled robots.
 
-| Constructor                                       | Description              | Arguments                  |
-| ------------------------------------------------- | ------------------------ | -------------------------- |
-| `wheels = RoboClawWheels(left_motor, left_motor)` | left and right motors    | two RoboClaw motor modules |
+| Constructor                                       | Description           | Arguments                  |
+| ------------------------------------------------- | --------------------- | -------------------------- |
+| `wheels = RoboClawWheels(left_motor, left_motor)` | left and right motors | two RoboClaw motor modules |
 
-| Properties             | Description                                                | Data type |
-| ---------------------- | ---------------------------------------------------------- | --------- |
-| `wheels.width`         | wheel distance (m)                                         | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)                                        | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)                                      | `float`   |
-| `wheels.m_per_tick`    | Meters per encoder tick                                    | `float`   |
-| `wheels.enabled`       | Whether motors react to commands                           | `bool`    |
+| Properties             | Description                      | Data type |
+| ---------------------- | -------------------------------- | --------- |
+| `wheels.width`         | wheel distance (m)               | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)              | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)            | `float`   |
+| `wheels.m_per_tick`    | Meters per encoder tick          | `float`   |
+| `wheels.enabled`       | Whether motors react to commands | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |

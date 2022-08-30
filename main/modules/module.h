@@ -14,6 +14,7 @@ enum ModuleType {
     input,
     output,
     mcp23017,
+    imu,
     can,
     serial,
     odrive_motor,
@@ -32,6 +33,7 @@ enum ModuleType {
 class Module;
 using Module_ptr = std::shared_ptr<Module>;
 using ConstModule_ptr = std::shared_ptr<const Module>;
+using MessageHandler = void (*)(const char *line, bool trigger_keep_alive);
 
 class Module {
 private:
@@ -51,7 +53,7 @@ public:
     static Module_ptr create(const std::string type,
                              const std::string name,
                              const std::vector<ConstExpression_ptr> arguments,
-                             void (*message_handler)(const char *));
+                             MessageHandler message_handler);
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);

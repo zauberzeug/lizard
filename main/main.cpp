@@ -39,7 +39,7 @@ extern "C" {
 void app_main();
 }
 
-void process_lizard(const char *line);
+void process_lizard(const char *line, bool trigger_keep_alive = true);
 
 std::string identifier_to_string(const struct owl_ref ref) {
     const struct parsed_identifier identifier = parsed_identifier_get(ref);
@@ -285,7 +285,11 @@ void process_tree(owl_tree *const tree) {
     }
 }
 
-void process_lizard(const char *line) {
+void process_lizard(const char *line, bool trigger_keep_alive) {
+    if (trigger_keep_alive) {
+        core_module->keep_alive();
+    }
+
     const bool debug = core_module->get_property("debug")->boolean_value;
     if (debug) {
         echo(">> %s", line);
@@ -353,7 +357,6 @@ void process_line(const char *line, const int len) {
     } else {
         process_lizard(line);
     }
-    core_module->keep_alive();
 }
 
 void process_uart() {

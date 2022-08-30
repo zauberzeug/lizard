@@ -1,4 +1,5 @@
 #include "roboclaw.h"
+#include "timing.h"
 
 #define MAXRETRY 2
 #define SetDWORDval(arg) (uint8_t)(((uint32_t)arg) >> 24), (uint8_t)(((uint32_t)arg) >> 16), (uint8_t)(((uint32_t)arg) >> 8), (uint8_t)arg
@@ -6,6 +7,17 @@
 
 RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address)
     : Module(roboclaw, name), address(address), serial(serial) {
+    this->properties["temperature"] = std::make_shared<NumberVariable>();
+}
+
+void RoboClaw::step() {
+    if (millis_since(this->last_temp_reading) > 1000) {
+        uint16_t temp;
+        this->ReadTemp(temp);
+        this->properties["temperature"]->number_value = temp / 10.0;
+        this->last_temp_reading = millis();
+    }
+    Module::step();
 }
 
 void RoboClaw::crc_clear() {

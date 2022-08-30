@@ -40,6 +40,17 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
     g_config.rx_queue_len = 20;
     g_config.tx_queue_len = 20;
 
+    this->properties["state"] = std::make_shared<StringVariable>();
+    this->properties["tx_error_counter"] = std::make_shared<IntegerVariable>();
+    this->properties["rx_error_counter"] = std::make_shared<IntegerVariable>();
+    this->properties["msgs_to_tx"] = std::make_shared<IntegerVariable>();
+    this->properties["msgs_to_rx"] = std::make_shared<IntegerVariable>();
+    this->properties["tx_failed_count"] = std::make_shared<IntegerVariable>();
+    this->properties["rx_missed_count"] = std::make_shared<IntegerVariable>();
+    this->properties["rx_overrun_count"] = std::make_shared<IntegerVariable>();
+    this->properties["arb_lost_count"] = std::make_shared<IntegerVariable>();
+    this->properties["bus_error_count"] = std::make_shared<IntegerVariable>();
+
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());
 }
@@ -47,6 +58,26 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
 void Can::step() {
     while (this->receive()) {
     }
+
+    twai_status_info_t status_info;
+    if (twai_get_status_info(&status_info) != ESP_OK) {
+        throw std::runtime_error("could not get status info");
+    }
+    this->properties.at("state")->string_value = status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
+                                                 : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
+                                                 : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+                                                 : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                                                              : "UNKNOWN";
+    this->properties.at("tx_error_counter")->integer_value = status_info.tx_error_counter;
+    this->properties.at("rx_error_counter")->integer_value = status_info.rx_error_counter;
+    this->properties.at("msgs_to_tx")->integer_value = status_info.msgs_to_tx;
+    this->properties.at("msgs_to_rx")->integer_value = status_info.msgs_to_rx;
+    this->properties.at("tx_failed_count")->integer_value = status_info.tx_failed_count;
+    this->properties.at("rx_missed_count")->integer_value = status_info.rx_missed_count;
+    this->properties.at("rx_overrun_count")->integer_value = status_info.rx_overrun_count;
+    this->properties.at("arb_lost_count")->integer_value = status_info.arb_lost_count;
+    this->properties.at("bus_error_count")->integer_value = status_info.bus_error_count;
+
     Module::step();
 }
 
@@ -113,26 +144,18 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
                    arguments[6]->evaluate_integer(),
                    arguments[7]->evaluate_integer(),
                    arguments[8]->evaluate_integer());
-    } else if (method_name == "get_status") {
+    } else if (method_name == "status") {
         Module::expect(arguments, 0);
-        twai_status_info_t status_info;
-        if (twai_get_status_info(&status_info) != ESP_OK) {
-            throw std::runtime_error("could not get status info");
-        }
-        echo("state:            %s", status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
-                                     : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
-                                     : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
-                                     : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
-                                                                                  : "UNKNOWN");
-        echo("msgs_to_tx:       %d", status_info.msgs_to_tx);
-        echo("msgs_to_rx:       %d", status_info.msgs_to_rx);
-        echo("tx_error_counter: %d", status_info.tx_error_counter);
-        echo("rx_error_counter: %d", status_info.rx_error_counter);
-        echo("tx_failed_count:  %d", status_info.tx_failed_count);
-        echo("rx_missed_count:  %d", status_info.rx_missed_count);
-        echo("rx_overrun_count: %d", status_info.rx_overrun_count);
-        echo("arb_lost_count:   %d", status_info.arb_lost_count);
-        echo("bus_error_count:  %d", status_info.bus_error_count);
+        echo("state:            %s", this->properties.at("state")->string_value.c_str());
+        echo("msgs_to_tx:       %d", (int)this->properties.at("msgs_to_tx")->integer_value);
+        echo("msgs_to_rx:       %d", (int)this->properties.at("msgs_to_rx")->integer_value);
+        echo("tx_error_counter: %d", (int)this->properties.at("tx_error_counter")->integer_value);
+        echo("rx_error_counter: %d", (int)this->properties.at("rx_error_counter")->integer_value);
+        echo("tx_failed_count:  %d", (int)this->properties.at("tx_failed_count")->integer_value);
+        echo("rx_missed_count:  %d", (int)this->properties.at("rx_missed_count")->integer_value);
+        echo("rx_overrun_count: %d", (int)this->properties.at("rx_overrun_count")->integer_value);
+        echo("arb_lost_count:   %d", (int)this->properties.at("arb_lost_count")->integer_value);
+        echo("bus_error_count:  %d", (int)this->properties.at("bus_error_count")->integer_value);
     } else if (method_name == "start") {
         Module::expect(arguments, 0);
         if (twai_start() != ESP_OK) {
