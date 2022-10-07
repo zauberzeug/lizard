@@ -57,7 +57,7 @@ void RoboClawMotor::power(double value) {
 }
 
 void RoboClawMotor::speed(int value) {
-    unsigned int counts_per_second = constrain(value, -32767, 32767);
+    unsigned int counts_per_second = constrain(value, -2147483647, 2147483647);
 
     const int max_retries = 4;
     for (int retries = 0; retries < max_retries; ++retries) {
