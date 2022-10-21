@@ -34,8 +34,8 @@ jobs:
           tag_name: ${{ steps.version_id.outputs.value }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: Zip devtools
-        run: "zip devtools.zip -@ < .github/devtools.txt"
+      - name: Zip bins and tools
+        run: "zip lizard.zip -@ < .github/zip_content.txt"
       - name: Upload artifacts
         uses: actions/upload-release-asset@v1
         env:
@@ -51,8 +51,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: devtools.zip
-          asset_name: lizard_devtools_${{ steps.version_id.outputs.value }}.zip
+          asset_path: lizard.zip
+          asset_name: lizard_firmware_and_devtools_${{ steps.version_id.outputs.value }}.zip
           asset_content_type: application/zip
 
   docs:
