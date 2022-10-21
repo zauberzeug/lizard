@@ -1,7 +1,8 @@
 backtrace.sh
-monitor_ssh.sh
-upload_ssh.sh
 upload_ths1.sh
+upload_ths0_xavier.sh
 upload_usb.sh
 configure.py
 monitor.py
+README.md
+LICENSE
