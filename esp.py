@@ -1,21 +1,22 @@
 from contextlib import contextmanager
 from typing import Union
+
 class Esp:
 
-    def __init__(self) ->None:
+    def __init__(self, nand=False, xavier=False) ->None:
         print('Initializing ESP...')
-        self.en=216
-        self.g0=50
-        nand=False
+        self.en=434 if xavier else 216
+        self.g0=428 if xavier else 50
+        self.port = '/dev/ttyTHS' + ('0' if xavier else '1')
         self.on=1 if nand else 0
         self.off=0 if nand else 1
 
     def write(self,value:Union[str,int], path:str):
         try:
-            with open(path, 'w') as f:
+            with open(f'/sys/class/gpio{path}', 'w') as f:
                 f.write(str(value) + '\n')
         except:
-            pass
+            print(f'could not write {value} to {path}')
 
     @contextmanager
     def pin_config(self):
