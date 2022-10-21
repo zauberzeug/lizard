@@ -2,10 +2,9 @@ build/bootloader/bootloader.bin
 build/partition_table/partition-table.bin
 build/lizard.bin
 backtrace.sh
-upload_ths1.sh
-upload_ths0_xavier.sh
-upload_usb.sh
 configure.py
+esp.py
+flash.py
 monitor.py
 README.md
 LICENSE
