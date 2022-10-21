@@ -9,18 +9,27 @@ def help():
     print(f'   nano          flashing Jetson Nano (default)')
     print(f'   xavier        flashing Jetson Xavier')
     print(f'   nand          Robot Brain has piggyboard with NAND gate (eg. older version)')
+    print(f'   usb           use /dev/tty.SLAB_USBtoUART as serial device')
+    print(f'   /dev/<name>   use /dev/<name> as serial device')
 
 if any([h in sys.argv for h in ['--help', '-help', 'help']]):
     help()
     sys.exit()
 
-esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv)
+device=None
+if 'usb' in sys.argv:
+    device='/dev/tty.SLAB_USBtoUART'
+for p in sys.argv:
+    if p.startswith('/dev/'):
+        device=p
+esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv, device=device)
+
 with esp.pin_config(), esp.flash_mode():
     print('Flashing...')
     result = subprocess.run([
         'esptool.py', 
         '--chip', 'esp32', 
-        '--port', esp.port, 
+        '--port', esp.device, 
         '--baud', '921600', 
         '--before', 'default_reset', 
         '--after', 'hard_reset', 

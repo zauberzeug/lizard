@@ -38,7 +38,7 @@ Generate the parser and compile Lizard:
 Flash the microcontroller:
 
 ```bash
-./upload_usb.sh # if locally connected
+./flash.py # if locally connected
 ./upload_ssh.sh <hostname> # if firmware should be deployed on a remote machine
 ```
 

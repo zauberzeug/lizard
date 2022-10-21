@@ -3,11 +3,14 @@ from typing import Union
 
 class Esp:
 
-    def __init__(self, nand=False, xavier=False) ->None:
+    def __init__(self, nand=False, xavier=False, device=None) ->None:
         print('Initializing ESP...')
         self.en=434 if xavier else 216
         self.g0=428 if xavier else 50
-        self.port = '/dev/ttyTHS' + ('0' if xavier else '1')
+        if device is None:
+            self.device = '/dev/ttyTHS' + ('0' if xavier else '1')
+        else:
+            self.device = device
         self.on=1 if nand else 0
         self.off=0 if nand else 1
 
