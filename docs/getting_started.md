@@ -1,6 +1,6 @@
 # Getting Started
 
-You launch an interactive shell with monitor.py to try out configurations.
+You launch an interactive shell with `./monitor.py` to try out configurations.
 To verify that the communication is working, use one of the following commands to generate some output:
 
     core.info()

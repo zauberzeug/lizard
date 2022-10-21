@@ -3,7 +3,11 @@
 Lizard is a domain-specific language to define and control hardware behaviour.
 It is intened to run on embedded systems which are connected to motor controllers, sensors etc.
 
-## Getting started
+## Documentation
+
+The documentation is available on https://lizard.dev.
+
+## Prepare for Development
 
 Install Python requirements:
 
@@ -11,27 +15,39 @@ Install Python requirements:
 
 Download [owl](https://github.com/ianh/owl), the language parser generator:
 
+```bash
     ./get_owl.sh
+```
 
-Generate the parser, compile Lizard and flash the microcontroller:
+Install UART drivers: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
 
-    ./upload.sh
+Get all sub modules:
 
-Interact with the microcontroller using the serial monitor:
+```bash
+git submodule update --init --recursive
+```
 
+Generate the parser and compile Lizard:
+
+```bash
+./compile.sh
+```
+
+Flash the microcontroller:
+
+```bash
+    ./upload_usb.sh # if locally connected
+    ./upload_ssh.sh <hostname> # if firmware should be deployed on a remote machine
+```
+
+Interact with the microcontroller using the serial monitor (does not jet work for remote machines):
+
+```bash
     ./monitor.py
-
-## Documentation
-
-Launch the documentation locally with
-
-```bash
-mkdocs serve
 ```
 
-Eventually we will publish these on https://lizard.dev through GitHub Pages.
-But for now you can deploy it with
+## Releasing
 
-```bash
-mkdocs build && rsync -aluv --delete site/* root@lizard.dev:public-web/lizard/
-```
+To build a new release tag the commit with a v prefix (for example v0.1.4).
+A GitHub Action will build the binary and create a new release.
+After creation you can fill in a description if necessary.
