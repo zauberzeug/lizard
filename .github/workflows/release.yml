@@ -18,14 +18,13 @@ jobs:
       - name: Determine version
         id: version_id
         run: echo "::set-output name=value::$(git describe --always --tags --dirty)"
-      - name: Create version.txt
-        run: echo ${{ steps.version_id.outputs.value }} > version.txt
       - name: Generate parser
         run: "./gen_parser.sh"
       - name: Build firmware
         uses: espressif/esp-idf-ci-action@release-v4.4
         env:
           PROJECT_NAME: lizard_${{ steps.version_id.outputs.value }}
+          PROJECT_VER: ${{ steps.version_id.outputs.value }}
       - name: Create release
         uses: actions/create-release@v1
         id: create_release
