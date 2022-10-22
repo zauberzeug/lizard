@@ -18,6 +18,8 @@ jobs:
       - name: Determine version
         id: version_id
         run: echo "::set-output name=value::$(git describe --always --tags --dirty)"
+      - name: Create version.txt
+        run: echo ${{ steps.version_id.outputs.value }} > version.txt
       - name: Generate parser
         run: "./gen_parser.sh"
       - name: Build firmware
