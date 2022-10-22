@@ -10,6 +10,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Silence warnings
+        run: git config --global --add safe.directory '*'
       - name: Checkout
         uses: actions/checkout@v2
         with:
