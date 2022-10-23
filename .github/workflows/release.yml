@@ -57,6 +57,7 @@ jobs:
           asset_content_type: application/zip
 
   docs:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -68,7 +69,7 @@ jobs:
       - name: Install dependencies
         run: python3 -m pip install -r requirements.txt
       - name: Build docs
-        run: mkdocs build
+        run: mkdocs build -v
       - name: Deploy gh-pages
         uses: JamesIves/github-pages-deploy-action@v4.2.5
         with:
