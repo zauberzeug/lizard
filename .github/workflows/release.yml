@@ -22,11 +22,8 @@ jobs:
         run: "./gen_parser.sh"
       - name: Build firmware
         uses: espressif/esp-idf-ci-action@v1
-        env:
-          PROJECT_NAME: lizard_${{ steps.version_id.outputs.value }}
-          PROJECT_VER: ${{ steps.version_id.outputs.value }}
         with:
-          command: "git config --global --add safe.directory /github/workspace && idf.py build"
+          command: PROJECT_VER=${{ steps.version_id.outputs.value }} PROJECT_NAME=lizard idf.py build
           esp_idf_version: v4.4
           target: esp32
       - name: Create release
