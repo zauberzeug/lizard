@@ -2,37 +2,37 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://lizard.dev/</loc>
-         <lastmod>2022-10-22</lastmod>
+         <lastmod>2022-10-23</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://lizard.dev/examples/</loc>
-         <lastmod>2022-10-22</lastmod>
+         <lastmod>2022-10-23</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://lizard.dev/getting_started/</loc>
-         <lastmod>2022-10-22</lastmod>
+         <lastmod>2022-10-23</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://lizard.dev/language/</loc>
-         <lastmod>2022-10-22</lastmod>
+         <lastmod>2022-10-23</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://lizard.dev/machine_safety/</loc>
-         <lastmod>2022-10-22</lastmod>
+         <lastmod>2022-10-23</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://lizard.dev/module_reference/</loc>
-         <lastmod>2022-10-22</lastmod>
+         <lastmod>2022-10-23</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://lizard.dev/tools/</loc>
-         <lastmod>2022-10-22</lastmod>
+         <lastmod>2022-10-23</lastmod>
          <changefreq>daily</changefreq>
     </url>
 </urlset>
