@@ -4,7 +4,7 @@
 
 1. Download and unpack the zip file of the [latest release](https://github.com/zauberzeug/lizard/releases).
 2. attach an espressif ESP32 micro controller via serial to your computer
-3. run `./flash.py /dev/<serial dev name>` to install Lizard on the esp32
+3. run `sudo ./flash.py /dev/<serial dev name>` to install Lizard on the esp32
 
 ## Try Out
 

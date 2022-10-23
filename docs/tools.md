@@ -1,8 +1,25 @@
 # Tools
 
+## Installation
+
+### Flash
+
+To install Lizard on your ESP32 run
+
+```bash
+sudo ./flash.py [<device_path>]
+```
+
+Note that flashing may reqire root access (hence the sudo).
+It also cannot communicate while the serial interface is busy communicating with another process.
+
+### Robot Brain
+
+The `flash.py` script can also upload firmware on a [Robot Brain](https://www.zauberzeug.com/product-robot-brain.html) where the microcontroller is connected to the pin header of an NVIDIA Jetson computer.
+
 ## Interaction
 
-### Serial monitor
+### Serial Monitor
 
 Use the serial monitor to read the current output and interactively send Lizard or [control commands](control_commands.md) to the microcontroller.
 
@@ -18,7 +35,7 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
-### Configure script
+### Configure
 
 Use the configure script to send a new startup script to the microcontroller.
 
@@ -30,7 +47,29 @@ Note that the configure script cannot communicate while the serial interface is 
 
 ## Development
 
-### Compile script
+### Prepare for Development
+
+Install Python requirements:
+
+```python
+python3 -m pip install -r requirements.txt
+```
+
+Download [owl](https://github.com/ianh/owl), the language parser generator:
+
+```bash
+./get_owl.sh
+```
+
+Install UART drivers: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
+
+Get all sub modules:
+
+```bash
+git submodule update --init --recursive
+```
+
+### Compile Lizard
 
 After making changes to the Lizard language definition or its C++ implementation, you can use the compile script to generate a new parser and executing the compilation in an Espressif IDF Docker container.
 
@@ -38,29 +77,7 @@ After making changes to the Lizard language definition or its C++ implementation
 ./compile.sh
 ```
 
-### Upload new firmware
-
-To upload the compiled firmware you can use one of the following scripts.
-
-#### Upload via USB
-
-```bash
-./upload_usb.sh [<device_path>]
-```
-
-#### Upload via SSH
-
-```bash
-./upload_ssh.sh <user@host>
-```
-
-#### Upload via ttyTHS1
-
-```bash
-./upload_ths1.sh
-```
-
-This script is useful on [Robot Brains](https://www.zauberzeug.com/product-robot-brain.html) where the microcontroller is connected to the pin header of an NVIDIA Jetson computer.
+To upload the compiled firmware you can use the `./flash.py` command described above.
 
 ### Backtrace
 
@@ -70,4 +87,10 @@ In case Lizard terminates with a backtrace printed to the serial terminal, you c
 ./backtrace.sh <addresses>
 ```
 
-Note that the script assumes Espressif IDF tools being installed at `~/esp/esp-tools_4.2/` and a compiled ELF file being located at `build/lizard.elf`.
+Note that the script assumes Espressif IDF tools being installed at `~/esp/esp-tools_4.4/` and a compiled ELF file being located at `build/lizard.elf`.
+
+### Releasing
+
+To build a new release, tag the commit with a "v" prefix, for example "v0.1.4".
+A GitHub action will build the binary and create a new release.
+After creation you can fill in a description if necessary.
