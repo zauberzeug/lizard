@@ -23,7 +23,6 @@ jobs:
       - name: Build firmware
         uses: espressif/esp-idf-ci-action@v1
         with:
-          command: PROJECT_VER=${{ steps.version_id.outputs.value }} PROJECT_NAME=lizard idf.py build
           esp_idf_version: v4.4
           target: esp32
       - name: Create release
