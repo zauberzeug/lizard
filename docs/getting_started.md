@@ -8,7 +8,7 @@
 
 ## Try Out
 
-You can launch an interactive shell with `./monitor.py` to try out configurations (see [Tools](tools.md#serial-monitor) for more details) and see Lizard outputs.
+You can launch an interactive shell with `./monitor.py` to try out configurations and watch Lizard outputs (see [tools](tools.md#serial-monitor) for more details).
 To verify that the communication is working, use one of the following commands to generate some output:
 
     core.info()
