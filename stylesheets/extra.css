@@ -1,39 +1,43 @@
 :root {
-    --md-primary-fg-color: #3A3E42;
-    --md-default-fg-color: #3A3E42;
-    --md-accent-fg-color: #53B689;
+  --md-primary-fg-color: #3a3e42;
+  --md-default-fg-color: #3a3e42;
+  --md-accent-fg-color: #53b689;
+}
+
+a {
+  text-decoration: underline;
 }
 
 /* definition lists are used in the module reference */
 
 dl {
-    display: grid;
-    grid-template-columns: max-content auto;
-  }
-  
-  dt {
-    grid-column-start: 1;
-  }
-  
-  dd {
-    grid-column-start: 2;
-  }
+  display: grid;
+  grid-template-columns: max-content auto;
+}
 
-.md-typeset dd {
-    margin: 0;
+dt {
+  grid-column-start: 1;
 }
 
 dd {
-    display: inline;
-    clear:both;
+  grid-column-start: 2;
+}
+
+.md-typeset dd {
+  margin: 0;
+}
+
+dd {
+  display: inline;
+  clear: both;
 }
 dt {
-    width:16em;
-    display: inline;
-    margin-right: 1em;
+  width: 16em;
+  display: inline;
+  margin-right: 1em;
 }
 
 dl.inline dd {
-    display: inline;
-    margin: 0;
+  display: inline;
+  margin: 0;
 }
