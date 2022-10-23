@@ -5,6 +5,9 @@ It is intended to run on embedded systems which are connected to motor controlle
 Most of the time it is used in combination with a higher level engine like [ROS](https://www.ros.org/) or [RoSys](http://rosys.io/).
 You can think of the microcontroller as the machine's lizard brain which ensures basic safety and performs all time-critical actions.
 
+The idea is to not compile and deploy specific C++ code for every new hardware requirement.
+Instead you simply write your commands in a text based language which can be changed on the fly.
+
 ## Features
 
 - Shell-like input and output over serial communication to ease the development
@@ -13,6 +16,7 @@ You can think of the microcontroller as the machine's lizard brain which ensures
 - Safety conditions that are checked continuously
 - Ability to work across multiple microcontrollers
 - Human-readable and easy-to-type (like Python)
+- Persistent "startup" commands to apply configuration after boot
 
 ## Concept
 
