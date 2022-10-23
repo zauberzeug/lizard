@@ -21,7 +21,7 @@ The `flash.py` script can also upload firmware on a [Robot Brain](https://www.za
 
 ### Serial Monitor
 
-Use the serial monitor to read the current output and interactively send Lizard or [control commands](control_commands.md) to the microcontroller.
+Use the serial monitor to read the current output and interactively send [Lizard commands](language.md) to the microcontroller.
 
 ```bash
 ./monitor.py [<device_path>]
