@@ -233,9 +233,61 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Getting Started
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         Getting Started
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    Installation
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#try-out" class="md-nav__link">
+    Try Out
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#wireing" class="md-nav__link">
+    Wireing
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#startup-script" class="md-nav__link">
+    Startup Script
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -336,6 +388,42 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    Installation
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#try-out" class="md-nav__link">
+    Try Out
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#wireing" class="md-nav__link">
+    Wireing
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#startup-script" class="md-nav__link">
+    Startup Script
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -355,7 +443,14 @@
 
 
 <h1 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h1>
-<p>You launch an interactive shell with <code>./monitor.py</code> to try out configurations.
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Download and unpack the zip file of the <a href="https://github.com/zauberzeug/lizard/releases">latest release</a>.</li>
+<li>attach an espressif ESP32 micro controller via serial to your computer</li>
+<li>run <code>sudo ./flash.py /dev/&lt;serial device name&gt;</code> to install Lizard on the esp32</li>
+</ol>
+<h2 id="try-out">Try Out<a class="headerlink" href="#try-out" title="Permanent link">&para;</a></h2>
+<p>You can launch an interactive shell with <code>./monitor.py</code> to try out configurations (see <a href="../tools/#serial-monitor">Tools</a> for more details) and see Lizard outputs.
 To verify that the communication is working, use one of the following commands to generate some output:</p>
 <pre><code>core.info()
 core.millis
@@ -367,6 +462,16 @@ core.print("Hello, Lizard!")
 estop.level
 estop.unmute()
 </code></pre>
+<h2 id="wireing">Wireing<a class="headerlink" href="#wireing" title="Permanent link">&para;</a></h2>
+<p>Of course you should connect the ESP32 to some hardware you want to control.
+From basic pins like LEDs (see <a href="../module_reference/#output">Output</a>) and buttons (see <a href="../module_reference/#input">Input</a>)
+to communication via <a href="../module_reference/#can-interface">CAN</a> and control of <a href="../module_reference/#stepper-motor">stepper motors</a>.</p>
+<h2 id="startup-script">Startup Script<a class="headerlink" href="#startup-script" title="Permanent link">&para;</a></h2>
+<p>You can create a startup script for rules which should be directly applied after boot of the micro controller.
+Simply write the commands into a file like <code>on_startup.lizard</code> and set them with</p>
+<pre><code class="language-bash">./configure.py on_startup.lizard /dev/&lt;serial device name&gt;
+</code></pre>
+<p>See <a href="../tools/#configure">Tools</a> for more details.</p>
 
 
 
