@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 import asyncio
-from prompt_toolkit import PromptSession
-from prompt_toolkit.patch_stdout import patch_stdout
-import serial
 import os.path
 import sys
+
+import serial
+from prompt_toolkit import PromptSession
+from prompt_toolkit.patch_stdout import patch_stdout
 
 
 class LineReader:
     # https://github.com/pyserial/pyserial/issues/216#issuecomment-369414522
 
-    def __init__(self, s: serial.Serial):
+    def __init__(self, s: serial.Serial) -> None:
         self.buf = bytearray()
         self.s = s
 
-    def readline(self):
+    def readline(self) -> bytearray:
         i = self.buf.find(b'\n')
         if i >= 0:
             r = self.buf[:i+1]
@@ -32,7 +33,7 @@ class LineReader:
                 self.buf.extend(data)
 
 
-def receive():
+def receive() -> None:
     line_reader = LineReader(port)
     while True:
         try:
@@ -50,7 +51,7 @@ def receive():
             print(e)
 
 
-async def send():
+async def send() -> None:
     session = PromptSession()
     while True:
         try:

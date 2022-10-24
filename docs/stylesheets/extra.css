@@ -4,7 +4,7 @@
   --md-accent-fg-color: #53b689;
 }
 
-a {
+a:not(.md-nav__link) {
   text-decoration: underline;
 }
 

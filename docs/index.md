@@ -6,7 +6,7 @@ Most of the time it is used in combination with a higher level engine like [ROS]
 You can think of the microcontroller as the machine's lizard brain which ensures basic safety and performs all time-critical actions.
 
 The idea is to not compile and deploy specific C++ code for every new hardware requirement.
-Instead you simply write your commands in a text based language which can be changed on the fly.
+Instead you simply write your commands in a text-based language which can be changed on the fly.
 
 ## Features
 

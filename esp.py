@@ -1,28 +1,29 @@
 from contextlib import contextmanager
-from typing import Union
+from typing import Optional, Union
+
 
 class Esp:
 
-    def __init__(self, nand=False, xavier=False, device=None) ->None:
+    def __init__(self, nand: bool = False, xavier: bool = False, device: Optional[str] = None) -> None:
         print('Initializing ESP...')
-        self.en=434 if xavier else 216
-        self.g0=428 if xavier else 50
+        self.en = 434 if xavier else 216
+        self.g0 = 428 if xavier else 50
         if device is None:
             self.device = '/dev/ttyTHS' + ('0' if xavier else '1')
         else:
             self.device = device
-        self.on=1 if nand else 0
-        self.off=0 if nand else 1
+        self.on = 1 if nand else 0
+        self.off = 0 if nand else 1
 
-    def write(self,value:Union[str,int], path:str):
+    def write(self, value: Union[str, int], path: str) -> None:
         try:
             with open(f'/sys/class/gpio{path}', 'w') as f:
-                f.write(str(value) + '\n')
+                f.write(f'{value}\n')
         except:
             print(f'could not write {value} to {path}')
 
     @contextmanager
-    def pin_config(self):
+    def pin_config(self) -> None:
         print('Configuring pins...')
         self.write(self.en, '/export')
         self.write(self.g0, '/export')
@@ -32,7 +33,7 @@ class Esp:
         self.write(self.en, '/unexport')
         self.write(self.g0, '/unexport')
 
-    def activate(self):
+    def activate(self) -> None:
         print('Bringing microcontroller into normal operation mode...')
         self.write(self.off, f'/gpio{self.g0}/value')
         self.write(self.on, f'/gpio{self.en}/value')

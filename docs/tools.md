@@ -10,8 +10,8 @@ To install Lizard on your ESP32 run
 sudo ./flash.py [<device_path>]
 ```
 
-Note that flashing may reqire root access (hence the sudo).
-It also cannot communicate while the serial interface is busy communicating with another process.
+Note that flashing may require root access (hence the sudo).
+The command also does not work while the serial interface is busy communicating with another process.
 
 ### Robot Brain
 
