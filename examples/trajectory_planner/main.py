@@ -7,7 +7,7 @@ import pylab as pl
 from nicegui import ui
 
 from serial_connection import SerialConnection
-from trajectory import trajectory
+from trajectory import trajectories
 
 STARTUP = '''
 can = Can(32, 33, 1000000)
@@ -59,24 +59,14 @@ ui.timer(0.01, read)
 ui.on_startup(lambda: serial.configure(STARTUP))
 
 
-async def run():
+async def run() -> None:
     try:
+        tx, ty = trajectories(x0.value, y0.value, x1.value, y1.value, v0.value, w0.value, v1.value, w1.value,
+                              v_max.value, a_max.value, curved.value)
         dt = 0.01
-        if curved.value:
-            tx = trajectory(x0.value, v0.value, x1.value, v1.value, v_max.value, a_max.value)
-            ty = trajectory(y0.value, w0.value, y1.value, w1.value, v_max.value, a_max.value)
-            throttle_x = min(tx.duration / ty.duration, 1.0)
-            throttle_y = min(ty.duration / tx.duration, 1.0)
-            t = np.arange(0, max(tx.duration, ty.duration), dt)
-            x = [tx.position(ti * throttle_x) for ti in t]
-            y = [ty.position(ti * throttle_y) for ti in t]
-        else:
-            l = np.sqrt((x1.value - x0.value)**2 + (y1.value - y0.value)**2)
-            ts = trajectory(0, v0.value, l, v1.value, v_max.value, a_max.value)
-            print(ts)
-            t = np.arange(0, ts.duration, dt)
-            x = [x0.value + ts.position(ti) * (x1.value - x0.value) / l for ti in t]
-            y = [y0.value + ts.position(ti) * (y1.value - y0.value) / l for ti in t]
+        t = np.arange(0, tx.duration, dt)
+        x = [tx.position(ti) for ti in t]
+        y = [ty.position(ti) for ti in t]
 
         with position_plot:
             pl.clf()
