@@ -272,8 +272,8 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#wireing" class="md-nav__link">
-    Wireing
+  <a href="#wiring" class="md-nav__link">
+    Wiring
   </a>
   
 </li>
@@ -409,8 +409,8 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#wireing" class="md-nav__link">
-    Wireing
+  <a href="#wiring" class="md-nav__link">
+    Wiring
   </a>
   
 </li>
@@ -446,8 +446,8 @@
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <ol>
 <li>Download and unpack the zip file of the <a href="https://github.com/zauberzeug/lizard/releases">latest release</a>.</li>
-<li>attach an espressif ESP32 micro controller via serial to your computer</li>
-<li>run <code>sudo ./flash.py /dev/&lt;serial device name&gt;</code> to install Lizard on the ESP32</li>
+<li>Attach an Espressif ESP32 microcontroller via serial to your computer.</li>
+<li>Run <code>sudo ./flash.py /dev/&lt;serial device name&gt;</code> to install Lizard on the ESP32.</li>
 </ol>
 <h2 id="try-out">Try Out<a class="headerlink" href="#try-out" title="Permanent link">&para;</a></h2>
 <p>You can launch an interactive shell with <code>./monitor.py</code> to try out configurations and watch Lizard outputs (see <a href="../tools/#serial-monitor">tools</a> for more details).
@@ -462,12 +462,12 @@ core.print("Hello, Lizard!")
 estop.level
 estop.unmute()
 </code></pre>
-<h2 id="wireing">Wireing<a class="headerlink" href="#wireing" title="Permanent link">&para;</a></h2>
+<h2 id="wiring">Wiring<a class="headerlink" href="#wiring" title="Permanent link">&para;</a></h2>
 <p>Of course you should connect the ESP32 to some hardware you want to control.
 From basic pins like LEDs (see <a href="../module_reference/#output">Output</a>) and buttons (see <a href="../module_reference/#input">Input</a>)
 to communication via <a href="../module_reference/#can-interface">CAN</a> and control of <a href="../module_reference/#stepper-motor">stepper motors</a>.</p>
 <h2 id="startup-script">Startup Script<a class="headerlink" href="#startup-script" title="Permanent link">&para;</a></h2>
-<p>You can create a startup script for rules which should be directly applied after boot of the micro controller.
+<p>You can create a startup script for rules which should be directly applied after boot of the microcontroller.
 Simply write the commands into a file like <code>on_startup.lizard</code> and set them with</p>
 <pre><code class="language-bash">./configure.py on_startup.lizard /dev/&lt;serial device name&gt;
 </code></pre>
