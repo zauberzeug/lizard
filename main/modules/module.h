@@ -20,6 +20,7 @@ enum ModuleType {
     odrive_motor,
     odrive_wheels,
     rmd_motor,
+    rmd_pair,
     roboclaw,
     roboclaw_motor,
     roboclaw_wheels,

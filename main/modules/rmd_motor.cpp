@@ -79,6 +79,60 @@ void RmdMotor::step() {
     Module::step();
 }
 
+void RmdMotor::power(double target_power) {
+    int16_t power = target_power / 32.0 * 2000;
+    this->send_and_wait(this->can_id, 0xa1, 0,
+                        0,
+                        0,
+                        *((uint8_t *)(&power) + 0),
+                        *((uint8_t *)(&power) + 1),
+                        0,
+                        0);
+}
+
+void RmdMotor::speed(double target_speed) {
+    int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;
+    this->send_and_wait(this->can_id, 0xa2, 0,
+                        0,
+                        0,
+                        *((uint8_t *)(&speed) + 0),
+                        *((uint8_t *)(&speed) + 1),
+                        *((uint8_t *)(&speed) + 2),
+                        *((uint8_t *)(&speed) + 3));
+}
+
+void RmdMotor::position(double target_position, double target_speed) {
+    int32_t position = target_position * 100 * this->properties.at("ratio")->number_value;
+    uint16_t speed = target_speed * this->properties.at("ratio")->number_value;
+    this->send_and_wait(this->can_id, speed ? 0xa4 : 0xa3, 0,
+                        *((uint8_t *)(&speed) + 0),
+                        *((uint8_t *)(&speed) + 1),
+                        *((uint8_t *)(&position) + 0),
+                        *((uint8_t *)(&position) + 1),
+                        *((uint8_t *)(&position) + 2),
+                        *((uint8_t *)(&position) + 3));
+}
+
+void RmdMotor::stop() {
+    this->send_and_wait(this->can_id, 0x81, 0, 0, 0, 0, 0, 0, 0);
+}
+
+void RmdMotor::resume() {
+    this->send_and_wait(this->can_id, 0x88, 0, 0, 0, 0, 0, 0, 0);
+}
+
+void RmdMotor::off() {
+    this->send_and_wait(this->can_id, 0x80, 0, 0, 0, 0, 0, 0, 0);
+}
+
+void RmdMotor::hold() {
+    this->position(this->properties.at("position")->number_value);
+}
+
+void RmdMotor::clear_errors() {
+    this->send_and_wait(this->can_id, 0x9b, 0, 0, 0, 0, 0, 0, 0);
+}
+
 void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     this->map_leader = nullptr;
 
@@ -87,66 +141,29 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
         this->send_and_wait(this->can_id, 0x19, 0, 0, 0, 0, 0, 0, 0, 250);
     } else if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
-        int16_t power = arguments[0]->evaluate_number() / 32.0 * 2000;
-        this->send_and_wait(this->can_id, 0xa1, 0,
-                            0,
-                            0,
-                            *((uint8_t *)(&power) + 0),
-                            *((uint8_t *)(&power) + 1),
-                            0,
-                            0);
+        this->power(arguments[0]->evaluate_number());
     } else if (method_name == "speed") {
         Module::expect(arguments, 1, numbery);
-        int32_t speed = arguments[0]->evaluate_number() * 100 * this->properties.at("ratio")->number_value;
-        this->send_and_wait(this->can_id, 0xa2, 0,
-                            0,
-                            0,
-                            *((uint8_t *)(&speed) + 0),
-                            *((uint8_t *)(&speed) + 1),
-                            *((uint8_t *)(&speed) + 2),
-                            *((uint8_t *)(&speed) + 3));
+        this->speed(arguments[0]->evaluate_number());
     } else if (method_name == "position") {
         if (arguments.size() == 1) {
             Module::expect(arguments, 1, numbery);
-            int32_t position = arguments[0]->evaluate_number() * 100 * this->properties.at("ratio")->number_value;
-            this->send_and_wait(this->can_id, 0xa3, 0,
-                                0,
-                                0,
-                                *((uint8_t *)(&position) + 0),
-                                *((uint8_t *)(&position) + 1),
-                                *((uint8_t *)(&position) + 2),
-                                *((uint8_t *)(&position) + 3));
+            this->position(arguments[0]->evaluate_number(), 0);
         } else {
             Module::expect(arguments, 2, numbery, numbery);
-            int32_t position = arguments[0]->evaluate_number() * 100 * this->properties.at("ratio")->number_value;
-            uint16_t speed = arguments[1]->evaluate_number() * this->properties.at("ratio")->number_value;
-            this->send_and_wait(this->can_id, 0xa4, 0,
-                                *((uint8_t *)(&speed) + 0),
-                                *((uint8_t *)(&speed) + 1),
-                                *((uint8_t *)(&position) + 0),
-                                *((uint8_t *)(&position) + 1),
-                                *((uint8_t *)(&position) + 2),
-                                *((uint8_t *)(&position) + 3));
+            this->position(arguments[0]->evaluate_number(), arguments[1]->evaluate_number());
         }
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        this->send_and_wait(this->can_id, 0x81, 0, 0, 0, 0, 0, 0, 0);
+        this->stop();
     } else if (method_name == "resume") {
         Module::expect(arguments, 0);
-        this->send_and_wait(this->can_id, 0x88, 0, 0, 0, 0, 0, 0, 0);
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
-        this->send_and_wait(this->can_id, 0x80, 0, 0, 0, 0, 0, 0, 0);
+        this->off();
     } else if (method_name == "hold") {
         Module::expect(arguments, 0);
-        int32_t position = this->properties.at("position")->number_value * 100 * this->properties.at("ratio")->number_value;
-        this->send_and_wait(this->can_id, 0xa3, 0,
-                            0,
-                            0,
-                            *((uint8_t *)(&position) + 0),
-                            *((uint8_t *)(&position) + 1),
-                            *((uint8_t *)(&position) + 2),
-                            *((uint8_t *)(&position) + 3));
+        this->hold();
     } else if (method_name == "map") {
         if (arguments.size() < 1 || arguments[0]->type != identifier) {
             throw std::runtime_error("expecting at least 1 identifier argument");
@@ -227,7 +244,7 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
                             *((uint8_t *)(&acceleration) + 3));
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
-        this->send_and_wait(this->can_id, 0x9b, 0, 0, 0, 0, 0, 0, 0);
+        this->clear_errors();
     } else {
         Module::call(method_name, arguments);
     }

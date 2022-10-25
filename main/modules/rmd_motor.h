@@ -30,4 +30,13 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
+
+    void power(double target_power);
+    void speed(double target_speed);
+    void position(double target_position, double target_speed = 0.0);
+    void stop();
+    void resume();
+    void off();
+    void hold();
+    void clear_errors();
 };

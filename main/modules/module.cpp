@@ -17,6 +17,7 @@
 #include "odrive_wheels.h"
 #include "output.h"
 #include "rmd_motor.h"
+#include "rmd_pair.h"
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
 #include "roboclaw_wheels.h"
@@ -192,6 +193,21 @@ Module_ptr Module::create(const std::string type,
         RmdMotor_ptr rmd_motor = std::make_shared<RmdMotor>(name, can, motor_id);
         rmd_motor->subscribe_to_can();
         return rmd_motor;
+    } else if (type == "RmdPair") {
+        Module::expect(arguments, 2, identifier, identifier);
+        std::string rmd1_name = arguments[0]->evaluate_identifier();
+        Module_ptr module1 = Global::get_module(rmd1_name);
+        if (module1->type != rmd_motor) {
+            throw std::runtime_error("module \"" + rmd1_name + "\" is no RMD motor");
+        }
+        const RmdMotor_ptr rmd1 = std::static_pointer_cast<RmdMotor>(module1);
+        std::string rmd2_name = arguments[1]->evaluate_identifier();
+        Module_ptr module2 = Global::get_module(rmd2_name);
+        if (module2->type != rmd_motor) {
+            throw std::runtime_error("module \"" + rmd2_name + "\" is no RMD motor");
+        }
+        const RmdMotor_ptr rmd2 = std::static_pointer_cast<RmdMotor>(module2);
+        return std::make_shared<RmdPair>(name, rmd1, rmd2);
     } else if (type == "Serial") {
         Module::expect(arguments, 4, integer, integer, integer, integer);
         gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();

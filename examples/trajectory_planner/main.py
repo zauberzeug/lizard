@@ -15,6 +15,7 @@ rmd1 = RmdMotor(can, 1)
 rmd2 = RmdMotor(can, 2)
 rmd1.ratio = 9
 rmd2.ratio = 9
+rmd = RmdPair(rmd1, rmd2)
 
 core.output('core.millis rmd1.position rmd2.position')
 '''
