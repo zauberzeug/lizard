@@ -5,11 +5,17 @@ import serial
 
 class SerialConnection:
 
-    def __init__(self) -> None:
-        self.port = serial.Serial('/dev/tty.SLAB_USBtoUART', baudrate=115200, timeout=1.0)
+    def __init__(self, port: str = '/dev/tty.SLAB_USBtoUART', baudrate: int = 115200, timeout: float = 1.0) -> None:
+        try:
+            self.port = serial.Serial(port, baudrate=baudrate, timeout=timeout)
+        except serial.SerialException:
+            print(f'Device {port} is unavailable. Running without serial connection.')
+            self.port = None
         self.buffer = ''
 
     def read(self) -> Optional[str]:
+        if not self.port:
+            return
         s = self.port.read_all()
         s = s.decode()
         self.buffer += s
@@ -27,6 +33,8 @@ class SerialConnection:
                 return line
 
     def send(self, line: str) -> None:
+        if not self.port:
+            return
         print(f'Sending: {line}')
         checksum = 0
         for c in line:
