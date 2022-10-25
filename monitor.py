@@ -45,7 +45,7 @@ def receive() -> None:
                 for c in line:
                     checksum ^= ord(c)
                 if checksum != check:
-                    print(f'ERROR: CHECKSUM MISSMATCH ({checksum} vs. {check} for "{line}")')
+                    print(f'ERROR: CHECKSUM MISMATCH ({checksum} vs. {check} for "{line}")')
             print(line)
         except UnicodeDecodeError as e:
             print(e)

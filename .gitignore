@@ -1,6 +1,7 @@
 build/
 owl/
 site/
+__pycache__/
 sdkconfig
 *.swp
 *.bin
