@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
+import logging
 
 import numpy as np
 import pylab as pl
@@ -62,19 +63,20 @@ async def run():
     try:
         dt = 0.01
         if curved.value:
-            fx, x_duration = trajectory(x0.value, v0.value, x1.value, v1.value, v_max.value, a_max.value)
-            fy, y_duration = trajectory(y0.value, w0.value, y1.value, w1.value, v_max.value, a_max.value)
-            throttle_x = min(x_duration / y_duration, 1.0)
-            throttle_y = min(y_duration / x_duration, 1.0)
-            t = np.arange(0, max(x_duration, y_duration), dt)
-            x = [fx(ti * throttle_x) for ti in t]
-            y = [fy(ti * throttle_y) for ti in t]
+            tx = trajectory(x0.value, v0.value, x1.value, v1.value, v_max.value, a_max.value)
+            ty = trajectory(y0.value, w0.value, y1.value, w1.value, v_max.value, a_max.value)
+            throttle_x = min(tx.duration / ty.duration, 1.0)
+            throttle_y = min(ty.duration / tx.duration, 1.0)
+            t = np.arange(0, max(tx.duration, ty.duration), dt)
+            x = [tx.position(ti * throttle_x) for ti in t]
+            y = [ty.position(ti * throttle_y) for ti in t]
         else:
             l = np.sqrt((x1.value - x0.value)**2 + (y1.value - y0.value)**2)
-            fs, duration = trajectory(0, v0.value, l, v1.value, v_max.value, a_max.value)
-            t = np.arange(0, duration, dt)
-            x = [x0.value + fs(ti) * (x1.value - x0.value) / l for ti in t]
-            y = [y0.value + fs(ti) * (y1.value - y0.value) / l for ti in t]
+            ts = trajectory(0, v0.value, l, v1.value, v_max.value, a_max.value)
+            print(ts)
+            t = np.arange(0, ts.duration, dt)
+            x = [x0.value + ts.position(ti) * (x1.value - x0.value) / l for ti in t]
+            y = [y0.value + ts.position(ti) * (y1.value - y0.value) / l for ti in t]
 
         with position_plot:
             pl.clf()
@@ -116,6 +118,7 @@ async def run():
             await asyncio.sleep(5 * dt)
 
     except Exception as e:
+        logging.exception(e)
         ui.notify(str(e) or repr(e), close_button='OK')
 
 with ui.row().classes('w-full items-stretch'):
