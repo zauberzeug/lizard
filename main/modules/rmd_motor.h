@@ -39,4 +39,7 @@ public:
     void off();
     void hold();
     void clear_errors();
+
+    double get_position() const;
+    double get_speed() const;
 };

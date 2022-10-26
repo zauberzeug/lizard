@@ -291,3 +291,11 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
     this->last_msg_id = data[0];
     this->last_msg_millis = millis();
 }
+
+double RmdMotor::get_position() const {
+    return this->properties.at("position")->number_value;
+}
+
+double RmdMotor::get_speed() const {
+    return this->properties.at("speed")->number_value;
+}

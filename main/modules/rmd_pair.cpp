@@ -4,9 +4,13 @@
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)
     : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
+    this->properties["v_max"] = std::make_shared<NumberVariable>(1000);
+    this->properties["a_max"] = std::make_shared<NumberVariable>(1000);
 }
 
-RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1, double v_max, double a_max) {
+RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {
+    const double v_max = this->properties.at("v_max")->number_value;
+    const double a_max = this->properties.at("a_max")->number_value;
     assert(v_max > 0);        // Positive velocity limit expected.
     assert(a_max > 0);        // Positive acceleration limit expected.
     assert(abs(v0) <= v_max); // Start velocity exceeds velocity limit.
@@ -46,38 +50,41 @@ RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, doub
     return result;
 }
 
-double RmdPair::t_end(TrajectoryPart part) {
+double RmdPair::t_end(TrajectoryPart part) const {
     return part.t0 + part.dt;
 }
 
-double RmdPair::x_end(TrajectoryPart part) {
+double RmdPair::x_end(TrajectoryPart part) const {
     return this->x(part, this->t_end(part));
 }
 
-double RmdPair::x(TrajectoryPart part, double t) {
+double RmdPair::v_end(TrajectoryPart part) const {
+    return this->v(part, this->t_end(part));
+}
+
+double RmdPair::x(TrajectoryPart part, double t) const {
     double dt = t - part.t0;
     return part.x0 + part.v0 * dt + 0.5 * part.a * dt * dt;
 }
 
-void RmdPair::throttle(TrajectoryPart &part, double factor) {
+double RmdPair::v(TrajectoryPart part, double t) const {
+    return part.v0 + part.a * (t - part.t0);
+}
+
+void RmdPair::throttle(TrajectoryPart &part, double factor) const {
     part.t0 *= factor;
     part.v0 /= factor;
     part.a /= factor * factor;
     part.dt *= factor;
 }
 
-void RmdPair::schedule_trajectories(double x0, double y0, double x1, double y1, double v0, double w0, double v1, double w1,
-                                    double v_max, double a_max, bool curved) {
-    TrajectoryTriple t1;
-    TrajectoryTriple t2;
-    if (curved) {
-        t1 = this->compute_trajectory(x0, x1, v0, v1, v_max, a_max);
-        t2 = this->compute_trajectory(y0, y1, w0, w1, v_max, a_max);
-    } else {
-        double yaw = std::atan2(y1 - y0, x1 - x0);
-        t1 = this->compute_trajectory(x0, x1, v0 * std::cos(yaw), v1 * std::cos(yaw), v_max * std::cos(yaw), a_max * std::cos(yaw));
-        t2 = this->compute_trajectory(y0, y1, v0 * std::sin(yaw), v1 * std::sin(yaw), v_max * std::sin(yaw), a_max * std::sin(yaw));
-    }
+void RmdPair::schedule_trajectories(double x, double y, double v, double w) {
+    double x0 = this->schedule1.empty() ? rmd1->get_position() : this->x_end(this->schedule1.back());
+    double y0 = this->schedule2.empty() ? rmd2->get_position() : this->x_end(this->schedule2.back());
+    double v0 = this->schedule1.empty() ? rmd1->get_speed() : this->v_end(this->schedule1.back());
+    double w0 = this->schedule2.empty() ? rmd2->get_speed() : this->v_end(this->schedule2.back());
+    TrajectoryTriple t1 = this->compute_trajectory(x0, x, v0, v);
+    TrajectoryTriple t2 = this->compute_trajectory(y0, y, w0, w);
     double duration1 = t1.part_a.dt + t1.part_b.dt + t1.part_c.dt;
     double duration2 = t2.part_a.dt + t2.part_b.dt + t2.part_c.dt;
     double duration = std::max(duration1, duration2);
@@ -122,34 +129,20 @@ void RmdPair::step() {
 
 void RmdPair::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "move") {
-        if (arguments.size() == 8) {
-            Module::expect(arguments, 8, numbery, numbery, numbery, numbery, numbery, numbery, numbery, numbery);
+        if (arguments.size() == 2) {
+            Module::expect(arguments, 2, numbery, numbery);
             this->schedule_trajectories(
                 arguments[0]->evaluate_number(),
                 arguments[1]->evaluate_number(),
-                arguments[2]->evaluate_number(),
-                arguments[3]->evaluate_number(),
-                arguments[4]->evaluate_number(),
                 0,
-                arguments[5]->evaluate_number(),
-                0,
-                arguments[6]->evaluate_number(),
-                arguments[7]->evaluate_number(),
-                false);
+                0);
         } else {
-            Module::expect(arguments, 10, numbery, numbery, numbery, numbery, numbery, numbery, numbery, numbery, numbery, numbery);
+            Module::expect(arguments, 4, numbery, numbery, numbery, numbery);
             this->schedule_trajectories(
                 arguments[0]->evaluate_number(),
                 arguments[1]->evaluate_number(),
                 arguments[2]->evaluate_number(),
-                arguments[3]->evaluate_number(),
-                arguments[4]->evaluate_number(),
-                arguments[5]->evaluate_number(),
-                arguments[6]->evaluate_number(),
-                arguments[7]->evaluate_number(),
-                arguments[8]->evaluate_number(),
-                arguments[9]->evaluate_number(),
-                false);
+                arguments[3]->evaluate_number());
         }
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
