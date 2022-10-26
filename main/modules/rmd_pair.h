@@ -7,23 +7,16 @@ class RmdPair : public Module {
 private:
     const RmdMotor_ptr rmd1;
     const RmdMotor_ptr rmd2;
-    struct Trajectory {
+    struct TrajectoryPart {
+        double t0;
         double x0;
         double v0;
-        double x1;
-        double v1;
-        double v_max;
-        double a_max;
         double a;
-        double t_acc;
-        double t_lin;
-        double t_dec;
-        double xa;
-        double va;
-        double duration;
-    } t, tx, ty;
+        double dt;
+    } t1a, t1b, t1c, t2a, t2b, t2c;
 
-    Trajectory compute_trajectory(double x0, double x1, double v0, double v1, double v_max, double a_max);
+    void throttle(TrajectoryPart &part, double factor);
+    void compute_trajectory(int index, double x0, double x1, double v0, double v1, double v_max, double a_max);
     void compute_trajectories(double x0, double y0, double x1, double y1, double v0, double w0, double v1, double w1,
                               double v_max, double a_max, bool curved);
 

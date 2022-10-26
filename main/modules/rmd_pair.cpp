@@ -5,57 +5,72 @@ RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor
     : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
 }
 
-RmdPair::Trajectory RmdPair::compute_trajectory(double x0, double x1, double v0, double v1, double v_max, double a_max) {
+void RmdPair::compute_trajectory(int index, double x0, double x1, double v0, double v1, double v_max, double a_max) {
     assert(v_max > 0);        // Positive velocity limit expected.
     assert(a_max > 0);        // Positive acceleration limit expected.
     assert(abs(v0) <= v_max); // Start velocity exceeds velocity limit.
     assert(abs(v1) <= v_max); // Target velocity exceeds velocity limit.
 
-    Trajectory t;
-    t.x0 = x0;
-    t.v0 = v0;
-    t.x1 = x1;
-    t.v1 = v1;
-    t.v_max = v_max;
-    t.a_max = a_max;
+    TrajectoryPart ta = index == 1 ? this->t1a : this->t2a;
+    TrajectoryPart tb = index == 1 ? this->t1b : this->t2b;
+    TrajectoryPart tc = index == 1 ? this->t1c : this->t2c;
 
     // find maximum possible velocity
-    t.a = a_max;
-    double r = (v0 * v0 + v1 * v1) / 2 + t.a * (x1 - x0);
+    double a = a_max;
+    double r = (v0 * v0 + v1 * v1) / 2 + a * (x1 - x0);
     if (r < 0) {
-        t.a = -a_max;
-        r = (v0 * v0 + v1 * v1) / 2 + t.a * (x1 - x0);
+        a = -a_max;
+        r = (v0 * v0 + v1 * v1) / 2 + a * (x1 - x0);
     }
-    t.t_acc = std::max((-v0 - std::sqrt(r)) / t.a, (-v0 + std::sqrt(r)) / t.a);
-    double v_mid = v0 + t.t_acc * t.a;
+    double dt_acc = std::max((-v0 - std::sqrt(r)) / a, (-v0 + std::sqrt(r)) / a);
+    double dt_dec = (v0 - v1) / a + dt_acc;
+    double v_mid = v0 + dt_acc * a;
     if (abs(v_mid) <= v_max) {
         // no linear part necessary
-        t.t_lin = 0;
-        t.t_dec = (v0 - v1) / t.a + t.t_acc;
-        t.duration = t.t_acc + t.t_dec;
+        double x_mid = x0 + v0 * dt_acc + 1 / 2 * a * dt_acc * dt_acc;
+        ta = (TrajectoryPart){.t0 = 0, .x0 = x0, .v0 = v0, .a = a, .dt = dt_acc};
+        tb = (TrajectoryPart){.t0 = dt_acc, .x0 = x_mid, .v0 = v_mid, .a = 0, .dt = 0};
+        tc = (TrajectoryPart){.t0 = dt_acc, .x0 = x_mid, .v0 = v_mid, .a = -a, .dt = dt_dec};
     } else {
         // insert linear part
-        t.t_acc = abs(v_mid > 0 ? v_max - v0 : -v_max - v0) / a_max;
-        t.t_dec = abs(v_mid > 0 ? v_max - v1 : -v_max - v1) / a_max;
-        t.xa = x0 + v0 * t.t_acc + 1 / 2 * t.a * t.t_acc * t.t_acc;
-        t.va = v0 + t.t_acc * t.a;
-        double xb = x1 - v1 * t.t_dec - 1 / 2 * t.a * t.t_dec * t.t_dec;
-        t.t_lin = abs(xb - t.xa) / abs(v_max);
-        t.duration = t.t_acc + t.t_lin + t.t_dec;
+        dt_acc = abs(v_mid > 0 ? v_max - v0 : -v_max - v0) / a_max;
+        dt_dec = abs(v_mid > 0 ? v_max - v1 : -v_max - v1) / a_max;
+        double xa = x0 + v0 * dt_acc + 1 / 2 * a * dt_acc * dt_acc;
+        double xb = x1 - v1 * dt_dec - 1 / 2 * a * dt_dec * dt_dec;
+        double v_lin = v0 + dt_acc * a;
+        double dt_lin = abs(xb - xa) / abs(v_max);
+        ta = (TrajectoryPart){.t0 = 0, .x0 = x0, .v0 = v0, .a = a, .dt = dt_acc};
+        tb = (TrajectoryPart){.t0 = dt_acc, .x0 = xa, .v0 = v_lin, .a = 0, .dt = dt_lin};
+        tc = (TrajectoryPart){.t0 = dt_acc + dt_lin, .x0 = xb, .v0 = v_lin, .a = -a, .dt = dt_dec};
     }
+}
 
-    return t;
+void RmdPair::throttle(TrajectoryPart &part, double factor) {
+    part.t0 *= factor;
+    part.v0 /= factor;
+    part.a /= factor * factor;
+    part.dt *= factor;
 }
 
 void RmdPair::compute_trajectories(double x0, double y0, double x1, double y1, double v0, double w0, double v1, double w1,
                                    double v_max, double a_max, bool curved) {
     if (curved) {
-        this->tx = this->compute_trajectory(x0, x1, v0, v1, v_max, a_max);
-        this->ty = this->compute_trajectory(y0, y1, w0, w1, v_max, a_max);
+        this->compute_trajectory(1, x0, x1, v0, v1, v_max, a_max);
+        this->compute_trajectory(2, y0, y1, w0, w1, v_max, a_max);
     } else {
-        double l = std::sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
-        this->t = this->compute_trajectory(0, v0, l, v1, v_max, a_max);
+        double yaw = std::atan2(y1 - y0, x1 - x0);
+        this->compute_trajectory(1, x0, x1, v0 * std::cos(yaw), v1 * std::cos(yaw), v_max * std::cos(yaw), a_max * std::cos(yaw));
+        this->compute_trajectory(2, y0, y1, v0 * std::sin(yaw), v1 * std::sin(yaw), v_max * std::sin(yaw), a_max * std::sin(yaw));
     }
+    double duration1 = this->t1a.dt + this->t1b.dt + this->t1c.dt;
+    double duration2 = this->t2a.dt + this->t2b.dt + this->t2c.dt;
+    double duration = std::max(duration1, duration2);
+    throttle(this->t1a, duration / duration1);
+    throttle(this->t1b, duration / duration1);
+    throttle(this->t1c, duration / duration1);
+    throttle(this->t2a, duration / duration2);
+    throttle(this->t2b, duration / duration2);
+    throttle(this->t2c, duration / duration2);
 }
 
 void RmdPair::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

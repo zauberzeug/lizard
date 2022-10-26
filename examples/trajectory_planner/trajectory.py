@@ -45,7 +45,7 @@ class Trajectory:
             part.dt *= factor
 
 
-def trajectory(x0: float, v0: float, x1: float, v1: float, v_max: float, a_max: float) -> Trajectory:
+def trajectory(x0: float, x1: float, v0: float, v1: float, v_max: float, a_max: float) -> Trajectory:
     assert v_max > 0, 'Positive velocity limit expected.'
     assert a_max > 0, 'Positive acceleration limit expected.'
     assert abs(v0) <= v_max, 'Start velocity exceeds velocity limit.'
@@ -84,12 +84,12 @@ def trajectory(x0: float, v0: float, x1: float, v1: float, v_max: float, a_max: 
 def trajectories(x0: float, y0: float, x1: float, y1: float, v0: float, w0: float, v1: float, w1: float,
                  v_max: float, a_max: float, curved: bool) -> tuple[Trajectory, Trajectory]:
     if curved:
-        tx = trajectory(x0, v0, x1, v1, v_max, a_max)
-        ty = trajectory(y0, w0, y1, w1, v_max, a_max)
+        tx = trajectory(x0, x1, v0, v1, v_max, a_max)
+        ty = trajectory(y0, y1, w0, w1, v_max, a_max)
     else:
         yaw = np.arctan2(y1 - y0, x1 - x0)
-        tx = trajectory(x0, v0 * np.cos(yaw), x1, v1 * np.cos(yaw), v_max * np.cos(yaw), a_max * np.cos(yaw))
-        ty = trajectory(y0, v0 * np.sin(yaw), y1, v1 * np.sin(yaw), v_max * np.sin(yaw), a_max * np.sin(yaw))
+        tx = trajectory(x0, x1, v0 * np.cos(yaw), v1 * np.cos(yaw), v_max * np.cos(yaw), a_max * np.cos(yaw))
+        ty = trajectory(y0, y1, v0 * np.sin(yaw), v1 * np.sin(yaw), v_max * np.sin(yaw), a_max * np.sin(yaw))
     duration = max(tx.duration, ty.duration)
     tx.throttle(duration / tx.duration)
     ty.throttle(duration / ty.duration)
