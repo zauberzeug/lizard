@@ -1,19 +1,18 @@
 #include "rmd_pair.h"
+#include "utils/timing.h"
 #include <math.h>
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)
     : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
 }
 
-void RmdPair::compute_trajectory(int index, double x0, double x1, double v0, double v1, double v_max, double a_max) {
+RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1, double v_max, double a_max) {
     assert(v_max > 0);        // Positive velocity limit expected.
     assert(a_max > 0);        // Positive acceleration limit expected.
     assert(abs(v0) <= v_max); // Start velocity exceeds velocity limit.
     assert(abs(v1) <= v_max); // Target velocity exceeds velocity limit.
 
-    TrajectoryPart ta = index == 1 ? this->t1a : this->t2a;
-    TrajectoryPart tb = index == 1 ? this->t1b : this->t2b;
-    TrajectoryPart tc = index == 1 ? this->t1c : this->t2c;
+    TrajectoryTriple result;
 
     // find maximum possible velocity
     double a = a_max;
@@ -27,22 +26,37 @@ void RmdPair::compute_trajectory(int index, double x0, double x1, double v0, dou
     double v_mid = v0 + dt_acc * a;
     if (abs(v_mid) <= v_max) {
         // no linear part necessary
-        double x_mid = x0 + v0 * dt_acc + 1 / 2 * a * dt_acc * dt_acc;
-        ta = (TrajectoryPart){.t0 = 0, .x0 = x0, .v0 = v0, .a = a, .dt = dt_acc};
-        tb = (TrajectoryPart){.t0 = dt_acc, .x0 = x_mid, .v0 = v_mid, .a = 0, .dt = 0};
-        tc = (TrajectoryPart){.t0 = dt_acc, .x0 = x_mid, .v0 = v_mid, .a = -a, .dt = dt_dec};
+        double x_mid = x0 + v0 * dt_acc + 0.5 * a * dt_acc * dt_acc;
+        result.part_a = (TrajectoryPart){.t0 = 0, .x0 = x0, .v0 = v0, .a = a, .dt = dt_acc};
+        result.part_b = (TrajectoryPart){.t0 = dt_acc, .x0 = x_mid, .v0 = v_mid, .a = 0, .dt = 0};
+        result.part_c = (TrajectoryPart){.t0 = dt_acc, .x0 = x_mid, .v0 = v_mid, .a = -a, .dt = dt_dec};
     } else {
         // insert linear part
         dt_acc = abs(v_mid > 0 ? v_max - v0 : -v_max - v0) / a_max;
         dt_dec = abs(v_mid > 0 ? v_max - v1 : -v_max - v1) / a_max;
-        double xa = x0 + v0 * dt_acc + 1 / 2 * a * dt_acc * dt_acc;
-        double xb = x1 - v1 * dt_dec - 1 / 2 * a * dt_dec * dt_dec;
+        double xa = x0 + v0 * dt_acc + 0.5 * a * dt_acc * dt_acc;
+        double xb = x1 - v1 * dt_dec - 0.5 * a * dt_dec * dt_dec;
         double v_lin = v0 + dt_acc * a;
         double dt_lin = abs(xb - xa) / abs(v_max);
-        ta = (TrajectoryPart){.t0 = 0, .x0 = x0, .v0 = v0, .a = a, .dt = dt_acc};
-        tb = (TrajectoryPart){.t0 = dt_acc, .x0 = xa, .v0 = v_lin, .a = 0, .dt = dt_lin};
-        tc = (TrajectoryPart){.t0 = dt_acc + dt_lin, .x0 = xb, .v0 = v_lin, .a = -a, .dt = dt_dec};
+        result.part_a = (TrajectoryPart){.t0 = 0, .x0 = x0, .v0 = v0, .a = a, .dt = dt_acc};
+        result.part_b = (TrajectoryPart){.t0 = dt_acc, .x0 = xa, .v0 = v_lin, .a = 0, .dt = dt_lin};
+        result.part_c = (TrajectoryPart){.t0 = dt_acc + dt_lin, .x0 = xb, .v0 = v_lin, .a = -a, .dt = dt_dec};
     }
+
+    return result;
+}
+
+double RmdPair::t_end(TrajectoryPart part) {
+    return part.t0 + part.dt;
+}
+
+double RmdPair::x_end(TrajectoryPart part) {
+    return this->x(part, this->t_end(part));
+}
+
+double RmdPair::x(TrajectoryPart part, double t) {
+    double dt = t - part.t0;
+    return part.x0 + part.v0 * dt + 0.5 * part.a * dt * dt;
 }
 
 void RmdPair::throttle(TrajectoryPart &part, double factor) {
@@ -52,46 +66,79 @@ void RmdPair::throttle(TrajectoryPart &part, double factor) {
     part.dt *= factor;
 }
 
-void RmdPair::compute_trajectories(double x0, double y0, double x1, double y1, double v0, double w0, double v1, double w1,
-                                   double v_max, double a_max, bool curved) {
+void RmdPair::schedule_trajectories(double x0, double y0, double x1, double y1, double v0, double w0, double v1, double w1,
+                                    double v_max, double a_max, bool curved) {
+    TrajectoryTriple t1;
+    TrajectoryTriple t2;
     if (curved) {
-        this->compute_trajectory(1, x0, x1, v0, v1, v_max, a_max);
-        this->compute_trajectory(2, y0, y1, w0, w1, v_max, a_max);
+        t1 = this->compute_trajectory(x0, x1, v0, v1, v_max, a_max);
+        t2 = this->compute_trajectory(y0, y1, w0, w1, v_max, a_max);
     } else {
         double yaw = std::atan2(y1 - y0, x1 - x0);
-        this->compute_trajectory(1, x0, x1, v0 * std::cos(yaw), v1 * std::cos(yaw), v_max * std::cos(yaw), a_max * std::cos(yaw));
-        this->compute_trajectory(2, y0, y1, v0 * std::sin(yaw), v1 * std::sin(yaw), v_max * std::sin(yaw), a_max * std::sin(yaw));
+        t1 = this->compute_trajectory(x0, x1, v0 * std::cos(yaw), v1 * std::cos(yaw), v_max * std::cos(yaw), a_max * std::cos(yaw));
+        t2 = this->compute_trajectory(y0, y1, v0 * std::sin(yaw), v1 * std::sin(yaw), v_max * std::sin(yaw), a_max * std::sin(yaw));
     }
-    double duration1 = this->t1a.dt + this->t1b.dt + this->t1c.dt;
-    double duration2 = this->t2a.dt + this->t2b.dt + this->t2c.dt;
+    double duration1 = t1.part_a.dt + t1.part_b.dt + t1.part_c.dt;
+    double duration2 = t2.part_a.dt + t2.part_b.dt + t2.part_c.dt;
     double duration = std::max(duration1, duration2);
-    throttle(this->t1a, duration / duration1);
-    throttle(this->t1b, duration / duration1);
-    throttle(this->t1c, duration / duration1);
-    throttle(this->t2a, duration / duration2);
-    throttle(this->t2b, duration / duration2);
-    throttle(this->t2c, duration / duration2);
+    throttle(t1.part_a, duration / duration1);
+    throttle(t1.part_b, duration / duration1);
+    throttle(t1.part_c, duration / duration1);
+    throttle(t2.part_a, duration / duration2);
+    throttle(t2.part_b, duration / duration2);
+    throttle(t2.part_c, duration / duration2);
+    t1.part_a.t0 = this->schedule1.empty() ? millis() / 1000.0 : this->t_end(this->schedule1.back());
+    t1.part_b.t0 = this->t_end(t1.part_a);
+    t1.part_c.t0 = this->t_end(t1.part_b);
+    t2.part_a.t0 = this->schedule2.empty() ? millis() / 1000.0 : this->t_end(this->schedule2.back());
+    t2.part_b.t0 = this->t_end(t2.part_a);
+    t2.part_c.t0 = this->t_end(t2.part_b);
+    this->schedule1.push_back(t1.part_a);
+    this->schedule1.push_back(t1.part_b);
+    this->schedule1.push_back(t1.part_c);
+    this->schedule2.push_back(t2.part_a);
+    this->schedule2.push_back(t2.part_b);
+    this->schedule2.push_back(t2.part_c);
+}
+
+void RmdPair::step() {
+    double t = millis() / 1000.0;
+    while (!this->schedule1.empty() && this->t_end(this->schedule1.front()) < t) {
+        this->schedule1.pop_front();
+    }
+    while (!this->schedule2.empty() && this->t_end(this->schedule2.front()) < t) {
+        this->schedule2.pop_front();
+    }
+    if (!this->schedule1.empty()) {
+        double position = this->x(this->schedule1.front(), t);
+        printf("%.1f\n", position);
+    }
+    if (!this->schedule2.empty()) {
+        double position = this->x(this->schedule2.front(), t);
+        printf("             %.1f\n", position);
+    }
+    Module::step();
 }
 
 void RmdPair::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "move") {
         if (arguments.size() == 8) {
             Module::expect(arguments, 8, numbery, numbery, numbery, numbery, numbery, numbery, numbery, numbery);
-            this->compute_trajectories(
+            this->schedule_trajectories(
                 arguments[0]->evaluate_number(),
                 arguments[1]->evaluate_number(),
                 arguments[2]->evaluate_number(),
                 arguments[3]->evaluate_number(),
                 arguments[4]->evaluate_number(),
-                arguments[4]->evaluate_number(),
+                0,
                 arguments[5]->evaluate_number(),
-                arguments[5]->evaluate_number(),
+                0,
                 arguments[6]->evaluate_number(),
                 arguments[7]->evaluate_number(),
                 false);
         } else {
             Module::expect(arguments, 10, numbery, numbery, numbery, numbery, numbery, numbery, numbery, numbery, numbery, numbery);
-            this->compute_trajectories(
+            this->schedule_trajectories(
                 arguments[0]->evaluate_number(),
                 arguments[1]->evaluate_number(),
                 arguments[2]->evaluate_number(),
