@@ -53,9 +53,9 @@ def read() -> None:
             return
         try:
             global true_x, true_y
-            true_x = int(words[2]) / SCALE
-            true_y = int(words[3]) / SCALE
-            true_sphere.move(true_x, true_y)
+            true_x = int(words[2])
+            true_y = int(words[3])
+            true_sphere.move(true_x / SCALE, true_y / SCALE)
         except ValueError:
             pass
 
@@ -115,6 +115,10 @@ async def run() -> None:
             pl.plot(x1.value, y1.value, 'ko')
             location_plot.update()
 
+        serial.send(f'rmd.v_max = {v_max.value}')
+        serial.send(f'rmd.a_max = {a_max.value}')
+        serial.send(f'rmd.move({x0.value}, {y0.value}, {v0.value}, {w0.value})')
+        serial.send(f'rmd.move({x1.value}, {y1.value}, {v1.value}, {w1.value})')
         for xi, yi in zip((x_ + x)[::5], (y_ + y)[::5]):
             target_sphere.move(x=xi / SCALE, y=yi / SCALE)
             await asyncio.sleep(5 * dt)
@@ -126,22 +130,22 @@ async def run() -> None:
 with ui.row().classes('w-full items-stretch'):
     with ui.column().classes('flex-grow'):
         ui.markdown('Start position: `x0` and `y0`')
-        x0 = ui.slider(min=-1000, max=1000, value=-300, on_change=run).props('label-always color=blue')
-        y0 = ui.slider(min=-1000, max=1000, value=-100, on_change=run).props('label-always color=blue')
+        x0 = ui.slider(min=-720, max=720, value=-300, step=10, on_change=run).props('label-always color=blue')
+        y0 = ui.slider(min=-720, max=720, value=-100, step=10, on_change=run).props('label-always color=blue')
         ui.markdown('Start velocity: `v0` (and `w0`)')
-        v0 = ui.slider(min=-1000, max=1000, value=0, on_change=run).props('label-always color=green')
-        w0 = ui.slider(min=-1000, max=1000, value=0, on_change=run).props('label-always color=green')
+        v0 = ui.slider(min=-420, max=420, value=0, step=10, on_change=run).props('label-always color=green')
+        w0 = ui.slider(min=-420, max=420, value=0, step=10, on_change=run).props('label-always color=green')
     with ui.column().classes('flex-grow'):
         ui.markdown('Target position: `x1` and `y1`')
-        x1 = ui.slider(min=-1000, max=1000, value=300, on_change=run).props('label-always color=blue')
-        y1 = ui.slider(min=-1000, max=1000, value=100, on_change=run).props('label-always color=blue')
+        x1 = ui.slider(min=-720, max=720, value=300, step=10, on_change=run).props('label-always color=blue')
+        y1 = ui.slider(min=-720, max=720, value=100, step=10, on_change=run).props('label-always color=blue')
         ui.markdown('Target velocity: `v1` (and `w1`)')
-        v1 = ui.slider(min=-1000, max=1000, value=0, on_change=run).props('label-always color=green')
-        w1 = ui.slider(min=-1000, max=1000, value=0, on_change=run).props('label-always color=green')
+        v1 = ui.slider(min=-420, max=420, value=0, step=10, on_change=run).props('label-always color=green')
+        w1 = ui.slider(min=-420, max=420, value=0, step=10, on_change=run).props('label-always color=green')
     with ui.column().classes('flex-grow'):
         ui.markdown('Velocity and acceleration limits: `v_max` and `a_max`')
-        v_max = ui.slider(min=0, max=1000, value=1000, on_change=run).props('label-always color=orange')
-        a_max = ui.slider(min=0, max=1000, value=1000, on_change=run).props('label-always color=red')
+        v_max = ui.slider(min=0, max=420,  value=360, on_change=run).props('label-always color=orange')
+        a_max = ui.slider(min=0, max=1000, value=360, on_change=run).props('label-always color=red')
         curved = ui.checkbox('allow curved trajectory', on_change=run)
         w0.bind_visibility_from(curved, 'value')
         w1.bind_visibility_from(curved, 'value')
