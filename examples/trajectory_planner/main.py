@@ -33,6 +33,8 @@ BLACK = '#111B1E'
 ui.colors(primary=BLUE, secondary=GREEN)
 
 serial = SerialConnection()
+true_x = 0
+true_y = 0
 
 with ui.header().style(f'background-color: {BLUE}').classes('items-center'):
     ui.label('RMD Motor Synchronization').classes('text-lg font-medium')
@@ -50,7 +52,10 @@ def read() -> None:
         if len(words) != 4:
             return
         try:
-            true_sphere.move(int(words[2]) / SCALE, int(words[3]) / SCALE)
+            global true_x, true_y
+            true_x = int(words[2]) / SCALE
+            true_y = int(words[3]) / SCALE
+            true_sphere.move(true_x, true_y)
         except ValueError:
             pass
 
@@ -61,9 +66,16 @@ ui.on_startup(lambda: serial.configure(STARTUP))
 
 async def run() -> None:
     try:
+        dt = 0.01
+
+        tx, ty = trajectories(true_x, true_y, x0.value, y0.value, 0, 0, v0.value, w0.value,
+                              v_max.value, a_max.value, True)
+        t = np.arange(0, tx.duration, dt)
+        x_ = [tx.position(ti) for ti in t]
+        y_ = [ty.position(ti) for ti in t]
+
         tx, ty = trajectories(x0.value, y0.value, x1.value, y1.value, v0.value, w0.value, v1.value, w1.value,
                               v_max.value, a_max.value, curved.value)
-        dt = 0.01
         t = np.arange(0, tx.duration, dt)
         x = [tx.position(ti) for ti in t]
         y = [ty.position(ti) for ti in t]
@@ -103,7 +115,7 @@ async def run() -> None:
             pl.plot(x1.value, y1.value, 'ko')
             location_plot.update()
 
-        for xi, yi in zip(x[::5], y[::5]):
+        for xi, yi in zip((x_ + x)[::5], (y_ + y)[::5]):
             target_sphere.move(x=xi / SCALE, y=yi / SCALE)
             await asyncio.sleep(5 * dt)
 
@@ -146,4 +158,4 @@ with ui.row():
         velocity_plot = ui.plot(figsize=(6, 2))
         acceleration_plot = ui.plot(figsize=(6, 2))
 
-ui.run()
+ui.run(title='RMD Motor Synchronization')
