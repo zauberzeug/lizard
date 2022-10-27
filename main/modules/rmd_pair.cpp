@@ -1,11 +1,13 @@
 #include "rmd_pair.h"
 #include "utils/timing.h"
+#include "utils/uart.h"
 #include <math.h>
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)
     : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
-    this->properties["v_max"] = std::make_shared<NumberVariable>(1000);
-    this->properties["a_max"] = std::make_shared<NumberVariable>(1000);
+    this->properties["v_max"] = std::make_shared<NumberVariable>(360);
+    this->properties["a_max"] = std::make_shared<NumberVariable>(360);
+    this->properties["max_error"] = std::make_shared<NumberVariable>(10);
 }
 
 RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {
@@ -109,20 +111,42 @@ void RmdPair::schedule_trajectories(double x, double y, double v, double w) {
 }
 
 void RmdPair::step() {
-    double t = millis() / 1000.0;
+    const double t = millis() / 1000.0;
     while (!this->schedule1.empty() && this->t_end(this->schedule1.front()) < t) {
         this->schedule1.pop_front();
+        if (this->schedule1.empty()) {
+            this->rmd1->stop();
+        }
     }
     while (!this->schedule2.empty() && this->t_end(this->schedule2.front()) < t) {
         this->schedule2.pop_front();
+        if (this->schedule2.empty()) {
+            this->rmd2->stop();
+        }
     }
     if (!this->schedule1.empty()) {
-        double position = this->x(this->schedule1.front(), t);
-        printf("%.1f\n", position);
+        const double target_position = this->x(this->schedule1.front(), t);
+        const double target_speed = this->v(this->schedule1.front(), t);
+        const double d_position = target_position - rmd1->get_position();
+        if (std::abs(d_position) > this->properties.at("max_error")->number_value) {
+            echo("error: \"%s\" position difference too large\n", rmd1->name.c_str());
+            this->schedule1.clear();
+            this->rmd1->stop();
+            return;
+        }
+        rmd1->position(target_position, std::abs(target_speed));
     }
     if (!this->schedule2.empty()) {
-        double position = this->x(this->schedule2.front(), t);
-        printf("             %.1f\n", position);
+        const double target_position = this->x(this->schedule2.front(), t);
+        const double target_speed = this->v(this->schedule2.front(), t);
+        const double d_position = target_position - rmd2->get_position();
+        if (std::abs(d_position) > this->properties.at("max_error")->number_value) {
+            echo("error: \"%s\" position difference too large\n", rmd2->name.c_str());
+            this->schedule2.clear();
+            this->rmd2->stop();
+            return;
+        }
+        rmd2->position(target_position, std::abs(target_speed));
     }
     Module::step();
 }
