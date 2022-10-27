@@ -8,6 +8,7 @@ RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor
     this->properties["v_max"] = std::make_shared<NumberVariable>(360);
     this->properties["a_max"] = std::make_shared<NumberVariable>(360);
     this->properties["max_error"] = std::make_shared<NumberVariable>(10);
+    this->properties["dt"] = std::make_shared<NumberVariable>(0.02);
 }
 
 RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {
@@ -124,9 +125,9 @@ void RmdPair::step() {
             this->rmd2->stop();
         }
     }
+    const double dt = this->properties.at("dt")->number_value;
     if (!this->schedule1.empty()) {
         const double target_position = this->x(this->schedule1.front(), t);
-        const double target_speed = this->v(this->schedule1.front(), t);
         const double d_position = target_position - rmd1->get_position();
         if (std::abs(d_position) > this->properties.at("max_error")->number_value) {
             echo("error: \"%s\" position difference too large\n", rmd1->name.c_str());
@@ -134,11 +135,10 @@ void RmdPair::step() {
             this->rmd1->stop();
             return;
         }
-        rmd1->position(target_position, std::abs(target_speed));
+        rmd1->speed((this->x(this->schedule1.front(), t + dt) - rmd1->get_position()) / dt);
     }
     if (!this->schedule2.empty()) {
         const double target_position = this->x(this->schedule2.front(), t);
-        const double target_speed = this->v(this->schedule2.front(), t);
         const double d_position = target_position - rmd2->get_position();
         if (std::abs(d_position) > this->properties.at("max_error")->number_value) {
             echo("error: \"%s\" position difference too large\n", rmd2->name.c_str());
@@ -146,7 +146,7 @@ void RmdPair::step() {
             this->rmd2->stop();
             return;
         }
-        rmd2->position(target_position, std::abs(target_speed));
+        rmd2->speed((this->x(this->schedule2.front(), t + dt) - rmd2->get_position()) / dt);
     }
     Module::step();
 }
