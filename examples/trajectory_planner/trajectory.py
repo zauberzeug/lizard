@@ -46,10 +46,8 @@ class Trajectory:
 
 
 def trajectory(x0: float, x1: float, v0: float, v1: float, v_max: float, a_max: float) -> Trajectory:
-    assert v_max > 0, 'Positive velocity limit expected.'
-    assert a_max > 0, 'Positive acceleration limit expected.'
-    assert abs(v0) <= v_max, 'Start velocity exceeds velocity limit.'
-    assert abs(v1) <= v_max, 'Target velocity exceeds velocity limit.'
+    v0 = min(max(v0, -v_max), v_max)
+    v1 = min(max(v1, -v_max), v_max)
 
     # find maximum possible velocity
     for a in [a_max, -a_max]:

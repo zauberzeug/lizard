@@ -12,12 +12,10 @@ RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor
 }
 
 RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {
-    const double v_max = this->properties.at("v_max")->number_value;
-    const double a_max = this->properties.at("a_max")->number_value;
-    assert(v_max > 0);        // Positive velocity limit expected.
-    assert(a_max > 0);        // Positive acceleration limit expected.
-    assert(abs(v0) <= v_max); // Start velocity exceeds velocity limit.
-    assert(abs(v1) <= v_max); // Target velocity exceeds velocity limit.
+    const double v_max = std::abs(this->properties.at("v_max")->number_value);
+    const double a_max = std::abs(this->properties.at("a_max")->number_value);
+    v0 = std::min(std::max(v0, -v_max), v_max);
+    v1 = std::min(std::max(v1, -v_max), v_max);
 
     TrajectoryTriple result;
 
