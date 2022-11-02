@@ -13,4 +13,4 @@ echo "Copying binary files to $host..."
 rsync -zarv --prune-empty-dirs --include="*/" --include="*.bin" --exclude="*" build $host:~/lizard/ || exit 1 # https://stackoverflow.com/a/32527277/3419103
 
 echo "Flashing microcontroller..."
-ssh -t $host "bash --login -c 'cd ~/lizard && ./flash.py ${@:2}'"
+ssh -t $host "bash --login -c 'cd ~/lizard && sudo ./flash.py ${@:2}'"
