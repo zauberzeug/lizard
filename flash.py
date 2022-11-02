@@ -42,7 +42,7 @@ with esp.pin_config(), esp.flash_mode():
         '--flash_size', 'detect',
         '0x1000', 'build/bootloader/bootloader.bin',
         '0x8000', 'build/partition_table/partition-table.bin',
-        '0x10000', 'build/lizard.bin'
+        '0x10000', 'build/lizard.bin',
     ])
     if result.returncode != 0:
         print('Flashing failed. Maybe you need different parameters? Or you forgot "sudo"?\n')
