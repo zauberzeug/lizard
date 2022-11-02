@@ -353,6 +353,7 @@ The RMD motor pair module allows to synchronize two RMD motors.
 | `rmd.resume()`         | Resume motors (continue in state from before stop command) |            |
 | `rmd.off()`            | Turn motors off (clear operating state)                    |            |
 | `rmd.hold()`           | Hold current positions                                     |            |
+| `rmd.clear_moves()`    | Clear scheduled moves and stop motors                      |            |
 | `rmd.clear_errors()`   | Clear motor errors                                         |            |
 
 Multiple `move` commands are scheduled to be executed one after another.

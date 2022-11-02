@@ -182,6 +182,12 @@ void RmdPair::call(const std::string method_name, const std::vector<ConstExpress
         Module::expect(arguments, 0);
         this->rmd1->hold();
         this->rmd2->hold();
+    } else if (method_name == "clear_moves") {
+        Module::expect(arguments, 0);
+        this->schedule1.clear();
+        this->schedule2.clear();
+        this->rmd1->stop();
+        this->rmd2->stop();
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
         this->rmd1->clear_errors();
