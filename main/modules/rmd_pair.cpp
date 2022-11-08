@@ -109,6 +109,13 @@ void RmdPair::schedule_trajectories(double x, double y, double v, double w) {
     this->schedule2.push_back(t2.part_c);
 }
 
+void RmdPair::clear_moves() {
+    this->schedule1.clear();
+    this->schedule2.clear();
+    this->rmd1->stop();
+    this->rmd2->stop();
+}
+
 void RmdPair::step() {
     const double t = millis() / 1000.0;
     while (!this->schedule1.empty() && this->t_end(this->schedule1.front()) < t) {
@@ -128,9 +135,8 @@ void RmdPair::step() {
         const double target_position = this->x(this->schedule1.front(), t);
         const double d_position = target_position - rmd1->get_position();
         if (std::abs(d_position) > this->properties.at("max_error")->number_value) {
-            echo("error: \"%s\" position difference too large\n", rmd1->name.c_str());
-            this->schedule1.clear();
-            this->rmd1->stop();
+            echo("error: \"%s\" position difference too large", rmd1->name.c_str());
+            this->clear_moves();
             return;
         }
         rmd1->speed((this->x(this->schedule1.front(), t + dt) - rmd1->get_position()) / dt);
@@ -139,9 +145,8 @@ void RmdPair::step() {
         const double target_position = this->x(this->schedule2.front(), t);
         const double d_position = target_position - rmd2->get_position();
         if (std::abs(d_position) > this->properties.at("max_error")->number_value) {
-            echo("error: \"%s\" position difference too large\n", rmd2->name.c_str());
-            this->schedule2.clear();
-            this->rmd2->stop();
+            echo("error: \"%s\" position difference too large", rmd2->name.c_str());
+            this->clear_moves();
             return;
         }
         rmd2->speed((this->x(this->schedule2.front(), t + dt) - rmd2->get_position()) / dt);
@@ -184,10 +189,7 @@ void RmdPair::call(const std::string method_name, const std::vector<ConstExpress
         this->rmd2->hold();
     } else if (method_name == "clear_moves") {
         Module::expect(arguments, 0);
-        this->schedule1.clear();
-        this->schedule2.clear();
-        this->rmd1->stop();
-        this->rmd2->stop();
+        this->clear_moves();
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
         this->rmd1->clear_errors();
