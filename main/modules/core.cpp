@@ -25,6 +25,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     if (method_name == "restart") {
         Module::expect(arguments, 0);
         esp_restart();
+    } else if (method_name == "version") {
+        const esp_app_desc_t *app_desc = esp_ota_get_app_description();
+        echo("version: %s", this->name.c_str(), app_desc->version);
     } else if (method_name == "info") {
         Module::expect(arguments, 0);
         const esp_app_desc_t *app_desc = esp_ota_get_app_description();
