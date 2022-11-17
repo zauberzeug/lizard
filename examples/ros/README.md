@@ -27,7 +27,7 @@ You can replace this with any other node as needed.
 
 ## Configure Lizard
 
-By sending the `/configure` message to the `lizard` node the microcontroller will receive the configuration of the attached devices (an ODrive motor controller with two wheels) stored in the `lizard.txt` file.
+By sending the `/configure` message to the `lizard` node the microcontroller will receive the configuration of the attached devices (an ODrive motor controller with two wheels) stored in the `startup.liz` file.
 The configuration is stored persitently on the microcontroller, so you only need to save it once.
 
 In the example the web page provides a button to trigger the `/configure` message.

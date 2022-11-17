@@ -22,6 +22,6 @@ RUN echo "#!/bin/bash" > /ros_entrypoint.sh && \
 
 ADD scripts /root/rosys/catkin_ws/src/robot/scripts
 ADD launch /root/rosys/catkin_ws/src/robot/launch
-COPY lizard.txt /root/rosys/catkin_ws/src/robot/
+COPY startup.liz /root/rosys/catkin_ws/src/robot/
 
 CMD [ "roslaunch", "/root/rosys/catkin_ws/src/robot/launch/robot.launch" ]

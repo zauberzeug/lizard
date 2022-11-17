@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-import rospy
-from std_msgs.msg import Empty, String
-from geometry_msgs.msg import Twist, Vector3
-import serial
-from operator import ixor
-from functools import reduce
 import json
 import os.path
+from functools import reduce
+from operator import ixor
+
+import rospy
+import serial
+from geometry_msgs.msg import Twist, Vector3
+from std_msgs.msg import Empty, String
 
 
 def send(line):
@@ -20,7 +21,7 @@ def handle_command(data):
 
 
 def handle_configure(data):
-    with open(os.path.dirname(__file__) + '/../lizard.txt') as f:
+    with open(os.path.dirname(__file__) + '/../startup.liz') as f:
         send('!-')
         for line in f.read().splitlines():
             send('!+' + line)
