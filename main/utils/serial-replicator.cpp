@@ -80,14 +80,14 @@ static auto connect() -> bool {
     return true;
 }
 
-static auto upBaudrate(uint32_t base_baud_rate) -> bool {
+static auto upBaudrate(uart_port_t uart_num, uint32_t base_baud_rate) -> bool {
     const uint32_t higherRate{base_baud_rate * 8};
     esp_loader_error_t status{esp_loader_change_baudrate(higherRate)};
 
     ESP_LOGD(TAG, "esp_loader_change_baudrate(%u)", higherRate);
     HANDLE_ERROR(status, "raising target baudrate");
 
-    esp_err_t ec{uart_set_baudrate(UART_NUM_1, higherRate)};
+    esp_err_t ec{uart_set_baudrate(uart_num, higherRate)};
 
     HANDLE_ESP_ERROR(ec, "raising host baudrate");
 
@@ -232,7 +232,7 @@ auto flashReplica(const uart_port_t uart_num,
     }
 
     ESP_LOGI(TAG, "Raising baudrate..");
-    if (!upBaudrate(baud_rate)) {
+    if (!upBaudrate(uart_num, baud_rate)) {
         return false;
     }
 
