@@ -3,7 +3,7 @@
 This example shows how to start [ROS](https://www.ros.org/) with [Lizard](https://lizard.dev/) on the [Zauberzeug Robot Brain](https://zauberzeug.com/product-robot-brain.html).
 For simplicity we use [NiceGUI](https://nicegui.io/) to present a website with control elements:
 
-<img src="https://raw.githubusercontent.com/zauberzeug/rosys/main/examples/ros/screenshot.png" width="800">
+<img src="https://raw.githubusercontent.com/zauberzeug/lizard/main/examples/ros/screenshot.png" width="800">
 
 The built-in NVIDIA Jetson is running a rather old Ubuntu LTS 18.04.
 Therefore it is best to start ROS in a docker container.
