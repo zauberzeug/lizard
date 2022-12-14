@@ -6,7 +6,7 @@ class Esp:
 
     def __init__(self, nand: bool = False, xavier: bool = False, device: Optional[str] = None) -> None:
         print('Initializing ESP...')
-        self.en = 434 if xavier else 216
+        self.en = 436 if xavier else 216
         self.g0 = 428 if xavier else 50
         if device is None:
             self.device = '/dev/ttyTHS' + ('0' if xavier else '1')
