@@ -77,6 +77,7 @@ def serial_connection() -> serial.Serial:
         usb_path = sys.argv[1]
     else:
         usb_paths = [
+            '/dev/ttyTHS0',
             '/dev/ttyTHS1',
             '/dev/ttyUSB0',
             '/dev/ttyUSB1',
