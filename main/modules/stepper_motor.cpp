@@ -144,6 +144,7 @@ void StepperMotor::step() {
 
         // stop if target is reached
         if (target_speed == 0 && -MIN_SPEED < speed && speed < MIN_SPEED) {
+            speed = 0;
             set_state(Idle);
         }
 
