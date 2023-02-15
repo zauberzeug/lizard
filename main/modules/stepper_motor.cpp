@@ -60,13 +60,12 @@ StepperMotor::StepperMotor(const std::string name,
         .channel = this->ledc_channel,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = this->ledc_timer,
-        .duty = 1,
+        .duty = 0,
         .hpoint = 0,
         .flags = {},
     };
     ledc_timer_config(&timer_config);
     ledc_channel_config(&channel_config);
-    ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_matrix_out(step_pin, LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0, 0);
@@ -89,6 +88,8 @@ void StepperMotor::read_position() {
 void StepperMotor::set_state(StepperState new_state) {
     this->state = new_state;
     this->properties.at("idle")->boolean_value = (new_state == Idle);
+    ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
+    ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
 }
 
 void StepperMotor::step() {
@@ -134,16 +135,17 @@ void StepperMotor::step() {
         }
 
         // set frequency and pause/resume LED controller
-        if (-MIN_SPEED < speed && speed < MIN_SPEED) {
+        int32_t abs_speed = std::abs(speed);
+        if (abs_speed < MIN_SPEED) {
             ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
         } else {
-            gpio_set_level(this->dir_pin, speed > 0 ? 1 : 0);
-            ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, std::abs(speed));
+            ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, abs_speed);
             ledc_timer_resume(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
         }
+        gpio_set_level(this->dir_pin, speed > 0 ? 1 : 0);
 
         // stop if target is reached
-        if (target_speed == 0 && -MIN_SPEED < speed && speed < MIN_SPEED) {
+        if (target_speed == 0 && abs_speed < MIN_SPEED) {
             set_state(Idle);
         }
 
@@ -173,10 +175,9 @@ void StepperMotor::call(const std::string method_name, const std::vector<ConstEx
         Module::expect(arguments, -1, numbery, numbery);
         this->target_speed = arguments[0]->evaluate_number();
         this->target_acceleration = arguments.size() > 1 ? std::abs(arguments[1]->evaluate_number()) : 0;
-        set_state(Speeding);
+        set_state(this->target_speed == 0 ? Idle : Speeding);
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
         set_state(Idle);
     } else {
         Module::call(method_name, arguments);
