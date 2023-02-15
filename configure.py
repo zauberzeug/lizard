@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import sys
+import time
+from pathlib import Path
 
 import serial
 
@@ -19,9 +21,27 @@ def send(line) -> None:
 
 
 with serial.Serial(usb_path, baudrate=115200, timeout=1.0) as port:
+    startup = Path(txt_path).read_text()
+    if not startup.endswith('\n'):
+        startup += '\n'
+    checksum = sum(ord(c) for c in startup) % 0x10000
+
     send('!-')
-    with open(txt_path) as f:
-        for line in f.read().splitlines():
-            send(f'!+{line}')
+    for line in startup.splitlines():
+        send(f'!+{line}')
     send('!.')
     send('core.restart()')
+
+    time.sleep(1.0)
+    send('core.startup_checksum()')
+    deadline = time.time() + 1.0
+    while time.time() < deadline:
+        line = port.read_until(b'\r\n').decode().rstrip()
+        if line.startswith('checksum: '):
+            if int(line.split()[1].split("@")[0], 16) == checksum:
+                print('Checksum matches.')
+                break
+            else:
+                raise ValueError('Checksum mismatch!')
+    else:
+        raise TimeoutError('Timeout waiting for checksum!')
