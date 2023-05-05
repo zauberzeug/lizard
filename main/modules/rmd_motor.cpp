@@ -158,6 +158,7 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
         this->stop();
     } else if (method_name == "resume") {
         Module::expect(arguments, 0);
+        this->resume();
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->off();
