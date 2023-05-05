@@ -10,7 +10,7 @@ using ConstRmdMotor_ptr = std::shared_ptr<const RmdMotor>;
 
 class RmdMotor : public Module, public std::enable_shared_from_this<RmdMotor> {
 private:
-    const uint32_t can_id;
+    const uint32_t motor_id;
     const Can_ptr can;
     uint8_t last_msg_id = 0;
     unsigned long int last_msg_millis = 0;
@@ -19,8 +19,7 @@ private:
     double map_scale = 1;
     double map_offset = 0;
 
-    void send_and_wait(const uint32_t id,
-                       const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
+    void send_and_wait(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
                        const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
                        const unsigned long int timeout_ms = 1);
 
