@@ -6,7 +6,7 @@
 #include <memory>
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id)
-    : Module(rmd_motor, name), motor_id(motor_id), can(can) {
+    : Module(rmd_motor, name), motor_id(motor_id), can(can), is_version_3(true) {
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["ratio"] = std::make_shared<NumberVariable>(6.0);
     this->properties["torque"] = std::make_shared<NumberVariable>();
@@ -18,6 +18,7 @@ RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t moto
 
 void RmdMotor::subscribe_to_can() {
     can->subscribe(this->motor_id + 0x140, std::static_pointer_cast<Module>(this->shared_from_this()));
+    can->subscribe(this->motor_id + 0x240, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
 void RmdMotor::send_and_wait(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
@@ -251,6 +252,7 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
 }
 
 void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
+    this->is_version_3 = id > 0x240;
     switch (data[0]) {
     case 0x92: {
         int64_t value = 0;
