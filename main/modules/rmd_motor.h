@@ -35,7 +35,6 @@ public:
     void speed(double target_speed);
     void position(double target_position, double target_speed = 0.0);
     void stop();
-    void resume();
     void off();
     void hold();
     void clear_errors();

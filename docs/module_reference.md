@@ -300,7 +300,6 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.position(pos)`           | Move to and hold at `pos` (deg)                           | `float`                |
 | `rmd.position(pos, speed)`    | Move to and hold at `pos` (deg) with max. `speed` (deg/s) | `float`, `float`       |
 | `rmd.stop()`                  | Stop motor (but keep operating state)                     |                        |
-| `rmd.resume()`                | Resume motor (continue in state from before stop command) |                        |
 | `rmd.off()`                   | Turn motor off (clear operating state)                    |                        |
 | `rmd.hold()`                  | Hold current position                                     |                        |
 | `rmd.map(leader)`             | Map another RMD with current offset and scale 1           | RMD module             |
@@ -310,8 +309,7 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.unmap()`                 | Stop mapping                                              |                        |
 | `rmd.get_health()`            | Print temperature (C), voltage (V) and error code         |                        |
 | `rmd.get_pid()`               | Print PID parameters Kp/Ki for position/speed/torque loop |                        |
-| `rmd.get_acceleration()`      | Print acceleration setting                                |                        |
-| `rmd.set_acceleration()`      | Set acceleration                                          | `int`                  |
+| `rmd.set_pid(...)`            | Print PID parameters Kp/Ki for position/speed/torque loop | 6x `int`               |
 | `rmd.clear_errors()`          | Clear motor error                                         |                        |
 | `rmd.zero()`                  | Write position to ROM as zero position (see below)        |                        |
 
@@ -347,16 +345,15 @@ The RMD motor pair module allows to synchronize two RMD motors.
 | `rmd.max_error` | Maximum position deviation (deg, default: 10) | `float`   |
 | `rmd.dt`        | Differentiation interval (s, default: 0.02)   | `float`   |
 
-| Methods                | Description                                                | Arguments  |
-| ---------------------- | ---------------------------------------------------------- | ---------- |
-| `rmd.move(x, y)`       | Move motor 1 to `x` and motor 2 to `x`                     | 2x `float` |
-| `rmd.move(x, y, v, w)` | Reach targets `x` and `y` with speeds `v` and `w`          | 4x `float` |
-| `rmd.stop()`           | Stop motors (but keep operating state)                     |            |
-| `rmd.resume()`         | Resume motors (continue in state from before stop command) |            |
-| `rmd.off()`            | Turn motors off (clear operating state)                    |            |
-| `rmd.hold()`           | Hold current positions                                     |            |
-| `rmd.clear_moves()`    | Clear scheduled moves and stop motors                      |            |
-| `rmd.clear_errors()`   | Clear motor errors                                         |            |
+| Methods                | Description                                       | Arguments  |
+| ---------------------- | ------------------------------------------------- | ---------- |
+| `rmd.move(x, y)`       | Move motor 1 to `x` and motor 2 to `x`            | 2x `float` |
+| `rmd.move(x, y, v, w)` | Reach targets `x` and `y` with speeds `v` and `w` | 4x `float` |
+| `rmd.stop()`           | Stop motors (but keep operating state)            |            |
+| `rmd.off()`            | Turn motors off (clear operating state)           |            |
+| `rmd.hold()`           | Hold current positions                            |            |
+| `rmd.clear_moves()`    | Clear scheduled moves and stop motors             |            |
+| `rmd.clear_errors()`   | Clear motor errors                                |            |
 
 Multiple `move` commands are scheduled to be executed one after another.
 

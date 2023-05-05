@@ -175,10 +175,6 @@ void RmdPair::call(const std::string method_name, const std::vector<ConstExpress
         Module::expect(arguments, 0);
         this->rmd1->stop();
         this->rmd2->stop();
-    } else if (method_name == "resume") {
-        Module::expect(arguments, 0);
-        this->rmd1->resume();
-        this->rmd2->resume();
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->rmd1->off();
