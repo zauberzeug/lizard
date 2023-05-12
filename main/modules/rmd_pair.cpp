@@ -109,7 +109,7 @@ void RmdPair::schedule_trajectories(double x, double y, double v, double w) {
     this->schedule2.push_back(t2.part_c);
 }
 
-void RmdPair::clear_moves() {
+void RmdPair::stop() {
     this->schedule1.clear();
     this->schedule2.clear();
     this->rmd1->stop();
@@ -136,7 +136,7 @@ void RmdPair::step() {
         const double d_position = target_position - rmd1->get_position();
         if (std::abs(d_position) > this->properties.at("max_error")->number_value) {
             echo("error: \"%s\" position difference too large", rmd1->name.c_str());
-            this->clear_moves();
+            this->stop();
             return;
         }
         rmd1->speed((this->x(this->schedule1.front(), t + dt) - rmd1->get_position()) / dt);
@@ -146,7 +146,7 @@ void RmdPair::step() {
         const double d_position = target_position - rmd2->get_position();
         if (std::abs(d_position) > this->properties.at("max_error")->number_value) {
             echo("error: \"%s\" position difference too large", rmd2->name.c_str());
-            this->clear_moves();
+            this->stop();
             return;
         }
         rmd2->speed((this->x(this->schedule2.front(), t + dt) - rmd2->get_position()) / dt);
@@ -173,8 +173,7 @@ void RmdPair::call(const std::string method_name, const std::vector<ConstExpress
         }
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        this->rmd1->stop();
-        this->rmd2->stop();
+        this->stop();
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->rmd1->off();
@@ -183,9 +182,6 @@ void RmdPair::call(const std::string method_name, const std::vector<ConstExpress
         Module::expect(arguments, 0);
         this->rmd1->hold();
         this->rmd2->hold();
-    } else if (method_name == "clear_moves") {
-        Module::expect(arguments, 0);
-        this->clear_moves();
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
         this->rmd1->clear_errors();

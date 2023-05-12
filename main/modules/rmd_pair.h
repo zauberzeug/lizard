@@ -34,7 +34,7 @@ private:
     void throttle(TrajectoryPart &part, double factor) const;
     TrajectoryTriple compute_trajectory(double x0, double x1, double v0, double v1) const;
     void schedule_trajectories(double x, double y, double v, double w);
-    void clear_moves();
+    void stop();
 
 public:
     RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2);
