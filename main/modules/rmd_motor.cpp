@@ -81,6 +81,7 @@ void RmdMotor::step() {
 
 void RmdMotor::power(double target_power) {
     int16_t power = this->is_version_3 ? target_power * 100 : target_power / 32.0 * 2000;
+    power *= this->properties.at("ratio")->number_value < 0 ? -1 : 1;
     this->send_and_wait(0xa1, 0,
                         0,
                         0,
