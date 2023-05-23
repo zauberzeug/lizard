@@ -11,6 +11,7 @@ RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t moto
     this->properties["ratio"] = std::make_shared<NumberVariable>(6.0);
     this->properties["torque"] = std::make_shared<NumberVariable>();
     this->properties["speed"] = std::make_shared<NumberVariable>();
+    this->properties["temperature"] = std::make_shared<NumberVariable>();
     this->properties["can_age"] = std::make_shared<NumberVariable>();
     this->properties["map_distance"] = std::make_shared<NumberVariable>();
     this->properties["map_speed"] = std::make_shared<NumberVariable>();
@@ -29,7 +30,6 @@ void RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const 
 void RmdMotor::step() {
     this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
 
-    this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
     this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
     if (this->map_leader) {
         double own_position = this->properties.at("position")->number_value;
@@ -226,34 +226,23 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
 void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     this->is_version_3 = id > 0x240;
     switch (data[0]) {
-    case 0x92: {
-        if (this->is_version_3) {
-            int32_t value = 0;
-            std::memcpy(&value, data + 4, 4);
-            this->properties.at("position")->number_value = (value << 8) / 256.0 / 100.0 / this->properties.at("ratio")->number_value;
-        } else {
-            int64_t value = 0;
-            std::memcpy(&value, data + 1, 7);
-            this->properties.at("position")->number_value = (value << 8) / 256.0 / 100.0 / this->properties.at("ratio")->number_value;
-        }
-        break;
-    }
-    case 0x9a: {
+    case 0x9c: {
         int8_t temperature = 0;
         std::memcpy(&temperature, data + 1, 1);
-        uint16_t voltage = 0;
-        std::memcpy(&voltage, data + (this->is_version_3 ? 4 : 3), 2);
-        uint8_t error = data[7];
-        echo("%s health %d %.1f %d", this->name.c_str(), temperature, 0.1 * voltage, error);
-        break;
-    }
-    case 0x9c: {
+        this->properties.at("temperature")->number_value = temperature;
+
         int16_t torque = 0;
         std::memcpy(&torque, data + 2, 2);
         this->properties.at("torque")->number_value = this->is_version_3 ? 0.01 * torque : torque / 2048.0 * 33.0;
+
         int16_t speed = 0;
         std::memcpy(&speed, data + 4, 2);
         this->properties.at("speed")->number_value = speed / this->properties.at("ratio")->number_value;
+
+        int16_t position = 0;
+        std::memcpy(&position, data + 6, 2);
+        this->properties.at("position")->number_value = position / this->properties.at("ratio")->number_value;
+
         break;
     }
     case 0x30: {
