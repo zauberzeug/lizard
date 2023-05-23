@@ -5,10 +5,14 @@
 #include <cstring>
 #include <memory>
 
-RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id)
-    : Module(rmd_motor, name), motor_id(motor_id), can(can), is_version_3(true) {
+template <typename T>
+int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
+RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
+    : Module(rmd_motor, name), motor_id(motor_id), can(can), is_version_3(true), ratio(ratio) {
     this->properties["position"] = std::make_shared<NumberVariable>();
-    this->properties["ratio"] = std::make_shared<NumberVariable>(6.0);
     this->properties["torque"] = std::make_shared<NumberVariable>();
     this->properties["speed"] = std::make_shared<NumberVariable>();
     this->properties["temperature"] = std::make_shared<NumberVariable>();
@@ -34,7 +38,7 @@ void RmdMotor::step() {
 
 void RmdMotor::power(double target_power) {
     int16_t power = this->is_version_3 ? target_power * 100 : target_power / 32.0 * 2000;
-    power *= this->properties.at("ratio")->number_value < 0 ? -1 : 1;
+    power *= sgn(this->ratio);
     this->send(0xa1, 0,
                0,
                0,
@@ -45,7 +49,7 @@ void RmdMotor::power(double target_power) {
 }
 
 void RmdMotor::speed(double target_speed) {
-    int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;
+    int32_t speed = target_speed * 100 * (this->is_version_3 ? sgn(this->ratio) : this->ratio);
     this->send(0xa2, 0,
                0,
                0,
@@ -56,8 +60,8 @@ void RmdMotor::speed(double target_speed) {
 }
 
 void RmdMotor::position(double target_position, double target_speed) {
-    int32_t position = target_position * 100 * this->properties.at("ratio")->number_value;
-    uint16_t speed = target_speed * abs(this->properties.at("ratio")->number_value);
+    int32_t position = target_position * 100 * (this->is_version_3 ? sgn(this->ratio) : this->ratio);
+    uint16_t speed = target_speed * (this->is_version_3 ? 1 : this->ratio);
     this->send(0xa4, 0,
                *((uint8_t *)(&speed) + 0),
                *((uint8_t *)(&speed) + 1),
@@ -152,11 +156,17 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
 
         int16_t speed = 0;
         std::memcpy(&speed, data + 4, 2);
-        this->properties.at("speed")->number_value = speed / this->properties.at("ratio")->number_value;
+        this->properties.at("speed")->number_value = speed / (this->is_version_3 ? sgn(this->ratio) : this->ratio);
 
-        int16_t position = 0;
-        std::memcpy(&position, data + 6, 2);
-        this->properties.at("position")->number_value = position / this->properties.at("ratio")->number_value;
+        if (this->is_version_3) {
+            int16_t position = 0;
+            std::memcpy(&position, data + 6, 2);
+            this->properties.at("position")->number_value = position / sgn(this->ratio);
+        } else {
+            uint16_t position = 0;
+            std::memcpy(&position, data + 6, 2);
+            this->properties.at("position")->number_value = (position >> 2) / 16384.0 * 360.0 / this->ratio;
+        }
 
         break;
     }

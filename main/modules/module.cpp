@@ -182,7 +182,7 @@ Module_ptr Module::create(const std::string type,
         const ODriveMotor_ptr right_motor = std::static_pointer_cast<ODriveMotor>(right_module);
         return std::make_shared<ODriveWheels>(name, left_motor, right_motor);
     } else if (type == "RmdMotor") {
-        Module::expect(arguments, 2, identifier, integer);
+        Module::expect(arguments, 3, identifier, integer, integer);
         std::string can_name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(can_name);
         if (module->type != can) {
@@ -190,7 +190,8 @@ Module_ptr Module::create(const std::string type,
         }
         const Can_ptr can = std::static_pointer_cast<Can>(module);
         uint8_t motor_id = arguments[1]->evaluate_integer();
-        RmdMotor_ptr rmd_motor = std::make_shared<RmdMotor>(name, can, motor_id);
+        int ratio = arguments[2]->evaluate_integer();
+        RmdMotor_ptr rmd_motor = std::make_shared<RmdMotor>(name, can, motor_id, ratio);
         rmd_motor->subscribe_to_can();
         return rmd_motor;
     } else if (type == "RmdPair") {

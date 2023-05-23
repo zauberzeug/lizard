@@ -55,7 +55,7 @@ You can call module methods as follows:
 
 Some module properties are meant to be written to:
 
-    motor.ratio = 9
+    motor.reversed = true
 
 **Routines: definition and call**
 

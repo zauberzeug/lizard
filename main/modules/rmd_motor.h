@@ -13,13 +13,14 @@ private:
     const uint32_t motor_id;
     const Can_ptr can;
     bool is_version_3;
+    int ratio;
     unsigned long int last_msg_millis = 0;
 
     void send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7);
 
 public:
-    RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id);
+    RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio);
     void subscribe_to_can();
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

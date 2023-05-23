@@ -5,17 +5,14 @@ import logging
 import numpy as np
 import pylab as pl
 from nicegui import ui
-
 from serial_connection import SerialConnection
 from trajectory import trajectories
 
 STARTUP = '''
 can = Can(32, 33, 1000000)
 
-rmd1 = RmdMotor(can, 1)
-rmd2 = RmdMotor(can, 2)
-rmd1.ratio = 9
-rmd2.ratio = 9
+rmd1 = RmdMotor(can, 1, 9)
+rmd2 = RmdMotor(can, 2, 9)
 rmd = RmdPair(rmd1, rmd2)
 
 core.output('core.millis rmd1.position rmd2.position')
