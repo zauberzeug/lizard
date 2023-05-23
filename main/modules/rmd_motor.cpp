@@ -5,11 +5,6 @@
 #include <cstring>
 #include <memory>
 
-template <typename T>
-int sgn(T val) {
-    return (T(0) < val) - (val < T(0));
-}
-
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
     : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio) {
     this->properties["position"] = std::make_shared<NumberVariable>();
@@ -17,6 +12,7 @@ RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t moto
     this->properties["speed"] = std::make_shared<NumberVariable>();
     this->properties["temperature"] = std::make_shared<NumberVariable>();
     this->properties["can_age"] = std::make_shared<NumberVariable>();
+    this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdMotor::subscribe_to_can() {
@@ -36,7 +32,7 @@ void RmdMotor::step() {
 }
 
 void RmdMotor::power(double target_power) {
-    int16_t power = target_power * 100 * sgn(this->ratio);
+    int16_t power = target_power * 100;
     this->send(0xa1, 0,
                0,
                0,
@@ -47,7 +43,7 @@ void RmdMotor::power(double target_power) {
 }
 
 void RmdMotor::speed(double target_speed) {
-    int32_t speed = target_speed * 100 * sgn(this->ratio);
+    int32_t speed = target_speed * 100;
     this->send(0xa2, 0,
                0,
                0,
@@ -58,7 +54,7 @@ void RmdMotor::speed(double target_speed) {
 }
 
 void RmdMotor::position(double target_position, double target_speed) {
-    int32_t position = target_position * 100 * sgn(this->ratio);
+    int32_t position = target_position * 100;
     uint16_t speed = target_speed;
     this->send(0xa4, 0,
                *((uint8_t *)(&speed) + 0),
@@ -138,6 +134,19 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
 
 void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     switch (data[0]) {
+    case 0x92: {
+        int32_t position = 0;
+        std::memcpy(&position, data + 4, 4);
+        this->properties.at("position")->number_value = 0.01 * position;
+        this->last_encoder_position = 0.01 * position;
+        while (this->last_encoder_position > 65536 * 2 / this->ratio) {
+            this->last_encoder_position -= 65536 * 4 / this->ratio;
+        }
+        while (this->last_encoder_position < -65536 * 2 / this->ratio) {
+            this->last_encoder_position += 65536 * 4 / this->ratio;
+        }
+        break;
+    }
     case 0x9c: {
         int8_t temperature = 0;
         std::memcpy(&temperature, data + 1, 1);
@@ -149,11 +158,19 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
 
         int16_t speed = 0;
         std::memcpy(&speed, data + 4, 2);
-        this->properties.at("speed")->number_value = speed / sgn(this->ratio);
+        this->properties.at("speed")->number_value = speed;
 
         int16_t position = 0;
         std::memcpy(&position, data + 6, 2);
-        this->properties.at("position")->number_value = position / sgn(this->ratio);
+        int32_t encoder_position = position;
+        this->properties.at("position")->number_value += encoder_position - this->last_encoder_position;
+        if (encoder_position - this->last_encoder_position > 65536 * 2 / this->ratio) {
+            this->properties.at("position")->number_value -= 65536 * 4 / this->ratio;
+        }
+        if (encoder_position - this->last_encoder_position < -65536 * 2 / this->ratio) {
+            this->properties.at("position")->number_value += 65536 * 4 / this->ratio;
+        }
+        this->last_encoder_position = encoder_position;
 
         break;
     }

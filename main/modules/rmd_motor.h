@@ -13,6 +13,7 @@ private:
     const uint32_t motor_id;
     const Can_ptr can;
     int ratio;
+    int32_t last_encoder_position;
     unsigned long int last_msg_millis = 0;
 
     void send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
