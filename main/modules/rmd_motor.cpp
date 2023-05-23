@@ -21,30 +21,16 @@ void RmdMotor::subscribe_to_can() {
     can->subscribe(this->motor_id + 0x240, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
-void RmdMotor::send_and_wait(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
-                             const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
-                             const unsigned long int timeout_ms) {
-    this->last_msg_id = 0;
-    const int max_attempts = 3;
-    for (int i = 0; i < max_attempts; ++i) {
-        this->can->send(this->motor_id + 0x140, d0, d1, d2, d3, d4, d5, d6, d7);
-        unsigned long int start = micros();
-        while (this->last_msg_id != d0 && micros_since(start) < timeout_ms * 1000) {
-            this->can->receive();
-        }
-        if (this->last_msg_id == d0) {
-            return;
-        } else {
-            echo("%s warning: CAN timeout for msg id 0x%02x (attempt %d/%d)", this->name.c_str(), d0, i + 1, max_attempts);
-        }
-    }
+void RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
+                    const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7) {
+    this->can->send(this->motor_id + 0x140, d0, d1, d2, d3, d4, d5, d6, d7);
 }
 
 void RmdMotor::step() {
     this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
 
-    this->send_and_wait(0x92, 0, 0, 0, 0, 0, 0, 0);
-    this->send_and_wait(0x9c, 0, 0, 0, 0, 0, 0, 0);
+    this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
+    this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
     if (this->map_leader) {
         double own_position = this->properties.at("position")->number_value;
         double leader_position = this->map_leader->properties.at("position")->number_value;
@@ -53,23 +39,23 @@ void RmdMotor::step() {
         this->properties.at("map_distance")->number_value = target_position - own_position;
         if (abs(target_speed) > 1) {
             int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;
-            this->send_and_wait(0xa2, 0,
-                                0,
-                                0,
-                                *((uint8_t *)(&speed) + 0),
-                                *((uint8_t *)(&speed) + 1),
-                                *((uint8_t *)(&speed) + 2),
-                                *((uint8_t *)(&speed) + 3));
+            this->send(0xa2, 0,
+                       0,
+                       0,
+                       *((uint8_t *)(&speed) + 0),
+                       *((uint8_t *)(&speed) + 1),
+                       *((uint8_t *)(&speed) + 2),
+                       *((uint8_t *)(&speed) + 3));
             this->properties.at("map_speed")->number_value = target_speed;
         } else {
             int32_t position = own_position * 100 * this->properties.at("ratio")->number_value;
-            this->send_and_wait(0xa4, 0,
-                                0,
-                                0,
-                                *((uint8_t *)(&position) + 0),
-                                *((uint8_t *)(&position) + 1),
-                                *((uint8_t *)(&position) + 2),
-                                *((uint8_t *)(&position) + 3));
+            this->send(0xa4, 0,
+                       0,
+                       0,
+                       *((uint8_t *)(&position) + 0),
+                       *((uint8_t *)(&position) + 1),
+                       *((uint8_t *)(&position) + 2),
+                       *((uint8_t *)(&position) + 3));
             this->properties.at("map_speed")->number_value = 0;
         }
     } else {
@@ -82,44 +68,44 @@ void RmdMotor::step() {
 void RmdMotor::power(double target_power) {
     int16_t power = this->is_version_3 ? target_power * 100 : target_power / 32.0 * 2000;
     power *= this->properties.at("ratio")->number_value < 0 ? -1 : 1;
-    this->send_and_wait(0xa1, 0,
-                        0,
-                        0,
-                        *((uint8_t *)(&power) + 0),
-                        *((uint8_t *)(&power) + 1),
-                        0,
-                        0);
+    this->send(0xa1, 0,
+               0,
+               0,
+               *((uint8_t *)(&power) + 0),
+               *((uint8_t *)(&power) + 1),
+               0,
+               0);
 }
 
 void RmdMotor::speed(double target_speed) {
     int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;
-    this->send_and_wait(0xa2, 0,
-                        0,
-                        0,
-                        *((uint8_t *)(&speed) + 0),
-                        *((uint8_t *)(&speed) + 1),
-                        *((uint8_t *)(&speed) + 2),
-                        *((uint8_t *)(&speed) + 3));
+    this->send(0xa2, 0,
+               0,
+               0,
+               *((uint8_t *)(&speed) + 0),
+               *((uint8_t *)(&speed) + 1),
+               *((uint8_t *)(&speed) + 2),
+               *((uint8_t *)(&speed) + 3));
 }
 
 void RmdMotor::position(double target_position, double target_speed) {
     int32_t position = target_position * 100 * this->properties.at("ratio")->number_value;
     uint16_t speed = target_speed * abs(this->properties.at("ratio")->number_value);
-    this->send_and_wait(0xa4, 0,
-                        *((uint8_t *)(&speed) + 0),
-                        *((uint8_t *)(&speed) + 1),
-                        *((uint8_t *)(&position) + 0),
-                        *((uint8_t *)(&position) + 1),
-                        *((uint8_t *)(&position) + 2),
-                        *((uint8_t *)(&position) + 3));
+    this->send(0xa4, 0,
+               *((uint8_t *)(&speed) + 0),
+               *((uint8_t *)(&speed) + 1),
+               *((uint8_t *)(&position) + 0),
+               *((uint8_t *)(&position) + 1),
+               *((uint8_t *)(&position) + 2),
+               *((uint8_t *)(&position) + 3));
 }
 
 void RmdMotor::stop() {
-    this->send_and_wait(0x81, 0, 0, 0, 0, 0, 0, 0);
+    this->send(0x81, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdMotor::off() {
-    this->send_and_wait(0x80, 0, 0, 0, 0, 0, 0, 0);
+    this->send(0x80, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdMotor::hold() {
@@ -127,7 +113,7 @@ void RmdMotor::hold() {
 }
 
 void RmdMotor::clear_errors() {
-    this->send_and_wait(this->is_version_3 ? 0x76 : 0x9b, 0, 0, 0, 0, 0, 0, 0);
+    this->send(this->is_version_3 ? 0x76 : 0x9b, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -136,10 +122,10 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     if (method_name == "zero") {
         Module::expect(arguments, 0);
         if (this->is_version_3) {
-            this->send_and_wait(0x64, 0, 0, 0, 0, 0, 0, 0, 250);
-            this->send_and_wait(0x76, 0, 0, 0, 0, 0, 0, 0);
+            this->send(0x64, 0, 0, 0, 0, 0, 0, 0);
+            this->send(0x76, 0, 0, 0, 0, 0, 0, 0);
         } else {
-            this->send_and_wait(0x19, 0, 0, 0, 0, 0, 0, 0, 250);
+            this->send(0x19, 0, 0, 0, 0, 0, 0, 0);
         }
     } else if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
@@ -216,19 +202,19 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
         this->map_leader = nullptr;
     } else if (method_name == "get_health") {
         Module::expect(arguments, 0);
-        this->send_and_wait(0x9a, 0, 0, 0, 0, 0, 0, 0);
+        this->send(0x9a, 0, 0, 0, 0, 0, 0, 0);
     } else if (method_name == "get_pid") {
         Module::expect(arguments, 0);
-        this->send_and_wait(0x30, 0, 0, 0, 0, 0, 0, 0);
+        this->send(0x30, 0, 0, 0, 0, 0, 0, 0);
     } else if (method_name == "set_pid") {
         Module::expect(arguments, 6, integer, integer, integer, integer, integer, integer);
-        this->send_and_wait(0x32, 0,
-                            arguments[this->is_version_3 ? 4 : 0]->evaluate_integer(),
-                            arguments[this->is_version_3 ? 5 : 1]->evaluate_integer(),
-                            arguments[this->is_version_3 ? 2 : 2]->evaluate_integer(),
-                            arguments[this->is_version_3 ? 3 : 3]->evaluate_integer(),
-                            arguments[this->is_version_3 ? 0 : 4]->evaluate_integer(),
-                            arguments[this->is_version_3 ? 1 : 5]->evaluate_integer());
+        this->send(0x32, 0,
+                   arguments[this->is_version_3 ? 4 : 0]->evaluate_integer(),
+                   arguments[this->is_version_3 ? 5 : 1]->evaluate_integer(),
+                   arguments[this->is_version_3 ? 2 : 2]->evaluate_integer(),
+                   arguments[this->is_version_3 ? 3 : 3]->evaluate_integer(),
+                   arguments[this->is_version_3 ? 0 : 4]->evaluate_integer(),
+                   arguments[this->is_version_3 ? 1 : 5]->evaluate_integer());
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
         this->clear_errors();
@@ -282,7 +268,6 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         break;
     }
     }
-    this->last_msg_id = data[0];
     this->last_msg_millis = millis();
 }
 
