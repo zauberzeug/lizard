@@ -13,8 +13,6 @@ RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t moto
     this->properties["speed"] = std::make_shared<NumberVariable>();
     this->properties["temperature"] = std::make_shared<NumberVariable>();
     this->properties["can_age"] = std::make_shared<NumberVariable>();
-    this->properties["map_distance"] = std::make_shared<NumberVariable>();
-    this->properties["map_speed"] = std::make_shared<NumberVariable>();
 }
 
 void RmdMotor::subscribe_to_can() {
@@ -31,37 +29,6 @@ void RmdMotor::step() {
     this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
 
     this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
-    if (this->map_leader) {
-        double own_position = this->properties.at("position")->number_value;
-        double leader_position = this->map_leader->properties.at("position")->number_value;
-        double target_position = leader_position * this->map_scale + this->map_offset;
-        double target_speed = (target_position - own_position) / 0.01;
-        this->properties.at("map_distance")->number_value = target_position - own_position;
-        if (abs(target_speed) > 1) {
-            int32_t speed = target_speed * 100 * this->properties.at("ratio")->number_value;
-            this->send(0xa2, 0,
-                       0,
-                       0,
-                       *((uint8_t *)(&speed) + 0),
-                       *((uint8_t *)(&speed) + 1),
-                       *((uint8_t *)(&speed) + 2),
-                       *((uint8_t *)(&speed) + 3));
-            this->properties.at("map_speed")->number_value = target_speed;
-        } else {
-            int32_t position = own_position * 100 * this->properties.at("ratio")->number_value;
-            this->send(0xa4, 0,
-                       0,
-                       0,
-                       *((uint8_t *)(&position) + 0),
-                       *((uint8_t *)(&position) + 1),
-                       *((uint8_t *)(&position) + 2),
-                       *((uint8_t *)(&position) + 3));
-            this->properties.at("map_speed")->number_value = 0;
-        }
-    } else {
-        this->properties.at("map_distance")->number_value = 0;
-        this->properties.at("map_speed")->number_value = 0;
-    }
     Module::step();
 }
 
@@ -117,8 +84,6 @@ void RmdMotor::clear_errors() {
 }
 
 void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    this->map_leader = nullptr;
-
     if (method_name == "zero") {
         Module::expect(arguments, 0);
         if (this->is_version_3) {
@@ -150,56 +115,6 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     } else if (method_name == "hold") {
         Module::expect(arguments, 0);
         this->hold();
-    } else if (method_name == "map") {
-        if (arguments.size() < 1 || arguments[0]->type != identifier) {
-            throw std::runtime_error("expecting at least 1 identifier argument");
-        }
-        std::string other_name = arguments[0]->evaluate_identifier();
-        ConstModule_ptr other = Global::get_module(other_name);
-        if (other->type != rmd_motor) {
-            throw std::runtime_error("module \"" + other_name + "\" is no RMD motor");
-        }
-        this->map_leader = std::static_pointer_cast<const RmdMotor>(other);
-        switch (arguments.size()) {
-        case 1:
-            Module::expect(arguments, 1, identifier);
-            this->map_offset =
-                this->properties.at("position")->number_value -
-                this->map_leader->properties.at("position")->number_value;
-            this->map_scale = 1;
-            break;
-        case 2:
-            Module::expect(arguments, 2, identifier, numbery);
-            this->map_scale = arguments[1]->evaluate_number();
-            this->map_offset =
-                this->properties.at("position")->number_value -
-                this->map_leader->properties.at("position")->number_value * this->map_scale;
-            break;
-        case 3:
-            Module::expect(arguments, 3, identifier, numbery, numbery);
-            this->map_scale = arguments[1]->evaluate_number();
-            this->map_offset = arguments[2]->evaluate_number();
-            break;
-        case 5: {
-            Module::expect(arguments, 5, identifier, numbery, numbery, numbery, numbery);
-            double a = arguments[1]->evaluate_number();
-            double b = arguments[2]->evaluate_number();
-            double c = arguments[3]->evaluate_number();
-            double d = arguments[4]->evaluate_number();
-            if (a == b) {
-                throw std::runtime_error("invalid mapping (leader interval is empty)");
-            }
-            this->map_scale = (d - c) / (b - a);
-            this->map_offset = c - a * (d - c) / (b - a);
-            break;
-        }
-        default:
-            throw std::runtime_error("unexpected number of arguments");
-        }
-        echo("new mapping: %s = %f * %s %+f",
-             this->name.c_str(), this->map_scale, this->map_leader->name.c_str(), this->map_offset);
-    } else if (method_name == "unmap") {
-        this->map_leader = nullptr;
     } else if (method_name == "get_health") {
         Module::expect(arguments, 0);
         this->send(0x9a, 0, 0, 0, 0, 0, 0, 0);

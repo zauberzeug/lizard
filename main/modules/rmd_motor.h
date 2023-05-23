@@ -15,10 +15,6 @@ private:
     bool is_version_3;
     unsigned long int last_msg_millis = 0;
 
-    ConstRmdMotor_ptr map_leader = nullptr;
-    double map_scale = 1;
-    double map_offset = 0;
-
     void send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7);
 

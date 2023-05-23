@@ -283,53 +283,35 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | ------------------------------- | ------------------------------ | ----------------- |
 | `rmd = RmdMotor(can, motor_id)` | CAN module and motor ID (1..8) | CAN module, `int` |
 
-| Properties         | Description                                    | Data type |
-| ------------------ | ---------------------------------------------- | --------- |
-| `rmd.position`     | Multi-turn motor position (deg)                | `float`   |
-| `rmd.ratio`        | Transmission from motor to shaft (default: 6)  | `float`   |
-| `rmd.torque`       | Current torque                                 | `float`   |
-| `rmd.speed`        | Current speed (deg/s)                          | `float`   |
-| `rmd.temperature`  | Current temperature (C)                        | `float`   |
-| `rmd.can_age`      | Time since last CAN message from motor (s)     | `float`   |
-| `rmd.map_distance` | Distance to leading motor (deg)                | `float`   |
-| `rmd.map_speed`    | Computed speed to follow leading motor (deg/s) | `float`   |
+| Properties        | Description                                   | Data type |
+| ----------------- | --------------------------------------------- | --------- |
+| `rmd.position`    | Multi-turn motor position (deg)               | `float`   |
+| `rmd.ratio`       | Transmission from motor to shaft (default: 6) | `float`   |
+| `rmd.torque`      | Current torque                                | `float`   |
+| `rmd.speed`       | Current speed (deg/s)                         | `float`   |
+| `rmd.temperature` | Current temperature (C)                       | `float`   |
+| `rmd.can_age`     | Time since last CAN message from motor (s)    | `float`   |
 
-| Methods                       | Description                                               | Arguments              |
-| ----------------------------- | --------------------------------------------------------- | ---------------------- |
-| `rmd.power(torque)`           | Move with given `torque` (-32..32 A)                      | `float`                |
-| `rmd.speed(speed)`            | Move with given `speed` (deg/s)                           | `float`                |
-| `rmd.position(pos)`           | Move to and hold at `pos` (deg)                           | `float`                |
-| `rmd.position(pos, speed)`    | Move to and hold at `pos` (deg) with max. `speed` (deg/s) | `float`, `float`       |
-| `rmd.stop()`                  | Stop motor (but keep operating state)                     |                        |
-| `rmd.off()`                   | Turn motor off (clear operating state)                    |                        |
-| `rmd.hold()`                  | Hold current position                                     |                        |
-| `rmd.map(leader)`             | Map another RMD with current offset and scale 1           | RMD module             |
-| `rmd.map(leader, m)`          | Map another RMD with current offset and scale `m`         | RMD module, 1x `float` |
-| `rmd.map(leader, m, n)`       | Map another RMD with offset `n` and scale `m`             | RMD module, 2x `float` |
-| `rmd.map(leader, a, b, c, d)` | Map another RMD from interval (a, b) to (c, d)            | RMD module, 4x `float` |
-| `rmd.unmap()`                 | Stop mapping                                              |                        |
-| `rmd.get_health()`            | Print temperature (C), voltage (V) and error code         |                        |
-| `rmd.get_pid()`               | Print PID parameters Kp/Ki for position/speed/torque loop |                        |
-| `rmd.set_pid(...)`            | Print PID parameters Kp/Ki for position/speed/torque loop | 6x `int`               |
-| `rmd.clear_errors()`          | Clear motor error                                         |                        |
-| `rmd.zero()`                  | Write position to ROM as zero position (see below)        |                        |
+| Methods                    | Description                                               | Arguments        |
+| -------------------------- | --------------------------------------------------------- | ---------------- |
+| `rmd.power(torque)`        | Move with given `torque` (-32..32 A)                      | `float`          |
+| `rmd.speed(speed)`         | Move with given `speed` (deg/s)                           | `float`          |
+| `rmd.position(pos)`        | Move to and hold at `pos` (deg)                           | `float`          |
+| `rmd.position(pos, speed)` | Move to and hold at `pos` (deg) with max. `speed` (deg/s) | `float`, `float` |
+| `rmd.stop()`               | Stop motor (but keep operating state)                     |                  |
+| `rmd.off()`                | Turn motor off (clear operating state)                    |                  |
+| `rmd.hold()`               | Hold current position                                     |                  |
+| `rmd.get_health()`         | Print temperature (C), voltage (V) and error code         |                  |
+| `rmd.get_pid()`            | Print PID parameters Kp/Ki for position/speed/torque loop |                  |
+| `rmd.set_pid(...)`         | Print PID parameters Kp/Ki for position/speed/torque loop | 6x `int`         |
+| `rmd.clear_errors()`       | Clear motor error                                         |                  |
+| `rmd.zero()`               | Write position to ROM as zero position (see below)        |                  |
 
 **The zero command**
 
 The `zero()` method should be used with care!
 In contrast to other commands it blocks the main loop for up to 200 ms and requires restarting the motor to take effect.
 Furthermore, multiple writes will affect the chip life, thus it is not recommended to use it frequently.
-
-**Mapping movement to another RMD motor**
-
-When mapping the movement of a following motor to a leading motor, the follower uses velocity control to follow the leader.
-The follower's target speed is always computed such that it catches up within one loop cycle.
-When the following motor reaches its target position and the computed speed is below 1 degree per second, the follower switches to position control and holds the current position.
-
-The mapping interval (`a`, `b`) should not be empty, because the target position of the following motor would be undefined.
-
-Any method call (except the `map()` method) will unmap the motor.
-This avoids extreme position jumps and inconsistencies caused by multiple control loops running at the same time.
 
 ## RMD Motor Pair
 
