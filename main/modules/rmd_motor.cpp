@@ -11,7 +11,7 @@ int sgn(T val) {
 }
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
-    : Module(rmd_motor, name), motor_id(motor_id), can(can), is_version_3(true), ratio(ratio) {
+    : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio) {
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["torque"] = std::make_shared<NumberVariable>();
     this->properties["speed"] = std::make_shared<NumberVariable>();
@@ -20,7 +20,6 @@ RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t moto
 }
 
 void RmdMotor::subscribe_to_can() {
-    can->subscribe(this->motor_id + 0x140, std::static_pointer_cast<Module>(this->shared_from_this()));
     can->subscribe(this->motor_id + 0x240, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
@@ -37,8 +36,7 @@ void RmdMotor::step() {
 }
 
 void RmdMotor::power(double target_power) {
-    int16_t power = this->is_version_3 ? target_power * 100 : target_power / 32.0 * 2000;
-    power *= sgn(this->ratio);
+    int16_t power = target_power * 100 * sgn(this->ratio);
     this->send(0xa1, 0,
                0,
                0,
@@ -49,7 +47,7 @@ void RmdMotor::power(double target_power) {
 }
 
 void RmdMotor::speed(double target_speed) {
-    int32_t speed = target_speed * 100 * (this->is_version_3 ? sgn(this->ratio) : this->ratio);
+    int32_t speed = target_speed * 100 * sgn(this->ratio);
     this->send(0xa2, 0,
                0,
                0,
@@ -60,8 +58,8 @@ void RmdMotor::speed(double target_speed) {
 }
 
 void RmdMotor::position(double target_position, double target_speed) {
-    int32_t position = target_position * 100 * (this->is_version_3 ? sgn(this->ratio) : this->ratio);
-    uint16_t speed = target_speed * (this->is_version_3 ? 1 : this->ratio);
+    int32_t position = target_position * 100 * sgn(this->ratio);
+    uint16_t speed = target_speed;
     this->send(0xa4, 0,
                *((uint8_t *)(&speed) + 0),
                *((uint8_t *)(&speed) + 1),
@@ -84,18 +82,14 @@ void RmdMotor::hold() {
 }
 
 void RmdMotor::clear_errors() {
-    this->send(this->is_version_3 ? 0x76 : 0x9b, 0, 0, 0, 0, 0, 0, 0);
+    this->send(0x76, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "zero") {
         Module::expect(arguments, 0);
-        if (this->is_version_3) {
-            this->send(0x64, 0, 0, 0, 0, 0, 0, 0);
-            this->send(0x76, 0, 0, 0, 0, 0, 0, 0);
-        } else {
-            this->send(0x19, 0, 0, 0, 0, 0, 0, 0);
-        }
+        this->send(0x64, 0, 0, 0, 0, 0, 0, 0);
+        this->send(0x76, 0, 0, 0, 0, 0, 0, 0);
     } else if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
         this->power(arguments[0]->evaluate_number());
@@ -128,12 +122,12 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     } else if (method_name == "set_pid") {
         Module::expect(arguments, 6, integer, integer, integer, integer, integer, integer);
         this->send(0x32, 0,
-                   arguments[this->is_version_3 ? 4 : 0]->evaluate_integer(),
-                   arguments[this->is_version_3 ? 5 : 1]->evaluate_integer(),
-                   arguments[this->is_version_3 ? 2 : 2]->evaluate_integer(),
-                   arguments[this->is_version_3 ? 3 : 3]->evaluate_integer(),
-                   arguments[this->is_version_3 ? 0 : 4]->evaluate_integer(),
-                   arguments[this->is_version_3 ? 1 : 5]->evaluate_integer());
+                   arguments[4]->evaluate_integer(),
+                   arguments[5]->evaluate_integer(),
+                   arguments[2]->evaluate_integer(),
+                   arguments[3]->evaluate_integer(),
+                   arguments[0]->evaluate_integer(),
+                   arguments[1]->evaluate_integer());
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
         this->clear_errors();
@@ -143,7 +137,6 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
 }
 
 void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
-    this->is_version_3 = id > 0x240;
     switch (data[0]) {
     case 0x9c: {
         int8_t temperature = 0;
@@ -152,33 +145,27 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
 
         int16_t torque = 0;
         std::memcpy(&torque, data + 2, 2);
-        this->properties.at("torque")->number_value = this->is_version_3 ? 0.01 * torque : torque / 2048.0 * 33.0;
+        this->properties.at("torque")->number_value = 0.01 * torque;
 
         int16_t speed = 0;
         std::memcpy(&speed, data + 4, 2);
-        this->properties.at("speed")->number_value = speed / (this->is_version_3 ? sgn(this->ratio) : this->ratio);
+        this->properties.at("speed")->number_value = speed / sgn(this->ratio);
 
-        if (this->is_version_3) {
-            int16_t position = 0;
-            std::memcpy(&position, data + 6, 2);
-            this->properties.at("position")->number_value = position / sgn(this->ratio);
-        } else {
-            uint16_t position = 0;
-            std::memcpy(&position, data + 6, 2);
-            this->properties.at("position")->number_value = (position >> 2) / 16384.0 * 360.0 / this->ratio;
-        }
+        int16_t position = 0;
+        std::memcpy(&position, data + 6, 2);
+        this->properties.at("position")->number_value = position / sgn(this->ratio);
 
         break;
     }
     case 0x30: {
         echo("%s pid %3d %3d %3d %3d %3d %3d",
              this->name.c_str(),
-             data[this->is_version_3 ? 6 : 2],
-             data[this->is_version_3 ? 7 : 3],
-             data[this->is_version_3 ? 4 : 4],
-             data[this->is_version_3 ? 5 : 5],
-             data[this->is_version_3 ? 2 : 6],
-             data[this->is_version_3 ? 3 : 7]);
+             data[6],
+             data[7],
+             data[4],
+             data[5],
+             data[2],
+             data[3]);
         break;
     }
     }

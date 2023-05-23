@@ -12,7 +12,6 @@ class RmdMotor : public Module, public std::enable_shared_from_this<RmdMotor> {
 private:
     const uint32_t motor_id;
     const Can_ptr can;
-    bool is_version_3;
     int ratio;
     unsigned long int last_msg_millis = 0;
 
