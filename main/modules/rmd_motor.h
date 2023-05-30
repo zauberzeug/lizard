@@ -12,12 +12,14 @@ class RmdMotor : public Module, public std::enable_shared_from_this<RmdMotor> {
 private:
     const uint32_t motor_id;
     const Can_ptr can;
+    uint8_t last_msg_id = 0;
     int ratio;
     int32_t last_encoder_position;
     unsigned long int last_msg_millis = 0;
 
     void send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
-              const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7);
+              const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
+              const unsigned long int timeout_ms = 2);
 
 public:
     RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio);

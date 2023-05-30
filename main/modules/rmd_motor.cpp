@@ -12,16 +12,30 @@ RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t moto
     this->properties["speed"] = std::make_shared<NumberVariable>();
     this->properties["temperature"] = std::make_shared<NumberVariable>();
     this->properties["can_age"] = std::make_shared<NumberVariable>();
-    this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdMotor::subscribe_to_can() {
     can->subscribe(this->motor_id + 0x240, std::static_pointer_cast<Module>(this->shared_from_this()));
+    this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
-                    const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7) {
-    this->can->send(this->motor_id + 0x140, d0, d1, d2, d3, d4, d5, d6, d7);
+                    const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
+                    const unsigned long int timeout_ms) {
+    this->last_msg_id = 0;
+    const int max_attempts = 3;
+    for (int i = 0; i < max_attempts; ++i) {
+        this->can->send(this->motor_id + 0x140, d0, d1, d2, d3, d4, d5, d6, d7);
+        unsigned long int start = micros();
+        while (this->last_msg_id != d0 && micros_since(start) < timeout_ms * 1000) {
+            this->can->receive();
+        }
+        if (this->last_msg_id == d0) {
+            return;
+        } else {
+            echo("%s warning: CAN timeout for msg id 0x%02x (attempt %d/%d)", this->name.c_str(), d0, i + 1, max_attempts);
+        }
+    }
 }
 
 void RmdMotor::step() {
@@ -201,6 +215,8 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         echo("%s acceleration %d", this->name.c_str(), acceleration);
         break;
     }
+    }
+    this->last_msg_id = data[0];
     this->last_msg_millis = millis();
 }
 
