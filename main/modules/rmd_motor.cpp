@@ -109,9 +109,6 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     } else if (method_name == "hold") {
         Module::expect(arguments, 0);
         this->hold();
-    } else if (method_name == "get_health") {
-        Module::expect(arguments, 0);
-        this->send(0x9a, 0, 0, 0, 0, 0, 0, 0);
     } else if (method_name == "get_pid") {
         Module::expect(arguments, 0);
         this->send(0x30, 0, 0, 0, 0, 0, 0, 0);

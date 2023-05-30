@@ -300,7 +300,6 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.stop()`               | Stop motor (but keep operating state)                     |                  |
 | `rmd.off()`                | Turn motor off (clear operating state)                    |                  |
 | `rmd.hold()`               | Hold current position                                     |                  |
-| `rmd.get_health()`         | Print temperature (C), voltage (V) and error code         |                  |
 | `rmd.get_pid()`            | Print PID parameters Kp/Ki for position/speed/torque loop |                  |
 | `rmd.set_pid(...)`         | Print PID parameters Kp/Ki for position/speed/torque loop | 6x `int`         |
 | `rmd.clear_errors()`       | Clear motor error                                         |                  |
