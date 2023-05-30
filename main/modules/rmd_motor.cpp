@@ -121,6 +121,19 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
                    arguments[3]->evaluate_integer(),
                    arguments[0]->evaluate_integer(),
                    arguments[1]->evaluate_integer());
+    } else if (method_name == "get_acceleration") {
+        Module::expect(arguments, 0);
+        this->send(0x42, 0, 0, 0, 0, 0, 0, 0);
+    } else if (method_name == "set_acceleration") {
+        Module::expect(arguments, 4, integer);
+        for (int i = 0; i < 4; ++i) {
+            const uint32_t acceleration = arguments[i]->evaluate_integer();
+            this->send(0x42, i, 0, 0,
+                       *((uint8_t *)(&acceleration) + 0),
+                       *((uint8_t *)(&acceleration) + 1),
+                       *((uint8_t *)(&acceleration) + 2),
+                       *((uint8_t *)(&acceleration) + 3));
+        }
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
         this->clear_errors();
@@ -182,6 +195,11 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
              data[3]);
         break;
     }
+    case 0x42: {
+        int32_t acceleration = 0;
+        std::memcpy(&acceleration, data + 4, 4);
+        echo("%s acceleration %d", this->name.c_str(), acceleration);
+        break;
     }
     this->last_msg_millis = millis();
 }

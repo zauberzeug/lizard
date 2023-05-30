@@ -291,25 +291,36 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.temperature` | Current temperature (C)                    | `float`   |
 | `rmd.can_age`     | Time since last CAN message from motor (s) | `float`   |
 
-| Methods                    | Description                                               | Arguments        |
-| -------------------------- | --------------------------------------------------------- | ---------------- |
-| `rmd.power(torque)`        | Move with given `torque` (-32..32 A)                      | `float`          |
-| `rmd.speed(speed)`         | Move with given `speed` (deg/s)                           | `float`          |
-| `rmd.position(pos)`        | Move to and hold at `pos` (deg)                           | `float`          |
-| `rmd.position(pos, speed)` | Move to and hold at `pos` (deg) with max. `speed` (deg/s) | `float`, `float` |
-| `rmd.stop()`               | Stop motor (but keep operating state)                     |                  |
-| `rmd.off()`                | Turn motor off (clear operating state)                    |                  |
-| `rmd.hold()`               | Hold current position                                     |                  |
-| `rmd.get_pid()`            | Print PID parameters Kp/Ki for position/speed/torque loop |                  |
-| `rmd.set_pid(...)`         | Print PID parameters Kp/Ki for position/speed/torque loop | 6x `int`         |
-| `rmd.clear_errors()`       | Clear motor error                                         |                  |
-| `rmd.zero()`               | Write position to ROM as zero position (see below)        |                  |
+| Methods                     | Description                                                       | Arguments        |
+| --------------------------- | ----------------------------------------------------------------- | ---------------- |
+| `rmd.power(torque)`         | Move with given `torque` (-32..32 A)                              | `float`          |
+| `rmd.speed(speed)`          | Move with given `speed` (deg/s)                                   | `float`          |
+| `rmd.position(pos)`         | Move to and hold at `pos` (deg)                                   | `float`          |
+| `rmd.position(pos, speed)`  | Move to and hold at `pos` (deg) with max. `speed` (deg/s)         | `float`, `float` |
+| `rmd.stop()`                | Stop motor (but keep operating state)                             |                  |
+| `rmd.off()`                 | Turn motor off (clear operating state)                            |                  |
+| `rmd.hold()`                | Hold current position                                             |                  |
+| `rmd.get_pid()`             | Print PID parameters Kp/Ki for position/speed/torque loop         |                  |
+| `rmd.set_pid(...)`          | Set PID parameters Kp/Ki for position/speed/torque loop           | 6x `int`         |
+| `rmd.get_acceleration()`    | Print acceleration (deg/s^2)                                      |                  |
+| `rmd.set_acceleration(...)` | Set accelerations/decelerations for position/speed loop (deg/s^2) | 4x `int`         |
+| `rmd.clear_errors()`        | Clear motor error                                                 |                  |
+| `rmd.zero()`                | Write position to ROM as zero position (see below)                |                  |
 
 **The zero command**
 
 The `zero()` method should be used with care!
 In contrast to other commands it blocks the main loop for up to 200 ms and requires restarting the motor to take effect.
 Furthermore, multiple writes will affect the chip life, thus it is not recommended to use it frequently.
+
+**Set acceleration**
+
+Although `get_acceleration()` prints only one acceleration per motor, `set_acceleration` distinguishes the following four parameters:
+
+1. acceleration for position mode
+2. deceleration for position mode
+3. acceleration for speed mode
+4. deceleration for speed mode
 
 ## RMD Motor Pair
 
