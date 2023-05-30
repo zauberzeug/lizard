@@ -8,7 +8,7 @@ RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor
     this->properties["v_max"] = std::make_shared<NumberVariable>(360);
     this->properties["a_max"] = std::make_shared<NumberVariable>(360);
     this->properties["max_error"] = std::make_shared<NumberVariable>(10);
-    this->properties["dt"] = std::make_shared<NumberVariable>(0.02);
+    this->properties["dt"] = std::make_shared<NumberVariable>(0.1);
 }
 
 RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {

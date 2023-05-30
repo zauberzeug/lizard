@@ -335,7 +335,7 @@ The RMD motor pair module allows to synchronize two RMD motors.
 | `rmd.v_max`     | Maximum speed (deg/s, default: 360)           | `float`   |
 | `rmd.a_max`     | Maximum acceleration (deg/s² (default: 360)   | `float`   |
 | `rmd.max_error` | Maximum position deviation (deg, default: 10) | `float`   |
-| `rmd.dt`        | Differentiation interval (s, default: 0.02)   | `float`   |
+| `rmd.dt`        | Differentiation interval (s, default: 0.1)    | `float`   |
 
 | Methods                | Description                                       | Arguments  |
 | ---------------------- | ------------------------------------------------- | ---------- |
