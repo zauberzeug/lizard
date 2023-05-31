@@ -38,4 +38,5 @@ public:
 
     double get_position() const;
     double get_speed() const;
+    void set_acceleration(const uint8_t index, const uint32_t acceleration);
 };

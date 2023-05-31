@@ -140,14 +140,8 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
         this->send(0x42, 0, 0, 0, 0, 0, 0, 0);
     } else if (method_name == "set_acceleration") {
         Module::expect(arguments, 4, integer, integer, integer, integer);
-        for (int i = 0; i < 4; ++i) {
-            const uint32_t acceleration = arguments[i]->evaluate_integer();
-            this->send(0x43, i, 0, 0,
-                       *((uint8_t *)(&acceleration) + 0),
-                       *((uint8_t *)(&acceleration) + 1),
-                       *((uint8_t *)(&acceleration) + 2),
-                       *((uint8_t *)(&acceleration) + 3),
-                       20);
+        for (uint8_t i = 0; i < 4; ++i) {
+            set_acceleration(i, arguments[i]->evaluate_integer());
         }
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
@@ -235,4 +229,16 @@ double RmdMotor::get_position() const {
 
 double RmdMotor::get_speed() const {
     return this->properties.at("speed")->number_value;
+}
+
+void RmdMotor::set_acceleration(const uint8_t index, const uint32_t acceleration) {
+    this->send(0x43,
+               index,
+               0,
+               0,
+               *((uint8_t *)(&acceleration) + 0),
+               *((uint8_t *)(&acceleration) + 1),
+               *((uint8_t *)(&acceleration) + 2),
+               *((uint8_t *)(&acceleration) + 3),
+               20);
 }

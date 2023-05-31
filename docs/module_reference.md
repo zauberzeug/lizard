@@ -330,23 +330,18 @@ The RMD motor pair module allows to synchronize two RMD motors.
 | --------------------------- | --------------------- | ------------------- |
 | `rmd = RmdPair(rmd1, rmd2)` | Two RMD motor modules | 2x RMD Motor module |
 
-| Properties      | Description                                   | Data type |
-| --------------- | --------------------------------------------- | --------- |
-| `rmd.v_max`     | Maximum speed (deg/s, default: 360)           | `float`   |
-| `rmd.a_max`     | Maximum acceleration (deg/s² (default: 360)   | `float`   |
-| `rmd.max_error` | Maximum position deviation (deg, default: 10) | `float`   |
-| `rmd.dt`        | Differentiation interval (s, default: 0.1)    | `float`   |
+| Properties  | Description                                   | Data type |
+| ----------- | --------------------------------------------- | --------- |
+| `rmd.v_max` | Maximum speed (deg/s, default: 360)           | `float`   |
+| `rmd.a_max` | Maximum acceleration (deg/s² (default: 10000) | `float`   |
 
-| Methods                | Description                                       | Arguments  |
-| ---------------------- | ------------------------------------------------- | ---------- |
-| `rmd.move(x, y)`       | Move motor 1 to `x` and motor 2 to `x`            | 2x `float` |
-| `rmd.move(x, y, v, w)` | Reach targets `x` and `y` with speeds `v` and `w` | 4x `float` |
-| `rmd.stop()`           | Stop motors (but keep operating state)            |            |
-| `rmd.off()`            | Turn motors off (clear operating state)           |            |
-| `rmd.hold()`           | Hold current positions                            |            |
-| `rmd.clear_errors()`   | Clear motor errors                                |            |
-
-Multiple `move` commands are scheduled to be executed one after another.
+| Methods              | Description                             | Arguments  |
+| -------------------- | --------------------------------------- | ---------- |
+| `rmd.move(x, y)`     | Move motor 1 to `x` and motor 2 to `x`  | 2x `float` |
+| `rmd.stop()`         | Stop motors (but keep operating state)  |            |
+| `rmd.off()`          | Turn motors off (clear operating state) |            |
+| `rmd.hold()`         | Hold current positions                  |            |
+| `rmd.clear_errors()` | Clear motor errors                      |            |
 
 ## RoboClaw
 
