@@ -15,6 +15,7 @@ private:
     uint8_t last_msg_id = 0;
     int ratio;
     int32_t last_encoder_position;
+    bool has_last_encoder_position = false;
     unsigned long int last_msg_millis = 0;
 
     void send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,

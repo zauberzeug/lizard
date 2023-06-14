@@ -16,7 +16,6 @@ RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t moto
 
 void RmdMotor::subscribe_to_can() {
     can->subscribe(this->motor_id + 0x240, std::static_pointer_cast<Module>(this->shared_from_this()));
-    this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
@@ -40,6 +39,10 @@ void RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const 
 
 void RmdMotor::step() {
     this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
+
+    if (!this->has_last_encoder_position) {
+        this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
+    }
 
     this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
     Module::step();
@@ -164,6 +167,7 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         while (this->last_encoder_position < -65536 * 2 / this->ratio) {
             this->last_encoder_position += 65536 * 4 / this->ratio;
         }
+        this->has_last_encoder_position = true;
         break;
     }
     case 0x9c: {
