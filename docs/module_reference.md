@@ -322,6 +322,8 @@ Although `get_acceleration()` prints only one acceleration per motor, `set_accel
 3. acceleration for speed mode
 4. deceleration for speed mode
 
+You can pass `0` to skip parameters, i.e. to keep individual acceleration values unchanged.
+
 ## RMD Motor Pair
 
 The RMD motor pair module allows to synchronize two RMD motors.

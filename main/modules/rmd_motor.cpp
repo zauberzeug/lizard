@@ -144,7 +144,10 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     } else if (method_name == "set_acceleration") {
         Module::expect(arguments, 4, integer, integer, integer, integer);
         for (uint8_t i = 0; i < 4; ++i) {
-            set_acceleration(i, arguments[i]->evaluate_integer());
+            int acceleration = arguments[i]->evaluate_integer();
+            if (acceleration > 0) {
+                set_acceleration(i, acceleration);
+            }
         }
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
