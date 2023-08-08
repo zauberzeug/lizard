@@ -15,6 +15,9 @@ void ODriveMotor::subscribe_to_can() {
 }
 
 void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, const uint8_t input_mode) {
+    if (!this->is_boot_complete) {
+        return;
+    }
     if (this->axis_state != state) {
         this->can->send(this->can_id + 0x007, state, 0, 0, 0, 0, 0, 0, 0);
         this->axis_state = state;
@@ -53,6 +56,7 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
 }
 
 void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
+    this->is_boot_complete = true;
     switch (id - this->can_id) {
     case 0x009: {
         float tick;

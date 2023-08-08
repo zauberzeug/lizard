@@ -11,6 +11,7 @@ class ODriveMotor : public Module, public std::enable_shared_from_this<ODriveMot
 private:
     const uint32_t can_id;
     const Can_ptr can;
+    bool is_boot_complete = false;
     uint8_t axis_state = -1;
     uint8_t axis_control_mode = -1;
     uint8_t axis_input_mode = -1;
