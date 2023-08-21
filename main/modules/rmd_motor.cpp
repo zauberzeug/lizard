@@ -3,10 +3,11 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <cstring>
+#include <math.h>
 #include <memory>
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
-    : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio) {
+    : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["torque"] = std::make_shared<NumberVariable>();
     this->properties["speed"] = std::make_shared<NumberVariable>();
@@ -157,19 +158,24 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     }
 }
 
+double modulo_encoder_range(double position, double range) {
+    double result = std::fmod(position, range);
+    if (result > range / 2) {
+        return result - range;
+    }
+    if (result < -range / 2) {
+        return result + range;
+    }
+    return result;
+}
+
 void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     switch (data[0]) {
     case 0x92: {
         int32_t position = 0;
         std::memcpy(&position, data + 4, 4);
         this->properties.at("position")->number_value = 0.01 * position;
-        this->last_encoder_position = 0.01 * position;
-        while (this->last_encoder_position > 65536 * 2 / this->ratio) {
-            this->last_encoder_position -= 65536 * 4 / this->ratio;
-        }
-        while (this->last_encoder_position < -65536 * 2 / this->ratio) {
-            this->last_encoder_position += 65536 * 4 / this->ratio;
-        }
+        this->last_encoder_position = modulo_encoder_range(0.01 * position, this->encoder_range);
         this->has_last_encoder_position = true;
         break;
     }
@@ -189,14 +195,16 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         int16_t position = 0;
         std::memcpy(&position, data + 6, 2);
         int32_t encoder_position = position;
-        this->properties.at("position")->number_value += encoder_position - this->last_encoder_position;
-        if (encoder_position - this->last_encoder_position > 65536 * 2 / this->ratio) {
-            this->properties.at("position")->number_value -= 65536 * 4 / this->ratio;
+        if (this->has_last_encoder_position) {
+            this->properties.at("position")->number_value += encoder_position - this->last_encoder_position;
+            if (encoder_position - this->last_encoder_position > this->encoder_range / 2) {
+                this->properties.at("position")->number_value -= this->encoder_range;
+            }
+            if (encoder_position - this->last_encoder_position < -this->encoder_range / 2) {
+                this->properties.at("position")->number_value += this->encoder_range;
+            }
+            this->last_encoder_position = encoder_position;
         }
-        if (encoder_position - this->last_encoder_position < -65536 * 2 / this->ratio) {
-            this->properties.at("position")->number_value += 65536 * 4 / this->ratio;
-        }
-        this->last_encoder_position = encoder_position;
 
         break;
     }

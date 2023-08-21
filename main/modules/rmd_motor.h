@@ -14,6 +14,7 @@ private:
     const Can_ptr can;
     uint8_t last_msg_id = 0;
     int ratio;
+    const double encoder_range;
     int32_t last_encoder_position;
     bool has_last_encoder_position = false;
     unsigned long int last_msg_millis = 0;
