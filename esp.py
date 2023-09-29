@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from time import sleep
 from typing import Optional, Union
 
 
@@ -41,7 +42,9 @@ class Esp:
     def flash_mode(self):
         print('Bringing microcontroller into flash mode...')
         self.write(f'{self.gpio_en}/value', self.on)
+        sleep(0.5)
         self.write(f'{self.gpio_g0}/value', self.on)
+        sleep(0.5)
         self.write(f'{self.gpio_en}/value', self.off)
         yield
         self.activate()
@@ -49,5 +52,7 @@ class Esp:
     def activate(self) -> None:
         print('Bringing microcontroller into normal operation mode...')
         self.write(f'{self.gpio_g0}/value', self.off)
+        sleep(0.5)
         self.write(f'{self.gpio_en}/value', self.on)
+        sleep(0.5)
         self.write(f'{self.gpio_en}/value', self.off)
