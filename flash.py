@@ -6,9 +6,10 @@ from esp import Esp
 
 
 def help() -> None:
-    print(f'{sys.argv[0]} [nano | xavier] [nand]')
+    print(f'{sys.argv[0]} [nano | xavier | orin] [nand]')
     print(f'   nano          flashing Jetson Nano (default)')
     print(f'   xavier        flashing Jetson Xavier')
+    print(f'   orin          flashing Jetson Orin')
     print(f'   nand          Robot Brain has piggyboard with NAND gate (eg. older version)')
     print(f'   usb           use /dev/tty.SLAB_USBtoUART as serial device')
     print(f'   /dev/<name>   use /dev/<name> as serial device')
@@ -24,7 +25,7 @@ if 'usb' in sys.argv:
 for p in sys.argv:
     if p.startswith('/dev/'):
         device = p
-esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv, device=device)
+esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv, orin='orin' in sys.argv, device=device)
 
 with esp.pin_config(), esp.flash_mode():
     print('Flashing...')
