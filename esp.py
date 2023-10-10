@@ -5,8 +5,12 @@ from typing import Optional, Union
 
 class Esp:
 
-    def __init__(
-            self, nand: bool = False, xavier: bool = False, orin: bool = False, device: Optional[str] = None) -> None:
+    def __init__(self,
+                 nand: bool = False,
+                 xavier: bool = False,
+                 orin: bool = False,
+                 device: Optional[str] = None,
+                 ) -> None:
         print('Initializing ESP...')
         self.en = 436 if xavier else 492 if orin else 216
         self.g0 = 428 if xavier else 460 if orin else 50
@@ -24,7 +28,7 @@ class Esp:
             print(f'echo {value:3} > /sys/class/gpio/{path}')
             with open(f'/sys/class/gpio/{path}', 'w') as f:
                 f.write(f'{value}\n')
-        except:
+        except Exception:
             print(f'could not write {value} to {path}')
 
     @contextmanager
