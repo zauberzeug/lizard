@@ -1,8 +1,6 @@
 #include "pwm_output.h"
 #include <driver/ledc.h>
 
-#define MIN_FREQUENCY 490
-
 PwmOutput::PwmOutput(const std::string name,
                      const gpio_num_t pin,
                      const ledc_timer_t ledc_timer,
@@ -38,9 +36,7 @@ PwmOutput::PwmOutput(const std::string name,
 
 void PwmOutput::step() {
     uint32_t frequency = this->properties.at("frequency")->integer_value;
-    if (frequency > MIN_FREQUENCY) {
-        ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, frequency);
-    }
+    ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, frequency);
     uint32_t duty = this->properties.at("duty")->integer_value;
     ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, duty);
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
