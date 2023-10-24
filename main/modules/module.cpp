@@ -16,6 +16,7 @@
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
 #include "output.h"
+#include "pwm_output.h"
 #include "rmd_motor.h"
 #include "rmd_pair.h"
 #include "roboclaw.h"
@@ -104,6 +105,15 @@ Module_ptr Module::create(const std::string type,
             const Mcp23017_ptr mcp = std::static_pointer_cast<Mcp23017>(module);
             return std::make_shared<McpInput>(name, mcp, arguments[1]->evaluate_integer());
         }
+    } else if (type == "PwmOutput") {
+        if (arguments.size() < 1 || arguments.size() > 6) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer, integer, integer, integer, integer, integer);
+        gpio_num_t pin = (gpio_num_t)arguments[0]->evaluate_integer();
+        ledc_timer_t ledc_timer = arguments.size() > 1 ? (ledc_timer_t)arguments[1]->evaluate_integer() : LEDC_TIMER_0;
+        ledc_channel_t ledc_channel = arguments.size() > 2 ? (ledc_channel_t)arguments[2]->evaluate_integer() : LEDC_CHANNEL_0;
+        return std::make_shared<PwmOutput>(name, pin, ledc_timer, ledc_channel);
     } else if (type == "Mcp23017") {
         if (arguments.size() > 5) {
             throw std::runtime_error("unexpected number of arguments");
