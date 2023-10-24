@@ -106,10 +106,10 @@ Module_ptr Module::create(const std::string type,
             return std::make_shared<McpInput>(name, mcp, arguments[1]->evaluate_integer());
         }
     } else if (type == "PwmOutput") {
-        if (arguments.size() < 1 || arguments.size() > 6) {
+        if (arguments.size() < 1 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, integer, integer, integer, integer, integer, integer);
+        Module::expect(arguments, -1, integer, integer, integer);
         gpio_num_t pin = (gpio_num_t)arguments[0]->evaluate_integer();
         ledc_timer_t ledc_timer = arguments.size() > 1 ? (ledc_timer_t)arguments[1]->evaluate_integer() : LEDC_TIMER_0;
         ledc_channel_t ledc_channel = arguments.size() > 2 ? (ledc_channel_t)arguments[2]->evaluate_integer() : LEDC_CHANNEL_0;

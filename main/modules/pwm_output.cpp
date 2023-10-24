@@ -31,9 +31,9 @@ PwmOutput::PwmOutput(const std::string name,
         .flags = {},
     };
     ledc_timer_config(&timer_config);
+    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
     ledc_channel_config(&channel_config);
     ledc_timer_pause(LEDC_HIGH_SPEED_MODE, ledc_timer);
-    gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT);
 }
 
 void PwmOutput::step() {
