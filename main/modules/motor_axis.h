@@ -9,6 +9,8 @@ private:
     const Input_ptr input1;
     const Input_ptr input2;
 
+    void check_inputs() const;
+
 public:
     MotorAxis(const std::string name, const StepperMotor_ptr motor, const Input_ptr input1, const Input_ptr input2);
     void step() override;
