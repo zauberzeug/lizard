@@ -4,6 +4,9 @@
 #include "mcp23017.h"
 #include "module.h"
 
+class Input;
+using Input_ptr = std::shared_ptr<Input>;
+
 class Input : public Module {
 private:
     virtual bool get_level() const = 0;
