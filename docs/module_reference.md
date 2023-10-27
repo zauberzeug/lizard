@@ -92,6 +92,24 @@ The output module is associated with a digital output pin that is connected to a
 The `pulse()` method allows pulsing an output with a given interval in seconds and an optional duty cycle between 0 and 1 (0.5 by default).
 Note that the pulsing frequency is limited by the main loop to around 20 Hz.
 
+## PWM Output
+
+The PWM output module is associated with a digital output pin that is connected to an LED, actuator or other output signal.
+
+| Constructor            | Description                            | Arguments |
+| ---------------------- | -------------------------------------- | --------- |
+| `pwm = PwmOutput(pin)` | `pin` is the corresponding GPIO number | `int`     |
+
+| Properties         | Description                              | Data type |
+| ------------------ | ---------------------------------------- | --------- |
+| `output.duty`      | Duty cycle (8 bit: 0..256, default: 128) | `int`     |
+| `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
+
+| Methods        | Description             | Arguments |
+| -------------- | ----------------------- | --------- |
+| `output.on()`  | Turn on the PWM signal  |           |
+| `output.off()` | Turn off the PWM signal |           |
+
 ## MCP23017 Port Expander
 
 The MCP23017 allows controlling up to 16 general purpose input or output pins via I2C.

@@ -13,6 +13,7 @@ enum ModuleType {
     expander,
     input,
     output,
+    pwm_output,
     mcp23017,
     imu,
     can,
