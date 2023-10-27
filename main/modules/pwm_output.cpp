@@ -24,21 +24,20 @@ PwmOutput::PwmOutput(const std::string name,
         .channel = ledc_channel,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = ledc_timer,
-        .duty = (uint32_t)this->properties.at("duty")->integer_value,
+        .duty = 0,
         .hpoint = 0,
         .flags = {},
     };
     ledc_timer_config(&timer_config);
     gpio_set_direction(pin, GPIO_MODE_OUTPUT);
     ledc_channel_config(&channel_config);
-    ledc_timer_pause(LEDC_HIGH_SPEED_MODE, ledc_timer);
 }
 
 void PwmOutput::step() {
     uint32_t frequency = this->properties.at("frequency")->integer_value;
     ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, frequency);
     uint32_t duty = this->properties.at("duty")->integer_value;
-    ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, duty);
+    ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
     Module::step();
 }
@@ -46,10 +45,10 @@ void PwmOutput::step() {
 void PwmOutput::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "on") {
         Module::expect(arguments, 0);
-        ledc_timer_resume(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+        this->is_on = true;
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
-        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+        this->is_on = false;
     } else {
         Module::call(method_name, arguments);
     }
