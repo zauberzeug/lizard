@@ -16,7 +16,7 @@ StepperMotor::StepperMotor(const std::string name,
                            const pcnt_channel_t pcnt_channel,
                            const ledc_timer_t ledc_timer,
                            const ledc_channel_t ledc_channel)
-    : Module(output, name),
+    : Module(stepper_motor, name),
       step_pin(step_pin),
       dir_pin(dir_pin),
       pcnt_unit(pcnt_unit),

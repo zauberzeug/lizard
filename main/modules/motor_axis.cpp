@@ -1,14 +1,20 @@
 #include "motor_axis.h"
+#include "utils/uart.h"
 
 MotorAxis::MotorAxis(const std::string name, const StepperMotor_ptr motor, const Input_ptr input1, const Input_ptr input2)
     : Module(motor_axis, name), motor(motor), input1(input1), input2(input2) {
 }
 
 void MotorAxis::step() {
-    if (this->motor->get_target_speed() < 0 && this->input1->get_level()) {
-        this->motor->stop();
-    } else if (this->motor->get_target_speed() > 0 && this->input2->get_level()) {
-        this->motor->stop();
+    try {
+        if (this->motor->get_target_speed() < 0 && !this->input1->get_property("level")->integer_value) {
+            this->motor->stop();
+        }
+        if (this->motor->get_target_speed() > 0 && !this->input2->get_property("level")->integer_value) {
+            this->motor->stop();
+        }
+    } catch (std::runtime_error &e) {
+        echo("error in MotorAxis::step(): %s", e.what());
     }
     Module::step();
 }
