@@ -44,4 +44,12 @@ public:
                  const ledc_channel_t ledc_channel);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void position(const int32_t position, const int32_t speed, const uint32_t acceleration);
+    void speed(const int32_t speed, const uint32_t acceleration);
+    void stop();
+
+    StepperState get_state() const { return this->state; }
+    int32_t get_target_position() const { return this->target_position; }
+    int32_t get_target_speed() const { return this->target_speed; }
+    uint32_t get_target_acceleration() const { return this->target_acceleration; }
 };
