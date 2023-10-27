@@ -9,7 +9,7 @@ PwmOutput::PwmOutput(const std::string name,
     gpio_reset_pin(pin);
 
     this->properties["frequency"] = std::make_shared<IntegerVariable>(1000);
-    this->properties["duty"] = std::make_shared<IntegerVariable>(100);
+    this->properties["duty"] = std::make_shared<IntegerVariable>(128);
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,

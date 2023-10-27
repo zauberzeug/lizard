@@ -100,10 +100,10 @@ The PWM output module is associated with a digital output pin that is connected 
 | ---------------------- | -------------------------------------- | --------- |
 | `pwm = PwmOutput(pin)` | `pin` is the corresponding GPIO number | `int`     |
 
-| Properties         | Description                | Data type |
-| ------------------ | -------------------------- | --------- |
-| `output.duty`      | Duty cycle (8 bit: 0..256) | `int`     |
-| `output.frequency` | Frequency (Hz)             | `int`     |
+| Properties         | Description                              | Data type |
+| ------------------ | ---------------------------------------- | --------- |
+| `output.duty`      | Duty cycle (8 bit: 0..256, default: 128) | `int`     |
+| `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
 
 | Methods        | Description             | Arguments |
 | -------------- | ----------------------- | --------- |
