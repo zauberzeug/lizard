@@ -39,7 +39,7 @@ extern "C" {
 void app_main();
 }
 
-void process_lizard(const char *line, bool trigger_keep_alive = true);
+void process_lizard(const char *line, bool trigger_keep_alive = true, bool from_expander = false);
 
 std::string identifier_to_string(const struct owl_ref ref) {
     const struct parsed_identifier identifier = parsed_identifier_get(ref);
@@ -179,7 +179,7 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
     return actions;
 }
 
-void process_tree(owl_tree *const tree) {
+void process_tree(owl_tree *const tree, bool from_expander) {
     const struct parsed_statements statements = owl_tree_get_parsed_statements(tree);
     for (struct owl_ref r = statements.statement; !r.empty; r = owl_next(r)) {
         const struct parsed_statement statement = parsed_statement_get(r);
@@ -234,7 +234,7 @@ void process_tree(owl_tree *const tree) {
             const Module_ptr module = Global::get_module(module_name);
             const std::string property_name = identifier_to_string(property_assignment.property_name);
             const ConstExpression_ptr expression = compile_expression(property_assignment.expression);
-            module->write_property(property_name, expression);
+            module->write_property(property_name, expression, from_expander);
         } else if (!statement.variable_assignment.empty) {
             const struct parsed_variable_assignment variable_assignment = parsed_variable_assignment_get(statement.variable_assignment);
             const std::string variable_name = identifier_to_string(variable_assignment.variable_name);
@@ -285,7 +285,7 @@ void process_tree(owl_tree *const tree) {
     }
 }
 
-void process_lizard(const char *line, bool trigger_keep_alive) {
+void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     if (trigger_keep_alive) {
         core_module->keep_alive();
     }
@@ -323,7 +323,7 @@ void process_lizard(const char *line, bool trigger_keep_alive) {
             owl_tree_print(tree.get());
             tic();
         }
-        process_tree(tree.get());
+        process_tree(tree.get(), from_expander);
         if (debug) {
             toc("Tree traversal");
         }
