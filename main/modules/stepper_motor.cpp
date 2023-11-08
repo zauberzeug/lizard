@@ -16,7 +16,7 @@ StepperMotor::StepperMotor(const std::string name,
                            const pcnt_channel_t pcnt_channel,
                            const ledc_timer_t ledc_timer,
                            const ledc_channel_t ledc_channel)
-    : Module(output, name),
+    : Module(stepper_motor, name),
       step_pin(step_pin),
       dir_pin(dir_pin),
       pcnt_unit(pcnt_unit),
@@ -163,23 +163,38 @@ void StepperMotor::call(const std::string method_name, const std::vector<ConstEx
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, numbery, numbery, numbery);
-        this->target_position = arguments[0]->evaluate_number();
-        bool forward = this->target_position > this->properties.at("position")->integer_value;
-        this->target_speed = arguments[1]->evaluate_number() * (forward ? 1 : -1);
-        this->target_acceleration = arguments.size() > 2 ? std::abs(arguments[2]->evaluate_number()) : 0;
-        set_state(Positioning);
+        this->position(arguments[0]->evaluate_number(),
+                       arguments[1]->evaluate_number(),
+                       arguments.size() > 2 ? std::abs(arguments[2]->evaluate_number()) : 0);
     } else if (method_name == "speed") {
         if (arguments.size() < 1 || arguments.size() > 2) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, numbery, numbery);
-        this->target_speed = arguments[0]->evaluate_number();
-        this->target_acceleration = arguments.size() > 1 ? std::abs(arguments[1]->evaluate_number()) : 0;
-        set_state(this->target_speed == 0 ? Idle : Speeding);
+        this->speed(arguments[0]->evaluate_number(),
+                    arguments.size() > 1 ? std::abs(arguments[1]->evaluate_number()) : 0);
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        set_state(Idle);
+        this->stop();
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void StepperMotor::position(const int32_t position, const int32_t speed, const uint32_t acceleration) {
+    this->target_position = position;
+    bool forward = this->target_position > this->properties.at("position")->integer_value;
+    this->target_speed = speed * (forward ? 1 : -1);
+    this->target_acceleration = acceleration;
+    set_state(Positioning);
+}
+
+void StepperMotor::speed(const int32_t speed, const uint32_t acceleration) {
+    this->target_speed = speed;
+    this->target_acceleration = acceleration;
+    set_state(this->target_speed == 0 ? Idle : Speeding);
+}
+
+void StepperMotor::stop() {
+    set_state(Idle);
 }

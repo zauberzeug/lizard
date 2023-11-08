@@ -11,6 +11,9 @@ enum StepperState {
     Positioning,
 };
 
+class StepperMotor;
+using StepperMotor_ptr = std::shared_ptr<StepperMotor>;
+
 class StepperMotor : public Module {
 private:
     const gpio_num_t step_pin;
@@ -29,7 +32,6 @@ private:
     uint32_t target_acceleration = 0;
 
     void read_position();
-    void set_frequency();
     void set_state(StepperState new_state);
 
 public:
@@ -42,5 +44,12 @@ public:
                  const ledc_channel_t ledc_channel);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void position(const int32_t position, const int32_t speed, const uint32_t acceleration);
+    void speed(const int32_t speed, const uint32_t acceleration);
     void stop();
+
+    StepperState get_state() const { return this->state; }
+    int32_t get_target_position() const { return this->target_position; }
+    int32_t get_target_speed() const { return this->target_speed; }
+    uint32_t get_target_acceleration() const { return this->target_acceleration; }
 };

@@ -446,6 +446,25 @@ When using multiple stepper motors, they can be set to different values to avoid
 
 The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.
 
+## Motor Axis
+
+The motor axis module wraps a stepper motor and two limit switches.
+It prevents the motor from moving past the limits.
+But in contrast to a simple Lizard rule, it allows to actively move out of the limits when moving in the right direction.
+
+| Constructor                               | Description                    | Arguments |
+| ----------------------------------------- | ------------------------------ | --------- |
+| `axis = MotorAxis(motor, limit1, limit2)` | StepperMotor and Input modules | 3 modules |
+
+Currently the motor axis module has no properties.
+To get the current position or speed, access the StepperMotor module instead.
+
+| Methods                                           | Description              | Arguments  |
+| ------------------------------------------------- | ------------------------ | ---------- |
+| `motor.speed(speed[, acceleration])`              | Move with given `speed`  | 2x `float` |
+| `motor.position(position, speed[, acceleration])` | Move to given `position` | 3x `float` |
+| `motor.stop()`                                    | Stop                     |            |
+
 ## CanOpenMaster
 
 The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
