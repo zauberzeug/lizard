@@ -342,7 +342,7 @@ Variable_ptr Module::get_property(const std::string property_name) const {
     return this->properties.at(property_name);
 }
 
-void Module::write_property(const std::string property_name, const ConstExpression_ptr expression) {
+void Module::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
     this->get_property(property_name)->assign(expression);
 }
 

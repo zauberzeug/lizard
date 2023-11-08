@@ -44,7 +44,7 @@ void Expander::step() {
         check(buffer, len);
         if (buffer[0] == '!' && buffer[1] == '!') {
             /* Don't trigger keep-alive from expander updates */
-            this->message_handler(&buffer[2], false);
+            this->message_handler(&buffer[2], false, true);
         } else {
             echo("%s: %s", this->name.c_str(), buffer);
         }

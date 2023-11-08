@@ -35,7 +35,7 @@ enum ModuleType {
 class Module;
 using Module_ptr = std::shared_ptr<Module>;
 using ConstModule_ptr = std::shared_ptr<const Module>;
-using MessageHandler = void (*)(const char *line, bool trigger_keep_alive);
+using MessageHandler = void (*)(const char *line, bool trigger_keep_alive, bool from_expander);
 
 class Module {
 private:
@@ -61,6 +61,6 @@ public:
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     virtual std::string get_output() const;
     Variable_ptr get_property(const std::string property_name) const;
-    virtual void write_property(const std::string property_name, const ConstExpression_ptr expression);
+    virtual void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander = false);
     virtual void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
 };
