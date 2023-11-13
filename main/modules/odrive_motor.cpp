@@ -34,7 +34,9 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     if (method_name == "zero") {
         Module::expect(arguments, 0);
         this->properties.at("tick_offset")->number_value +=
-            this->properties.at("position")->number_value / this->properties.at("m_per_tick")->number_value;
+            this->properties.at("position")->number_value /
+            this->properties.at("m_per_tick")->number_value *
+            (this->properties.at("reversed")->boolean_value ? -1 : 1);
     } else if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
         this->power(arguments[0]->evaluate_number());
