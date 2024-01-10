@@ -33,28 +33,34 @@ class Esp:
 
     @contextmanager
     def pin_config(self) -> None:
-        print('Configuring pins...')
+        print('Configuring pins...>>>>')
         self.write('export', self.en)
+        sleep(0.5)
         self.write('export', self.g0)
+        sleep(0.5)
         self.write(f'{self.gpio_en}/direction', 'out')
+        sleep(0.5)
         self.write(f'{self.gpio_g0}/direction', 'out')
+        sleep(0.5)
         yield
         self.write('unexport', self.en)
+        sleep(0.5)
         self.write('unexport', self.g0)
 
     @contextmanager
     def flash_mode(self):
-        print('Bringing microcontroller into flash mode...')
+        print('Bringing microcontroller into flash mode...>>>>>')
         self.write(f'{self.gpio_en}/value', self.on)
         sleep(0.5)
         self.write(f'{self.gpio_g0}/value', self.on)
         sleep(0.5)
         self.write(f'{self.gpio_en}/value', self.off)
+        sleep(0.5)
         yield
         self.activate()
 
     def activate(self) -> None:
-        print('Bringing microcontroller into normal operation mode...')
+        print('Bringing microcontroller into normal operation mode...>>>>>>')
         self.write(f'{self.gpio_g0}/value', self.off)
         sleep(0.5)
         self.write(f'{self.gpio_en}/value', self.on)
