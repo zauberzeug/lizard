@@ -26,13 +26,15 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
     try {
         this->bno->begin();
         this->bno->enableExternalCrystal();
-        this->bno->setOprModeAccOnly();
+        this->bno->setOprModeM4G(); //setOprModeM4G
     } catch (BNO055BaseException &ex) {
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     } catch (std::exception &ex) {
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     }
-
+    this->properties["roll"] = std::make_shared<NumberVariable>();
+    this->properties["tilt"] = std::make_shared<NumberVariable>();
+    this->properties["yaw"] = std::make_shared<NumberVariable>();
     this->properties["acc_x"] = std::make_shared<NumberVariable>();
     this->properties["acc_y"] = std::make_shared<NumberVariable>();
     this->properties["acc_z"] = std::make_shared<NumberVariable>();
@@ -44,5 +46,9 @@ void Imu::step() {
     this->properties.at("acc_y")->number_value = v.y;
     this->properties.at("acc_z")->number_value = v.z;
 
+    bno055_vector_t e = this->bno->getVectorEuler();
+    this->properties.("roll")->number_value = e.x;
+    this->properties.("tilt")->number_value = e.y;
+    this->properties.("yaw")->number_value = e.z;
     Module::step();
 }
