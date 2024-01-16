@@ -32,7 +32,7 @@ with serial.Serial(usb_path, baudrate=115200, timeout=1.0) as port:
     send('!.')
     send('core.restart()')
 
-    time.sleep(1.0)
+    time.sleep(3.0)
     send('core.startup_checksum()')
     deadline = time.time() + 1.0
     while time.time() < deadline:
