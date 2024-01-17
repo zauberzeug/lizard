@@ -171,11 +171,11 @@ The constructor expects up to five arguments:
 - `address`: client address of the MCP (0x28 or 0x29, default: 0x28)
 - `clk_speed`: I2C clock speed (default: 100000)
 
-| Properties    | Description                         | Data type |
-| ------------- | ----------------------------------- | --------- |
-| `imu.accel_x` | acceleration in x direction (m/s^2) | `float`   |
-| `imu.accel_y` | acceleration in y direction (m/s^2) | `float`   |
-| `imu.accel_z` | acceleration in z direction (m/s^2) | `float`   |
+| Properties  | Description                         | Data type |
+| ----------- | ----------------------------------- | --------- |
+| `imu.acc_x` | acceleration in x direction (m/s^2) | `float`   |
+| `imu.acc_y` | acceleration in y direction (m/s^2) | `float`   |
+| `imu.acc_z` | acceleration in z direction (m/s^2) | `float`   |
 
 ## CAN interface
 
