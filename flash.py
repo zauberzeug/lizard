@@ -6,13 +6,15 @@ from esp import Esp
 
 
 def help() -> None:
-    print(f'{sys.argv[0]} [nano | xavier | orin] [nand]')
+    print(f'{sys.argv[0]} [nano | xavier | orin] [nand | v05] [usb | /dev/<name>] [enable]')
     print(f'   nano          flashing Jetson Nano (default)')
     print(f'   xavier        flashing Jetson Xavier')
     print(f'   orin          flashing Jetson Orin')
     print(f'   nand          Robot Brain has piggyboard with NAND gate (eg. older version)')
+    print(f'   v05           Robot Brain has piggyboard with V0.5 or higher (eg. newer version)')
     print(f'   usb           use /dev/tty.SLAB_USBtoUART as serial device')
     print(f'   /dev/<name>   use /dev/<name> as serial device')
+    print(f'   enable        enable the ESP32 microcontroller')
 
 
 if any(h in sys.argv for h in ['--help', '-help', 'help']):
@@ -25,7 +27,13 @@ if 'usb' in sys.argv:
 for p in sys.argv:
     if p.startswith('/dev/'):
         device = p
-esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv, orin='orin' in sys.argv, device=device)
+esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv, orin='orin' in sys.argv, v05='v05' in sys.argv, device=device)
+
+if 'enable' in sys.argv:
+    with esp.pin_config():
+        print('Enabling ESP...')
+        esp.activate()
+    sys.exit()
 
 with esp.pin_config(), esp.flash_mode():
     print('Flashing...')

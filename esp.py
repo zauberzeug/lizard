@@ -9,6 +9,7 @@ class Esp:
                  nand: bool = False,
                  xavier: bool = False,
                  orin: bool = False,
+                 v05: bool = False,
                  device: Optional[str] = None,
                  ) -> None:
         print('Initializing ESP...')
@@ -16,6 +17,11 @@ class Esp:
         self.g0 = 428 if xavier else 460 if orin else 50
         self.gpio_en = f'gpio{self.en}' if not orin else 'PAC.06'
         self.gpio_g0 = f'gpio{self.g0}' if not orin else 'PR.04'
+
+        if orin and v05:
+            self.en, self.g0 = self.g0, self.en
+            self.gpio_en, self.gpio_g0 = self.gpio_g0, self.gpio_en
+
         if device is None:
             self.device = '/dev/ttyTHS' + ('0' if xavier else '0' if orin else '1')
         else:
