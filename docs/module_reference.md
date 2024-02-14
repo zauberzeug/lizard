@@ -183,6 +183,10 @@ The constructor expects up to five arguments:
 | `imu.cal_gyr` | calibration of gyroscope 0 min, 3 max     | `float`   |
 | `imu.cal_acc` | calibration of accelerometer 0 min, 3 max | `float`   |
 | `imu.cal_mag` | calibration of magnetometer 0 min, 3 max  | `float`   |
+| `imu.quat_w`  | quaternion real part w                    | `float`   |
+| `imu.quat_x`  | quaternion imaginary part x(i)            | `float`   |
+| `imu.quat_y`  | quaternion imaginary part y(j)            | `float`   |
+| `imu.quat_z`  | quaternion imaginary part z(k)            | `float`   |
 
 ## CAN interface
 

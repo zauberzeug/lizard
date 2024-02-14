@@ -42,6 +42,10 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
     this->properties["cal_gyr"] = std::make_shared<NumberVariable>();
     this->properties["cal_acc"] = std::make_shared<NumberVariable>();
     this->properties["cal_mag"] = std::make_shared<NumberVariable>();
+    this->properties["quat_w"] = std::make_shared<NumberVariable>();
+    this->properties["quat_x"] = std::make_shared<NumberVariable>();
+    this->properties["quat_y"] = std::make_shared<NumberVariable>();
+    this->properties["quat_z"] = std::make_shared<NumberVariable>();
 }
 
 void Imu::step() {
@@ -60,5 +64,12 @@ void Imu::step() {
     this->properties.at("cal_gyr")->number_value = c.gyro;
     this->properties.at("cal_acc")->number_value = c.accel;
     this->properties.at("cal_mag")->number_value = c.mag;
+
+    bno055_quaternion_t q = this->bno->getQuaternion();
+    this->properties.at("quat_w")->number_value = q.w;
+    this->properties.at("quat_x")->number_value = q.x;
+    this->properties.at("quat_y")->number_value = q.y;
+    this->properties.at("quat_z")->number_value = q.z;
+
     Module::step();
 }
