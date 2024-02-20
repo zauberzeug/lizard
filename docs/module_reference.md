@@ -171,22 +171,22 @@ The constructor expects up to five arguments:
 - `address`: client address of the MCP (0x28 or 0x29, default: 0x28)
 - `clk_speed`: I2C clock speed (default: 100000)
 
-| Properties    | Description                               | Data type |
-| ------------- | ----------------------------------------- | --------- |
-| `imu.acc_x`   | acceleration in x direction (m/s^2)       | `float`   |
-| `imu.acc_y`   | acceleration in y direction (m/s^2)       | `float`   |
-| `imu.acc_z`   | acceleration in z direction (m/s^2)       | `float`   |
-| `imu.roll`    | roll in degrees (-90 deg to 90 deg)       | `float`   |
-| `imu.pitch`   | pitch in degrees (-90 deg to 90 deg)      | `float`   |
-| `imu.yaw`     | yaw in degrees (-180 deg to 180 deg)      | `float`   |
-| `imu.cal_sys` | calibration of system 0 min, 3 max        | `float`   |
-| `imu.cal_gyr` | calibration of gyroscope 0 min, 3 max     | `float`   |
-| `imu.cal_acc` | calibration of accelerometer 0 min, 3 max | `float`   |
-| `imu.cal_mag` | calibration of magnetometer 0 min, 3 max  | `float`   |
-| `imu.quat_w`  | quaternion real part w                    | `float`   |
-| `imu.quat_x`  | quaternion imaginary part x(i)            | `float`   |
-| `imu.quat_y`  | quaternion imaginary part y(j)            | `float`   |
-| `imu.quat_z`  | quaternion imaginary part z(k)            | `float`   |
+| Properties    | Description                           | Data type |
+| ------------- | ------------------------------------- | --------- |
+| `imu.acc_x`   | acceleration in x direction (m/s^2)   | `float`   |
+| `imu.acc_y`   | acceleration in y direction (m/s^2)   | `float`   |
+| `imu.acc_z`   | acceleration in z direction (m/s^2)   | `float`   |
+| `imu.roll`    | roll (degrees, see datasheet)         | `float`   |
+| `imu.pitch`   | pitch (degrees, see datasheet)        | `float`   |
+| `imu.yaw`     | yaw (degrees, see datasheet)          | `float`   |
+| `imu.quat_w`  | quaternion component w                | `float`   |
+| `imu.quat_x`  | quaternion component x                | `float`   |
+| `imu.quat_y`  | quaternion component y                | `float`   |
+| `imu.quat_z`  | quaternion component z                | `float`   |
+| `imu.cal_sys` | calibration of system (0 to 3)        | `float`   |
+| `imu.cal_gyr` | calibration of gyroscope (0 to 3)     | `float`   |
+| `imu.cal_acc` | calibration of accelerometer (0 to 3) | `float`   |
+| `imu.cal_mag` | calibration of magnetometer (0 to 3)  | `float`   |
 
 ## CAN interface
 
