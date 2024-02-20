@@ -26,16 +26,26 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
     try {
         this->bno->begin();
         this->bno->enableExternalCrystal();
-        this->bno->setOprModeAccOnly();
+        this->bno->setOprModeNdof();
     } catch (BNO055BaseException &ex) {
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     } catch (std::exception &ex) {
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     }
-
     this->properties["acc_x"] = std::make_shared<NumberVariable>();
     this->properties["acc_y"] = std::make_shared<NumberVariable>();
     this->properties["acc_z"] = std::make_shared<NumberVariable>();
+    this->properties["roll"] = std::make_shared<NumberVariable>();
+    this->properties["pitch"] = std::make_shared<NumberVariable>();
+    this->properties["yaw"] = std::make_shared<NumberVariable>();
+    this->properties["quat_w"] = std::make_shared<NumberVariable>();
+    this->properties["quat_x"] = std::make_shared<NumberVariable>();
+    this->properties["quat_y"] = std::make_shared<NumberVariable>();
+    this->properties["quat_z"] = std::make_shared<NumberVariable>();
+    this->properties["cal_sys"] = std::make_shared<NumberVariable>();
+    this->properties["cal_gyr"] = std::make_shared<NumberVariable>();
+    this->properties["cal_acc"] = std::make_shared<NumberVariable>();
+    this->properties["cal_mag"] = std::make_shared<NumberVariable>();
 }
 
 void Imu::step() {
@@ -43,6 +53,23 @@ void Imu::step() {
     this->properties.at("acc_x")->number_value = v.x;
     this->properties.at("acc_y")->number_value = v.y;
     this->properties.at("acc_z")->number_value = v.z;
+
+    bno055_vector_t e = this->bno->getVectorEuler();
+    this->properties.at("yaw")->number_value = e.x;
+    this->properties.at("roll")->number_value = e.y;
+    this->properties.at("pitch")->number_value = e.z;
+
+    bno055_quaternion_t q = this->bno->getQuaternion();
+    this->properties.at("quat_w")->number_value = q.w;
+    this->properties.at("quat_x")->number_value = q.x;
+    this->properties.at("quat_y")->number_value = q.y;
+    this->properties.at("quat_z")->number_value = q.z;
+
+    bno055_calibration_t c = this->bno->getCalibration();
+    this->properties.at("cal_sys")->number_value = c.sys;
+    this->properties.at("cal_gyr")->number_value = c.gyro;
+    this->properties.at("cal_acc")->number_value = c.accel;
+    this->properties.at("cal_mag")->number_value = c.mag;
 
     Module::step();
 }
