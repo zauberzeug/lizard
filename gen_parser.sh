@@ -15,8 +15,11 @@ then
         exit 1
     fi
 
-    # remove minimum size of 4096 bytes
+    # remove minimum size of 4096 bytes (see https://github.com/zauberzeug/lizard/issues/23)
     sed -i '' 's/while (n < size \|\| n < 4096)/while (n < size)/g' main/parser.h
+
+    # increase RESERVATION_AMOUNT to 11 (see https://github.com/zauberzeug/field_friend/issues/7)
+    sed -i '' 's/#define RESERVATION_AMOUNT 10/#define RESERVATION_AMOUNT 11/g' main/parser.h
 else
     echo "Nothing to do."
 fi

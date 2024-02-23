@@ -323,7 +323,7 @@ struct owl_tree {
     size_t next_number_token_offset;
 };
 // Reserve 10 bytes for each entry (the maximum encoded size of a 64-bit value).
-#define RESERVATION_AMOUNT 10
+#define RESERVATION_AMOUNT 11
 static inline uint64_t read_tree(size_t *offset, struct owl_tree *tree) {
     uint8_t *parse_tree = tree->parse_tree;
     size_t parse_tree_size = tree->parse_tree_size;
