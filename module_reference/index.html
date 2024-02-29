@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.9">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.12">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.f2e4d321.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.7e359304.min.css">
       
       
 
@@ -1316,6 +1316,61 @@ Currently, only reading the accelerometer is implemented.</p>
 <td>acceleration in z direction (m/s^2)</td>
 <td><code>float</code></td>
 </tr>
+<tr>
+<td><code>imu.roll</code></td>
+<td>roll (degrees, see datasheet)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.pitch</code></td>
+<td>pitch (degrees, see datasheet)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.yaw</code></td>
+<td>yaw (degrees, see datasheet)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.quat_w</code></td>
+<td>quaternion component w</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.quat_x</code></td>
+<td>quaternion component x</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.quat_y</code></td>
+<td>quaternion component y</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.quat_z</code></td>
+<td>quaternion component z</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.cal_sys</code></td>
+<td>calibration of system (0 to 3)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.cal_gyr</code></td>
+<td>calibration of gyroscope (0 to 3)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.cal_acc</code></td>
+<td>calibration of accelerometer (0 to 3)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.cal_mag</code></td>
+<td>calibration of magnetometer (0 to 3)</td>
+<td><code>float</code></td>
+</tr>
 </tbody>
 </table>
 <h2 id="can-interface">CAN interface<a class="headerlink" href="#can-interface" title="Permanent link">&para;</a></h2>
@@ -2495,7 +2550,7 @@ Note that the remote module has to have turned on broadcasting: <code>x.broadcas
     <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.8fd75fb4.min.js"></script>
+      <script src="../assets/javascripts/bundle.c8d2eff1.min.js"></script>
       
     
   </body>
