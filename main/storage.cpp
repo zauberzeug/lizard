@@ -6,7 +6,7 @@
 #include <string>
 
 #define NAMESPACE "storage"
-#define KEY "main"
+#define MAX_CHUNK_SIZE 0xf80
 
 std::string Storage::startup;
 
@@ -56,11 +56,21 @@ std::string read(const std::string ns, const std::string key) {
 }
 
 void Storage::put(const std::string value) {
-    write(NAMESPACE, KEY, value);
+    int num_chunks = 0;
+    for (int pos = 0; pos < value.length(); pos += MAX_CHUNK_SIZE) {
+        num_chunks++;
+        write(NAMESPACE, "chunk" + std::to_string(pos / MAX_CHUNK_SIZE), value.substr(pos, MAX_CHUNK_SIZE));
+    }
+    write(NAMESPACE, "num_chunks", std::to_string(num_chunks));
 }
 
 std::string Storage::get() {
-    return read(NAMESPACE, KEY);
+    std::string result = "";
+    const int num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
+    for (int i = 0; i < num_chunks; i++) {
+        result += read(NAMESPACE, "chunk" + std::to_string(i));
+    }
+    return result;
 }
 
 void Storage::append_to_startup(const std::string line) {
