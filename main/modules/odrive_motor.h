@@ -28,5 +28,8 @@ public:
     void position(const float position);
     void limits(const float speed, const float current);
     void off();
+    void update_motor_error();
+    void reset_motor();
+    void clear_errors();
     double get_position();
 };
