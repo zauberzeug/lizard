@@ -31,7 +31,7 @@ ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32
     this->properties["tick_offset"] = std::make_shared<NumberVariable>();
     this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
     this->properties["reversed"] = std::make_shared<BooleanVariable>();
-    this->properties["motor_error"] = std::make_shared<BooleanVariable>(false);
+    this->properties["motor_error"] = std::make_shared<IntegerVariable>(0);
     this->properties["axis_error"] = std::make_shared<IntegerVariable>();
 }
 
@@ -79,9 +79,6 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->off();
-    } else if (method_name == "update_motor_error") {
-        Module::expect(arguments, 0);
-        this->update_motor_error();
     } else if (method_name == "reset_motor") {
         Module::expect(arguments, 0);
         this->reset_motor();
@@ -135,11 +132,11 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         std::memcpy(&motor_error, data, 4);
         switch (motor_error) {
         case MOTOR_ERROR_NONE:
-            this->properties.at("motor_error")->boolean_value = false;
+            this->properties.at("motor_error")->integer_value = 0;
             break;
 
         default:
-            this->properties.at("motor_error")->boolean_value = true;
+            this->properties.at("motor_error")->integer_value = 1;
             break;
         }
     }
@@ -211,4 +208,9 @@ void ODriveMotor::reset_motor() {
 }
 double ODriveMotor::get_position() {
     return this->properties.at("position")->number_value;
+}
+
+void ODriveMotor::step() {
+    this->update_motor_error();
+    Module::step();
 }

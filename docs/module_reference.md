@@ -270,7 +270,7 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | `motor.m_per_tick`  | Meters per encoder tick | `float`   |
 | `motor.reversed`    | Reverse motor direction | `bool`    |
 | `motor.axis_error`  | Error code of the axis  | `int`     |
-| `motor.motor_error` | Motor in fault mode     | `bool`    |
+| `motor.motor_error` | Motor in fault mode     | `int`     |
 
 | Methods                        | Description                                 | Arguments        |
 | ------------------------------ | ------------------------------------------- | ---------------- |
@@ -280,7 +280,6 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | `motor.position(position)`     | Move to given `position` (m)                | `float`          |
 | `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits      | `float`, `float` |
 | `motor.off()`                  | Turn motor off (idle state)                 |                  |
-| `motor.update_motor_error`     | Update the motor_error Propertie            |                  |
 | `motor.clear_errors`           | Clears all error statements                 |                  |
 | `motor.reset_motor`            | Resets the Motor and clears error statments |                  |
 
