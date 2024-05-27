@@ -4,9 +4,9 @@ import sys
 
 from esp import Esp
 
-
 def help() -> None:
-    print(f'{sys.argv[0]} [nano | xavier | orin] [nand | v05] [usb | /dev/<name>] [enable]')
+    print(f'{sys.argv[0]} [nano | xavier | orin] [nand | v05] [usb | /dev/<name>] [enable] [-e | --erase]')
+    print(f'   -e, --erase   erase the flash before flashing the new firmware')
     print(f'   nano          flashing Jetson Nano (default)')
     print(f'   xavier        flashing Jetson Xavier')
     print(f'   orin          flashing Jetson Orin')
@@ -16,11 +16,11 @@ def help() -> None:
     print(f'   /dev/<name>   use /dev/<name> as serial device')
     print(f'   enable        enable the ESP32 microcontroller')
 
-
-if any(h in sys.argv for h in ['--help', '-help', 'help']):
+if any(h in sys.argv for h in ['--help', '-help', 'help', '-h']):
     help()
     sys.exit()
 
+erase_flash = any(e in sys.argv for e in ['-e', '--erase'])
 device = None
 if 'usb' in sys.argv:
     device = '/dev/tty.SLAB_USBtoUART'
@@ -36,6 +36,21 @@ if 'enable' in sys.argv:
     sys.exit()
 
 with esp.pin_config(), esp.flash_mode():
+    if erase_flash:
+        print('Erasing Flash...')
+        erase_result = subprocess.run([
+            'esptool.py',
+            '--chip', 'esp32',
+            '--port', esp.device,
+            '--baud', '921600',
+            '--before', 'default_reset',
+            '--after', 'hard_reset',
+            'erase_flash'
+        ])
+        if erase_result.returncode != 0:
+            print('Failed to erase flash.')
+            sys.exit(1)  # Exit if the erase fails
+
     print('Flashing...')
     result = subprocess.run([
         'esptool.py',
@@ -51,7 +66,7 @@ with esp.pin_config(), esp.flash_mode():
         '--flash_size', 'detect',
         '0x1000', 'build/bootloader/bootloader.bin',
         '0x8000', 'build/partition_table/partition-table.bin',
-        '0x10000', 'build/lizard.bin',
+        '0x20000', 'build/lizard.bin',
     ])
     if result.returncode != 0:
         print('Flashing failed. Maybe you need different parameters? Or you forgot "sudo"?\n')
