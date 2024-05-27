@@ -14,5 +14,7 @@
     "editor.codeActionsOnSave": {
       "source.organizeImports": "explicit"
     }
-  }
+  },
+
+  "idf.adapterTargetName": "esp32"
 }
