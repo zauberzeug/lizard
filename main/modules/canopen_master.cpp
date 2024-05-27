@@ -11,8 +11,7 @@ CanOpenMaster::CanOpenMaster(const std::string &name, const Can_ptr can)
 }
 
 void CanOpenMaster::send_sync() {
-    this->can->send(0x80, &sync_counter, false, 1);
-    sync_counter++;
+    this->can->send(0x80, nullptr, false, 0);
 }
 
 void CanOpenMaster::step() {

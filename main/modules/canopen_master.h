@@ -13,7 +13,6 @@ class CanOpenMaster : public Module, public std::enable_shared_from_this<CanOpen
 private:
     const Can_ptr can;
     int64_t sync_interval_counter = 0;
-    uint8_t sync_counter = 0;
 
     void send_sync();
 
