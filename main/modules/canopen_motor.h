@@ -58,7 +58,6 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
 public:
     CanOpenMotor(const std::string &name, const Can_ptr can, int64_t node_id);
     void subscribe_to_can();
-    void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
 };

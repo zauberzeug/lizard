@@ -245,9 +245,6 @@ void CanOpenMotor::subscribe_to_can() {
     can->subscribe(wrap_cob_id(COB_TPDO2, node_id), this->shared_from_this());
 }
 
-void CanOpenMotor::step() {
-}
-
 void CanOpenMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (!this->properties[PROP_INITIALIZED]->boolean_value) {
         throw std::runtime_error("CanOpenMotor: Not initialized!");
