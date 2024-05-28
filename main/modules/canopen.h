@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cassert>
 #include <cinttypes>
 #include <stdexcept>
@@ -39,6 +41,13 @@ enum HeartbeatStateCode {
     Preoperational = 0x7F,
     Operational = 0x05,
     Stopped = 0x04
+};
+
+enum InitState {
+    WaitingForPreoperational, // No preop HB received yet
+    WaitingForSdoWrites,      // preop HB received, SDOs written
+    WaitingForOperational,    // NMT preop -> op transition requested
+    InitDone,                 // node reports op state
 };
 
 enum ServerCommandSpecifier {

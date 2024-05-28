@@ -273,10 +273,9 @@ void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
 
     this->properties[PROP_HEARTBEAT]->integer_value = esp_timer_get_time();
     this->properties[PROP_301_STATE]->integer_value = actual_state;
-
-    this->properties[PROP_301_STATE_BOOTING]->boolean_value = (actual_state == Booting);
-    this->properties[PROP_301_STATE_PREOP]->boolean_value = (actual_state == Preoperational);
-    this->properties[PROP_301_STATE_OP]->boolean_value = (actual_state == Operational);
+    this->properties[PROP_301_STATE_BOOTING]->boolean_value = actual_state == Booting;
+    this->properties[PROP_301_STATE_PREOP]->boolean_value = actual_state == Preoperational;
+    this->properties[PROP_301_STATE_OP]->boolean_value = actual_state == Operational;
 
     if (actual_state == Booting) {
         /* Possible reboot, restart initialization */
@@ -285,59 +284,32 @@ void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
         return;
     }
 
-    switch (init_state) {
-    case WaitingForPreoperational:
-        switch (actual_state) {
-        case Operational:
+    if (init_state == WaitingForPreoperational) {
+        if (actual_state == Operational) {
             transition_preoperational();
-            break;
-
-        case Preoperational:
+        } else if (actual_state == Preoperational) {
             configure_constants();
             init_state = WaitingForSdoWrites;
-            break;
-
-        case Stopped:
+        } else if (actual_state == Stopped) {
             throw std::runtime_error("CanOpenMotor: Unexpected stopped state");
-
-        default:
-            break;
         }
-        break;
-
-    case WaitingForSdoWrites:
-        switch (actual_state) {
-        case Preoperational:
+    } else if (init_state == WaitingForSdoWrites) {
+        if (actual_state == Preoperational) {
             if (this->properties[PROP_PENDING_WRITES]->integer_value > 0) {
-                break;
+                return;
             }
-
             transition_operational();
             init_state = WaitingForOperational;
-            break;
-
-        default:
+        } else {
             throw std::runtime_error("CanOpenMotor: Unexpected state waiting for SDO writes");
         }
-        break;
-
-    case WaitingForOperational:
-        switch (actual_state) {
-        case Operational:
+    } else if (init_state == WaitingForOperational) {
+        if (actual_state == Operational) {
             init_state = InitDone;
             this->properties[PROP_INITIALIZED]->boolean_value = true;
-            break;
-
-        case Preoperational:
-            break;
-
-        default:
+        } else if (actual_state != Preoperational) {
             throw std::runtime_error("CanOpenMotor: Unexpected state waiting for operational");
         }
-        break;
-
-    case InitDone:
-        break;
     }
 }
 
