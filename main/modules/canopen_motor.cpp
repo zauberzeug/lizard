@@ -160,9 +160,16 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
         ctrl_word &= ~(1 << 7);
         send_control_word(ctrl_word);
     } else if (method_name == "sdo_read") {
-        expect(arguments, 1, integer);
-        uint16_t index = arguments[0]->evaluate_integer();
-        sdo_read(index, 0);
+        if (arguments.size() == 2) {
+            expect(arguments, 2, integer, integer);
+            uint16_t index = arguments[0]->evaluate_integer();
+            uint8_t sub = arguments[1]->evaluate_integer();
+            sdo_read(index, sub);
+        } else {
+            expect(arguments, 1, integer);
+            uint16_t index = arguments[0]->evaluate_integer();
+            sdo_read(index, 0);
+        }
     } else {
         Module::call(method_name, arguments);
     }
