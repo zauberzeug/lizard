@@ -13,8 +13,8 @@ enum AXIS_ERROR {
     AXIS_ERROR_UNKNOWN_POSITION = 0x80000
 };
 
-ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id) : Module(odrive_motor, name),
-                                                                                             can_id(can_id), can(can) {
+ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version) : Module(odrive_motor, name),
+                                                                                                                     can_id(can_id), can(can), version(version) {
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["tick_offset"] = std::make_shared<NumberVariable>();
     this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
@@ -83,11 +83,11 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         int axis_state;
         std::memcpy(&axis_state, data + 4, 1);
         this->axis_state = axis_state;
-
-        int messege_byte;
-        std::memcpy(&messege_byte, data + 5, 1);
-        this->properties.at("motor_error_flag")->integer_value = messege_byte & 0x01;
-
+        if (version == 6) {
+            int messege_byte;
+            std::memcpy(&messege_byte, data + 5, 1);
+            this->properties.at("motor_error_flag")->integer_value = messege_byte & 0x01;
+        }
         int axis_error;
         std::memcpy(&axis_error, data, 4);
         switch (axis_error) {
