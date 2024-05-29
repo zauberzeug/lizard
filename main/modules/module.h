@@ -29,6 +29,7 @@ enum ModuleType {
     motor_axis,
     canopen_motor,
     canopen_master,
+    dunker_motor,
     proxy,
     number_of_module_types,
 };

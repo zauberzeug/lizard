@@ -8,6 +8,7 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/pcnt.h"
+#include "dunker_motor.h"
 #include "expander.h"
 #include "imu.h"
 #include "input.h"
@@ -282,6 +283,13 @@ Module_ptr Module::create(const std::string type,
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
         CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
         return master;
+    } else if (type == "DunkerMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t node_id = arguments[1]->evaluate_integer();
+        DunkerMotor_ptr motor = std::make_shared<DunkerMotor>(name, can_module, node_id);
+        motor->subscribe_to_can();
+        return motor;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
