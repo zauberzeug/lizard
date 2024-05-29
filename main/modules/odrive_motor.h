@@ -29,8 +29,7 @@ public:
     void position(const float position);
     void limits(const float speed, const float current);
     void off();
-    void reset_motor();
-    void clear_errors();
+    void reset_motor_error();
     double get_position();
     void step() override;
 };
