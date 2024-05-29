@@ -17,21 +17,24 @@ void DunkerMotor::call(const std::string method_name, const std::vector<ConstExp
             throw std::runtime_error("unexpected number of arguments");
         }
         expect(arguments, -1, integer, integer);
-        uint16_t index = arguments[0]->evaluate_integer();
-        uint8_t sub = arguments.size() >= 2 ? arguments[1]->evaluate_integer() : 0;
+        const uint16_t index = arguments[0]->evaluate_integer();
+        const uint8_t sub = arguments.size() >= 2 ? arguments[1]->evaluate_integer() : 0;
         uint8_t data[8];
-        data[0] = 0x40; // Read 32-bit expedited
+        data[0] = 0x40;
         data[1] = (index >> 0) & 0xFF;
         data[2] = (index >> 8) & 0xFF;
         data[3] = sub;
         this->can->send(0x600 + node_id, data);
     } else if (method_name == "sdo_write") {
-        expect(arguments, 3, integer, integer, integer);
-        uint16_t index = arguments[0]->evaluate_integer();
-        uint8_t sub = arguments[1]->evaluate_integer();
-        uint32_t value = arguments[2]->evaluate_integer();
+        expect(arguments, 4, integer, integer, integer, integer);
+        const uint16_t index = arguments[0]->evaluate_integer();
+        const uint8_t sub = arguments[1]->evaluate_integer();
+        const uint8_t bits = arguments[2]->evaluate_integer();
+        const uint32_t value = arguments[3]->evaluate_integer();
         uint8_t data[8];
-        data[0] = 0x23; // Write 32-bit expedited
+        data[0] = bits == 8    ? 0x2F
+                  : bits == 16 ? 0x2B
+                               : 0x23;
         data[1] = (index >> 0) & 0xFF;
         data[2] = (index >> 8) & 0xFF;
         data[3] = sub;
