@@ -269,11 +269,13 @@ Module_ptr Module::create(const std::string type,
         Module::expect(arguments, 3, identifier, identifier, identifier);
         const std::string name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(name);
-        const Motor_ptr motor_ptr;
+        Motor_ptr motor_ptr;
         if (module->type == odrive_motor) {
-            const ODriveMotor_ptr motor_ptr = get_module_paramter<ODriveMotor>(arguments[0], odrive_motor, "motor");
+            motor_ptr = get_module_paramter<ODriveMotor>(arguments[0], odrive_motor, "odrive_motor");
         } else if (module->type == stepper_motor) {
-            const StepperMotor_ptr motor_ptr = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "motor");
+            motor_ptr = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "stepper_motor");
+        } else if (module->type == dummy_motor) {
+            motor_ptr = get_module_paramter<DummyMotor>(arguments[0], dummy_motor, "dummy_motor");
         } else {
             throw std::runtime_error("module \"" + name + "\" is no motor");
         }
