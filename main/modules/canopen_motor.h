@@ -49,11 +49,16 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
     void send_control_word(uint16_t value);
     void send_target_position(int32_t value);
     void send_target_velocity(int32_t value);
+
     uint16_t build_ctrl_word(bool new_set_point);
 
     void wait_for_sdo_writes(uint32_t timeout_ms);
     void enter_position_mode(int velocity);
     void enter_velocity_mode(int velocity);
+
+    void set_profile_acceleration(uint16_t acceleration);
+    void set_profile_deceleration(uint16_t deceleration);
+    void set_profile_quick_stop_deceleration(uint16_t deceleration);
 
 public:
     CanOpenMotor(const std::string &name, const Can_ptr can, int64_t node_id);
