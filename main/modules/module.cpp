@@ -26,6 +26,7 @@
 #include "serial.h"
 #include "stepper_motor.h"
 #include <stdarg.h>
+#include <dummy_motor.h>
 
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
 }
@@ -291,6 +292,10 @@ Module_ptr Module::create(const std::string type,
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
         CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
         return master;
+    } else if (type == "DummyMotor") {
+        Module::expect(arguments, 0);
+        DummyMotor_ptr dummy_motor = std::make_shared<DummyMotor>(name);
+        return dummy_motor;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
