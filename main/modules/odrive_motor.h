@@ -33,8 +33,8 @@ public:
 
     bool is_running() override;
     void stop() override;
-    int32_t position() override;
-    void position(const int32_t position, const int32_t speed, const uint32_t acceleration) override;
-    int32_t speed() override;
-    void speed(const int32_t speed, const uint32_t acceleration) override;
+    double position() override;
+    void position(const double position, const double speed, const uint32_t acceleration) override;
+    double speed() override;
+    void speed(const double speed, const uint32_t acceleration) override;
 };

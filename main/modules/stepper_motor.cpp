@@ -195,18 +195,26 @@ void StepperMotor::speed(const int32_t speed, const uint32_t acceleration) {
     set_state(this->target_speed == 0 ? Idle : Speeding);
 }
 
-void StepperMotor::stop() {
-    set_state(Idle);
-}
-
 bool StepperMotor::is_running() {
     return this->state != Idle;
 }
 
-int32_t StepperMotor::speed() {
-    return this->properties.at("speed")->integer_value;
+void StepperMotor::stop() {
+    set_state(Idle);
 }
 
-int32_t StepperMotor::position() {
-    return this->properties.at("position")->integer_value;
+double StepperMotor::position() {
+    return static_cast<double>(this->properties.at("position")->integer_value);
+}
+
+void StepperMotor::position(const double position, const double speed, const uint32_t acceleration) {
+    this->position(static_cast<int32_t>(position), static_cast<int32_t>(speed), acceleration);
+}
+
+double StepperMotor::speed() {
+    return static_cast<double>(this->properties.at("speed")->integer_value);
+}
+
+void StepperMotor::speed(const double speed, const uint32_t acceleration) {
+    this->speed(static_cast<int32_t>(speed), acceleration);
 }

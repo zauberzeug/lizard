@@ -114,7 +114,7 @@ void ODriveMotor::off() {
 }
 
 double ODriveMotor::get_position() {
-    return this->properties.at("position")->number_value;
+    return this->position();
 }
 
 
@@ -127,23 +127,20 @@ void ODriveMotor::stop() {
     this->off();
 }
 
-int32_t ODriveMotor::position() {
-    // TODO: types
-    return this->get_position();
+double ODriveMotor::position() {
+    return this->properties.at("position")->number_value;
 }
 
-void ODriveMotor::position(const int32_t position, const int32_t speed, const uint32_t acceleration) {
-    // TODO: types
-    this->speed(speed);
-    this->position(position);
+void ODriveMotor::position(const double position, const double speed, const uint32_t acceleration) {
+    this->speed(speed, acceleration);
+    this->position(static_cast<float>(position));
 }
 
-int32_t ODriveMotor::speed() {
+double ODriveMotor::speed() {
     // TODO: implement
-    return 0;
+    throw std::runtime_error("Motor::speed() not implemented in ODriveMotor");
 }
 
-void ODriveMotor::speed(const int32_t speed, const uint32_t acceleration) {
-    // TODO: types
-    this->speed(speed);
+void ODriveMotor::speed(const double speed, const uint32_t acceleration) {
+    this->speed(static_cast<float>(speed));
 }
