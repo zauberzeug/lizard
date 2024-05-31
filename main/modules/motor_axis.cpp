@@ -1,16 +1,16 @@
 #include "motor_axis.h"
 #include "utils/uart.h"
 
-MotorAxis::MotorAxis(const std::string name, const StepperMotor_ptr motor, const Input_ptr input1, const Input_ptr input2)
+MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2)
     : Module(motor_axis, name), motor(motor), input1(input1), input2(input2) {
 }
 
 void MotorAxis::check_inputs() const {
     try {
-        if (this->motor->get_target_speed() < 0 && !this->input1->get_property("level")->integer_value) {
+        if (this->motor->speed() < 0 && !this->input1->get_property("level")->integer_value) {
             this->motor->stop();
         }
-        if (this->motor->get_target_speed() > 0 && !this->input2->get_property("level")->integer_value) {
+        if (this->motor->speed() > 0 && !this->input2->get_property("level")->integer_value) {
             this->motor->stop();
         }
     } catch (std::runtime_error &e) {
@@ -29,6 +29,7 @@ void MotorAxis::call(const std::string method_name, const std::vector<ConstExpre
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, numbery, numbery, numbery);
+        // TODO: check before sending a command to the motor
         this->motor->position(arguments[0]->evaluate_number(),
                               arguments[1]->evaluate_number(),
                               arguments.size() > 2 ? std::abs(arguments[2]->evaluate_number()) : 0);

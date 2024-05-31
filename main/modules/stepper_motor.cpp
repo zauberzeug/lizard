@@ -198,3 +198,15 @@ void StepperMotor::speed(const int32_t speed, const uint32_t acceleration) {
 void StepperMotor::stop() {
     set_state(Idle);
 }
+
+bool StepperMotor::is_running() {
+    return this->state != Idle;
+}
+
+int32_t StepperMotor::speed() {
+    return this->properties.at("speed")->integer_value;
+}
+
+int32_t StepperMotor::position() {
+    return this->properties.at("position")->integer_value;
+}
