@@ -9,7 +9,7 @@ private:
     const Input_ptr input1;
     const Input_ptr input2;
 
-    void check_inputs() const;
+    bool check_input(const float speed) const;
 
 public:
     MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2);
