@@ -2,6 +2,7 @@
 
 #include "can.h"
 #include "module.h"
+#include "motor.h"
 #include <cstdint>
 #include <memory>
 
