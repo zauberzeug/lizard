@@ -116,3 +116,34 @@ void ODriveMotor::off() {
 double ODriveMotor::get_position() {
     return this->properties.at("position")->number_value;
 }
+
+
+bool ODriveMotor::is_running() {
+    // TODO: check state
+    return this->axis_state != 1;
+}
+
+void ODriveMotor::stop() {
+    this->off();
+}
+
+int32_t ODriveMotor::position() {
+    // TODO: types
+    return this->get_position();
+}
+
+void ODriveMotor::position(const int32_t position, const int32_t speed, const uint32_t acceleration) {
+    // TODO: types
+    this->speed(speed);
+    this->position(position);
+}
+
+int32_t ODriveMotor::speed() {
+    // TODO: implement
+    return 0;
+}
+
+void ODriveMotor::speed(const int32_t speed, const uint32_t acceleration) {
+    // TODO: types
+    this->speed(speed);
+}
