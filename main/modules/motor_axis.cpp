@@ -7,10 +7,10 @@ MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_
 
 void MotorAxis::check_inputs() const {
     try {
-        if (this->motor->speed() < 0 && !this->input1->get_property("level")->integer_value) {
+        if (this->motor->speed() < 0 && this->input1->get_property("active")->boolean_value) {
             this->motor->stop();
         }
-        if (this->motor->speed() > 0 && !this->input2->get_property("level")->integer_value) {
+        if (this->motor->speed() > 0 && this->input2->get_property("active")->boolean_value) {
             this->motor->stop();
         }
     } catch (std::runtime_error &e) {
