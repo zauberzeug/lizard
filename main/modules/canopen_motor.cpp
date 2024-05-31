@@ -648,6 +648,8 @@ double CanOpenMotor::position() {
 void CanOpenMotor::position(const double position, const double speed, const uint32_t acceleration) {
     this->enter_position_mode(static_cast<int32_t>(speed));
     this->send_target_position(static_cast<int32_t>(position) + this->properties[PROP_OFFSET]->integer_value);
+    send_control_word(build_ctrl_word(true));
+    send_control_word(build_ctrl_word(false));
 }
 
 double CanOpenMotor::speed() {
