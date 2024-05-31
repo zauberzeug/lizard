@@ -266,10 +266,19 @@ Module_ptr Module::create(const std::string type,
         return std::make_shared<StepperMotor>(name, step_pin, dir_pin, pcnt_unit, pcnt_channel, ledc_timer, ledc_channel);
     } else if (type == "MotorAxis") {
         Module::expect(arguments, 3, identifier, identifier, identifier);
-        const StepperMotor_ptr motor = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "stepper motor");
+        const std::string name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(name);
+        const Motor_ptr motor_ptr;
+        if (module->type == odrive_motor) {
+            const ODriveMotor_ptr motor_ptr = get_module_paramter<ODriveMotor>(arguments[0], odrive_motor, "motor");
+        } else if (module->type == stepper_motor) {
+            const StepperMotor_ptr motor_ptr = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "motor");
+        } else {
+            throw std::runtime_error("module \"" + name + "\" is no motor");
+        }
         const Input_ptr input1 = get_module_paramter<Input>(arguments[1], input, "input");
         const Input_ptr input2 = get_module_paramter<Input>(arguments[2], input, "input");
-        return std::make_shared<MotorAxis>(name, motor, input1, input2);
+        return std::make_shared<MotorAxis>(name, motor_ptr, input1, input2);
     } else if (type == "CanOpenMotor") {
         Module::expect(arguments, 2, identifier, integer);
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
