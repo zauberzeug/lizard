@@ -658,4 +658,6 @@ double CanOpenMotor::speed() {
 
 void CanOpenMotor::speed(const double speed, const uint32_t acceleration) {
     this->enter_velocity_mode(speed);
+    this->properties[PROP_CTRL_HALT]->boolean_value = arguments[0]->evaluate_boolean();
+    send_control_word(build_ctrl_word(false));
 }
