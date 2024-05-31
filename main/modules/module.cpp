@@ -270,10 +270,13 @@ Module_ptr Module::create(const std::string type,
         const std::string name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(name);
         Motor_ptr motor_ptr;
+        // TODO: rmd_motor, roboclaw_motor
         if (module->type == odrive_motor) {
             motor_ptr = get_module_paramter<ODriveMotor>(arguments[0], odrive_motor, "odrive_motor");
         } else if (module->type == stepper_motor) {
             motor_ptr = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "stepper_motor");
+        } else if (module->type == canopen_motor) {
+            motor_ptr = get_module_paramter<CanOpenMotor>(arguments[0], canopen_motor, "canopen_motor");
         } else if (module->type == dummy_motor) {
             motor_ptr = get_module_paramter<DummyMotor>(arguments[0], dummy_motor, "dummy_motor");
         } else {
