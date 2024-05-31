@@ -629,3 +629,33 @@ void CanOpenMotor::handle_can_msg(const uint32_t id, const int count, const uint
         break;
     }
 }
+
+bool CanOpenMotor::is_running() {
+    // TODO: implement
+    throw std::runtime_error("Motor::speed() not implemented in ODriveMotor");
+}
+
+void CanOpenMotor::stop() {
+    /* Put in halt for velocity mode since it directly controls motion */
+    // this->properties[PROP_CTRL_HALT]->boolean_value = true;
+    // send_control_word(build_ctrl_word(false));
+    // TODO: implement
+    throw std::runtime_error("Motor::speed() not implemented in ODriveMotor");
+}
+
+double CanOpenMotor::position() {
+    return static_cast<double>(this->properties[PROP_POSITION]->integer_value);
+}
+
+void CanOpenMotor::position(const double position, const double speed, const uint32_t acceleration) {
+    this->enter_position_mode(static_cast<int32_t>(speed));
+    this->send_target_position(static_cast<int32_t>(position) + this->properties[PROP_OFFSET]->integer_value);
+}
+
+double CanOpenMotor::speed() {
+    return static_cast<double>(this->properties[PROP_VELOCITY]->integer_value);
+}
+
+void CanOpenMotor::speed(const double speed, const uint32_t acceleration) {
+    enter_velocity_mode(speed);
+}

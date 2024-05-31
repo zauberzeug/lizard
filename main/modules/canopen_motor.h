@@ -8,7 +8,7 @@
 class CanOpenMotor;
 using CanOpenMotor_ptr = std::shared_ptr<CanOpenMotor>;
 
-class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenMotor> {
+class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenMotor>, virtual public Motor {
     Can_ptr can;
     const uint8_t node_id;
 
@@ -66,4 +66,11 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
+
+    bool is_running() override;
+    void stop() override;
+    double position() override;
+    void position(const double position, const double speed, const uint32_t acceleration) override;
+    double speed() override;
+    void speed(const double speed, const uint32_t acceleration) override;
 };
