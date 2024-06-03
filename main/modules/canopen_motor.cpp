@@ -635,8 +635,6 @@ bool CanOpenMotor::is_running() {
 }
 
 void CanOpenMotor::stop() {
-    // this->properties[PROP_CTRL_ENA_OP]->boolean_value = false;
-    // this->send_control_word(build_ctrl_word(false));
     this->properties[PROP_CTRL_HALT]->boolean_value = true;
     this->send_control_word(build_ctrl_word(false));
 }

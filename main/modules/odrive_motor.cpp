@@ -68,7 +68,6 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
             (tick - this->properties.at("tick_offset")->number_value) *
             (this->properties.at("reversed")->boolean_value ? -1 : 1) *
             this->properties.at("m_per_tick")->number_value;
-        // TODO: speed https://docs.odriverobotics.com/v/latest/manual/can-protocol.html#can-msg-get-encoder-estimates
         float ticks_per_second;
         std::memcpy(&ticks_per_second, data + 4, 4);
         this->properties.at("speed")->number_value =
@@ -121,18 +120,12 @@ void ODriveMotor::off() {
     this->set_mode(1); // AXIS_STATE_IDLE
 }
 
-double ODriveMotor::get_position() {
-    return this->position();
-}
-
-
 bool ODriveMotor::is_running() {
-    // TODO: check state
     return this->axis_state != 1;
 }
 
 void ODriveMotor::stop() {
-    this->off();
+    this->speed(0);
 }
 
 double ODriveMotor::position() {

@@ -461,9 +461,10 @@ The optional acceleration argument defaults to 0, which starts and stops pulsing
 
 ## Motor Axis
 
-The motor axis module wraps a stepper motor and two limit switches.
+The motor axis module wraps a motor and two limit switches.
 It prevents the motor from moving past the limits.
 But in contrast to a simple Lizard rule, it allows to actively move out of the limits when moving in the right direction.
+Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.
 
 | Constructor                               | Description                    | Arguments |
 | ----------------------------------------- | ------------------------------ | --------- |
