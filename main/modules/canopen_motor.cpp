@@ -238,6 +238,18 @@ void CanOpenMotor::enter_velocity_mode(int velocity) {
     current_op_mode = OP_MODE_PROFILE_VELOCITY;
 }
 
+void CanOpenMotor::set_profile_acceleration(uint16_t acceleration) {
+    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, acceleration);
+}
+
+void CanOpenMotor::set_profile_deceleration(uint16_t deceleration) {
+    write_od_u16(PROFILE_DECELERATION_U32, 0x00, deceleration);
+}
+
+void CanOpenMotor::set_profile_quick_stop_deceleration(uint16_t deceleration) {
+    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, deceleration);
+}
+
 void CanOpenMotor::subscribe_to_can() {
     can->subscribe(wrap_cob_id(COB_HEARTBEAT, node_id), this->shared_from_this());
     can->subscribe(wrap_cob_id(COB_SDO_SERVER2CLIENT, node_id), this->shared_from_this());
@@ -298,6 +310,18 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
         expect(arguments, 1, integer);
         uint16_t index = arguments[0]->evaluate_integer();
         sdo_read(index, 0);
+    } else if (method_name == "set_profile_acceleration") {
+        expect(arguments, 1, integer);
+        uint32_t acceleration = arguments[0]->evaluate_integer();
+        set_profile_acceleration(acceleration);
+    } else if (method_name == "set_profile_deceleration") {
+        expect(arguments, 1, integer);
+        uint32_t deceleration = arguments[0]->evaluate_integer();
+        set_profile_deceleration(deceleration);
+    } else if (method_name == "set_profile_quick_stop_deceleration") {
+        expect(arguments, 1, integer);
+        uint32_t deceleration = arguments[0]->evaluate_integer();
+        set_profile_quick_stop_deceleration(deceleration);
     } else {
         Module::call(method_name, arguments);
     }
@@ -395,9 +419,9 @@ void CanOpenMotor::configure_rpdos() {
 
 void CanOpenMotor::configure_constants() {
     write_od_u8(OP_MODE_U8, 0x00, OP_MODE_NONE);
-    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, 100);
-    write_od_u16(PROFILE_DECELERATION_U32, 0x00, 100);
-    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, 500);
+    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, 400);
+    write_od_u16(PROFILE_DECELERATION_U32, 0x00, 400);
+    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, 2000);
     write_od_u16(CONTROL_WORD_U16, 0x00, build_ctrl_word(false));
 
     configure_rpdos();
