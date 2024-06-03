@@ -29,7 +29,6 @@ public:
     void position(const float position);
     void limits(const float speed, const float current);
     void off();
-    double get_position();
 
     bool is_running() override;
     void stop() override;

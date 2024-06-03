@@ -11,8 +11,8 @@ ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_mo
 }
 
 void ODriveWheels::step() {
-    double left_position = this->left_motor->get_position();
-    double right_position = this->right_motor->get_position();
+    double left_position = this->left_motor->position();
+    double right_position = this->right_motor->position();
 
     if (this->initialized) {
         unsigned long int d_micros = micros_since(this->last_micros);
