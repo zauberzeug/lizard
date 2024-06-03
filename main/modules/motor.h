@@ -1,13 +1,12 @@
 #pragma once
 
-#include <stdint.h>
 #include <memory>
+#include <stdint.h>
 
 class Motor;
 using Motor_ptr = std::shared_ptr<Motor>;
 
 class Motor {
-
 public:
     virtual bool is_running() = 0;
     virtual void stop() = 0;
