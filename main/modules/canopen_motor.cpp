@@ -5,7 +5,7 @@
 #include <cinttypes>
 #include <esp_timer.h>
 #include <stdexcept>
-
+#include <unistd.h>
 enum CobFunction {
     COB_SYNC_EMCY = 0x1,
     COB_TPDO1 = 0x3,
@@ -282,7 +282,7 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
         expect(arguments, 0);
         /* toggle new set point bit in control word */
         send_control_word(build_ctrl_word(true));
-        send_control_word(build_ctrl_word(false));
+        // send_control_word(build_ctrl_word(false));
     } else if (method_name == "set_target_velocity") {
         expect(arguments, 1, integer);
         int32_t target_velocity = arguments[0]->evaluate_integer();
@@ -419,9 +419,9 @@ void CanOpenMotor::configure_rpdos() {
 
 void CanOpenMotor::configure_constants() {
     write_od_u8(OP_MODE_U8, 0x00, OP_MODE_NONE);
-    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, 400);
-    write_od_u16(PROFILE_DECELERATION_U32, 0x00, 400);
-    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, 2000);
+    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, 1000);
+    write_od_u16(PROFILE_DECELERATION_U32, 0x00, 1000);
+    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, 3000);
     write_od_u16(CONTROL_WORD_U16, 0x00, build_ctrl_word(false));
 
     configure_rpdos();
@@ -647,7 +647,7 @@ void CanOpenMotor::position(const double position, const double speed, const uin
     this->enter_position_mode(static_cast<int32_t>(speed));
     this->send_target_position(static_cast<int32_t>(position) + this->properties[PROP_OFFSET]->integer_value);
     send_control_word(build_ctrl_word(true));
-    send_control_word(build_ctrl_word(false));
+    // send_control_word(build_ctrl_word(false));
 }
 
 double CanOpenMotor::speed() {
