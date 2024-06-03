@@ -31,7 +31,6 @@ enum ModuleType {
     canopen_master,
     proxy,
     number_of_module_types,
-    dummy_motor,
 };
 
 class Module;
