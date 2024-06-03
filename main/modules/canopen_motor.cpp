@@ -419,9 +419,9 @@ void CanOpenMotor::configure_rpdos() {
 
 void CanOpenMotor::configure_constants() {
     write_od_u8(OP_MODE_U8, 0x00, OP_MODE_NONE);
-    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, 400);
-    write_od_u16(PROFILE_DECELERATION_U32, 0x00, 400);
-    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, 2000);
+    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, 1000);
+    write_od_u16(PROFILE_DECELERATION_U32, 0x00, 1000);
+    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, 3000);
     write_od_u16(CONTROL_WORD_U16, 0x00, build_ctrl_word(false));
 
     configure_rpdos();
