@@ -125,14 +125,12 @@ double ODriveMotor::get_position() {
     return this->position();
 }
 
-
 bool ODriveMotor::is_running() {
-    // TODO: check state
     return this->axis_state != 1;
 }
 
 void ODriveMotor::stop() {
-    this->off();
+    this->speed(0);
 }
 
 double ODriveMotor::position() {
