@@ -5,12 +5,15 @@
 Input::Input(const std::string name) : Module(input, name) {
     this->properties["level"] = std::make_shared<IntegerVariable>();
     this->properties["change"] = std::make_shared<IntegerVariable>();
+    this->properties["inverted"] = std::make_shared<BooleanVariable>();
+    this->properties["active"] = std::make_shared<BooleanVariable>();
 }
 
 void Input::step() {
     const int new_level = this->get_level();
     this->properties.at("change")->integer_value = new_level - this->properties.at("level")->integer_value;
     this->properties.at("level")->integer_value = new_level;
+    this->properties.at("active")->boolean_value = this->properties.at("inverted")->boolean_value ? !new_level : new_level;
     Module::step();
 }
 

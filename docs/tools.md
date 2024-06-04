@@ -55,12 +55,6 @@ Install Python requirements:
 python3 -m pip install -r requirements.txt
 ```
 
-Download [owl](https://github.com/ianh/owl), the language parser generator:
-
-```bash
-./get_owl.sh
-```
-
 Install UART drivers: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
 
 Get all sub modules:

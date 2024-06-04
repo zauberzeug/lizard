@@ -7,4 +7,5 @@ esp.py
 flash.py
 monitor.py
 README.md
+requirements.txt
 LICENSE

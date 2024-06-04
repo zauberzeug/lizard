@@ -57,10 +57,12 @@ The input module is associated with a digital input pin that is be connected to 
 | -------------------- | -------------------------------------- | --------- |
 | `input = Input(pin)` | `pin` is the corresponding GPIO number | `int`     |
 
-| Properties     | Description                           | Data type |
-| -------------- | ------------------------------------- | --------- |
-| `input.level`  | Current signal level (0 or 1)         | `int`     |
-| `input.change` | Level change since last cycle (-1..1) | `int`     |
+| Properties       | Description                           | Data type |
+| ---------------- | ------------------------------------- | --------- |
+| `input.level`    | Current signal level (0 or 1)         | `int`     |
+| `input.change`   | Level change since last cycle (-1..1) | `int`     |
+| `input.inverted` | Inverts the active property if true   | `bool`    |
+| `input.active`   | Current active state of the input     | `bool`    |
 
 | Methods            | Description                        |
 | ------------------ | ---------------------------------- |
