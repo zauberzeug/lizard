@@ -265,14 +265,15 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | ---------------------------------- | ---------------------- | ----------------- |
 | `motor = ODriveMotor(can, can_id)` | CAN module and node ID | CAN module, `int` |
 
-| Properties          | Description             | Data type |
-| ------------------- | ----------------------- | --------- |
-| `motor.position`    | Motor position (meters) | `float`   |
-| `motor.tick_offset` | Encoder tick offset     | `float`   |
-| `motor.m_per_tick`  | Meters per encoder tick | `float`   |
-| `motor.reversed`    | Reverse motor direction | `bool`    |
-| `motor.axis_error`  | Error code of the axis  | `int`     |
-| `motor.motor_error` | Motor in fault mode     | `int`     |
+| Properties          | Description                 | Data type |
+| ------------------- | --------------------------- | --------- |
+| `motor.position`    | Motor position (meters)     | `float`   |
+| `motor.tick_offset` | Encoder tick offset         | `float`   |
+| `motor.m_per_tick`  | Meters per encoder tick     | `float`   |
+| `motor.reversed`    | Reverse motor direction     | `bool`    |
+| `motor.axis_error`  | Error code of the axis      | `int`     |
+| `motor.motor_error` | Motor in fault mode         | `int`     |
+| `motor.axis_state`  | the state of the motor axis | `int`     |
 
 | Methods                        | Description                                 | Arguments        |
 | ------------------------------ | ------------------------------------------- | ---------------- |
@@ -282,7 +283,7 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | `motor.position(position)`     | Move to given `position` (m)                | `float`          |
 | `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits      | `float`, `float` |
 | `motor.off()`                  | Turn motor off (idle state)                 |                  |
-| `motor.reset_motor_error()`    | Resets the Motor and clears error statments |                  |
+| `motor.reset_motor()`          | Resets the Motor and clears error statments |                  |
 
 ## ODrive Wheels
 
