@@ -280,8 +280,7 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | `motor.position(position)`     | Move to given `position` (m)                | `float`          |
 | `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits      | `float`, `float` |
 | `motor.off()`                  | Turn motor off (idle state)                 |                  |
-| `motor.clear_errors`           | Clears all error statements                 |                  |
-| `motor.reset_motor`            | Resets the Motor and clears error statments |                  |
+| `motor.reset_motor_error()`    | Resets the Motor and clears error statments |                  |
 
 ## ODrive Wheels
 

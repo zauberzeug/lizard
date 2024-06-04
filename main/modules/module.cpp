@@ -176,6 +176,8 @@ Module_ptr Module::create(const std::string type,
             const Can_ptr can = std::static_pointer_cast<Can>(module);
             uint32_t can_id = arguments[1]->evaluate_integer();
             ODriveMotor_ptr odrive_motor = std::make_shared<ODriveMotor>(name, can, can_id, 4);
+            odrive_motor->subscribe_to_can();
+            return odrive_motor;
         } else {
             Module::expect(arguments, 3, identifier, integer, integer);
             std::string can_name = arguments[0]->evaluate_identifier();
@@ -187,10 +189,10 @@ Module_ptr Module::create(const std::string type,
             uint32_t can_id = arguments[1]->evaluate_integer();
             int version = arguments[2]->evaluate_integer();
             ODriveMotor_ptr odrive_motor = std::make_shared<ODriveMotor>(name, can, can_id, version);
+            odrive_motor->subscribe_to_can();
+            return odrive_motor;
         }
 
-        odrive_motor->subscribe_to_can();
-        return odrive_motor;
     } else if (type == "ODriveWheels") {
         Module::expect(arguments, 2, identifier, identifier);
         std::string left_name = arguments[0]->evaluate_identifier();

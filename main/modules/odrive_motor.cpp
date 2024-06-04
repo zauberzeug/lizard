@@ -21,6 +21,7 @@ ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32
     this->properties["reversed"] = std::make_shared<BooleanVariable>();
     this->properties["axis_error"] = std::make_shared<IntegerVariable>();
     this->properties["motor_error_flag"] = std::make_shared<IntegerVariable>();
+    this->properties["axis_state"] = std::make_shared<IntegerVariable>();
 }
 
 void ODriveMotor::subscribe_to_can() {
@@ -32,9 +33,12 @@ void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, cons
     if (!this->is_boot_complete) {
         return;
     }
-    // if (this->properties.at("motor_error")->number_value == 1) {
-    //     return;
-    // }
+    if (this->properties.at("motor_error_flag")->number_value == 1) {
+        axis_state = -1;
+        axis_control_mode = -1;
+        axis_input_mode = -1;
+        return;
+    }
     if (this->axis_state != state) {
         this->can->send(this->can_id + 0x007, state, 0, 0, 0, 0, 0, 0, 0);
         this->axis_state = state;
@@ -69,10 +73,9 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->off();
-    } else if (method_name == "reset_motor_error") {
+    } else if (method_name == "reset_motor") {
         Module::expect(arguments, 0);
         this->reset_motor_error();
-        Module::call(method_name, arguments);
     }
 }
 
@@ -83,6 +86,7 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         int axis_state;
         std::memcpy(&axis_state, data + 4, 1);
         this->axis_state = axis_state;
+        this->properties.at("axis_state")->integer_value = axis_state;
         if (version == 6) {
             int messege_byte;
             std::memcpy(&messege_byte, data + 5, 1);
