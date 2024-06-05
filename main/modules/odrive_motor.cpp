@@ -133,7 +133,6 @@ double ODriveMotor::position() {
 }
 
 void ODriveMotor::position(const double position, const double speed, const uint32_t acceleration) {
-    this->speed(speed, acceleration);
     this->position(static_cast<float>(position));
 }
 
