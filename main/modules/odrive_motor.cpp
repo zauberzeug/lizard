@@ -132,7 +132,7 @@ double ODriveMotor::position() {
     return this->properties.at("position")->number_value;
 }
 
-void ODriveMotor::position(const double position, const double speed, const uint32_t acceleration) {
+void ODriveMotor::position(const double position, const double speed, const double acceleration) {
     this->position(static_cast<float>(position));
 }
 
@@ -140,6 +140,6 @@ double ODriveMotor::speed() {
     return this->properties.at("speed")->number_value;
 }
 
-void ODriveMotor::speed(const double speed, const uint32_t acceleration) {
+void ODriveMotor::speed(const double speed, const double acceleration) {
     this->speed(static_cast<float>(speed));
 }

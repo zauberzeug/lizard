@@ -642,7 +642,7 @@ double CanOpenMotor::position() {
     return static_cast<double>(this->properties[PROP_POSITION]->integer_value);
 }
 
-void CanOpenMotor::position(const double position, const double speed, const uint32_t acceleration) {
+void CanOpenMotor::position(const double position, const double speed, const double acceleration) {
     this->enter_position_mode(static_cast<int32_t>(speed));
     this->send_target_position(static_cast<int32_t>(position) + this->properties[PROP_OFFSET]->integer_value);
     send_control_word(build_ctrl_word(true));
@@ -652,7 +652,7 @@ double CanOpenMotor::speed() {
     return static_cast<double>(this->properties[PROP_VELOCITY]->integer_value);
 }
 
-void CanOpenMotor::speed(const double speed, const uint32_t acceleration) {
+void CanOpenMotor::speed(const double speed, const double acceleration) {
     this->enter_velocity_mode(speed);
     this->properties[PROP_CTRL_HALT]->boolean_value = false;
     send_control_word(build_ctrl_word(false));

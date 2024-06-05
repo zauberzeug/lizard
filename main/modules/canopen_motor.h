@@ -71,7 +71,7 @@ public:
     bool is_running() override;
     void stop() override;
     double position() override;
-    void position(const double position, const double speed, const uint32_t acceleration) override;
+    void position(const double position, const double speed, const double acceleration) override;
     double speed() override;
-    void speed(const double speed, const uint32_t acceleration) override;
+    void speed(const double speed, const double acceleration) override;
 };

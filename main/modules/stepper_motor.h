@@ -54,9 +54,9 @@ public:
     bool is_running() override;
     void stop() override;
     double position() override;
-    void position(const double position, const double speed, const uint32_t acceleration) override;
+    void position(const double position, const double speed, const double acceleration) override;
     void position(const int32_t position, const int32_t speed, const uint32_t acceleration);
     double speed() override;
-    void speed(const double speed, const uint32_t acceleration) override;
+    void speed(const double speed, const double acceleration) override;
     void speed(const int32_t speed, const uint32_t acceleration);
 };
