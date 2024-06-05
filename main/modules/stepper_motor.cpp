@@ -181,20 +181,28 @@ void StepperMotor::call(const std::string method_name, const std::vector<ConstEx
     }
 }
 
-void StepperMotor::position(const int32_t position, const int32_t speed, const uint32_t acceleration) {
-    this->target_position = position;
+void StepperMotor::stop() {
+    set_state(Idle);
+}
+
+double StepperMotor::get_position() {
+    return static_cast<double>(this->properties.at("position")->integer_value);
+}
+
+void StepperMotor::position(const double position, const double speed, const double acceleration) {
+    this->target_position = static_cast<int32_t>(position);
     bool forward = this->target_position > this->properties.at("position")->integer_value;
-    this->target_speed = speed * (forward ? 1 : -1);
-    this->target_acceleration = acceleration;
+    this->target_speed = static_cast<int32_t>(speed) * (forward ? 1 : -1);
+    this->target_acceleration = static_cast<uint32_t>(acceleration);
     set_state(Positioning);
 }
 
-void StepperMotor::speed(const int32_t speed, const uint32_t acceleration) {
-    this->target_speed = speed;
-    this->target_acceleration = acceleration;
-    set_state(this->target_speed == 0 ? Idle : Speeding);
+double StepperMotor::get_speed() {
+    return static_cast<double>(this->properties.at("speed")->integer_value);
 }
 
-void StepperMotor::stop() {
-    set_state(Idle);
+void StepperMotor::speed(const double speed, const double acceleration) {
+    this->target_speed = static_cast<int32_t>(speed);
+    this->target_acceleration = static_cast<uint32_t>(acceleration);
+    set_state(this->target_speed == 0 ? Idle : Speeding);
 }

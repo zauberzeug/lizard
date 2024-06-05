@@ -2,12 +2,13 @@
 
 #include "can.h"
 #include "module.h"
+#include "motor.h"
 #include <memory>
 
 class ODriveMotor;
 using ODriveMotor_ptr = std::shared_ptr<ODriveMotor>;
 
-class ODriveMotor : public Module, public std::enable_shared_from_this<ODriveMotor> {
+class ODriveMotor : public Module, public std::enable_shared_from_this<ODriveMotor>, virtual public Motor {
 private:
     const uint32_t can_id;
     const Can_ptr can;
@@ -28,5 +29,10 @@ public:
     void position(const float position);
     void limits(const float speed, const float current);
     void off();
-    double get_position();
+
+    void stop() override;
+    double get_position() override;
+    void position(const double position, const double speed, const double acceleration) override;
+    double get_speed() override;
+    void speed(const double speed, const double acceleration) override;
 };

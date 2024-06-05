@@ -5,6 +5,7 @@
 ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id)
     : Module(odrive_motor, name), can_id(can_id), can(can) {
     this->properties["position"] = std::make_shared<NumberVariable>();
+    this->properties["speed"] = std::make_shared<NumberVariable>();
     this->properties["tick_offset"] = std::make_shared<NumberVariable>();
     this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
     this->properties["reversed"] = std::make_shared<BooleanVariable>();
@@ -67,6 +68,12 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
             (tick - this->properties.at("tick_offset")->number_value) *
             (this->properties.at("reversed")->boolean_value ? -1 : 1) *
             this->properties.at("m_per_tick")->number_value;
+        float ticks_per_second;
+        std::memcpy(&ticks_per_second, data + 4, 4);
+        this->properties.at("speed")->number_value =
+            ticks_per_second *
+            (this->properties.at("reversed")->boolean_value ? -1 : 1) *
+            this->properties.at("m_per_tick")->number_value;
     }
     }
 }
@@ -113,6 +120,22 @@ void ODriveMotor::off() {
     this->set_mode(1); // AXIS_STATE_IDLE
 }
 
+void ODriveMotor::stop() {
+    this->speed(0);
+}
+
 double ODriveMotor::get_position() {
     return this->properties.at("position")->number_value;
+}
+
+void ODriveMotor::position(const double position, const double speed, const double acceleration) {
+    this->position(static_cast<float>(position));
+}
+
+double ODriveMotor::get_speed() {
+    return this->properties.at("speed")->number_value;
+}
+
+void ODriveMotor::speed(const double speed, const double acceleration) {
+    this->speed(static_cast<float>(speed));
 }
