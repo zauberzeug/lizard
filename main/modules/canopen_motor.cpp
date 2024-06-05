@@ -629,10 +629,6 @@ void CanOpenMotor::handle_can_msg(const uint32_t id, const int count, const uint
     }
 }
 
-bool CanOpenMotor::is_running() {
-    return this->properties[PROP_VELOCITY]->integer_value != 0;
-}
-
 void CanOpenMotor::stop() {
     this->properties[PROP_CTRL_HALT]->boolean_value = true;
     this->send_control_word(build_ctrl_word(false));

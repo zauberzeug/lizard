@@ -120,10 +120,6 @@ void ODriveMotor::off() {
     this->set_mode(1); // AXIS_STATE_IDLE
 }
 
-bool ODriveMotor::is_running() {
-    return this->axis_state != 1;
-}
-
 void ODriveMotor::stop() {
     this->speed(0);
 }

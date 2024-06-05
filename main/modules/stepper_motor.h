@@ -51,7 +51,6 @@ public:
     int32_t get_target_speed() const { return this->target_speed; }
     uint32_t get_target_acceleration() const { return this->target_acceleration; }
 
-    bool is_running() override;
     void stop() override;
     double position() override;
     void position(const double position, const double speed, const double acceleration) override;

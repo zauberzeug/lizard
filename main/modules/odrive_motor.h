@@ -30,7 +30,6 @@ public:
     void limits(const float speed, const float current);
     void off();
 
-    bool is_running() override;
     void stop() override;
     double position() override;
     void position(const double position, const double speed, const double acceleration) override;

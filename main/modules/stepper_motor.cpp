@@ -195,10 +195,6 @@ void StepperMotor::speed(const int32_t speed, const uint32_t acceleration) {
     set_state(this->target_speed == 0 ? Idle : Speeding);
 }
 
-bool StepperMotor::is_running() {
-    return this->state != Idle;
-}
-
 void StepperMotor::stop() {
     set_state(Idle);
 }
