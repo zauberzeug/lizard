@@ -282,7 +282,6 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
         expect(arguments, 0);
         /* toggle new set point bit in control word */
         send_control_word(build_ctrl_word(true));
-        // send_control_word(build_ctrl_word(false));
     } else if (method_name == "set_target_velocity") {
         expect(arguments, 1, integer);
         int32_t target_velocity = arguments[0]->evaluate_integer();
@@ -647,7 +646,6 @@ void CanOpenMotor::position(const double position, const double speed, const uin
     this->enter_position_mode(static_cast<int32_t>(speed));
     this->send_target_position(static_cast<int32_t>(position) + this->properties[PROP_OFFSET]->integer_value);
     send_control_word(build_ctrl_word(true));
-    // send_control_word(build_ctrl_word(false));
 }
 
 double CanOpenMotor::speed() {
