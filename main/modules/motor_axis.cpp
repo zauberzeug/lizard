@@ -16,7 +16,7 @@ bool MotorAxis::can_move(const float speed) const {
 }
 
 void MotorAxis::step() {
-    float speed = this->motor->speed();
+    float speed = this->motor->get_speed();
     if (!this->can_move(speed)) {
         this->motor->stop();
     }
@@ -30,7 +30,7 @@ void MotorAxis::call(const std::string method_name, const std::vector<ConstExpre
         }
         Module::expect(arguments, -1, numbery, numbery, numbery);
         // Check distance because speed is always positive for ODriveMotors in position mode
-        float distance = arguments[0]->evaluate_number() - this->motor->position();
+        float distance = arguments[0]->evaluate_number() - this->motor->get_position();
         if (this->can_move(distance)) {
             this->motor->position(arguments[0]->evaluate_number(), arguments[1]->evaluate_number(), arguments.size() > 2 ? std::abs(arguments[2]->evaluate_number()) : 0);
         } else {

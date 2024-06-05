@@ -634,7 +634,7 @@ void CanOpenMotor::stop() {
     this->send_control_word(build_ctrl_word(false));
 }
 
-double CanOpenMotor::position() {
+double CanOpenMotor::get_position() {
     return static_cast<double>(this->properties[PROP_POSITION]->integer_value);
 }
 
@@ -644,7 +644,7 @@ void CanOpenMotor::position(const double position, const double speed, const dou
     send_control_word(build_ctrl_word(true));
 }
 
-double CanOpenMotor::speed() {
+double CanOpenMotor::get_speed() {
     return static_cast<double>(this->properties[PROP_VELOCITY]->integer_value);
 }
 

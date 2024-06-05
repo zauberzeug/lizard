@@ -185,7 +185,7 @@ void StepperMotor::stop() {
     set_state(Idle);
 }
 
-double StepperMotor::position() {
+double StepperMotor::get_position() {
     return static_cast<double>(this->properties.at("position")->integer_value);
 }
 
@@ -197,7 +197,7 @@ void StepperMotor::position(const double position, const double speed, const dou
     set_state(Positioning);
 }
 
-double StepperMotor::speed() {
+double StepperMotor::get_speed() {
     return static_cast<double>(this->properties.at("speed")->integer_value);
 }
 
