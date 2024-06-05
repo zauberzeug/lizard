@@ -32,5 +32,4 @@ public:
     void off();
     void reset_motor_error();
     double get_position();
-    void step() override;
 };

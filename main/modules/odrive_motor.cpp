@@ -183,7 +183,3 @@ void ODriveMotor::reset_motor_error() {
 double ODriveMotor::get_position() {
     return this->properties.at("position")->number_value;
 }
-
-void ODriveMotor::step() {
-    Module::step();
-}
