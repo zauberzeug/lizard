@@ -2,26 +2,15 @@
 #include <cstring>
 #include <memory>
 
-enum AXIS_ERROR {
-    AXIS_ERROR_NONE = 0,
-    AXIS_ERROR_INVALID_STATE = 0x01,
-    AXIS_ERROR_WATCHDOG_TIMER_EXPIRED = 0x800,
-    AXIS_ERROR_MIN_ENDSTOP_PRESSED = 0x1000,
-    AXIS_ERROR_MAX_ENDSTOP_PRESSED = 0x2000,
-    AXIS_ERROR_ESTOP_REQUESTED = 0x4000,
-    AXIS_ERROR_OVER_TEMP = 0x40000,
-    AXIS_ERROR_UNKNOWN_POSITION = 0x80000
-};
-
-ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version) : Module(odrive_motor, name),
-                                                                                                                     can_id(can_id), can(can), version(version) {
+ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version)
+    : Module(odrive_motor, name), can_id(can_id), can(can), version(version) {
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["tick_offset"] = std::make_shared<NumberVariable>();
     this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
     this->properties["reversed"] = std::make_shared<BooleanVariable>();
+    this->properties["axis_state"] = std::make_shared<IntegerVariable>();
     this->properties["axis_error"] = std::make_shared<IntegerVariable>();
     this->properties["motor_error_flag"] = std::make_shared<IntegerVariable>();
-    this->properties["axis_state"] = std::make_shared<IntegerVariable>();
 }
 
 void ODriveMotor::subscribe_to_can() {
@@ -34,9 +23,9 @@ void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, cons
         return;
     }
     if (this->properties.at("motor_error_flag")->number_value == 1) {
-        axis_state = -1;
-        axis_control_mode = -1;
-        axis_input_mode = -1;
+        this->axis_state = -1;
+        this->axis_control_mode = -1;
+        this->axis_input_mode = -1;
         return;
     }
     if (this->axis_state != state) {
@@ -76,6 +65,8 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "reset_motor") {
         Module::expect(arguments, 0);
         this->reset_motor_error();
+    } else {
+        Module::call(method_name, arguments);
     }
 }
 
@@ -83,45 +74,20 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
     this->is_boot_complete = true;
     switch (id - this->can_id) {
     case 0x001: {
+        int axis_error;
+        std::memcpy(&axis_error, data, 4);
+        this->properties.at("axis_error")->integer_value = axis_error;
         int axis_state;
         std::memcpy(&axis_state, data + 4, 1);
         this->axis_state = axis_state;
         this->properties.at("axis_state")->integer_value = axis_state;
         if (version == 6) {
-            int messege_byte;
-            std::memcpy(&messege_byte, data + 5, 1);
-            this->properties.at("motor_error_flag")->integer_value = messege_byte & 0x01;
-        }
-        int axis_error;
-        std::memcpy(&axis_error, data, 4);
-        switch (axis_error) {
-        case AXIS_ERROR_INVALID_STATE:
-            this->properties.at("axis_error")->integer_value = 1;
-            break;
-        case AXIS_ERROR_WATCHDOG_TIMER_EXPIRED:
-            this->properties.at("axis_error")->integer_value = 2;
-            break;
-        case AXIS_ERROR_MIN_ENDSTOP_PRESSED:
-            this->properties.at("axis_error")->integer_value = 3;
-            break;
-        case AXIS_ERROR_MAX_ENDSTOP_PRESSED:
-            this->properties.at("axis_error")->integer_value = 4;
-            break;
-        case AXIS_ERROR_ESTOP_REQUESTED:
-            this->properties.at("axis_error")->integer_value = 5;
-            break;
-        case AXIS_ERROR_OVER_TEMP:
-            this->properties.at("axis_error")->integer_value = 6;
-            break;
-        case AXIS_ERROR_UNKNOWN_POSITION:
-            this->properties.at("axis_error")->integer_value = 7;
-            break;
-        default:
-            this->properties.at("axis_error")->integer_value = axis_error;
-
-            break;
+            int message_byte;
+            std::memcpy(&message_byte, data + 5, 1);
+            this->properties.at("motor_error_flag")->integer_value = message_byte & 0x01;
         }
         break;
+    }
     case 0x009: {
         float tick;
         std::memcpy(&tick, data, 4);
@@ -129,7 +95,6 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
             (tick - this->properties.at("tick_offset")->number_value) *
             (this->properties.at("reversed")->boolean_value ? -1 : 1) *
             this->properties.at("m_per_tick")->number_value;
-    }
     }
     }
 }
@@ -178,8 +143,9 @@ void ODriveMotor::off() {
 
 void ODriveMotor::reset_motor_error() {
     uint8_t empty_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-    this->can->send(this->can_id + 0x018, empty_data, true);
+    this->can->send(this->can_id + 0x018, empty_data); // "Clear Errors"
 }
+
 double ODriveMotor::get_position() {
     return this->properties.at("position")->number_value;
 }

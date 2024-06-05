@@ -18,7 +18,6 @@ private:
     uint8_t axis_input_mode = -1;
 
     void set_mode(const uint8_t state, const uint8_t control_mode = 0, const uint8_t input_mode = 0);
-    void update_motor_error();
 
 public:
     ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version);

@@ -261,29 +261,31 @@ This module controls a linear actuator via two output pins (move in, move out) a
 
 The ODrive motor module controls a motor using an [ODrive motor controller](https://odriverobotics.com/).
 
-| Constructor                        | Description            | Arguments         |
-| ---------------------------------- | ---------------------- | ----------------- |
-| `motor = ODriveMotor(can, can_id)` | CAN module and node ID | CAN module, `int` |
+| Constructor                                   | Description                     | Arguments                |
+| --------------------------------------------- | ------------------------------- | ------------------------ |
+| `motor = ODriveMotor(can, can_id[, version])` | CAN module, node ID and version | CAN module, `int`, `int` |
 
-| Properties          | Description                 | Data type |
-| ------------------- | --------------------------- | --------- |
-| `motor.position`    | Motor position (meters)     | `float`   |
-| `motor.tick_offset` | Encoder tick offset         | `float`   |
-| `motor.m_per_tick`  | Meters per encoder tick     | `float`   |
-| `motor.reversed`    | Reverse motor direction     | `bool`    |
-| `motor.axis_error`  | Error code of the axis      | `int`     |
-| `motor.motor_error` | Motor in fault mode         | `int`     |
-| `motor.axis_state`  | the state of the motor axis | `int`     |
+The `version` parameter is an optional integer indicating the patch number of the ODrive firmware (4, 5 or 6; default: 4 for version "0.5.4"). Version 0.5.6 allows to read the motor error flag.
 
-| Methods                        | Description                                 | Arguments        |
-| ------------------------------ | ------------------------------------------- | ---------------- |
-| `motor.zero()`                 | Set current position as zero position       |                  |
-| `motor.power(torque)`          | Move with given `torque`                    | `float`          |
-| `motor.speed(speed)`           | Move with given `speed` (m/s)               | `float`          |
-| `motor.position(position)`     | Move to given `position` (m)                | `float`          |
-| `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits      | `float`, `float` |
-| `motor.off()`                  | Turn motor off (idle state)                 |                  |
-| `motor.reset_motor()`          | Resets the Motor and clears error statments |                  |
+| Properties          | Description                               | Data type |
+| ------------------- | ----------------------------------------- | --------- |
+| `motor.position`    | Motor position (meters)                   | `float`   |
+| `motor.tick_offset` | Encoder tick offset                       | `float`   |
+| `motor.m_per_tick`  | Meters per encoder tick                   | `float`   |
+| `motor.reversed`    | Reverse motor direction                   | `bool`    |
+| `motor.axis_state`  | State of the motor axis                   | `int`     |
+| `motor.axis_error`  | Error code of the axis                    | `int`     |
+| `motor.motor_error` | Motor error flat (requires version 0.5.6) | `int`     |
+
+| Methods                        | Description                            | Arguments        |
+| ------------------------------ | -------------------------------------- | ---------------- |
+| `motor.zero()`                 | Set current position as zero position  |                  |
+| `motor.power(torque)`          | Move with given `torque`               | `float`          |
+| `motor.speed(speed)`           | Move with given `speed` (m/s)          | `float`          |
+| `motor.position(position)`     | Move to given `position` (m)           | `float`          |
+| `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits | `float`, `float` |
+| `motor.off()`                  | Turn motor off (idle state)            |                  |
+| `motor.reset_motor()`          | Resets the motor and clears errors     |                  |
 
 ## ODrive Wheels
 
