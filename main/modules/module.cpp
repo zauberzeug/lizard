@@ -268,20 +268,20 @@ Module_ptr Module::create(const std::string type,
         Module::expect(arguments, 3, identifier, identifier, identifier);
         const std::string name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(name);
-        Motor_ptr motor_ptr;
+        Motor_ptr motor;
         // TODO: rmd_motor, roboclaw_motor
         if (module->type == odrive_motor) {
-            motor_ptr = get_module_paramter<ODriveMotor>(arguments[0], odrive_motor, "odrive_motor");
+            motor = get_module_paramter<ODriveMotor>(arguments[0], odrive_motor, "odrive_motor");
         } else if (module->type == stepper_motor) {
-            motor_ptr = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "stepper_motor");
+            motor = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "stepper_motor");
         } else if (module->type == canopen_motor) {
-            motor_ptr = get_module_paramter<CanOpenMotor>(arguments[0], canopen_motor, "canopen_motor");
+            motor = get_module_paramter<CanOpenMotor>(arguments[0], canopen_motor, "canopen_motor");
         } else {
-            throw std::runtime_error("module \"" + name + "\" is no motor");
+            throw std::runtime_error("module \"" + name + "\" is not a supported motor for MotorAxis");
         }
         const Input_ptr input1 = get_module_paramter<Input>(arguments[1], input, "input");
         const Input_ptr input2 = get_module_paramter<Input>(arguments[2], input, "input");
-        return std::make_shared<MotorAxis>(name, motor_ptr, input1, input2);
+        return std::make_shared<MotorAxis>(name, motor, input1, input2);
     } else if (type == "CanOpenMotor") {
         Module::expect(arguments, 2, identifier, integer);
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
