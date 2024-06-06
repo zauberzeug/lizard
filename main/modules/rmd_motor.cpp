@@ -150,6 +150,9 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
                 set_acceleration(i, acceleration);
             }
         }
+    } else if (method_name == "get_errors") {
+        Module::expect(arguments, 0);
+        this->send(0x9a, 0, 0, 0, 0, 0, 0, 0);
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
         this->clear_errors();
@@ -231,6 +234,12 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         int32_t acceleration = 0;
         std::memcpy(&acceleration, data + 4, 4);
         echo("%s acceleration[%d] %d", this->name.c_str(), index, acceleration);
+        break;
+    }
+    case 0x9a: {
+        uint16_t errors = 0;
+        std::memcpy(&errors, data + 6, 2);
+        echo("%s errors %d", this->name.c_str(), errors);
         break;
     }
     }

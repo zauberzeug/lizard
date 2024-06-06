@@ -335,6 +335,7 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.set_pid(...)`          | Set PID parameters Kp/Ki for position/speed/torque loop           | 6x `int`         |
 | `rmd.get_acceleration()`    | Print acceleration (deg/s^2)                                      |                  |
 | `rmd.set_acceleration(...)` | Set accelerations/decelerations for position/speed loop (deg/s^2) | 4x `int`         |
+| `rmd.get_errors()`          | Print motor error code                                            |                  |
 | `rmd.clear_errors()`        | Clear motor error                                                 |                  |
 | `rmd.zero()`                | Write position to ROM as zero position (see below)                |                  |
 
