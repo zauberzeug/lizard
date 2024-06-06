@@ -9,8 +9,12 @@ class DunkerMotor;
 using DunkerMotor_ptr = std::shared_ptr<DunkerMotor>;
 
 class DunkerMotor : public Module, public std::enable_shared_from_this<DunkerMotor> {
+private:
     Can_ptr can;
     const uint8_t node_id;
+
+    void sdo_read(const uint16_t index, const uint8_t sub);
+    void sdo_write(const uint16_t index, const uint8_t sub, const uint8_t bits, const uint32_t value);
 
 public:
     DunkerMotor(const std::string &name, const Can_ptr can, int64_t node_id);
