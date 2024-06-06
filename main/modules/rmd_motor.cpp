@@ -225,7 +225,7 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
     case 0x42: {
         int32_t acceleration = 0;
         std::memcpy(&acceleration, data + 4, 4);
-        echo("%s acceleration %d", this->name.c_str(), acceleration);
+        echo("%s.acceleration %d", this->name.c_str(), acceleration);
         break;
     }
     case 0x43: {
@@ -233,13 +233,13 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         std::memcpy(&index, data + 1, 1);
         int32_t acceleration = 0;
         std::memcpy(&acceleration, data + 4, 4);
-        echo("%s acceleration[%d] %d", this->name.c_str(), index, acceleration);
+        echo("%s.acceleration[%d] %d", this->name.c_str(), index, acceleration);
         break;
     }
     case 0x9a: {
         uint16_t errors = 0;
         std::memcpy(&errors, data + 6, 2);
-        echo("%s errors %d", this->name.c_str(), errors);
+        echo("%s.errors %d", this->name.c_str(), errors);
         break;
     }
     }
