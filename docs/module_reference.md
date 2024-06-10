@@ -308,19 +308,16 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 
 ## RMD Motor
 
-The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
+The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD motor via CAN.
 
 | Constructor                            | Description                                        | Arguments                |
 | -------------------------------------- | -------------------------------------------------- | ------------------------ |
 | `rmd = RmdMotor(can, motor_id, ratio)` | CAN module, motor ID (1..8) and transmission ratio | CAN module, `int`, `int` |
 
-| Properties        | Description                                | Data type |
-| ----------------- | ------------------------------------------ | --------- |
-| `rmd.position`    | Multi-turn motor position (deg)            | `float`   |
-| `rmd.torque`      | Current torque                             | `float`   |
-| `rmd.speed`       | Current speed (deg/s)                      | `float`   |
-| `rmd.temperature` | Current temperature (C)                    | `float`   |
-| `rmd.can_age`     | Time since last CAN message from motor (s) | `float`   |
+| Properties     | Description                                | Data type |
+| -------------- | ------------------------------------------ | --------- |
+| `rmd.position` | Multi-turn motor position (deg)            | `float`   |
+| `rmd.can_age`  | Time since last CAN message from motor (s) | `float`   |
 
 | Methods                     | Description                                                       | Arguments        |
 | --------------------------- | ----------------------------------------------------------------- | ---------------- |
@@ -335,15 +332,8 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.set_pid(...)`          | Set PID parameters Kp/Ki for position/speed/torque loop           | 6x `int`         |
 | `rmd.get_acceleration()`    | Print acceleration (deg/s^2)                                      |                  |
 | `rmd.set_acceleration(...)` | Set accelerations/decelerations for position/speed loop (deg/s^2) | 4x `int`         |
-| `rmd.get_errors()`          | Print motor error code                                            |                  |
+| `rmd.get_status()`          | Print temperature [˚C], voltage [V] and motor error code          |                  |
 | `rmd.clear_errors()`        | Clear motor error                                                 |                  |
-| `rmd.zero()`                | Write position to ROM as zero position (see below)                |                  |
-
-**The zero command**
-
-The `zero()` method should be used with care!
-In contrast to other commands it blocks the main loop for up to 200 ms and requires restarting the motor to take effect.
-Furthermore, multiple writes will affect the chip life, thus it is not recommended to use it frequently.
 
 **Set acceleration**
 
