@@ -5,6 +5,7 @@
 #include <cinttypes>
 #include <esp_timer.h>
 #include <stdexcept>
+#include <unistd.h>
 
 enum CobFunction {
     COB_SYNC_EMCY = 0x1,
@@ -238,6 +239,18 @@ void CanOpenMotor::enter_velocity_mode(int velocity) {
     current_op_mode = OP_MODE_PROFILE_VELOCITY;
 }
 
+void CanOpenMotor::set_profile_acceleration(uint16_t acceleration) {
+    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, acceleration);
+}
+
+void CanOpenMotor::set_profile_deceleration(uint16_t deceleration) {
+    write_od_u16(PROFILE_DECELERATION_U32, 0x00, deceleration);
+}
+
+void CanOpenMotor::set_profile_quick_stop_deceleration(uint16_t deceleration) {
+    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, deceleration);
+}
+
 void CanOpenMotor::subscribe_to_can() {
     can->subscribe(wrap_cob_id(COB_HEARTBEAT, node_id), this->shared_from_this());
     can->subscribe(wrap_cob_id(COB_SDO_SERVER2CLIENT, node_id), this->shared_from_this());
@@ -270,7 +283,6 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
         expect(arguments, 0);
         /* toggle new set point bit in control word */
         send_control_word(build_ctrl_word(true));
-        send_control_word(build_ctrl_word(false));
     } else if (method_name == "set_target_velocity") {
         expect(arguments, 1, integer);
         int32_t target_velocity = arguments[0]->evaluate_integer();
@@ -298,6 +310,18 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
         expect(arguments, 1, integer);
         uint16_t index = arguments[0]->evaluate_integer();
         sdo_read(index, 0);
+    } else if (method_name == "set_profile_acceleration") {
+        expect(arguments, 1, integer);
+        uint32_t acceleration = arguments[0]->evaluate_integer();
+        set_profile_acceleration(acceleration);
+    } else if (method_name == "set_profile_deceleration") {
+        expect(arguments, 1, integer);
+        uint32_t deceleration = arguments[0]->evaluate_integer();
+        set_profile_deceleration(deceleration);
+    } else if (method_name == "set_profile_quick_stop_deceleration") {
+        expect(arguments, 1, integer);
+        uint32_t deceleration = arguments[0]->evaluate_integer();
+        set_profile_quick_stop_deceleration(deceleration);
     } else {
         Module::call(method_name, arguments);
     }
@@ -395,9 +419,9 @@ void CanOpenMotor::configure_rpdos() {
 
 void CanOpenMotor::configure_constants() {
     write_od_u8(OP_MODE_U8, 0x00, OP_MODE_NONE);
-    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, 100);
-    write_od_u16(PROFILE_DECELERATION_U32, 0x00, 100);
-    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, 500);
+    write_od_u16(PROFILE_ACCELERATION_U32, 0x00, 1000);
+    write_od_u16(PROFILE_DECELERATION_U32, 0x00, 1000);
+    write_od_u16(QUICK_STOP_DECELERATION_U32, 0x00, 3000);
     write_od_u16(CONTROL_WORD_U16, 0x00, build_ctrl_word(false));
 
     configure_rpdos();
@@ -604,4 +628,29 @@ void CanOpenMotor::handle_can_msg(const uint32_t id, const int count, const uint
         handle_tpdo2(data);
         break;
     }
+}
+
+void CanOpenMotor::stop() {
+    this->properties[PROP_CTRL_HALT]->boolean_value = true;
+    this->send_control_word(build_ctrl_word(false));
+}
+
+double CanOpenMotor::get_position() {
+    return static_cast<double>(this->properties[PROP_POSITION]->integer_value);
+}
+
+void CanOpenMotor::position(const double position, const double speed, const double acceleration) {
+    this->enter_position_mode(static_cast<int32_t>(speed));
+    this->send_target_position(static_cast<int32_t>(position) + this->properties[PROP_OFFSET]->integer_value);
+    send_control_word(build_ctrl_word(true));
+}
+
+double CanOpenMotor::get_speed() {
+    return static_cast<double>(this->properties[PROP_VELOCITY]->integer_value);
+}
+
+void CanOpenMotor::speed(const double speed, const double acceleration) {
+    this->enter_velocity_mode(speed);
+    this->properties[PROP_CTRL_HALT]->boolean_value = false;
+    send_control_word(build_ctrl_word(false));
 }

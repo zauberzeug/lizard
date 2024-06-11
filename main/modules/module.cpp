@@ -270,7 +270,19 @@ Module_ptr Module::create(const std::string type,
         return std::make_shared<StepperMotor>(name, step_pin, dir_pin, pcnt_unit, pcnt_channel, ledc_timer, ledc_channel);
     } else if (type == "MotorAxis") {
         Module::expect(arguments, 3, identifier, identifier, identifier);
-        const StepperMotor_ptr motor = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "stepper motor");
+        const std::string name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(name);
+        Motor_ptr motor;
+        // TODO: rmd_motor, roboclaw_motor
+        if (module->type == odrive_motor) {
+            motor = get_module_paramter<ODriveMotor>(arguments[0], odrive_motor, "odrive_motor");
+        } else if (module->type == stepper_motor) {
+            motor = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "stepper_motor");
+        } else if (module->type == canopen_motor) {
+            motor = get_module_paramter<CanOpenMotor>(arguments[0], canopen_motor, "canopen_motor");
+        } else {
+            throw std::runtime_error("module \"" + name + "\" is not a supported motor for MotorAxis");
+        }
         const Input_ptr input1 = get_module_paramter<Input>(arguments[1], input, "input");
         const Input_ptr input2 = get_module_paramter<Input>(arguments[2], input, "input");
         return std::make_shared<MotorAxis>(name, motor, input1, input2);

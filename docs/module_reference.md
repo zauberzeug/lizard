@@ -314,19 +314,16 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 
 ## RMD Motor
 
-The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
+The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD motor via CAN.
 
 | Constructor                            | Description                                        | Arguments                |
 | -------------------------------------- | -------------------------------------------------- | ------------------------ |
 | `rmd = RmdMotor(can, motor_id, ratio)` | CAN module, motor ID (1..8) and transmission ratio | CAN module, `int`, `int` |
 
-| Properties        | Description                                | Data type |
-| ----------------- | ------------------------------------------ | --------- |
-| `rmd.position`    | Multi-turn motor position (deg)            | `float`   |
-| `rmd.torque`      | Current torque                             | `float`   |
-| `rmd.speed`       | Current speed (deg/s)                      | `float`   |
-| `rmd.temperature` | Current temperature (C)                    | `float`   |
-| `rmd.can_age`     | Time since last CAN message from motor (s) | `float`   |
+| Properties     | Description                                | Data type |
+| -------------- | ------------------------------------------ | --------- |
+| `rmd.position` | Multi-turn motor position (deg)            | `float`   |
+| `rmd.can_age`  | Time since last CAN message from motor (s) | `float`   |
 
 | Methods                     | Description                                                       | Arguments        |
 | --------------------------- | ----------------------------------------------------------------- | ---------------- |
@@ -341,14 +338,8 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.set_pid(...)`          | Set PID parameters Kp/Ki for position/speed/torque loop           | 6x `int`         |
 | `rmd.get_acceleration()`    | Print acceleration (deg/s^2)                                      |                  |
 | `rmd.set_acceleration(...)` | Set accelerations/decelerations for position/speed loop (deg/s^2) | 4x `int`         |
+| `rmd.get_status()`          | Print temperature [˚C], voltage [V] and motor error code          |                  |
 | `rmd.clear_errors()`        | Clear motor error                                                 |                  |
-| `rmd.zero()`                | Write position to ROM as zero position (see below)                |                  |
-
-**The zero command**
-
-The `zero()` method should be used with care!
-In contrast to other commands it blocks the main loop for up to 200 ms and requires restarting the motor to take effect.
-Furthermore, multiple writes will affect the chip life, thus it is not recommended to use it frequently.
 
 **Set acceleration**
 
@@ -467,16 +458,17 @@ The optional acceleration argument defaults to 0, which starts and stops pulsing
 
 ## Motor Axis
 
-The motor axis module wraps a stepper motor and two limit switches.
+The motor axis module wraps a motor and two limit switches.
 It prevents the motor from moving past the limits.
 But in contrast to a simple Lizard rule, it allows to actively move out of the limits when moving in the right direction.
+Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.
 
-| Constructor                               | Description                    | Arguments |
-| ----------------------------------------- | ------------------------------ | --------- |
-| `axis = MotorAxis(motor, limit1, limit2)` | StepperMotor and Input modules | 3 modules |
+| Constructor                               | Description             | Arguments |
+| ----------------------------------------- | ----------------------- | --------- |
+| `axis = MotorAxis(motor, limit1, limit2)` | motor and input modules | 3 modules |
 
 Currently the motor axis module has no properties.
-To get the current position or speed, access the StepperMotor module instead.
+To get the current position or speed, access the motor module instead.
 
 | Methods                                           | Description              | Arguments  |
 | ------------------------------------------------- | ------------------------ | ---------- |
@@ -504,17 +496,20 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 | ------------------------------------ | ------------------------------- | ------------------- |
 | `motor = CanOpenMotor(can, node_id)` | CAN module and node ID (1..127) | `CAN module`, `int` |
 
-| Methods                           | Description                                                                               | Arguments |
-| --------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
-| `motor.enter_pp_mode(velo)`       | Set 402 operating mode to profile position, halt off, and target velocity to `velo`       | `int`     |
-| `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
-| `motor.set_target_position(pos)`  | Set target position to `pos` (signed). [pp mode]                                          | `int`     |
-| `motor.commit_target_position()`  | Instruct motor to move to previously set target position. [pp mode]                       |           |
-| `motor.set_target_velocity(velo)` | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
-| `motor.set_ctrl_halt(mode)`       | Latches / resets the "halt" bit and sends the updated control word to the node            | `bool`    |
-| `motor.set_ctrl_enable(mode)`     | Latches / resets the "enable operation" bit and sends an updated control word to the node | `bool`    |
-| `motor.reset_fault()`             | Clear any faults (like positioning errors). Implicitly sets the "halt" bit.               |           |
-| `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
+| Methods                                                   | Description                                                                               | Arguments |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
+| `motor.enter_pp_mode(velo)`                               | Set 402 operating mode to profile position, halt off, and target velocity to `velo`       | `int`     |
+| `motor.enter_pv_mode()`                                   | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
+| `motor.set_target_position(pos)`                          | Set target position to `pos` (signed). [pp mode]                                          | `int`     |
+| `motor.commit_target_position()`                          | Instruct motor to move to previously set target position. [pp mode]                       |           |
+| `motor.set_target_velocity(velo)`                         | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
+| `motor.set_ctrl_halt(mode)`                               | Latches / resets the "halt" bit and sends the updated control word to the node            | `bool`    |
+| `motor.set_ctrl_enable(mode)`                             | Latches / resets the "enable operation" bit and sends an updated control word to the node | `bool`    |
+| `motor.set_profile_acceleration(acceleration)`            | Sets the motor acceleration                                                               | `int`     |
+| `motor.set_profile_deceleration(deceleration)`            | Sets the motor deceleration                                                               | `int`     |
+| `motor.set_profile_quick_stop_deceleration(deceleration)` | Sets the motor deceleration for the quick stop command                                    | `int`     |
+| `motor.reset_fault()`                                     | Clear any faults (like positioning errors). Implicitly sets the "halt" bit.               |           |
+| `motor.sdo_read(index)`                                   | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
 
 | Properties              | Description                                              | Data type |
 | ----------------------- | -------------------------------------------------------- | --------- |
