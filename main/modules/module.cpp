@@ -9,6 +9,7 @@
 #include "driver/ledc.h"
 #include "driver/pcnt.h"
 #include "dunker_motor.h"
+#include "dunker_wheels.h"
 #include "expander.h"
 #include "imu.h"
 #include "input.h"
@@ -290,6 +291,21 @@ Module_ptr Module::create(const std::string type,
         DunkerMotor_ptr motor = std::make_shared<DunkerMotor>(name, can_module, node_id);
         motor->subscribe_to_can();
         return motor;
+    } else if (type == "DunkerWheels") {
+        Module::expect(arguments, 2, identifier, identifier);
+        std::string left_name = arguments[0]->evaluate_identifier();
+        std::string right_name = arguments[1]->evaluate_identifier();
+        Module_ptr left_module = Global::get_module(left_name);
+        Module_ptr right_module = Global::get_module(right_name);
+        if (left_module->type != dunker_motor) {
+            throw std::runtime_error("module \"" + left_name + "\" is no Dunker motor");
+        }
+        if (right_module->type != dunker_motor) {
+            throw std::runtime_error("module \"" + right_name + "\" is no Dunker motor");
+        }
+        const DunkerMotor_ptr left_motor = std::static_pointer_cast<DunkerMotor>(left_module);
+        const DunkerMotor_ptr right_motor = std::static_pointer_cast<DunkerMotor>(right_module);
+        return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }

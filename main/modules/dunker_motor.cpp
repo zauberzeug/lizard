@@ -107,7 +107,7 @@ void DunkerMotor::call(const std::string method_name, const std::vector<ConstExp
         delay(arguments[0]->evaluate_integer());
     } else if (method_name == "speed") {
         Module::expect(arguments, 1, numbery);
-        this->sdo_write(0x4300, 1, 32, arguments[0]->evaluate_number(), false);
+        this->speed(arguments[0]->evaluate_number());
     } else {
         Module::call(method_name, arguments);
     }
@@ -123,4 +123,12 @@ void DunkerMotor::handle_can_msg(const uint32_t id, const int count, const uint8
     if (id == 0x200 + this->node_id) {
         this->properties["speed"]->number_value = demarshal_i32(data);
     }
+}
+
+void DunkerMotor::speed(const double speed) {
+    this->sdo_write(0x4300, 1, 32, speed, false);
+}
+
+double DunkerMotor::get_speed() {
+    return this->properties.at("speed")->number_value;
 }
