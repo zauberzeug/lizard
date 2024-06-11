@@ -261,16 +261,21 @@ This module controls a linear actuator via two output pins (move in, move out) a
 
 The ODrive motor module controls a motor using an [ODrive motor controller](https://odriverobotics.com/).
 
-| Constructor                        | Description            | Arguments         |
-| ---------------------------------- | ---------------------- | ----------------- |
-| `motor = ODriveMotor(can, can_id)` | CAN module and node ID | CAN module, `int` |
+| Constructor                                   | Description                     | Arguments                |
+| --------------------------------------------- | ------------------------------- | ------------------------ |
+| `motor = ODriveMotor(can, can_id[, version])` | CAN module, node ID and version | CAN module, `int`, `int` |
 
-| Properties          | Description             | Data type |
-| ------------------- | ----------------------- | --------- |
-| `motor.position`    | Motor position (meters) | `float`   |
-| `motor.tick_offset` | Encoder tick offset     | `float`   |
-| `motor.m_per_tick`  | Meters per encoder tick | `float`   |
-| `motor.reversed`    | Reverse motor direction | `bool`    |
+The `version` parameter is an optional integer indicating the patch number of the ODrive firmware (4, 5 or 6; default: 4 for version "0.5.4"). Version 0.5.6 allows to read the motor error flag.
+
+| Properties          | Description                               | Data type |
+| ------------------- | ----------------------------------------- | --------- |
+| `motor.position`    | Motor position (meters)                   | `float`   |
+| `motor.tick_offset` | Encoder tick offset                       | `float`   |
+| `motor.m_per_tick`  | Meters per encoder tick                   | `float`   |
+| `motor.reversed`    | Reverse motor direction                   | `bool`    |
+| `motor.axis_state`  | State of the motor axis                   | `int`     |
+| `motor.axis_error`  | Error code of the axis                    | `int`     |
+| `motor.motor_error` | Motor error flat (requires version 0.5.6) | `int`     |
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |
@@ -280,6 +285,7 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | `motor.position(position)`     | Move to given `position` (m)           | `float`          |
 | `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits | `float`, `float` |
 | `motor.off()`                  | Turn motor off (idle state)            |                  |
+| `motor.reset_motor()`          | Resets the motor and clears errors     |                  |
 
 ## ODrive Wheels
 
@@ -308,19 +314,16 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 
 ## RMD Motor
 
-The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
+The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD motor via CAN.
 
 | Constructor                            | Description                                        | Arguments                |
 | -------------------------------------- | -------------------------------------------------- | ------------------------ |
 | `rmd = RmdMotor(can, motor_id, ratio)` | CAN module, motor ID (1..8) and transmission ratio | CAN module, `int`, `int` |
 
-| Properties        | Description                                | Data type |
-| ----------------- | ------------------------------------------ | --------- |
-| `rmd.position`    | Multi-turn motor position (deg)            | `float`   |
-| `rmd.torque`      | Current torque                             | `float`   |
-| `rmd.speed`       | Current speed (deg/s)                      | `float`   |
-| `rmd.temperature` | Current temperature (C)                    | `float`   |
-| `rmd.can_age`     | Time since last CAN message from motor (s) | `float`   |
+| Properties     | Description                                | Data type |
+| -------------- | ------------------------------------------ | --------- |
+| `rmd.position` | Multi-turn motor position (deg)            | `float`   |
+| `rmd.can_age`  | Time since last CAN message from motor (s) | `float`   |
 
 | Methods                     | Description                                                       | Arguments        |
 | --------------------------- | ----------------------------------------------------------------- | ---------------- |
@@ -335,15 +338,8 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.set_pid(...)`          | Set PID parameters Kp/Ki for position/speed/torque loop           | 6x `int`         |
 | `rmd.get_acceleration()`    | Print acceleration (deg/s^2)                                      |                  |
 | `rmd.set_acceleration(...)` | Set accelerations/decelerations for position/speed loop (deg/s^2) | 4x `int`         |
-| `rmd.get_errors()`          | Print motor error code                                            |                  |
+| `rmd.get_status()`          | Print temperature [˚C], voltage [V] and motor error code          |                  |
 | `rmd.clear_errors()`        | Clear motor error                                                 |                  |
-| `rmd.zero()`                | Write position to ROM as zero position (see below)                |                  |
-
-**The zero command**
-
-The `zero()` method should be used with care!
-In contrast to other commands it blocks the main loop for up to 200 ms and requires restarting the motor to take effect.
-Furthermore, multiple writes will affect the chip life, thus it is not recommended to use it frequently.
 
 **Set acceleration**
 

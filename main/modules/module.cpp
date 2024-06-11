@@ -166,7 +166,10 @@ Module_ptr Module::create(const std::string type,
             return std::make_shared<McpLinearMotor>(name, mcp, move_in, move_out, end_in, end_out);
         }
     } else if (type == "ODriveMotor") {
-        Module::expect(arguments, 2, identifier, integer);
+        if (arguments.size() < 2 || arguments.size() > 3) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, identifier, integer, integer);
         std::string can_name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(can_name);
         if (module->type != can) {
@@ -174,7 +177,8 @@ Module_ptr Module::create(const std::string type,
         }
         const Can_ptr can = std::static_pointer_cast<Can>(module);
         uint32_t can_id = arguments[1]->evaluate_integer();
-        ODriveMotor_ptr odrive_motor = std::make_shared<ODriveMotor>(name, can, can_id);
+        int version = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 4;
+        ODriveMotor_ptr odrive_motor = std::make_shared<ODriveMotor>(name, can, can_id, version);
         odrive_motor->subscribe_to_can();
         return odrive_motor;
     } else if (type == "ODriveWheels") {

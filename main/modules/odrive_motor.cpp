@@ -2,21 +2,31 @@
 #include <cstring>
 #include <memory>
 
-ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id)
-    : Module(odrive_motor, name), can_id(can_id), can(can) {
+ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version)
+    : Module(odrive_motor, name), can_id(can_id), can(can), version(version) {
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["speed"] = std::make_shared<NumberVariable>();
     this->properties["tick_offset"] = std::make_shared<NumberVariable>();
     this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
     this->properties["reversed"] = std::make_shared<BooleanVariable>();
+    this->properties["axis_state"] = std::make_shared<IntegerVariable>();
+    this->properties["axis_error"] = std::make_shared<IntegerVariable>();
+    this->properties["motor_error_flag"] = std::make_shared<IntegerVariable>();
 }
 
 void ODriveMotor::subscribe_to_can() {
+    this->can->subscribe(this->can_id + 0x001, std::static_pointer_cast<Module>(this->shared_from_this()));
     this->can->subscribe(this->can_id + 0x009, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
 void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, const uint8_t input_mode) {
     if (!this->is_boot_complete) {
+        return;
+    }
+    if (this->properties.at("motor_error_flag")->number_value == 1) {
+        this->axis_state = -1;
+        this->axis_control_mode = -1;
+        this->axis_input_mode = -1;
         return;
     }
     if (this->axis_state != state) {
@@ -53,6 +63,9 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->off();
+    } else if (method_name == "reset_motor") {
+        Module::expect(arguments, 0);
+        this->reset_motor_error();
     } else {
         Module::call(method_name, arguments);
     }
@@ -61,6 +74,21 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
 void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     this->is_boot_complete = true;
     switch (id - this->can_id) {
+    case 0x001: {
+        int axis_error;
+        std::memcpy(&axis_error, data, 4);
+        this->properties.at("axis_error")->integer_value = axis_error;
+        int axis_state;
+        std::memcpy(&axis_state, data + 4, 1);
+        this->axis_state = axis_state;
+        this->properties.at("axis_state")->integer_value = axis_state;
+        if (version == 6) {
+            int message_byte;
+            std::memcpy(&message_byte, data + 5, 1);
+            this->properties.at("motor_error_flag")->integer_value = message_byte & 0x01;
+        }
+        break;
+    }
     case 0x009: {
         float tick;
         std::memcpy(&tick, data, 4);

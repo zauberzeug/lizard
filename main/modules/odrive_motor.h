@@ -12,6 +12,7 @@ class ODriveMotor : public Module, public std::enable_shared_from_this<ODriveMot
 private:
     const uint32_t can_id;
     const Can_ptr can;
+    const uint32_t version;
     bool is_boot_complete = false;
     uint8_t axis_state = -1;
     uint8_t axis_control_mode = -1;
@@ -20,7 +21,7 @@ private:
     void set_mode(const uint8_t state, const uint8_t control_mode = 0, const uint8_t input_mode = 0);
 
 public:
-    ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id);
+    ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version);
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
