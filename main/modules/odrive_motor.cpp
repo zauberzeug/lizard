@@ -120,6 +120,10 @@ void ODriveMotor::off() {
     this->set_mode(1); // AXIS_STATE_IDLE
 }
 
+void ODriveMotor::reset_motor_error() {
+    uint8_t empty_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    this->can->send(this->can_id + 0x018, empty_data); // "Clear Errors"
+}
 void ODriveMotor::stop() {
     this->speed(0);
 }
