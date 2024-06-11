@@ -12,9 +12,13 @@ class DunkerMotor : public Module, public std::enable_shared_from_this<DunkerMot
 private:
     Can_ptr can;
     const uint8_t node_id;
+    int waiting_nmt_writes = 0;
+    int waiting_sdo_writes = 0;
 
     void sdo_read(const uint16_t index, const uint8_t sub);
-    void sdo_write(const uint16_t index, const uint8_t sub, const uint8_t bits, const uint32_t value);
+    void nmt_write(const uint8_t cs);
+    void sdo_write(const uint16_t index, const uint8_t sub, const uint8_t bits, const uint32_t value, const bool wait = true);
+    void wait();
 
 public:
     DunkerMotor(const std::string &name, const Can_ptr can, int64_t node_id);
