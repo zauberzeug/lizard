@@ -104,9 +104,6 @@ void DunkerMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "disable") {
         Module::expect(arguments, 0);
         this->sdo_write(0x4004, 1, 8, 0);
-    } else if (method_name == "delay") {
-        Module::expect(arguments, 1, integer);
-        delay(arguments[0]->evaluate_integer());
     } else if (method_name == "speed") {
         Module::expect(arguments, 1, numbery);
         this->speed(arguments[0]->evaluate_number());
