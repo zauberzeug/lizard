@@ -6,7 +6,7 @@
 #include <string>
 
 #define NAMESPACE "storage"
-#define MAX_CHUNK_SIZE 0xf80
+#define MAX_CHUNK_SIZE 0xf00
 
 std::string Storage::startup;
 
