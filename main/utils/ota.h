@@ -9,7 +9,6 @@ typedef struct {
     std::string url;
 } ota_params_t;
 
-void stop_wifi();
 bool setup_wifi(const char *ssid, const char *password);
 void attempt(const char *url);
 void verify();

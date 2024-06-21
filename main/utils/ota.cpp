@@ -55,11 +55,6 @@ bool is_wifi_connected() {
     return err == ESP_OK;
 }
 
-void stop_wifi() {
-    // echo_if_error("disconnecting wifi", esp_wifi_disconnect());
-    echo_if_error("stopping wifi", esp_wifi_stop());
-}
-
 char *append_verify_to_url(const char *verify_path) {
     size_t remaining_size = sizeof(url_) - strlen(url_) - 1;
     char *output = url_;
@@ -79,7 +74,7 @@ void rollback_and_reboot() {
     memset(ssid_, 0, sizeof(ssid_));
     memset(password_, 0, sizeof(password_));
     memset(url_, 0, sizeof(url_));
-    stop_wifi();
+    echo_if_error("stopping wifi", esp_wifi_stop());
     echo_if_error("rolling back", esp_ota_mark_app_invalid_rollback_and_reboot());
 }
 
@@ -220,7 +215,7 @@ void attempt(const char *url) {
     err = esp_https_ota(&config);
     if (err == ESP_OK) {
         check_version_ = true;
-        stop_wifi();
+        echo_if_error("stopping wifi", esp_wifi_stop());
         echo("OTA Successful. Rebooting");
         esp_restart();
     } else {
@@ -268,7 +263,7 @@ void verify() {
             if (rollback) {
                 rollback_and_reboot();
             } else {
-                stop_wifi();
+                echo_if_error("stopping wifi", esp_wifi_stop());
                 echo("Version check complete. OTA was successful");
             }
         }
