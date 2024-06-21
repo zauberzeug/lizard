@@ -20,15 +20,15 @@ void write(const std::string ns, const std::string key, const std::string value)
     esp_err_t err;
     nvs_handle handle;
     if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
-        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(error)) + ")");
+        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
     }
     if ((err = nvs_set_str(handle, key.c_str(), value.c_str())) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(error)) + ")");
+        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     if ((err = nvs_commit(handle)) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(error)) + ")");
+        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     nvs_close(handle);
 }
@@ -37,19 +37,19 @@ std::string read(const std::string ns, const std::string key) {
     esp_err_t err;
     nvs_handle handle;
     if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
-        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(error)) + ")");
+        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
     }
     size_t size = 0;
     if ((err = nvs_get_str(handle, key.c_str(), NULL, &size)) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not peek storage " + ns + "." + key + " (" + std::string(esp_err_to_name(error)) + ")");
+        throw std::runtime_error("could not peek storage " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     char *value = (char *)malloc(size);
     if (size > 0) {
         if ((err = nvs_get_str(handle, key.c_str(), value, &size)) != ESP_OK) {
             free(value);
             nvs_close(handle);
-            throw std::runtime_error("could not read storage " + ns + "." + key + " (" + std::string(esp_err_to_name(error)) + ")");
+            throw std::runtime_error("could not read storage " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
         }
     }
     std::string result = std::string(value);
