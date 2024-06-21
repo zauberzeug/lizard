@@ -1,6 +1,6 @@
 #include "storage.h"
-#include "nvs_flash.h"
 #include "esp_check.h"
+#include "nvs_flash.h"
 #include "utils/string_utils.h"
 #include "utils/uart.h"
 #include <stdexcept>
