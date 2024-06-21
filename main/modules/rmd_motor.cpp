@@ -3,13 +3,15 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <cstring>
-#include <inttypes.h>
 #include <math.h>
 #include <memory>
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
-    : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio) {
+    : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
     this->properties["position"] = std::make_shared<NumberVariable>();
+    this->properties["torque"] = std::make_shared<NumberVariable>();
+    this->properties["speed"] = std::make_shared<NumberVariable>();
+    this->properties["temperature"] = std::make_shared<NumberVariable>();
     this->properties["can_age"] = std::make_shared<NumberVariable>();
 }
 
@@ -39,7 +41,10 @@ void RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const 
 void RmdMotor::step() {
     this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
 
-    this->send(0x60, 0, 0, 0, 0, 0, 0, 0);
+    if (!this->has_last_encoder_position) {
+        this->send(0x92, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+    this->send(0x9c, 0, 0, 0, 0, 0, 0, 0, 0);
     Module::step();
 }
 
@@ -151,14 +156,19 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     }
 }
 
+double modulo_encoder_range(double position, double range) {
+    double result = std::fmod(position, range);
+    if (result > range / 2) {
+        return result - range;
+    }
+    if (result < -range / 2) {
+        return result + range;
+    }
+    return result;
+}
+
 void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     switch (data[0]) {
-    case 0x60: {
-        int32_t encoder = 0;
-        std::memcpy(&encoder, data + 4, 4);
-        this->properties.at("position")->number_value = encoder / 16384.0 * 360.0 / this->ratio; // 16384 = 2^14
-        break;
-    }
     case 0x30: {
         echo("%s pid %3d %3d %3d %3d %3d %3d",
              this->name.c_str(),
@@ -184,14 +194,54 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         echo("%s.acceleration[%d] %d", this->name.c_str(), index, acceleration);
         break;
     }
+    case 0x60: {
+        int32_t encoder = 0;
+        std::memcpy(&encoder, data + 4, 4);
+        this->properties.at("position")->number_value = encoder / 16384.0 * 360.0 / this->ratio; // 16384 = 2^14
+        break;
+    }
     case 0x9a: {
-        int8_t temperature = 0;
-        std::memcpy(&temperature, data + 1, 1);
         uint16_t voltage = 0;
         std::memcpy(&voltage, data + 4, 2);
         uint16_t errors = 0;
         std::memcpy(&errors, data + 6, 2);
-        echo("%s.status %d %.1f %d", this->name.c_str(), temperature, (float)voltage / 10.0, errors);
+        echo("%s.status %d %.1f %d", this->name.c_str(), this->properties.at("temperature")->number_value, (float)voltage / 10.0, errors);
+        break;
+    }
+    case 0x92: {
+        int32_t position = 0;
+        std::memcpy(&position, data + 4, 4);
+        this->properties.at("position")->number_value = 0.01 * position;
+        this->last_encoder_position = modulo_encoder_range(0.01 * position, this->encoder_range);
+        this->has_last_encoder_position = true;
+        break;
+    }
+    case 0x9c: {
+        int8_t temperature = 0;
+        std::memcpy(&temperature, data + 1, 1);
+        this->properties.at("temperature")->number_value = temperature;
+
+        int16_t torque = 0;
+        std::memcpy(&torque, data + 2, 2);
+        this->properties.at("torque")->number_value = 0.01 * torque;
+
+        int16_t speed = 0;
+        std::memcpy(&speed, data + 4, 2);
+        this->properties.at("speed")->number_value = speed;
+
+        int16_t position = 0;
+        std::memcpy(&position, data + 6, 2);
+        int32_t encoder_position = position;
+        if (this->has_last_encoder_position) {
+            this->properties.at("position")->number_value += encoder_position - this->last_encoder_position;
+            if (encoder_position - this->last_encoder_position > this->encoder_range / 2) {
+                this->properties.at("position")->number_value -= this->encoder_range;
+            }
+            if (encoder_position - this->last_encoder_position < -this->encoder_range / 2) {
+                this->properties.at("position")->number_value += this->encoder_range;
+            }
+            this->last_encoder_position = encoder_position;
+        }
         break;
     }
     }
