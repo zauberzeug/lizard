@@ -53,7 +53,7 @@ RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, doub
 
 void RmdPair::step() {
     if (this->rmd1->get_is_part_of_pair() && this->rmd2->get_is_part_of_pair()) {
-        this->can->send(0x280, 0x9c, 0, 0, 0, 0, 0, 0);
+        this->can->send(0x280, 0x9c, 0, 0, 0, 0, 0, 0, 0);
     }
     Module::step();
 }
@@ -86,15 +86,27 @@ void RmdPair::move(double x, double y) {
 }
 
 void RmdPair::stop() {
-    this->can->send(0x280, 0x81, 0, 0, 0, 0, 0, 0);
+    this->can->send(0x280, 0x81, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdPair::off() {
-    this->can->send(0x280, 0x80, 0, 0, 0, 0, 0, 0);
+    this->can->send(0x280, 0x80, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdPair::clear_errors() {
-    this->can->send(0x280, 0x76, 0, 0, 0, 0, 0, 0);
+    this->can->send(0x280, 0x76, 0, 0, 0, 0, 0, 0, 0);
+}
+
+void RmdPair::set_can_age_limit(uint32_t age_limit) {
+    this->can->send(0x280,                           // ID
+                    0xb3,                            // command byte -> data[0]
+                    0,                               // 0x00 -> data[1]
+                    0,                               // 0x00 -> data[2]
+                    0,                               // 0x00 -> data[3]
+                    *((uint8_t *)(&age_limit) + 0),  // data[4]
+                    *((uint8_t *)(&age_limit) + 1),  // data[5]
+                    *((uint8_t *)(&age_limit) + 2),  // data[6]
+                    *((uint8_t *)(&age_limit) + 3)); // data[7]);
 }
 
 void RmdPair::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

@@ -19,6 +19,7 @@ private:
     bool has_last_encoder_position = false;
     unsigned long int last_msg_millis = 0;
     bool is_part_of_pair = false;
+    uint32_t can_age_limit;
 
     void send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
@@ -40,6 +41,7 @@ public:
     void clear_errors();
     void set_is_part_of_pair(bool is_part_of_pair);
     bool get_is_part_of_pair() const;
+    void set_can_age_limit(const uint32_t age_limit);
 
     double get_position() const;
     double get_speed() const;

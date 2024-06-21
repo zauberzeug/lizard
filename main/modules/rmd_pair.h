@@ -34,4 +34,5 @@ public:
     void stop();
     void off();
     void clear_errors();
+    void set_can_age_limit(uint32_t age_limit);
 };

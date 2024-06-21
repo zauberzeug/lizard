@@ -108,6 +108,17 @@ bool RmdMotor::get_is_part_of_pair() const {
     return this->is_part_of_pair;
 }
 
+void RmdMotor::set_can_age_limit(const uint32_t age_limit) {
+    this->send(0xb3,
+               0,
+               0,
+               0,
+               *((uint8_t *)(&age_limit) + 0),
+               *((uint8_t *)(&age_limit) + 1),
+               *((uint8_t *)(&age_limit) + 2),
+               *((uint8_t *)(&age_limit) + 3));
+}
+
 void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
@@ -252,6 +263,12 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
             }
             this->last_encoder_position = encoder_position;
         }
+        break;
+    }
+    case 0xb3: {
+        uint32_t age_limit = 0;
+        std::memcpy(&age_limit, data + 4, 4);
+        echo("%s.can_age_limit %d", this->name.c_str(), age_limit);
         break;
     }
     }
