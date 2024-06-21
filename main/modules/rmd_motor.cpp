@@ -44,7 +44,9 @@ void RmdMotor::step() {
     if (!this->has_last_encoder_position) {
         this->send(0x92, 0, 0, 0, 0, 0, 0, 0, 0);
     }
-    this->send(0x9c, 0, 0, 0, 0, 0, 0, 0, 0);
+    if (!this->is_part_of_pair) {
+        this->send(0x9c, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
     Module::step();
 }
 
@@ -96,6 +98,14 @@ void RmdMotor::hold() {
 
 void RmdMotor::clear_errors() {
     this->send(0x76, 0, 0, 0, 0, 0, 0, 0);
+}
+
+void RmdMotor::set_is_part_of_pair(bool is_part_of_pair) {
+    this->is_part_of_pair = is_part_of_pair;
+}
+
+bool RmdMotor::get_is_part_of_pair() const {
+    return this->is_part_of_pair;
 }
 
 void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

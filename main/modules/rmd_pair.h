@@ -7,6 +7,7 @@ class RmdPair : public Module {
 private:
     const RmdMotor_ptr rmd1;
     const RmdMotor_ptr rmd2;
+    const Can_ptr can;
 
     struct TrajectoryPart {
         double t0;
@@ -27,6 +28,10 @@ private:
     void move(double x, double y);
 
 public:
-    RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2);
+    RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2, const Can_ptr can);
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void step() override;
+    void stop();
+    void off();
+    void clear_errors();
 };

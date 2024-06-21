@@ -3,10 +3,12 @@
 #include "utils/uart.h"
 #include <math.h>
 
-RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)
-    : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
+RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2, const Can_ptr can)
+    : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2), can(can) {
     this->properties["v_max"] = std::make_shared<NumberVariable>(360);
     this->properties["a_max"] = std::make_shared<NumberVariable>(10000);
+    this->rmd1->set_is_part_of_pair(true);
+    this->rmd2->set_is_part_of_pair(true);
 }
 
 RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {
@@ -49,6 +51,13 @@ RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, doub
     return result;
 }
 
+void RmdPair::step() {
+    if (this->rmd1->get_is_part_of_pair() && this->rmd2->get_is_part_of_pair()) {
+        this->can->send(0x280, 0x9c, 0, 0, 0, 0, 0, 0);
+    }
+    Module::step();
+}
+
 void RmdPair::throttle(TrajectoryPart &part, double factor) const {
     part.t0 *= factor;
     part.v0 /= factor;
@@ -76,26 +85,35 @@ void RmdPair::move(double x, double y) {
     this->rmd2->position(y, std::abs(t2.part_b.v0));
 }
 
+void RmdPair::stop() {
+    this->can->send(0x280, 0x81, 0, 0, 0, 0, 0, 0);
+}
+
+void RmdPair::off() {
+    this->can->send(0x280, 0x80, 0, 0, 0, 0, 0, 0);
+}
+
+void RmdPair::clear_errors() {
+    this->can->send(0x280, 0x76, 0, 0, 0, 0, 0, 0);
+}
+
 void RmdPair::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "move") {
         Module::expect(arguments, 2, numbery, numbery);
         this->move(arguments[0]->evaluate_number(), arguments[1]->evaluate_number());
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        this->rmd1->stop();
-        this->rmd2->stop();
+        this->stop();
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
-        this->rmd1->off();
-        this->rmd2->off();
+        this->off();
     } else if (method_name == "hold") {
         Module::expect(arguments, 0);
         this->rmd1->hold();
         this->rmd2->hold();
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
-        this->rmd1->clear_errors();
-        this->rmd2->clear_errors();
+        this->clear_errors();
     } else {
         Module::call(method_name, arguments);
     }

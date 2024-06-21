@@ -210,7 +210,7 @@ Module_ptr Module::create(const std::string type,
         rmd_motor->subscribe_to_can();
         return rmd_motor;
     } else if (type == "RmdPair") {
-        Module::expect(arguments, 2, identifier, identifier);
+        Module::expect(arguments, 3, identifier, identifier, identifier);
         std::string rmd1_name = arguments[0]->evaluate_identifier();
         Module_ptr module1 = Global::get_module(rmd1_name);
         if (module1->type != rmd_motor) {
@@ -223,7 +223,13 @@ Module_ptr Module::create(const std::string type,
             throw std::runtime_error("module \"" + rmd2_name + "\" is no RMD motor");
         }
         const RmdMotor_ptr rmd2 = std::static_pointer_cast<RmdMotor>(module2);
-        return std::make_shared<RmdPair>(name, rmd1, rmd2);
+        std::string can_name = arguments[2]->evaluate_identifier();
+        Module_ptr module = Global::get_module(can_name);
+        if (module->type != can) {
+            throw std::runtime_error("module \"" + can_name + "\" is no can connection");
+        }
+        const Can_ptr can = std::static_pointer_cast<Can>(module);
+        return std::make_shared<RmdPair>(name, rmd1, rmd2, can);
     } else if (type == "Serial") {
         Module::expect(arguments, 4, integer, integer, integer, integer);
         gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
