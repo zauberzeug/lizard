@@ -1,6 +1,7 @@
 #include "module.h"
 #include "../global.h"
 #include "../utils/uart.h"
+#include "adc_module.h"
 #include "bluetooth.h"
 #include "can.h"
 #include "canopen_master.h"
@@ -298,6 +299,10 @@ Module_ptr Module::create(const std::string type,
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
         CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
         return master;
+    } else if (type == "adc") {
+        Module::expect(arguments, 0);
+        Adc_ptr adc = std::make_shared<Adc>(name);
+        return adc;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
