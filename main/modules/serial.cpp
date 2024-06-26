@@ -50,7 +50,9 @@ size_t Serial::write(const uint8_t byte) const {
 void Serial::write_checked_line(const char *message, const int length) const {
     char buffer[1024];
     strncpy(buffer, message, length);
-    int len = check(buffer, length);
+    
+    // TODO: Handle buffer overflows
+    int len = make_checked_line(buffer, length);
     buffer[len++] = '\n';
     uart_write_bytes(this->uart_num, buffer, len);
 }
