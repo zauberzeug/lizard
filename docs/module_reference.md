@@ -320,10 +320,13 @@ The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD mo
 | -------------------------------------- | -------------------------------------------------- | ------------------------ |
 | `rmd = RmdMotor(can, motor_id, ratio)` | CAN module, motor ID (1..8) and transmission ratio | CAN module, `int`, `int` |
 
-| Properties     | Description                                | Data type |
-| -------------- | ------------------------------------------ | --------- |
-| `rmd.position` | Multi-turn motor position (deg)            | `float`   |
-| `rmd.can_age`  | Time since last CAN message from motor (s) | `float`   |
+| Properties        | Description                                | Data type |
+| ----------------- | ------------------------------------------ | --------- |
+| `rmd.position`    | Multi-turn motor position (deg)            | `float`   |
+| `rmd.torque`      | Current torque                             | `float`   |
+| `rmd.speed`       | Current speed (deg/s)                      | `float`   |
+| `rmd.temperature` | Current temperature (˚C)                   | `float`   |
+| `rmd.can_age`     | Time since last CAN message from motor (s) | `float`   |
 
 | Methods                     | Description                                                       | Arguments        |
 | --------------------------- | ----------------------------------------------------------------- | ---------------- |
