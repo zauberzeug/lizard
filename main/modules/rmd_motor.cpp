@@ -43,9 +43,9 @@ void RmdMotor::step() {
     this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
 
     if (!this->has_last_encoder_position) {
-        this->send(0x92, 0, 0, 0, 0, 0, 0, 0, 0);
+        this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
     }
-    this->send(0x9c, 0, 0, 0, 0, 0, 0, 0, 0);
+    this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
     Module::step();
 }
 
