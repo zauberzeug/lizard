@@ -17,7 +17,7 @@ void RmdMotor::subscribe_to_can() {
     can->subscribe(this->motor_id + 0x240, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
-void RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
+bool RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
                     const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
                     const unsigned long int timeout_ms) {
     this->last_msg_id = 0;
@@ -29,11 +29,12 @@ void RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const 
             this->can->receive();
         }
         if (this->last_msg_id == d0) {
-            return;
+            return true;
         } else {
             echo("%s warning: CAN timeout for msg id 0x%02x (attempt %d/%d)", this->name.c_str(), d0, i + 1, max_attempts);
         }
     }
+    return false;
 }
 
 void RmdMotor::step() {
@@ -43,54 +44,54 @@ void RmdMotor::step() {
     Module::step();
 }
 
-void RmdMotor::power(double target_power) {
+bool RmdMotor::power(double target_power) {
     int16_t power = target_power * 100;
-    this->send(0xa1, 0,
-               0,
-               0,
-               *((uint8_t *)(&power) + 0),
-               *((uint8_t *)(&power) + 1),
-               0,
-               0);
+    return this->send(0xa1, 0,
+                      0,
+                      0,
+                      *((uint8_t *)(&power) + 0),
+                      *((uint8_t *)(&power) + 1),
+                      0,
+                      0);
 }
 
-void RmdMotor::speed(double target_speed) {
+bool RmdMotor::speed(double target_speed) {
     int32_t speed = target_speed * 100;
-    this->send(0xa2, 0,
-               0,
-               0,
-               *((uint8_t *)(&speed) + 0),
-               *((uint8_t *)(&speed) + 1),
-               *((uint8_t *)(&speed) + 2),
-               *((uint8_t *)(&speed) + 3));
+    return this->send(0xa2, 0,
+                      0,
+                      0,
+                      *((uint8_t *)(&speed) + 0),
+                      *((uint8_t *)(&speed) + 1),
+                      *((uint8_t *)(&speed) + 2),
+                      *((uint8_t *)(&speed) + 3));
 }
 
-void RmdMotor::position(double target_position, double target_speed) {
+bool RmdMotor::position(double target_position, double target_speed) {
     int32_t position = target_position * 100;
     uint16_t speed = target_speed;
-    this->send(0xa4, 0,
-               *((uint8_t *)(&speed) + 0),
-               *((uint8_t *)(&speed) + 1),
-               *((uint8_t *)(&position) + 0),
-               *((uint8_t *)(&position) + 1),
-               *((uint8_t *)(&position) + 2),
-               *((uint8_t *)(&position) + 3));
+    return this->send(0xa4, 0,
+                      *((uint8_t *)(&speed) + 0),
+                      *((uint8_t *)(&speed) + 1),
+                      *((uint8_t *)(&position) + 0),
+                      *((uint8_t *)(&position) + 1),
+                      *((uint8_t *)(&position) + 2),
+                      *((uint8_t *)(&position) + 3));
 }
 
-void RmdMotor::stop() {
-    this->send(0x81, 0, 0, 0, 0, 0, 0, 0);
+bool RmdMotor::stop() {
+    return this->send(0x81, 0, 0, 0, 0, 0, 0, 0);
 }
 
-void RmdMotor::off() {
-    this->send(0x80, 0, 0, 0, 0, 0, 0, 0);
+bool RmdMotor::off() {
+    return this->send(0x80, 0, 0, 0, 0, 0, 0, 0);
 }
 
-void RmdMotor::hold() {
-    this->position(this->properties.at("position")->number_value);
+bool RmdMotor::hold() {
+    return this->position(this->properties.at("position")->number_value);
 }
 
-void RmdMotor::clear_errors() {
-    this->send(0x76, 0, 0, 0, 0, 0, 0, 0);
+bool RmdMotor::clear_errors() {
+    return this->send(0x76, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -207,14 +208,14 @@ double RmdMotor::get_speed() const {
     return this->properties.at("speed")->number_value;
 }
 
-void RmdMotor::set_acceleration(const uint8_t index, const uint32_t acceleration) {
-    this->send(0x43,
-               index,
-               0,
-               0,
-               *((uint8_t *)(&acceleration) + 0),
-               *((uint8_t *)(&acceleration) + 1),
-               *((uint8_t *)(&acceleration) + 2),
-               *((uint8_t *)(&acceleration) + 3),
-               20);
+bool RmdMotor::set_acceleration(const uint8_t index, const uint32_t acceleration) {
+    return this->send(0x43,
+                      index,
+                      0,
+                      0,
+                      *((uint8_t *)(&acceleration) + 0),
+                      *((uint8_t *)(&acceleration) + 1),
+                      *((uint8_t *)(&acceleration) + 2),
+                      *((uint8_t *)(&acceleration) + 3),
+                      20);
 }
