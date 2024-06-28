@@ -14,14 +14,6 @@ Proxy::Proxy(const std::string name,
     pos += std::sprintf(&buffer[pos], "); ");
     pos += std::sprintf(&buffer[pos], "%s.broadcast()", name.c_str());
 
-    // XXX The properties of the proxied module type don't actually exist
-    // before the first expander broadcast, making them unusable for rule
-    // definitions.
-    if (module_type == "Input") {
-        this->properties["level"] = std::make_shared<IntegerVariable>(0);
-        this->properties["active"] = std::make_shared<BooleanVariable>(false);
-    }
-
     expander->serial->write_checked_line(buffer, pos);
 }
 
