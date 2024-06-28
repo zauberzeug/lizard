@@ -1,6 +1,7 @@
 #include "compilation/await_condition.h"
 #include "compilation/await_routine.h"
 #include "compilation/expression.h"
+#include "compilation/expressions.h"
 #include "compilation/method_call.h"
 #include "compilation/property_assignment.h"
 #include "compilation/routine.h"
@@ -74,8 +75,8 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
     case PARSED_VARIABLE:
         return std::make_shared<VariableExpression>(Global::get_variable(identifier_to_string(expression.identifier)));
     case PARSED_PROPERTY:
-        return std::make_shared<VariableExpression>(Global::get_module(identifier_to_string(expression.module_name))
-                                                        ->get_property(identifier_to_string(expression.property_name)));
+        return std::make_shared<PropertyExpression>(Global::get_module(identifier_to_string(expression.module_name)),
+                                                    identifier_to_string(expression.property_name));
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
