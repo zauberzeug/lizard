@@ -32,13 +32,18 @@ It is automatically created right after the boot sequence.
 | `core.print(...)`               | Print arbitrary arguments to the command line     | arbitrary |
 | `core.output(format)`           | Define the output format                          | `str`     |
 | `core.startup_checksum()`       | Show 16-bit checksum of the startup script        |           |
-| `core.ota(ssid, password, url)` | Starts OTA attempt on url with the given WiFi     | 3x `str`  |
+| `core.ota(ssid, password, url)` | Starts OTA update on a URL with given WiFi        | 3x `str`  |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789`.
 
-The OTA will try to connect to the specified SSID with the provided password. After initializing WiFi, it will attempt an OTA update from the given URL. Upon successful updating, the ESP will restart and attempt to verify the OTA update. It will reconnect to WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard. The test is considered successful if an HTTP request is received, even if the version does not match or is empty. If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
+The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
+After initializing the WiFi connection, it will attempt an OTA update from the given URL.
+Upon successful updating, the ESP will restart and attempt to verify the OTA update.
+It will reconnect to the WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard.
+The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
+If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
 
 ## Bluetooth
 

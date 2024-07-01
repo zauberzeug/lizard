@@ -80,7 +80,8 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         auto *params = new ota::ota_params_t{
             arguments[0]->evaluate_string(),
             arguments[1]->evaluate_string(),
-            arguments[2]->evaluate_string()};
+            arguments[2]->evaluate_string(),
+        };
         xTaskCreate(ota::ota_task, "ota_task", 8192, params, 5, nullptr);
     } else {
         Module::call(method_name, arguments);

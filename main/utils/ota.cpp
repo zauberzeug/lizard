@@ -86,7 +86,7 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
     case WIFI_EVENT_STA_CONNECTED:
         echo("WiFi connected\n");
         break;
-    case WIFI_EVENT_STA_DISCONNECTED: {
+    case WIFI_EVENT_STA_DISCONNECTED:
         echo("WiFi lost connection\n");
         if (++retry_num_ <= max_retry_num_) {
             echo("Retrying to Connect... (%d/%d)\n", retry_num_, max_retry_num_);
@@ -96,7 +96,6 @@ void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, in
             xSemaphoreGive(wifi_semaphore);
         }
         break;
-    }
     case IP_EVENT_STA_GOT_IP:
         echo("WiFi got IP...\n");
         xSemaphoreGive(wifi_semaphore);
@@ -233,7 +232,7 @@ void verify() {
         memset(url_, 0, sizeof(url_));
     } else {
         if (check_version_) {
-            echo("Detected ota update, checking version");
+            echo("Detected OTA update, checking version");
 
             if (!is_wifi_connected()) {
                 echo("Not connected to WiFi, connecting");
@@ -308,13 +307,6 @@ bool version_checker(const char *url) {
 
     esp_http_client_close(client);
     std::string version(output_buffer);
-
-    // shorten long git tags like "v1.2.3-123-g12345678" to "v1.2.3"
-    std::string git_version = GIT_VERSION;
-    size_t git_version_short = git_version.find('-');
-    if (git_version_short != std::string::npos) {
-        git_version = git_version.substr(0, git_version_short);
-    }
 
     if (version != GIT_VERSION) {
         echo(version == "Unknown version" ? "Unknown version, but connection successful" : "Found different version: %s. But connection successful", version.c_str());

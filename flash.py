@@ -4,6 +4,7 @@ import sys
 
 from esp import Esp
 
+
 def help() -> None:
     print(f'{sys.argv[0]} [nano | xavier | orin] [nand | v05] [usb | /dev/<name>] [enable] [-e | --erase]')
     print(f'   -e, --erase   erase the flash before flashing the new firmware')
@@ -45,8 +46,8 @@ with esp.pin_config(), esp.flash_mode():
             '--baud', '921600',
             '--before', 'default_reset',
             '--after', 'hard_reset',
-            'erase_flash'
-        ])
+            'erase_flash',
+        ], check=False)
         if erase_result.returncode != 0:
             print('Failed to erase flash.')
             sys.exit(1)  # Exit if the erase fails
@@ -67,7 +68,7 @@ with esp.pin_config(), esp.flash_mode():
         '0x1000', 'build/bootloader/bootloader.bin',
         '0x8000', 'build/partition_table/partition-table.bin',
         '0x20000', 'build/lizard.bin',
-    ])
+    ], check=False)
     if result.returncode != 0:
         print('Flashing failed. Maybe you need different parameters? Or you forgot "sudo"?\n')
         help()

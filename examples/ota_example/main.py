@@ -26,7 +26,7 @@ def ota_binary_verify(request: Request) -> Response:
             log.push('No "Lizard" binary found. But connection established')
             return Response("No Lizard")
         if verify_bin_str == "":
-            log.push(f'Binary without version found')
+            log.push('Binary without version found')
             return Response("Unknown version")
         response = Response(verify_bin_str)
         log.push(f'Send response: {verify_bin_str}')
@@ -53,6 +53,6 @@ def ota_binary(request: Request) -> Response:
 log = ui.log().classes('w-full h-96')
 
 log.push('ready to serve OTA updates')
-log.push('--------------------------------')
+log.push('--------------------------')
 
 ui.run(port=1111)
