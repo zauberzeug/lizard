@@ -7,13 +7,10 @@
 static xTaskHandle adc_task_handle = NULL;
 static volatile bool stop_adc_task = false;
 
-Adc::Adc(const std::string name)
-    : Module(adc, name) {
-
-    channel1_ = adc1_channel_t::ADC1_CHANNEL_MAX;
-    channel2_ = adc2_channel_t::ADC2_CHANNEL_MAX;
-    delay_ = 1000;
-    echo("created adc module");
+Adc::Adc(const std::string name) : Module(adc, name) {
+    this->channel1_ = adc1_channel_t::ADC1_CHANNEL_MAX;
+    this->channel2_ = adc2_channel_t::ADC2_CHANNEL_MAX;
+    this->delay_ = 1000;
 }
 
 bool Adc::setup_adc(const int &adc_num, const int &channel, const int &attenuation_level) {
@@ -65,7 +62,10 @@ bool Adc::channel2_mapper(const int &channel, adc2_channel_t &channel2) {
 }
 
 bool Adc::validate_attenuation_level(const int &attenuation_level) {
-    return (attenuation_level == ADC_ATTEN_DB_0 || attenuation_level == ADC_ATTEN_DB_2_5 || attenuation_level == ADC_ATTEN_DB_6 || attenuation_level == ADC_ATTEN_DB_12);
+    return attenuation_level == ADC_ATTEN_DB_0 ||
+           attenuation_level == ADC_ATTEN_DB_2_5 ||
+           attenuation_level == ADC_ATTEN_DB_6 ||
+           attenuation_level == ADC_ATTEN_DB_11;
 }
 
 void Adc::adc_task(void *pvParameter) {
@@ -77,7 +77,7 @@ void Adc::adc_task(void *pvParameter) {
     vTaskDelete(NULL);
 }
 
-void Adc::adc_tast_raw(void *pvParameter) {
+void Adc::adc_task_raw(void *pvParameter) {
     AdcTaskArgs *args = static_cast<AdcTaskArgs *>(pvParameter);
     Adc *adc_instance = args->adc_instance;
 
@@ -99,7 +99,6 @@ void Adc::stop_adc() {
 }
 
 void Adc::read_adc(const int &adc_num, const int &channel, const int &attenuation_level) {
-
     echo("reading ADC %d channel %d with attenuation level %d", adc_num, channel, attenuation_level);
 
     esp_adc_cal_characteristics_t adc_chars;
@@ -176,7 +175,7 @@ void Adc::call(const std::string method_name, const std::vector<ConstExpression_
                 return;
             }
             stop_adc_task = false;
-            xTaskCreate(adc_tast_raw, "adc_tast_raw", 2048, adc_task_args, 5, &adc_task_handle);
+            xTaskCreate(adc_task_raw, "adc_task_raw", 2048, adc_task_args, 5, &adc_task_handle);
 
         } else {
             echo("ADC task already running");

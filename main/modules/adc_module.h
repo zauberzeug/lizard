@@ -31,7 +31,7 @@ public:
     Adc(const std::string name);
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static void adc_task(void *pvParameter);
-    static void adc_tast_raw(void *pvParameter);
+    static void adc_task_raw(void *pvParameter);
     void read_adc(const int &adc_num, const int &channel, const int &attenuation_level);
     void read_adc_raw(const int &adc_num, const int &channel, const int &attenuation_level);
     void set_delay(const int &delay);
