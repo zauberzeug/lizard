@@ -68,12 +68,17 @@ void RmdPair::move(double x, double y) {
     throttle(t2.part_a, duration / duration2);
     throttle(t2.part_b, duration / duration2);
     throttle(t2.part_c, duration / duration2);
-    this->rmd1->set_acceleration(0, std::abs(t1.part_a.a));
-    this->rmd1->set_acceleration(1, std::abs(t1.part_c.a));
-    this->rmd2->set_acceleration(0, std::abs(t2.part_a.a));
-    this->rmd2->set_acceleration(1, std::abs(t2.part_c.a));
-    this->rmd1->position(x, std::abs(t1.part_b.v0));
-    this->rmd2->position(y, std::abs(t2.part_b.v0));
+    if (!(
+            this->rmd1->set_acceleration(0, std::abs(t1.part_a.a)) &&
+            this->rmd1->set_acceleration(1, std::abs(t1.part_c.a)) &&
+            this->rmd2->set_acceleration(0, std::abs(t2.part_a.a)) &&
+            this->rmd2->set_acceleration(1, std::abs(t2.part_c.a)) &&
+            this->rmd1->position(x, std::abs(t1.part_b.v0)) &&
+            this->rmd2->position(y, std::abs(t2.part_b.v0)))) {
+        echo("error: could not move RMD motor pair");
+        this->rmd1->stop();
+        this->rmd2->stop();
+    }
 }
 
 void RmdPair::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
