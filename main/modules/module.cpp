@@ -303,10 +303,11 @@ Module_ptr Module::create(const std::string type,
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, integer, integer, integer);
+        Module::expect(arguments, -1, integer, integer, numbery);
         uint8_t adc_modul_num = arguments[0]->evaluate_integer();
         uint8_t channel = arguments[1]->evaluate_integer();
-        uint8_t attenuation = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 3;
+        // naybe change attenuation to 12 in the future
+        float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 11;
         Adc_ptr adc = std::make_shared<Adc>(name, adc_modul_num, channel, attenuation);
         return adc;
     } else {

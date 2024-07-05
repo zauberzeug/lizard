@@ -565,9 +565,9 @@ motor.set_ctrl_halt(true)
 The ADC module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
 For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
 
-| Constructor                                   | Description                                                                                | Arguments |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------ | --------- |
-| `adc = Adc(adc_unit, channel[, attenuation])` | Create an ADC module that reads `channel` on `adc_unit` with specified `attenuation` level | 3x `int`  |
+| Constructor                                   | Description                                                                                                | Arguments            |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------- |
+| `adc = Adc(adc_unit, channel[, attenuation])` | Create an ADC module that reads `channel` on `adc_unit` with specified `attenuation` level (0, 2.5, 6, 11) | `int`, `int`,`float` |
 
 | Properties  | Description                                 | Data type |
 | ----------- | ------------------------------------------- | --------- |
