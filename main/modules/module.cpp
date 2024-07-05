@@ -300,8 +300,14 @@ Module_ptr Module::create(const std::string type,
         CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
         return master;
     } else if (type == "adc") {
-        Module::expect(arguments, 0);
-        Adc_ptr adc = std::make_shared<Adc>(name);
+        if (arguments.size() < 2 || arguments.size() > 3) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer, integer, integer);
+        uint8_t adc_modul_num = arguments[0]->evaluate_integer();
+        uint8_t channel = arguments[1]->evaluate_integer();
+        uint8_t attenuation = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 3;
+        Adc_ptr adc = std::make_shared<Adc>(name, adc_modul_num, channel, attenuation);
         return adc;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");

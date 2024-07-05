@@ -565,16 +565,14 @@ motor.set_ctrl_halt(true)
 The ADC module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
 For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
 
-| Constructor   | Description          | Arguments |
-| ------------- | -------------------- | --------- |
-| `adc = Adc()` | Create an ADC module |           |
+| Constructor                                   | Description                                                                                | Arguments |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------ | --------- |
+| `adc = Adc(adc_unit, channel[, attenuation])` | Create an ADC module that reads `channel` on `adc_unit` with specified `attenuation` level | 3x `int`  |
 
-| Methods                                        | Description                                                                              | Arguments |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------- | --------- |
-| `adc.read(adc_unit, channel, attenuation)`     | Read `channel` on `adc_unit` with specified attenuation level, outputs voltage in mV     | 3x `int`  |
-| `adc.read_raw(adc_unit, channel, attenuation)` | Read `channel` on `adc_unit` with specified attenuation level, outputs raw integer value | 3x `int`  |
-| `adc.set_delay(value)`                         | Set the interval between consecutive ADC read outputs in ms                              | `int`     |
-| `adc.stop()`                                   | Stop the ADC reading process                                                             |           |
+| Properties  | Description                                 | Data type |
+| ----------- | ------------------------------------------- | --------- |
+| `voltage`   | current Voltage at given channel            | `float`   |
+| `raw_value` | current raw value at given channel (0-4095) | `float`   |
 
 ## Expander
 
