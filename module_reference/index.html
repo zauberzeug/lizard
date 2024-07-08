@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.27">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.28">
     
     
       
@@ -948,11 +948,22 @@ It is automatically created right after the boot sequence.</p>
 <td>Show 16-bit checksum of the startup script</td>
 <td></td>
 </tr>
+<tr>
+<td><code>core.ota(ssid, password, url)</code></td>
+<td>Starts OTA update on a URL with given WiFi</td>
+<td>3x <code>str</code></td>
+</tr>
 </tbody>
 </table>
 <p>The output <code>format</code> is a string with multiple space-separated elements of the pattern <code>&lt;module&gt;.&lt;property&gt;[:&lt;precision&gt;]</code> or <code>&lt;variable&gt;[:&lt;precision&gt;]</code>.
 The <code>precision</code> is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format <code>"core.millis input.level motor.position:3"</code> might yield an output like <code>"92456 1 12.789</code>.</p>
+<p>The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
+After initializing the WiFi connection, it will attempt an OTA update from the given URL.
+Upon successful updating, the ESP will restart and attempt to verify the OTA update.
+It will reconnect to the WiFi and try to access URL + <code>/verify</code> to receive a message with the current version of Lizard.
+The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
+If the newly updated Lizard cannot connect to URL + <code>/verify</code>, the OTA update will be rolled back.</p>
 <h2 id="bluetooth">Bluetooth<a class="headerlink" href="#bluetooth" title="Permanent link">&para;</a></h2>
 <p>Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
 Simply create a Bluetooth module with a device name of your choice.</p>
@@ -1776,6 +1787,21 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 <td><code>float</code></td>
 </tr>
 <tr>
+<td><code>rmd.torque</code></td>
+<td>Current torque</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>rmd.speed</code></td>
+<td>Current speed (deg/s)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>rmd.temperature</code></td>
+<td>Current temperature (˚C)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
 <td><code>rmd.can_age</code></td>
 <td>Time since last CAN message from motor (s)</td>
 <td><code>float</code></td>
@@ -2578,7 +2604,7 @@ Note that the remote module has to have turned on broadcasting: <code>x.broadcas
     <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.ad660dcc.min.js"></script>
+      <script src="../assets/javascripts/bundle.fe8b6f2b.min.js"></script>
       
     
   </body>
