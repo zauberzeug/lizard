@@ -51,7 +51,7 @@ void Adc::step() {
         adc2_get_raw(static_cast<adc2_channel_t>(this->channel), ADC_WIDTH_BIT_12, &reading);
     }
 
-    this->properties.at("voltage")->number_value = esp_adc_cal_raw_to_voltage(reading, &this->adc_chars);
+    this->properties.at("voltage")->number_value = 0.001 * esp_adc_cal_raw_to_voltage(reading, &this->adc_chars);
     this->properties.at("raw_value")->integer_value = reading;
 
     Module::step();
