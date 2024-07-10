@@ -501,7 +501,9 @@ The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At c
 
 ## CanOpenMotor
 
-The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402. Positional and velocity units are currently undefined and must by manually measured. Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
+The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402.
+Positional and velocity units are currently undefined and must by manually measured.
+Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
 
 | Constructor                          | Description                     | Arguments           |
 | ------------------------------------ | ------------------------------- | ------------------- |
@@ -540,11 +542,13 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 
 **Configuration sequence**
 
-After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`. Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
+After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`.
+Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
 
 **Target position sequence**
 
-Note: The target velocity must be positive regardless of target point direction. The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.
+Note: The target velocity must be positive regardless of target point direction.
+The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.
 
 ```
 // First time, assuming motor is disabled and not in pp mode
@@ -558,7 +562,8 @@ motor.commit_target_position()
 
 **Target velocity sequence**
 
-Unlike in the profile position mode, here the sign of the velocity does controls the direction. The halt bit is set when entering pv. To start moving, clear it (and set again to stop).
+Unlike in the profile position mode, here the sign of the velocity does controls the direction.
+The halt bit is set when entering pv. To start moving, clear it (and set again to stop).
 
 ```
 // First time, assuming motor is disabled and not in pv mode
@@ -570,6 +575,23 @@ motor.set_ctrl_halt(false)
 // await some condition
 motor.set_ctrl_halt(true)
 ```
+
+## Analog Input
+
+This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
+For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
+
+| Constructor                                     | Description                              | Arguments             |
+| ----------------------------------------------- | ---------------------------------------- | --------------------- |
+| `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (dB) | `int`, `int`, `float` |
+
+Possible attenuation levels are 0, 2.5, 6, and 11 dB.
+The default attenuation level is 11 dB.
+
+| Properties | Description                    | Data type |
+| ---------- | ------------------------------ | --------- |
+| `raw`      | raw measurement value (0-4095) | `int`     |
+| `voltage`  | voltage (V)                    | `float`   |
 
 ## Expander
 
