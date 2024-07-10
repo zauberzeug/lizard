@@ -10,7 +10,7 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
         unit = 1;
     }
 
-    uint8_t max_channel = unit == 1 ? ADC1_CHANNEL_MAX : ADC2_CHANNEL_MAX;
+    const uint8_t max_channel = unit == 1 ? (uint8_t)ADC1_CHANNEL_MAX : (uint8_t)ADC2_CHANNEL_MAX;
     if (channel > max_channel) {
         echo("error: invalid channel, using default 0");
         channel = 0;
