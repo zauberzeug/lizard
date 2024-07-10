@@ -26,8 +26,8 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
     } else if (attenuation_level == 11.0) {
         attenuation = ADC_ATTEN_DB_11;
     } else {
-        echo("error: invalid attenuation level, using default 0");
-        attenuation = ADC_ATTEN_DB_0;
+        echo("error: invalid attenuation level, using default of 11 dB");
+        attenuation = ADC_ATTEN_DB_11;
     }
 
     if (unit == 1) {

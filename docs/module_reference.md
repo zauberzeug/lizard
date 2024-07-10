@@ -570,9 +570,12 @@ motor.set_ctrl_halt(true)
 This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
 For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
 
-| Constructor                                     | Description                                         | Arguments             |
-| ----------------------------------------------- | --------------------------------------------------- | --------------------- |
-| `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (0, 2.5, 6, 11) | `int`, `int`, `float` |
+| Constructor                                     | Description                              | Arguments             |
+| ----------------------------------------------- | ---------------------------------------- | --------------------- |
+| `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (dB) | `int`, `int`, `float` |
+
+Possible attenuation levels are 0, 2.5, 6, and 11 dB.
+The default attenuation level is 11 dB.
 
 | Properties | Description                    | Data type |
 | ---------- | ------------------------------ | --------- |
