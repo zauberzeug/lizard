@@ -1,10 +1,10 @@
-#include "adc.h"
+#include "analog.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "uart.h"
 
-Adc::Adc(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level)
-    : Module(adc, name), unit(unit) {
+Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level)
+    : Module(analog, name), unit(unit) {
     if (unit < 1 || unit > 2) {
         echo("error: invalid unit, using default 1");
         unit = 1;
@@ -33,17 +33,17 @@ Adc::Adc(const std::string name, uint8_t unit, uint8_t channel, float attenuatio
     if (unit == 1) {
         adc1_config_width(ADC_WIDTH_BIT_12);
         adc1_config_channel_atten(static_cast<adc1_channel_t>(channel), attenuation);
-        esp_adc_cal_characterize(ADC_UNIT_1, attenuation, ADC_WIDTH_BIT_12, 1100, &this->adc_chars);
+        esp_adc_cal_characterize(ADC_UNIT_1, attenuation, ADC_WIDTH_BIT_12, 1100, &this->characteristics);
     } else {
         adc2_config_channel_atten(static_cast<adc2_channel_t>(channel), attenuation);
-        esp_adc_cal_characterize(ADC_UNIT_2, attenuation, ADC_WIDTH_BIT_12, 1100, &this->adc_chars);
+        esp_adc_cal_characterize(ADC_UNIT_2, attenuation, ADC_WIDTH_BIT_12, 1100, &this->characteristics);
     }
 
+    this->properties["raw"] = std::make_shared<IntegerVariable>();
     this->properties["voltage"] = std::make_shared<NumberVariable>();
-    this->properties["raw_value"] = std::make_shared<IntegerVariable>();
 }
 
-void Adc::step() {
+void Analog::step() {
     int32_t reading = 0;
     if (this->unit == 1) {
         reading = adc1_get_raw(static_cast<adc1_channel_t>(this->channel));
@@ -51,8 +51,8 @@ void Adc::step() {
         adc2_get_raw(static_cast<adc2_channel_t>(this->channel), ADC_WIDTH_BIT_12, &reading);
     }
 
-    this->properties.at("voltage")->number_value = 0.001 * esp_adc_cal_raw_to_voltage(reading, &this->adc_chars);
-    this->properties.at("raw_value")->integer_value = reading;
+    this->properties.at("raw")->integer_value = reading;
+    this->properties.at("voltage")->number_value = 0.001 * esp_adc_cal_raw_to_voltage(reading, &this->characteristics);
 
     Module::step();
 }

@@ -1,7 +1,7 @@
 #include "module.h"
 #include "../global.h"
 #include "../utils/uart.h"
-#include "adc.h"
+#include "analog.h"
 #include "bluetooth.h"
 #include "can.h"
 #include "canopen_master.h"
@@ -299,17 +299,16 @@ Module_ptr Module::create(const std::string type,
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
         CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
         return master;
-    } else if (type == "adc") {
+    } else if (type == "analog") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer, integer, numbery);
-        uint8_t adc_modul_num = arguments[0]->evaluate_integer();
+        uint8_t unit = arguments[0]->evaluate_integer();
         uint8_t channel = arguments[1]->evaluate_integer();
-        // naybe change attenuation to 12 in the future
         float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 11;
-        Adc_ptr adc = std::make_shared<Adc>(name, adc_modul_num, channel, attenuation);
-        return adc;
+        Analog_ptr analog = std::make_shared<Analog>(name, unit, channel, attenuation);
+        return analog;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }

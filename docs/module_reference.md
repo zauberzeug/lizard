@@ -565,19 +565,19 @@ motor.set_ctrl_halt(false)
 motor.set_ctrl_halt(true)
 ```
 
-## ADC Module
+## Analog Input
 
-The ADC module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
+This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
 For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
 
-| Constructor                                   | Description                                             | Arguments             |
-| --------------------------------------------- | ------------------------------------------------------- | --------------------- |
-| `adc = Adc(adc_unit, channel[, attenuation])` | ADC unit, channel and attenuation level (0, 2.5, 6, 11) | `int`, `int`, `float` |
+| Constructor                                     | Description                                         | Arguments             |
+| ----------------------------------------------- | --------------------------------------------------- | --------------------- |
+| `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (0, 2.5, 6, 11) | `int`, `int`, `float` |
 
-| Properties  | Description                                 | Data type |
-| ----------- | ------------------------------------------- | --------- |
-| `voltage`   | current voltage at given channel            | `float`   |
-| `raw_value` | current raw value at given channel (0-4095) | `int`     |
+| Properties | Description                    | Data type |
+| ---------- | ------------------------------ | --------- |
+| `raw`      | raw measurement value (0-4095) | `int`     |
+| `voltage`  | voltage (V)                    | `float`   |
 
 ## Expander
 
