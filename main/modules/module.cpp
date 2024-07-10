@@ -1,7 +1,7 @@
 #include "module.h"
 #include "../global.h"
 #include "../utils/uart.h"
-#include "adc_module.h"
+#include "adc.h"
 #include "bluetooth.h"
 #include "can.h"
 #include "canopen_master.h"
