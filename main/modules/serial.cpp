@@ -48,11 +48,20 @@ size_t Serial::write(const uint8_t byte) const {
 }
 
 void Serial::write_checked_line(const char *message, const int length) const {
-    char buffer[1024];
-    strncpy(buffer, message, length);
-    int len = check(buffer, length);
-    buffer[len++] = '\n';
-    uart_write_bytes(this->uart_num, buffer, len);
+    static char checksum_buffer[16];
+    uint8_t checksum = 0;
+    int start = 0;
+    for (unsigned int i = 0; i < length + 1; ++i) {
+        if (i >= length || message[i] == '\n') {
+            sprintf(checksum_buffer, "@%02x\n", checksum);
+            uart_write_bytes(this->uart_num, &message[start], i - start);
+            uart_write_bytes(this->uart_num, checksum_buffer, 4);
+            start = i + 1;
+            checksum = 0;
+        } else {
+            checksum ^= message[i];
+        }
+    }
 }
 
 int Serial::available() const {
