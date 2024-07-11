@@ -15,9 +15,18 @@ void echo(const char *format, ...) {
 
     pos += std::sprintf(&buffer[pos], "\n");
 
-    // TODO: Properly handle buffer overflows
-    make_check_line(buffer, pos);
-    print(buffer);
+    uint8_t checksum = 0;
+    int start = 0;
+    for (unsigned int i = 0; i < pos; ++i) {
+        if (buffer[i] == '\n') {
+            buffer[i] = '\0';
+            printf("%s@%02x\n", &buffer[start], checksum);
+            start = i + 1;
+            checksum = 0;
+        } else {
+            checksum ^= buffer[i];
+        }
+    }
 }
 
 int strip(char *buffer, int len) {
@@ -29,22 +38,6 @@ int strip(char *buffer, int len) {
     }
     buffer[len] = 0;
     return len;
-}
-
-int make_checked_line(char *buffer, int len) {
-    uint8_t checksum = 0;
-    for (unsigned int i = 0; i < len; ++i) {
-        
-        if (buffer[i] == '\0') {
-            sprintf(&buffer[i], "@%02x", checksum);
-            
-        } else if (buffer[i] == '\n') {
-            sprintf(&buffer[i], "@%02x\n", checksum);
-            
-        } else {
-            checksum ^= buffer[i];
-        }
-    }
 }
 
 int check(char *buffer, int len) {
