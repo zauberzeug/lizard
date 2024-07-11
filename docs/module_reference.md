@@ -24,18 +24,26 @@ It is automatically created right after the boot sequence.
 | `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
 | `core.heap`   | Free heap memory (bytes)                                | `int`     |
 
-| Methods                   | Description                                       | Arguments |
-| ------------------------- | ------------------------------------------------- | --------- |
-| `core.restart()`          | Restart the microcontroller                       |           |
-| `core.version()`          | Show lizard version                               |           |
-| `core.info()`             | Show lizard version, compile time and IDF version |           |
-| `core.print(...)`         | Print arbitrary arguments to the command line     | arbitrary |
-| `core.output(format)`     | Define the output format                          | `str`     |
-| `core.startup_checksum()` | Show 16-bit checksum of the startup script        |           |
+| Methods                         | Description                                       | Arguments |
+| ------------------------------- | ------------------------------------------------- | --------- |
+| `core.restart()`                | Restart the microcontroller                       |           |
+| `core.version()`                | Show lizard version                               |           |
+| `core.info()`                   | Show lizard version, compile time and IDF version |           |
+| `core.print(...)`               | Print arbitrary arguments to the command line     | arbitrary |
+| `core.output(format)`           | Define the output format                          | `str`     |
+| `core.startup_checksum()`       | Show 16-bit checksum of the startup script        |           |
+| `core.ota(ssid, password, url)` | Starts OTA update on a URL with given WiFi        | 3x `str`  |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789`.
+
+The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
+After initializing the WiFi connection, it will attempt an OTA update from the given URL.
+Upon successful updating, the ESP will restart and attempt to verify the OTA update.
+It will reconnect to the WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard.
+The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
+If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
 
 ## Bluetooth
 
@@ -320,10 +328,13 @@ The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD mo
 | -------------------------------------- | -------------------------------------------------- | ------------------------ |
 | `rmd = RmdMotor(can, motor_id, ratio)` | CAN module, motor ID (1..8) and transmission ratio | CAN module, `int`, `int` |
 
-| Properties     | Description                                | Data type |
-| -------------- | ------------------------------------------ | --------- |
-| `rmd.position` | Multi-turn motor position (deg)            | `float`   |
-| `rmd.can_age`  | Time since last CAN message from motor (s) | `float`   |
+| Properties        | Description                                | Data type |
+| ----------------- | ------------------------------------------ | --------- |
+| `rmd.position`    | Multi-turn motor position (deg)            | `float`   |
+| `rmd.torque`      | Current torque                             | `float`   |
+| `rmd.speed`       | Current speed (deg/s)                      | `float`   |
+| `rmd.temperature` | Current temperature (˚C)                   | `float`   |
+| `rmd.can_age`     | Time since last CAN message from motor (s) | `float`   |
 
 | Methods                     | Description                                                       | Arguments        |
 | --------------------------- | ----------------------------------------------------------------- | ---------------- |
@@ -490,7 +501,9 @@ The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At c
 
 ## CanOpenMotor
 
-The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402. Positional and velocity units are currently undefined and must by manually measured. Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
+The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402.
+Positional and velocity units are currently undefined and must by manually measured.
+Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
 
 | Constructor                          | Description                     | Arguments           |
 | ------------------------------------ | ------------------------------- | ------------------- |
@@ -529,11 +542,13 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 
 **Configuration sequence**
 
-After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`. Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
+After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`.
+Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
 
 **Target position sequence**
 
-Note: The target velocity must be positive regardless of target point direction. The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.
+Note: The target velocity must be positive regardless of target point direction.
+The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.
 
 ```
 // First time, assuming motor is disabled and not in pp mode
@@ -547,7 +562,8 @@ motor.commit_target_position()
 
 **Target velocity sequence**
 
-Unlike in the profile position mode, here the sign of the velocity does controls the direction. The halt bit is set when entering pv. To start moving, clear it (and set again to stop).
+Unlike in the profile position mode, here the sign of the velocity does controls the direction.
+The halt bit is set when entering pv. To start moving, clear it (and set again to stop).
 
 ```
 // First time, assuming motor is disabled and not in pv mode
@@ -559,6 +575,23 @@ motor.set_ctrl_halt(false)
 // await some condition
 motor.set_ctrl_halt(true)
 ```
+
+## Analog Input
+
+This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
+For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
+
+| Constructor                                     | Description                              | Arguments             |
+| ----------------------------------------------- | ---------------------------------------- | --------------------- |
+| `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (dB) | `int`, `int`, `float` |
+
+Possible attenuation levels are 0, 2.5, 6, and 11 dB.
+The default attenuation level is 11 dB.
+
+| Properties | Description                    | Data type |
+| ---------- | ------------------------------ | --------- |
+| `raw`      | raw measurement value (0-4095) | `int`     |
+| `voltage`  | voltage (V)                    | `float`   |
 
 ## Expander
 

@@ -7,3 +7,4 @@ sdkconfig
 *.bin
 owl_executable
 config.txt
+*.lock

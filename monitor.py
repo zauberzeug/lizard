@@ -37,7 +37,10 @@ def receive() -> None:
     line_reader = LineReader(port)
     while True:
         try:
-            line = line_reader.readline().decode('utf-8', errors='replace').strip('\r\n')
+            line = line_reader.readline().decode('utf-8').strip('\r\n')
+        except UnicodeDecodeError:
+            print(f'ERROR: COULD NOT DECODE "{line}"')
+        else:
             if line[-3:-2] == '@':
                 check = int(line[-2:], 16)
                 line = line[:-3]
@@ -47,8 +50,6 @@ def receive() -> None:
                 if checksum != check:
                     print(f'ERROR: CHECKSUM MISMATCH ({checksum} vs. {check} for "{line}")')
             print(line)
-        except UnicodeDecodeError as e:
-            print(e)
 
 
 async def send() -> None:
