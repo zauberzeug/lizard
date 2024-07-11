@@ -15,7 +15,7 @@ class SerialConnection:
 
     def read(self) -> Optional[str]:
         if not self.port:
-            return
+            return None
         s = self.port.read_all()
         s = s.decode()
         self.buffer += s
@@ -31,6 +31,7 @@ class SerialConnection:
                     return line
             else:
                 return line
+        return None
 
     def send(self, line: str) -> None:
         if not self.port:
