@@ -128,6 +128,7 @@ static auto getUsedFlashSize(const esp_partition_t *partition, uint32_t &usedSiz
 
     auto partitionPtr{reinterpret_cast<const esp_partition_info_t *>(bytePtr)};
     usedSize = 0;
+    // todo kann ich NICHT DIE WERTE NEHMEN, DIE ICH DA AUCH PRNINTE?
 
     /* walk all partition entries */
     for (; partitionPtr->magic == ESP_PARTITION_MAGIC; ++partitionPtr) {
@@ -135,7 +136,7 @@ static auto getUsedFlashSize(const esp_partition_t *partition, uint32_t &usedSiz
                  partitionPtr->label, partitionPtr->pos.offset, partitionPtr->pos.size);
 
         if (partitionPtr->pos.offset == partition->address) {
-            usedSize = partitionPtr->pos.offset + partitionPtr->pos.size;
+            usedSize = partitionPtr->pos.size;
             break;
         }
     }
@@ -247,12 +248,18 @@ auto flashReplica(const uart_port_t uart_num,
         return false;
     }
 
+    ESP_LOGI(TAG, "Running partition: [%s] [%X/%X]", running_partition->label, running_partition->address, running_partition->size);
+
     uint32_t usedSize;
     esp_err_t ec{getUsedFlashSize(running_partition, usedSize)};
 
+    uint32_t usedSize_test;
+    // get used flash size from running partition
+    usedSize_test = running_partition->size;
+
     HANDLE_ESP_ERROR(ec, "querying used flash size");
 
-    if (!flash(usedSize, block_size)) {
+    if (!flash(usedSize_test, block_size)) {
         return false;
     }
 
