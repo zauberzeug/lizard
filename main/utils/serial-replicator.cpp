@@ -107,43 +107,6 @@ public:
     }
 };
 
-/* parses the partition table to determine extents of image to flash.
- * based on github.com/espressif/esp-idf/blob/v4.4/components/spi_flash/partition.c#L164 */
-static auto getUsedFlashSize(const esp_partition_t *partition, uint32_t &usedSize) -> esp_err_t {
-    const void *ptr;
-    spi_flash_mmap_handle_t handle;
-    esp_err_t ec;
-
-    /* map page 0 */
-    ec = spi_flash_mmap(CONFIG_PARTITION_TABLE_OFFSET & 0xFFFF0000, SPI_FLASH_SEC_SIZE, SPI_FLASH_MMAP_DATA, &ptr, &handle);
-    Unmapper unmapper{handle};
-
-    if (ec != ESP_OK) {
-        return ec;
-    }
-
-    /* adjust previously page-aligned pointer back to beginning of partition table */
-    auto bytePtr{reinterpret_cast<const std::byte *>(ptr)};
-    bytePtr += CONFIG_PARTITION_TABLE_OFFSET & 0xFFFF;
-
-    auto partitionPtr{reinterpret_cast<const esp_partition_info_t *>(bytePtr)};
-    usedSize = 0;
-    // todo kann ich NICHT DIE WERTE NEHMEN, DIE ICH DA AUCH PRNINTE?
-
-    /* walk all partition entries */
-    for (; partitionPtr->magic == ESP_PARTITION_MAGIC; ++partitionPtr) {
-        ESP_LOGD(TAG, "Visiting partition: [%*.s] [%X/%X]", sizeof(partitionPtr->label),
-                 partitionPtr->label, partitionPtr->pos.offset, partitionPtr->pos.size);
-
-        if (partitionPtr->pos.offset == partition->address) {
-            usedSize = partitionPtr->pos.size;
-            break;
-        }
-    }
-
-    return ESP_OK;
-}
-
 static auto neededBlocks(const uint32_t value, const uint32_t blockSize) -> uint32_t {
     uint32_t blockCount{value / blockSize};
 
@@ -248,16 +211,16 @@ auto flashReplica(const uart_port_t uart_num,
         return false;
     }
 
-    ESP_LOGI(TAG, "Running partition: [%s] [%X/%X]", running_partition->label, running_partition->address, running_partition->size);
+    ESP_LOGI(TAG, "Running partition: [%s] adress: [%X] size: [%X]", running_partition->label, running_partition->address, running_partition->size);
 
-    uint32_t usedSize;
-    esp_err_t ec{getUsedFlashSize(running_partition, usedSize)};
-
-    uint32_t usedSize_test;
+    uint32_t usedSize_test = 0;
     // get used flash size from running partition
     usedSize_test = running_partition->size;
 
-    HANDLE_ESP_ERROR(ec, "querying used flash size");
+    if (usedSize_test == 0) {
+        ESP_LOGE(TAG, "Failed to determine used flash size");
+        return false;
+    }
 
     if (!flash(usedSize_test, block_size)) {
         return false;
