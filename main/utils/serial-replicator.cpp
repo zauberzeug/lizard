@@ -213,16 +213,12 @@ auto flashReplica(const uart_port_t uart_num,
 
     ESP_LOGI(TAG, "Running partition: [%s] adress: [%X] size: [%X]", running_partition->label, running_partition->address, running_partition->size);
 
-    uint32_t usedSize_test = 0;
-    // get used flash size from running partition
-    usedSize_test = running_partition->size;
-
-    if (usedSize_test == 0) {
+    if (running_partition->size == 0) {
         ESP_LOGE(TAG, "Failed to determine used flash size");
         return false;
     }
 
-    if (!flash(usedSize_test, block_size)) {
+    if (!flash(running_partition->size, block_size)) {
         return false;
     }
 
