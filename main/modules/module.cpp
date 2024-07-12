@@ -64,15 +64,18 @@ Module_ptr Module::create(const std::string type,
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
     } else if (type == "Expander") {
-        Module::expect(arguments, 3, identifier, integer, integer);
+        if (arguments.size() < 1 || arguments.size() > 3) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, identifier, integer, integer);
         std::string serial_name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(serial_name);
         if (module->type != serial) {
             throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
         }
         const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
-        const gpio_num_t boot_pin = (gpio_num_t)arguments[1]->evaluate_integer();
-        const gpio_num_t enable_pin = (gpio_num_t)arguments[2]->evaluate_integer();
+        const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_MAX;
+        const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_MAX;
         return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
