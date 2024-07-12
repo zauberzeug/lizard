@@ -64,7 +64,7 @@ Module_ptr Module::create(const std::string type,
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
     } else if (type == "Expander") {
-        if (arguments.size() < 1 || arguments.size() > 3) {
+        if (arguments.size() != 1 && arguments.size() != 3) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, identifier, integer, integer);
