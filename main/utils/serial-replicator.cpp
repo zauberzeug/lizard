@@ -7,10 +7,12 @@
 #include <esp_err.h>
 #include <esp_flash_partitions.h>
 #include <esp_log.h>
+#include <esp_ota_ops.h>
 #include <esp_spi_flash.h>
 
 #include <esp32_port.h>
 #include <esp_loader.h>
+#include <esp_partition.h>
 
 namespace ZZ::Replicator {
 
@@ -104,39 +106,6 @@ public:
         spi_flash_munmap(m_handle);
     }
 };
-
-/* parses the partition table to determine extents of image to flash.
- * based on github.com/espressif/esp-idf/blob/v4.4/components/spi_flash/partition.c#L164 */
-static auto getUsedFlashSize(uint32_t &usedSize) -> esp_err_t {
-    const void *ptr;
-    spi_flash_mmap_handle_t handle;
-    esp_err_t ec;
-
-    /* map page 0 */
-    ec = spi_flash_mmap(CONFIG_PARTITION_TABLE_OFFSET & 0xFFFF0000, SPI_FLASH_SEC_SIZE, SPI_FLASH_MMAP_DATA, &ptr, &handle);
-    Unmapper unmapper{handle};
-
-    if (ec != ESP_OK) {
-        return ec;
-    }
-
-    /* adjust previously page-aligned pointer back to beginning of partition table */
-    auto bytePtr{reinterpret_cast<const std::byte *>(ptr)};
-    bytePtr += CONFIG_PARTITION_TABLE_OFFSET & 0xFFFF;
-
-    auto partitionPtr{reinterpret_cast<const esp_partition_info_t *>(bytePtr)};
-    usedSize = 0;
-
-    /* walk all partition entries */
-    for (; partitionPtr->magic == ESP_PARTITION_MAGIC; ++partitionPtr) {
-        ESP_LOGD(TAG, "Visiting partition: [%*.s] [%X/%X]", sizeof(partitionPtr->label),
-                 partitionPtr->label, partitionPtr->pos.offset, partitionPtr->pos.size);
-
-        usedSize = partitionPtr->pos.offset + partitionPtr->pos.size;
-    }
-
-    return ESP_OK;
-}
 
 static auto neededBlocks(const uint32_t value, const uint32_t blockSize) -> uint32_t {
     uint32_t blockCount{value / blockSize};
@@ -236,12 +205,20 @@ auto flashReplica(const uart_port_t uart_num,
         return false;
     }
 
-    uint32_t usedSize;
-    esp_err_t ec{getUsedFlashSize(usedSize)};
+    const esp_partition_t *running_partition = esp_ota_get_running_partition();
+    if (running_partition == nullptr) {
+        ESP_LOGE(TAG, "Failed to find OTA partition");
+        return false;
+    }
 
-    HANDLE_ESP_ERROR(ec, "querying used flash size");
+    ESP_LOGI(TAG, "Running partition: [%s] adress: [%X] size: [%X]", running_partition->label, running_partition->address, running_partition->size);
 
-    if (!flash(usedSize, block_size)) {
+    if (running_partition->size == 0) {
+        ESP_LOGE(TAG, "Failed to determine used flash size");
+        return false;
+    }
+
+    if (!flash(running_partition->size, block_size)) {
         return false;
     }
 
