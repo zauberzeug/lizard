@@ -13,7 +13,7 @@ Expander::Expander(const std::string name,
                    MessageHandler message_handler)
     : Module(expander, name), serial(serial), boot_pin(boot_pin), enable_pin(enable_pin), message_handler(message_handler) {
     serial->enable_line_detection();
-    if (boot_pin != GPIO_NUM_MAX && enable_pin != GPIO_NUM_MAX) {
+    if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(boot_pin);
         gpio_reset_pin(enable_pin);
         gpio_set_direction(boot_pin, GPIO_MODE_OUTPUT);
@@ -63,7 +63,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
     } else if (method_name == "disconnect") {
         Module::expect(arguments, 0);
         this->serial->deinstall();
-        if (this->boot_pin != GPIO_NUM_MAX && this->enable_pin != GPIO_NUM_MAX) {
+        if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
             gpio_reset_pin(this->boot_pin);
             gpio_reset_pin(this->enable_pin);
             gpio_set_direction(this->boot_pin, GPIO_MODE_INPUT);
@@ -73,7 +73,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         }
     } else if (method_name == "flash") {
         Module::expect(arguments, 0);
-        if (this->boot_pin == GPIO_NUM_MAX || this->enable_pin == GPIO_NUM_MAX) {
+        if (this->boot_pin == GPIO_NUM_NC || this->enable_pin == GPIO_NUM_NC) {
             throw std::runtime_error("expander \"" + this->name + "\" does not support flashing, pins not set");
         }
         Storage::clear_nvs();

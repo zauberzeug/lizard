@@ -74,8 +74,8 @@ Module_ptr Module::create(const std::string type,
             throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
         }
         const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
-        const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_MAX;
-        const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_MAX;
+        const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_NC;
+        const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_NC;
         return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
