@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.28">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.29">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.6543a935.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.76a95c52.min.css">
       
       
 
@@ -534,6 +534,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#analog-input" class="md-nav__link">
+    <span class="md-ellipsis">
+      Analog Input
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#expander" class="md-nav__link">
     <span class="md-ellipsis">
       Expander
@@ -809,6 +818,15 @@
   <a href="#canopenmotor" class="md-nav__link">
     <span class="md-ellipsis">
       CanOpenMotor
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#analog-input" class="md-nav__link">
+    <span class="md-ellipsis">
+      Analog Input
     </span>
   </a>
   
@@ -2303,7 +2321,9 @@ To get the current position or speed, access the motor module instead.</p>
 </tbody>
 </table>
 <h2 id="canopenmotor">CanOpenMotor<a class="headerlink" href="#canopenmotor" title="Permanent link">&para;</a></h2>
-<p>The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402. Positional and velocity units are currently undefined and must by manually measured. Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.</p>
+<p>The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402.
+Positional and velocity units are currently undefined and must by manually measured.
+Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.</p>
 <table>
 <thead>
 <tr>
@@ -2468,9 +2488,11 @@ To get the current position or speed, access the motor module instead.</p>
 </tbody>
 </table>
 <p><strong>Configuration sequence</strong></p>
-<p>After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the <code>initialized</code> attribute is set to <code>true</code>. Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.</p>
+<p>After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the <code>initialized</code> attribute is set to <code>true</code>.
+Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.</p>
 <p><strong>Target position sequence</strong></p>
-<p>Note: The target velocity must be positive regardless of target point direction. The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.</p>
+<p>Note: The target velocity must be positive regardless of target point direction.
+The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.</p>
 <pre><code>// First time, assuming motor is disabled and not in pp mode
 motor.set_ctrl_enable(true)
 motor.enter_pp_mode(&lt;some positive velocity&gt;)
@@ -2480,7 +2502,8 @@ motor.set_target_position(&lt;some position&gt;)
 motor.commit_target_position()
 </code></pre>
 <p><strong>Target velocity sequence</strong></p>
-<p>Unlike in the profile position mode, here the sign of the velocity does controls the direction. The halt bit is set when entering pv. To start moving, clear it (and set again to stop).</p>
+<p>Unlike in the profile position mode, here the sign of the velocity does controls the direction.
+The halt bit is set when entering pv. To start moving, clear it (and set again to stop).</p>
 <pre><code>// First time, assuming motor is disabled and not in pv mode
 motor.set_ctrl_enable(true)
 motor.enter_pv_mode(&lt;some signed velocity&gt;)
@@ -2490,6 +2513,48 @@ motor.set_ctrl_halt(false)
 // await some condition
 motor.set_ctrl_halt(true)
 </code></pre>
+<h2 id="analog-input">Analog Input<a class="headerlink" href="#analog-input" title="Permanent link">&para;</a></h2>
+<p>This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
+For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.</p>
+<table>
+<thead>
+<tr>
+<th>Constructor</th>
+<th>Description</th>
+<th>Arguments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>analog = Analog(unit, channel[, attenuation])</code></td>
+<td>unit, channel and attenuation level (dB)</td>
+<td><code>int</code>, <code>int</code>, <code>float</code></td>
+</tr>
+</tbody>
+</table>
+<p>Possible attenuation levels are 0, 2.5, 6, and 11 dB.
+The default attenuation level is 11 dB.</p>
+<table>
+<thead>
+<tr>
+<th>Properties</th>
+<th>Description</th>
+<th>Data type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>raw</code></td>
+<td>raw measurement value (0-4095)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>voltage</code></td>
+<td>voltage (V)</td>
+<td><code>float</code></td>
+</tr>
+</tbody>
+</table>
 <h2 id="expander">Expander<a class="headerlink" href="#expander" title="Permanent link">&para;</a></h2>
 <p>The expander module allows communication with another microcontroller connected via <a href="#serial-interface">serial</a>.</p>
 <table>
@@ -2502,7 +2567,7 @@ motor.set_ctrl_halt(true)
 </thead>
 <tbody>
 <tr>
-<td><code>expander = Expander(serial, boot, enable)</code></td>
+<td><code>expander = Expander(serial[, boot, enable])</code></td>
 <td>Serial module and boot/enable pins</td>
 <td>Serial module, 2x <code>int</code></td>
 </tr>
@@ -2534,6 +2599,7 @@ motor.set_ctrl_halt(true)
 </tr>
 </tbody>
 </table>
+<p>The <code>flash()</code> method requires the <code>boot</code> and <code>enable</code> pins to be defined.</p>
 <p>The <code>disconnect()</code> method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.</p>
 <p>Note that the expander forwards all other method calls to the remote core module, e.g. <code>expander.info()</code>.</p>
 <h2 id="proxy">Proxy<a class="headerlink" href="#proxy" title="Permanent link">&para;</a></h2>
