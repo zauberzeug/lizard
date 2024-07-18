@@ -7,7 +7,7 @@
 DunkerMotor::DunkerMotor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(dunker_motor, name), can(can), node_id(check_node_id(node_id)) {
     this->properties["speed"] = std::make_shared<NumberVariable>();
-    this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
+    this->properties["m_per_turn"] = std::make_shared<NumberVariable>(1.0);
     this->properties["reversed"] = std::make_shared<BooleanVariable>();
 }
 
@@ -123,14 +123,16 @@ void DunkerMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         const int32_t motor_speed = demarshal_i32(data);
         this->properties["speed"]->number_value = motor_speed *
                                                   (this->properties.at("reversed")->boolean_value ? -1 : 1) *
-                                                  this->properties.at("m_per_tick")->number_value;
+                                                  this->properties.at("m_per_turn")->number_value /
+                                                  60;
     }
 }
 
 void DunkerMotor::speed(const double speed) {
     const int32_t motor_speed = speed /
-                                this->properties.at("m_per_tick")->number_value /
-                                (this->properties.at("reversed")->boolean_value ? -1 : 1);
+                                this->properties.at("m_per_turn")->number_value /
+                                (this->properties.at("reversed")->boolean_value ? -1 : 1) *
+                                60;
     this->sdo_write(0x4300, 1, 32, motor_speed, false);
 }
 

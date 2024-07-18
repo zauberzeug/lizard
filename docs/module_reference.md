@@ -568,7 +568,7 @@ This module controls [dunkermotoren](https://www.dunkermotoren.de/) motor via CA
 | Properties         | Description                     | Data type |
 | ------------------ | ------------------------------- | --------- |
 | `motor.speed`      | Motor speed (meters per second) | `float`   |
-| `motor.m_per_tick` | Meters per tick                 | `float`   |
+| `motor.m_per_turn` | Meters per turn                 | `float`   |
 | `motor.reversed`   | Reverse motor direction         | `bool`    |
 
 | Methods                                         | Description                   | Arguments |
