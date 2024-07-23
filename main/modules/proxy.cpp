@@ -19,6 +19,7 @@ Proxy::Proxy(const std::string name,
     // definitions.
     if (module_type == "Input") {
         this->properties["level"] = std::make_shared<IntegerVariable>(0);
+        this->properties["active"] = std::make_shared<BooleanVariable>(false);
     }
 
     expander->serial->write_checked_line(buffer, pos);

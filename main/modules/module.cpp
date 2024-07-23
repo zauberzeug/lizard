@@ -1,6 +1,7 @@
 #include "module.h"
 #include "../global.h"
 #include "../utils/uart.h"
+#include "analog.h"
 #include "bluetooth.h"
 #include "can.h"
 #include "canopen_master.h"
@@ -65,15 +66,18 @@ Module_ptr Module::create(const std::string type,
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
     } else if (type == "Expander") {
-        Module::expect(arguments, 3, identifier, integer, integer);
+        if (arguments.size() != 1 && arguments.size() != 3) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, identifier, integer, integer);
         std::string serial_name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(serial_name);
         if (module->type != serial) {
             throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
         }
         const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
-        const gpio_num_t boot_pin = (gpio_num_t)arguments[1]->evaluate_integer();
-        const gpio_num_t enable_pin = (gpio_num_t)arguments[2]->evaluate_integer();
+        const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_NC;
+        const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_NC;
         return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
@@ -168,7 +172,10 @@ Module_ptr Module::create(const std::string type,
             return std::make_shared<McpLinearMotor>(name, mcp, move_in, move_out, end_in, end_out);
         }
     } else if (type == "ODriveMotor") {
-        Module::expect(arguments, 2, identifier, integer);
+        if (arguments.size() < 2 || arguments.size() > 3) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, identifier, integer, integer);
         std::string can_name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(can_name);
         if (module->type != can) {
@@ -176,7 +183,8 @@ Module_ptr Module::create(const std::string type,
         }
         const Can_ptr can = std::static_pointer_cast<Can>(module);
         uint32_t can_id = arguments[1]->evaluate_integer();
-        ODriveMotor_ptr odrive_motor = std::make_shared<ODriveMotor>(name, can, can_id);
+        int version = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 4;
+        ODriveMotor_ptr odrive_motor = std::make_shared<ODriveMotor>(name, can, can_id, version);
         odrive_motor->subscribe_to_can();
         return odrive_motor;
     } else if (type == "ODriveWheels") {
@@ -268,7 +276,19 @@ Module_ptr Module::create(const std::string type,
         return std::make_shared<StepperMotor>(name, step_pin, dir_pin, pcnt_unit, pcnt_channel, ledc_timer, ledc_channel);
     } else if (type == "MotorAxis") {
         Module::expect(arguments, 3, identifier, identifier, identifier);
-        const StepperMotor_ptr motor = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "stepper motor");
+        const std::string name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(name);
+        Motor_ptr motor;
+        // TODO: rmd_motor, roboclaw_motor
+        if (module->type == odrive_motor) {
+            motor = get_module_paramter<ODriveMotor>(arguments[0], odrive_motor, "odrive_motor");
+        } else if (module->type == stepper_motor) {
+            motor = get_module_paramter<StepperMotor>(arguments[0], stepper_motor, "stepper_motor");
+        } else if (module->type == canopen_motor) {
+            motor = get_module_paramter<CanOpenMotor>(arguments[0], canopen_motor, "canopen_motor");
+        } else {
+            throw std::runtime_error("module \"" + name + "\" is not a supported motor for MotorAxis");
+        }
         const Input_ptr input1 = get_module_paramter<Input>(arguments[1], input, "input");
         const Input_ptr input2 = get_module_paramter<Input>(arguments[2], input, "input");
         return std::make_shared<MotorAxis>(name, motor, input1, input2);
@@ -306,6 +326,16 @@ Module_ptr Module::create(const std::string type,
         const DunkerMotor_ptr left_motor = std::static_pointer_cast<DunkerMotor>(left_module);
         const DunkerMotor_ptr right_motor = std::static_pointer_cast<DunkerMotor>(right_module);
         return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
+    } else if (type == "analog") {
+        if (arguments.size() < 2 || arguments.size() > 3) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer, integer, numbery);
+        uint8_t unit = arguments[0]->evaluate_integer();
+        uint8_t channel = arguments[1]->evaluate_integer();
+        float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 11;
+        Analog_ptr analog = std::make_shared<Analog>(name, unit, channel, attenuation);
+        return analog;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }

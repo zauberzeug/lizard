@@ -24,18 +24,26 @@ It is automatically created right after the boot sequence.
 | `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
 | `core.heap`   | Free heap memory (bytes)                                | `int`     |
 
-| Methods                   | Description                                       | Arguments |
-| ------------------------- | ------------------------------------------------- | --------- |
-| `core.restart()`          | Restart the microcontroller                       |           |
-| `core.version()`          | Show lizard version                               |           |
-| `core.info()`             | Show lizard version, compile time and IDF version |           |
-| `core.print(...)`         | Print arbitrary arguments to the command line     | arbitrary |
-| `core.output(format)`     | Define the output format                          | `str`     |
-| `core.startup_checksum()` | Show 16-bit checksum of the startup script        |           |
+| Methods                         | Description                                       | Arguments |
+| ------------------------------- | ------------------------------------------------- | --------- |
+| `core.restart()`                | Restart the microcontroller                       |           |
+| `core.version()`                | Show lizard version                               |           |
+| `core.info()`                   | Show lizard version, compile time and IDF version |           |
+| `core.print(...)`               | Print arbitrary arguments to the command line     | arbitrary |
+| `core.output(format)`           | Define the output format                          | `str`     |
+| `core.startup_checksum()`       | Show 16-bit checksum of the startup script        |           |
+| `core.ota(ssid, password, url)` | Starts OTA update on a URL with given WiFi        | 3x `str`  |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789`.
+
+The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
+After initializing the WiFi connection, it will attempt an OTA update from the given URL.
+Upon successful updating, the ESP will restart and attempt to verify the OTA update.
+It will reconnect to the WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard.
+The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
+If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
 
 ## Bluetooth
 
@@ -57,10 +65,12 @@ The input module is associated with a digital input pin that is be connected to 
 | -------------------- | -------------------------------------- | --------- |
 | `input = Input(pin)` | `pin` is the corresponding GPIO number | `int`     |
 
-| Properties     | Description                           | Data type |
-| -------------- | ------------------------------------- | --------- |
-| `input.level`  | Current signal level (0 or 1)         | `int`     |
-| `input.change` | Level change since last cycle (-1..1) | `int`     |
+| Properties       | Description                           | Data type |
+| ---------------- | ------------------------------------- | --------- |
+| `input.level`    | Current signal level (0 or 1)         | `int`     |
+| `input.change`   | Level change since last cycle (-1..1) | `int`     |
+| `input.inverted` | Inverts the active property if true   | `bool`    |
+| `input.active`   | Current active state of the input     | `bool`    |
 
 | Methods            | Description                        |
 | ------------------ | ---------------------------------- |
@@ -259,16 +269,21 @@ This module controls a linear actuator via two output pins (move in, move out) a
 
 The ODrive motor module controls a motor using an [ODrive motor controller](https://odriverobotics.com/).
 
-| Constructor                        | Description            | Arguments         |
-| ---------------------------------- | ---------------------- | ----------------- |
-| `motor = ODriveMotor(can, can_id)` | CAN module and node ID | CAN module, `int` |
+| Constructor                                   | Description                     | Arguments                |
+| --------------------------------------------- | ------------------------------- | ------------------------ |
+| `motor = ODriveMotor(can, can_id[, version])` | CAN module, node ID and version | CAN module, `int`, `int` |
 
-| Properties          | Description             | Data type |
-| ------------------- | ----------------------- | --------- |
-| `motor.position`    | Motor position (meters) | `float`   |
-| `motor.tick_offset` | Encoder tick offset     | `float`   |
-| `motor.m_per_tick`  | Meters per encoder tick | `float`   |
-| `motor.reversed`    | Reverse motor direction | `bool`    |
+The `version` parameter is an optional integer indicating the patch number of the ODrive firmware (4, 5 or 6; default: 4 for version "0.5.4"). Version 0.5.6 allows to read the motor error flag.
+
+| Properties          | Description                               | Data type |
+| ------------------- | ----------------------------------------- | --------- |
+| `motor.position`    | Motor position (meters)                   | `float`   |
+| `motor.tick_offset` | Encoder tick offset                       | `float`   |
+| `motor.m_per_tick`  | Meters per encoder tick                   | `float`   |
+| `motor.reversed`    | Reverse motor direction                   | `bool`    |
+| `motor.axis_state`  | State of the motor axis                   | `int`     |
+| `motor.axis_error`  | Error code of the axis                    | `int`     |
+| `motor.motor_error` | Motor error flat (requires version 0.5.6) | `int`     |
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |
@@ -278,6 +293,7 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | `motor.position(position)`     | Move to given `position` (m)           | `float`          |
 | `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits | `float`, `float` |
 | `motor.off()`                  | Turn motor off (idle state)            |                  |
+| `motor.reset_motor()`          | Resets the motor and clears errors     |                  |
 
 ## ODrive Wheels
 
@@ -306,7 +322,7 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 
 ## RMD Motor
 
-The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
+The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD motor via CAN.
 
 | Constructor                            | Description                                        | Arguments                |
 | -------------------------------------- | -------------------------------------------------- | ------------------------ |
@@ -317,7 +333,7 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.position`    | Multi-turn motor position (deg)            | `float`   |
 | `rmd.torque`      | Current torque                             | `float`   |
 | `rmd.speed`       | Current speed (deg/s)                      | `float`   |
-| `rmd.temperature` | Current temperature (C)                    | `float`   |
+| `rmd.temperature` | Current temperature (˚C)                   | `float`   |
 | `rmd.can_age`     | Time since last CAN message from motor (s) | `float`   |
 
 | Methods                     | Description                                                       | Arguments        |
@@ -333,14 +349,8 @@ The RMD motor module controls a [Gyems](http://www.gyems.cn/) RMD motor via CAN.
 | `rmd.set_pid(...)`          | Set PID parameters Kp/Ki for position/speed/torque loop           | 6x `int`         |
 | `rmd.get_acceleration()`    | Print acceleration (deg/s^2)                                      |                  |
 | `rmd.set_acceleration(...)` | Set accelerations/decelerations for position/speed loop (deg/s^2) | 4x `int`         |
+| `rmd.get_status()`          | Print temperature [˚C], voltage [V] and motor error code          |                  |
 | `rmd.clear_errors()`        | Clear motor error                                                 |                  |
-| `rmd.zero()`                | Write position to ROM as zero position (see below)                |                  |
-
-**The zero command**
-
-The `zero()` method should be used with care!
-In contrast to other commands it blocks the main loop for up to 200 ms and requires restarting the motor to take effect.
-Furthermore, multiple writes will affect the chip life, thus it is not recommended to use it frequently.
 
 **Set acceleration**
 
@@ -459,16 +469,17 @@ The optional acceleration argument defaults to 0, which starts and stops pulsing
 
 ## Motor Axis
 
-The motor axis module wraps a stepper motor and two limit switches.
+The motor axis module wraps a motor and two limit switches.
 It prevents the motor from moving past the limits.
 But in contrast to a simple Lizard rule, it allows to actively move out of the limits when moving in the right direction.
+Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.
 
-| Constructor                               | Description                    | Arguments |
-| ----------------------------------------- | ------------------------------ | --------- |
-| `axis = MotorAxis(motor, limit1, limit2)` | StepperMotor and Input modules | 3 modules |
+| Constructor                               | Description             | Arguments |
+| ----------------------------------------- | ----------------------- | --------- |
+| `axis = MotorAxis(motor, limit1, limit2)` | motor and input modules | 3 modules |
 
 Currently the motor axis module has no properties.
-To get the current position or speed, access the StepperMotor module instead.
+To get the current position or speed, access the motor module instead.
 
 | Methods                                           | Description              | Arguments  |
 | ------------------------------------------------- | ------------------------ | ---------- |
@@ -490,23 +501,28 @@ The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At c
 
 ## CanOpenMotor
 
-The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402. Positional and velocity units are currently undefined and must by manually measured. Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
+The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402.
+Positional and velocity units are currently undefined and must by manually measured.
+Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
 
 | Constructor                          | Description                     | Arguments         |
 | ------------------------------------ | ------------------------------- | ----------------- |
 | `motor = CanOpenMotor(can, node_id)` | CAN module and node ID (1..127) | CAN module, `int` |
 
-| Methods                           | Description                                                                               | Arguments |
-| --------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
-| `motor.enter_pp_mode(velo)`       | Set 402 operating mode to profile position, halt off, and target velocity to `velo`       | `int`     |
-| `motor.enter_pv_mode()`           | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
-| `motor.set_target_position(pos)`  | Set target position to `pos` (signed). [pp mode]                                          | `int`     |
-| `motor.commit_target_position()`  | Instruct motor to move to previously set target position. [pp mode]                       |           |
-| `motor.set_target_velocity(velo)` | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
-| `motor.set_ctrl_halt(mode)`       | Latches / resets the "halt" bit and sends the updated control word to the node            | `bool`    |
-| `motor.set_ctrl_enable(mode)`     | Latches / resets the "enable operation" bit and sends an updated control word to the node | `bool`    |
-| `motor.reset_fault()`             | Clear any faults (like positioning errors). Implicitly sets the "halt" bit.               |           |
-| `motor.sdo_read(index)`           | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
+| Methods                                                   | Description                                                                               | Arguments |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
+| `motor.enter_pp_mode(velo)`                               | Set 402 operating mode to profile position, halt off, and target velocity to `velo`       | `int`     |
+| `motor.enter_pv_mode()`                                   | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
+| `motor.set_target_position(pos)`                          | Set target position to `pos` (signed). [pp mode]                                          | `int`     |
+| `motor.commit_target_position()`                          | Instruct motor to move to previously set target position. [pp mode]                       |           |
+| `motor.set_target_velocity(velo)`                         | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
+| `motor.set_ctrl_halt(mode)`                               | Latches / resets the "halt" bit and sends the updated control word to the node            | `bool`    |
+| `motor.set_ctrl_enable(mode)`                             | Latches / resets the "enable operation" bit and sends an updated control word to the node | `bool`    |
+| `motor.set_profile_acceleration(acceleration)`            | Sets the motor acceleration                                                               | `int`     |
+| `motor.set_profile_deceleration(deceleration)`            | Sets the motor deceleration                                                               | `int`     |
+| `motor.set_profile_quick_stop_deceleration(deceleration)` | Sets the motor deceleration for the quick stop command                                    | `int`     |
+| `motor.reset_fault()`                                     | Clear any faults (like positioning errors). Implicitly sets the "halt" bit.               |           |
+| `motor.sdo_read(index)`                                   | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
 
 | Properties              | Description                                              | Data type |
 | ----------------------- | -------------------------------------------------------- | --------- |
@@ -526,11 +542,13 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 
 **Configuration sequence**
 
-After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`. Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
+After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`.
+Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
 
 **Target position sequence**
 
-Note: The target velocity must be positive regardless of target point direction. The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.
+Note: The target velocity must be positive regardless of target point direction.
+The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.
 
 ```
 // First time, assuming motor is disabled and not in pp mode
@@ -544,7 +562,8 @@ motor.commit_target_position()
 
 **Target velocity sequence**
 
-Unlike in the profile position mode, here the sign of the velocity does controls the direction. The halt bit is set when entering pv. To start moving, clear it (and set again to stop).
+Unlike in the profile position mode, here the sign of the velocity does controls the direction.
+The halt bit is set when entering pv. To start moving, clear it (and set again to stop).
 
 ```
 // First time, assuming motor is disabled and not in pv mode
@@ -597,19 +616,38 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | ------------------------------- | ----------------------------------------------- | ---------------- |
 | `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
 
+## Analog Input
+
+This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
+For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
+
+| Constructor                                     | Description                              | Arguments             |
+| ----------------------------------------------- | ---------------------------------------- | --------------------- |
+| `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (dB) | `int`, `int`, `float` |
+
+Possible attenuation levels are 0, 2.5, 6, and 11 dB.
+The default attenuation level is 11 dB.
+
+| Properties | Description                    | Data type |
+| ---------- | ------------------------------ | --------- |
+| `raw`      | raw measurement value (0-4095) | `int`     |
+| `voltage`  | voltage (V)                    | `float`   |
+
 ## Expander
 
 The expander module allows communication with another microcontroller connected via [serial](#serial-interface).
 
-| Constructor                                 | Description                        | Arguments               |
-| ------------------------------------------- | ---------------------------------- | ----------------------- |
-| `expander = Expander(serial, boot, enable)` | Serial module and boot/enable pins | Serial module, 2x `int` |
+| Constructor                                   | Description                        | Arguments               |
+| --------------------------------------------- | ---------------------------------- | ----------------------- |
+| `expander = Expander(serial[, boot, enable])` | Serial module and boot/enable pins | Serial module, 2x `int` |
 
 | Methods                 | Description                                      | Arguments |
 | ----------------------- | ------------------------------------------------ | --------- |
 | `expander.run(command)` | Run any `command` on the other microcontroller   | `string`  |
 | `expander.disconnect()` | Disconnect serial connection and pins            |           |
 | `expander.flash()`      | Flash other microcontroller with own binary data |           |
+
+The `flash()` method requires the `boot` and `enable` pins to be defined.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
 

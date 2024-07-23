@@ -31,8 +31,8 @@ enum ModuleType {
     canopen_master,
     dunker_motor,
     dunker_wheels,
+    analog,
     proxy,
-    number_of_module_types,
 };
 
 class Module;

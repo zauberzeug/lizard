@@ -1,18 +1,18 @@
 #pragma once
 
 #include "input.h"
-#include "stepper_motor.h"
+#include "motor.h"
 
 class MotorAxis : public Module {
 private:
-    const StepperMotor_ptr motor;
+    const Motor_ptr motor;
     const Input_ptr input1;
     const Input_ptr input2;
 
-    void check_inputs() const;
+    bool can_move(const float speed) const;
 
 public:
-    MotorAxis(const std::string name, const StepperMotor_ptr motor, const Input_ptr input1, const Input_ptr input2);
+    MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 };

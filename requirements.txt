@@ -1,4 +1,5 @@
 asyncio
+esptool
 mkdocs
 mkdocs-material
 mdx-include
