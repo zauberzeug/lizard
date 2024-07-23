@@ -14,17 +14,17 @@ DunkerMotor::DunkerMotor(const std::string &name, Can_ptr can, int64_t node_id)
 void DunkerMotor::subscribe_to_can() {
     can->subscribe(0x700 + node_id, this->shared_from_this()); // NMT response
     can->subscribe(0x580 + node_id, this->shared_from_this()); // SDO response
-    can->subscribe(0x200 + node_id, this->shared_from_this()); // RPDO1
+    can->subscribe(0x180 + node_id, this->shared_from_this()); // TPDO1
 
     // restart device
     this->nmt_write(0x81);
 
-    // setup RPDO1: measured velocity
+    // setup TPDO1: measured velocity
     this->sdo_write(0x1800, 1, 32, -1);
     this->sdo_write(0x1A00, 0, 8, 0);
     this->sdo_write(0x1A00, 1, 32, (0x4A04 << 16) | (2 << 8) | 32); // 0x4A04.02: measured velocity
     this->sdo_write(0x1A00, 0, 8, 1);
-    this->sdo_write(0x1800, 1, 32, 0x200 + this->node_id);
+    this->sdo_write(0x1800, 1, 32, 0x180 + this->node_id);
 
     // enter operational state
     this->nmt_write(0x01);
@@ -119,7 +119,7 @@ void DunkerMotor::handle_can_msg(const uint32_t id, const int count, const uint8
     if (id == 0x580 + this->node_id) {
         this->waiting_sdo_writes--;
     }
-    if (id == 0x200 + this->node_id) {
+    if (id == 0x180 + this->node_id) {
         const int32_t motor_speed = demarshal_i32(data);
         this->properties["speed"]->number_value = motor_speed *
                                                   (this->properties.at("reversed")->boolean_value ? -1 : 1) *
