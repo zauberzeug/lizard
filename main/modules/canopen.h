@@ -61,14 +61,9 @@ enum SdoWriteFailureReason {
     SizeMismatch = 0x06070010,
 };
 
-static uint32_t wrap_cob_id(CobFunction function, uint8_t node_id) {
-    return (function << (11 - 4)) | (node_id);
-}
+uint32_t wrap_cob_id(CobFunction function, uint8_t node_id);
 
-static void unwrap_cob_id(uint32_t id, uint8_t &function_out, uint8_t &node_id_out) {
-    function_out = (id >> (11 - 4)) & 0xF;
-    node_id_out = id & 0x7F;
-}
+void unwrap_cob_id(uint32_t id, uint8_t &function_out, uint8_t &node_id_out);
 
 #define CONTROL_WORD_U16 0x6040
 #define STATUS_WORD_U16 0x6041
@@ -92,9 +87,7 @@ static constexpr CobFunction rpdo_func(uint8_t rpdo) {
     return idx_to_func[rpdo - 1];
 }
 
-static uint32_t make_mapping_entry(uint16_t index, uint8_t sub, uint8_t size) {
-    return index << 16 | sub << 8 | size;
-}
+uint32_t make_mapping_entry(uint16_t index, uint8_t sub, uint8_t size);
 
 template <typename U>
 static U demarshal_unsigned(const uint8_t *const data) {
@@ -106,10 +99,7 @@ static U demarshal_unsigned(const uint8_t *const data) {
     return value;
 }
 
-static int32_t demarshal_i32(const uint8_t *const data) {
-    uint32_t value_u = demarshal_unsigned<uint32_t>(data);
-    return *reinterpret_cast<int32_t *>(&value_u);
-}
+int32_t demarshal_i32(const uint8_t *const data);
 
 template <typename U>
 static void marshal_unsigned(const U value, uint8_t *const data) {
@@ -118,26 +108,13 @@ static void marshal_unsigned(const U value, uint8_t *const data) {
     }
 }
 
-static void marshal_i32(const int32_t value, uint8_t *const data) {
-    const uint32_t value_u = *reinterpret_cast<const uint32_t *>(&value);
-    marshal_unsigned(value_u, data);
-}
+void marshal_i32(const int32_t value, uint8_t *const data);
 
 static constexpr uint8_t sdo_write_u8_header = (0x1 /*write*/ << (8 - 3)) | (3 << 2 /*8bit*/) | (1 << 1 /*expedited*/) | (1 /*size indicated*/);
 static constexpr uint8_t sdo_write_u16_header = (0x1 /*write*/ << (8 - 3)) | (2 << 2 /*16bit*/) | (1 << 1 /*expedited*/) | (1 /*size indicated*/);
 static constexpr uint8_t sdo_write_u32_header = (0x1 /*write*/ << (8 - 3)) | (1 << 1 /*expedited*/) | (1 /*size indicated*/);
 static constexpr uint8_t sdo_read_header = (0x2 /* read */ << (8 - 3));
 
-static void marshal_index(uint16_t index, uint8_t sub, uint8_t *const data) {
-    data[0] = index & 0xFF; /* idx low */
-    data[1] = index >> 8;   /* idx high */
-    data[2] = sub;          /* idx sub */
-}
+void marshal_index(uint16_t index, uint8_t sub, uint8_t *const data);
 
-static uint8_t check_node_id(int64_t id) {
-    if (id < 1 || id > 127) {
-        throw std::runtime_error("Invalid CanOpen node id: " + std::to_string(id) + ". Must be in range 1-127");
-    }
-
-    return static_cast<uint8_t>(id);
-}
+uint8_t check_node_id(int64_t id);
