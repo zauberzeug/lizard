@@ -305,7 +305,7 @@ The ODrive wheels module combines to ODrive motors and provides odometry and ste
 
 | Properties             | Description                      | Data type |
 | ---------------------- | -------------------------------- | --------- |
-| `wheels.width`         | wheel distance (m)               | `float`   |
+| `wheels.width`         | Wheel distance (m)               | `float`   |
 | `wheels.linear_speed`  | Forward speed (m/s)              | `float`   |
 | `wheels.angular_speed` | Turning speed (rad/s)            | `float`   |
 | `wheels.enabled`       | Whether motors react to commands | `bool`    |
@@ -427,7 +427,7 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 
 | Properties             | Description                      | Data type |
 | ---------------------- | -------------------------------- | --------- |
-| `wheels.width`         | wheel distance (m)               | `float`   |
+| `wheels.width`         | Wheel distance (m)               | `float`   |
 | `wheels.linear_speed`  | Forward speed (m/s)              | `float`   |
 | `wheels.angular_speed` | Turning speed (rad/s)            | `float`   |
 | `wheels.m_per_tick`    | Meters per encoder tick          | `float`   |
@@ -495,9 +495,9 @@ The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At c
 | -------------------------------- | ----------- | ---------- |
 | `co_master = CanOpenMaster(can)` | CAN module  | CAN module |
 
-| Properties                | Description                                | Data type |
-| ------------------------- | ------------------------------------------ | --------- |
-| `co_master.sync_interval` | Amount of lizard steps inbetween each SYNC | `int`     |
+| Properties                | Description                                 | Data type |
+| ------------------------- | ------------------------------------------- | --------- |
+| `co_master.sync_interval` | Amount of lizard steps in between each SYNC | `int`     |
 
 ## CanOpenMotor
 
@@ -505,9 +505,9 @@ The CanOpenMotor module implements a subset of commands necessary to control a m
 Positional and velocity units are currently undefined and must by manually measured.
 Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
 
-| Constructor                          | Description                     | Arguments           |
-| ------------------------------------ | ------------------------------- | ------------------- |
-| `motor = CanOpenMotor(can, node_id)` | CAN module and node ID (1..127) | `CAN module`, `int` |
+| Constructor                          | Description                     | Arguments         |
+| ------------------------------------ | ------------------------------- | ----------------- |
+| `motor = CanOpenMotor(can, node_id)` | CAN module and node ID (1..127) | CAN module, `int` |
 
 | Methods                                                   | Description                                                                               | Arguments |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
@@ -575,6 +575,46 @@ motor.set_ctrl_halt(false)
 // await some condition
 motor.set_ctrl_halt(true)
 ```
+
+## DunkerMotor
+
+This module controls [dunkermotoren](https://www.dunkermotoren.de/) motor via CANOpen.
+
+| Constructor                         | Description                     | Arguments         |
+| ----------------------------------- | ------------------------------- | ----------------- |
+| `motor = DunkerMotor(can, node_id)` | CAN module and node ID (1..127) | CAN module, `int` |
+
+| Properties         | Description                     | Data type |
+| ------------------ | ------------------------------- | --------- |
+| `motor.speed`      | Motor speed (meters per second) | `float`   |
+| `motor.m_per_turn` | Meters per turn                 | `float`   |
+| `motor.reversed`   | Reverse motor direction         | `bool`    |
+
+| Methods                                         | Description                   | Arguments |
+| ----------------------------------------------- | ----------------------------- | --------- |
+| `motor.speed(speed)`                            | Move with given `speed` (m/s) | `float`   |
+| `motor.enable()`                                | Enable motor                  |           |
+| `motor.disable()`                               | Disable motor                 |           |
+| `motor.sdo_read(index[, subindex])`             | Read SDO                      | 2x `int`  |
+| `motor.sdo_write(index, subindex, bits, value)` | Write SDO                     | 4x `int`  |
+
+## DunkerWheels
+
+The DunkerWheels module combines two DunkerMotor modules and provides odometry and steering for differential wheeled robots.
+
+| Constructor                                      | Description           | Arguments               |
+| ------------------------------------------------ | --------------------- | ----------------------- |
+| `wheels = DunkerWheels(left_motor, right_motor)` | left and right motors | two DunkerMotor modules |
+
+| Properties             | Description           | Data type |
+| ---------------------- | --------------------- | --------- |
+| `wheels.width`         | Wheel distance (m)    | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)   | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s) | `float`   |
+
+| Methods                         | Description                                     | Arguments        |
+| ------------------------------- | ----------------------------------------------- | ---------------- |
+| `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
 
 ## Analog Input
 

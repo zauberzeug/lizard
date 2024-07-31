@@ -9,6 +9,8 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/pcnt.h"
+#include "dunker_motor.h"
+#include "dunker_wheels.h"
 #include "expander.h"
 #include "imu.h"
 #include "input.h"
@@ -302,6 +304,28 @@ Module_ptr Module::create(const std::string type,
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
         CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
         return master;
+    } else if (type == "DunkerMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t node_id = arguments[1]->evaluate_integer();
+        DunkerMotor_ptr motor = std::make_shared<DunkerMotor>(name, can_module, node_id);
+        motor->subscribe_to_can();
+        return motor;
+    } else if (type == "DunkerWheels") {
+        Module::expect(arguments, 2, identifier, identifier);
+        std::string left_name = arguments[0]->evaluate_identifier();
+        std::string right_name = arguments[1]->evaluate_identifier();
+        Module_ptr left_module = Global::get_module(left_name);
+        Module_ptr right_module = Global::get_module(right_name);
+        if (left_module->type != dunker_motor) {
+            throw std::runtime_error("module \"" + left_name + "\" is no Dunker motor");
+        }
+        if (right_module->type != dunker_motor) {
+            throw std::runtime_error("module \"" + right_name + "\" is no Dunker motor");
+        }
+        const DunkerMotor_ptr left_motor = std::static_pointer_cast<DunkerMotor>(left_module);
+        const DunkerMotor_ptr right_motor = std::static_pointer_cast<DunkerMotor>(right_module);
+        return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
     } else if (type == "analog") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");

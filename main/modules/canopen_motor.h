@@ -1,6 +1,7 @@
 #pragma once
 
 #include "can.h"
+#include "canopen.h"
 #include "module.h"
 #include "motor.h"
 #include <cstdint>
@@ -13,16 +14,7 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
     Can_ptr can;
     const uint8_t node_id;
 
-    enum {
-        /* No preop HB received yet */
-        WaitingForPreoperational,
-        /* preop HB received, SDOs written */
-        WaitingForSdoWrites,
-        /* NMT preop -> op transition requested */
-        WaitingForOperational,
-        /* node reports op state */
-        InitDone,
-    } init_state = WaitingForPreoperational;
+    enum InitState init_state = WaitingForPreoperational;
 
     /* What the motor says it's in (currently not regularly polled) */
     uint16_t current_op_mode_disp;
@@ -64,7 +56,6 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
 public:
     CanOpenMotor(const std::string &name, const Can_ptr can, int64_t node_id);
     void subscribe_to_can();
-    void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
 
