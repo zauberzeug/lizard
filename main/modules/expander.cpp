@@ -12,6 +12,9 @@ Expander::Expander(const std::string name,
                    const gpio_num_t enable_pin,
                    MessageHandler message_handler)
     : Module(expander, name), serial(serial), boot_pin(boot_pin), enable_pin(enable_pin), message_handler(message_handler) {
+    
+    this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
+
     serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(boot_pin);
@@ -46,12 +49,16 @@ void Expander::step() {
         int len = this->serial->read_line(buffer);
         check(buffer, len);
         if (buffer[0] == '!' && buffer[1] == '!') {
-            /* Don't trigger keep-alive from expander updates */
+            /* Update expander last_message_millis */
+            this->last_message_millis = millis();
+            /* Don't trigger core keep-alive from expander updates */
             this->message_handler(&buffer[2], false, true);
         } else {
             echo("%s: %s", this->name.c_str(), buffer);
         }
     }
+    /* Update last_message_age property */
+    this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
 }
 
