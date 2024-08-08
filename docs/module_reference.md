@@ -653,6 +653,10 @@ The `disconnect()` method might be useful to access the other microcontroller on
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 
+| Properties         | Description                                             | Data type |
+| ------------------ | ------------------------------------------------------- | --------- |
+| `last_message_age` | Time since last message from other microcontroller (ms) | `int`     |
+
 ## Proxy
 
 -- _This module is mainly for internal use with the expander module._ --
