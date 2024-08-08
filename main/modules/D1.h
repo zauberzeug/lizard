@@ -31,4 +31,5 @@ public:
     void speedMode(const int speed);
     void reset();
     void setup();
+    void step() override;
 };

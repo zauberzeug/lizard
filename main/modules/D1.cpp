@@ -30,12 +30,12 @@ void D1Motor::subscribe_to_can() {
     can->subscribe(0x201 + node_id, this->shared_from_this()); // RPDO2
 
     // // setup RPDO
-    this->sdo_write(0x1800, 1, 32, 0xC00001E0);
-    this->sdo_write(0x1A00, 0, 8, 0);
-    this->sdo_write(0x1A00, 1, 32, (0x6041 << 16) | (0 << 8) | 16); // statusword
-    this->sdo_write(0x1A00, 2, 32, (0x2014 << 16) | (0 << 8) | 32); // status flag(referenced)
-    this->sdo_write(0x1A00, 0, 8, 2);
-    this->sdo_write(0x1800, 1, 32, 0x180 + this->node_id);
+    // this->sdo_write(0x1800, 1, 32, 0xC00001E0);
+    // this->sdo_write(0x1A00, 0, 8, 0);
+    // this->sdo_write(0x1A00, 1, 32, (0x6041 << 16) | (0 << 8) | 16); // statusword
+    // this->sdo_write(0x1A00, 2, 32, (0x2014 << 16) | (0 << 8) | 32); // status flag(referenced)
+    // this->sdo_write(0x1A00, 0, 8, 2);
+    // this->sdo_write(0x1800, 1, 32, 0x180 + this->node_id);
     // // setup RPO1
     // this->sdo_write(0x1801, 1, 32, -1);
     // this->sdo_write(0x1A01, 0, 8, 0);
@@ -138,11 +138,22 @@ void D1Motor::call(const std::string method_name, const std::vector<ConstExpress
 }
 
 void D1Motor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
-    echo("message received");
     if (id == 0x700 + this->node_id) {
         this->waiting_nmt_writes--;
     } else if (id == 0x580 + this->node_id) {
         this->waiting_sdo_writes--;
+        if (data[1] == 0x41 && data[2] == 0x60) {
+            this->properties["statusword"]->number_value = data[5] << 8 | data[4];
+        }
+        if (data[1] == 0x14 && data[2] == 0x20) {
+            this->properties["status_flag"]->number_value = data[4];
+        }
+        if (data[1] == 0x64 && data[2] == 0x60) {
+            this->properties["position"]->number_value = data[5] << 8 | data[4];
+        }
+        if (data[1] == 0x6C && data[2] == 0x60) {
+            this->properties["velocity"]->number_value = data[5] << 8 | data[4];
+        }
     } else if (id == 0x180 + this->node_id) {
         echo("message is there");
         this->properties["statusword"]->number_value = demarshal_unsigned<uint16_t>(data);
@@ -172,23 +183,6 @@ void D1Motor::homing() {
     this->sdo_write(0x6040, 0, 16, 0x1F); // TODO what code to write here
 }
 
-// void D1Motor::setup() {
-//     if (this->properties["statusword"]->number_value == 664) {
-//         this->sdo_write(0x6040, 0, 16, 6);
-//         this->setup();
-//     } else if (this->properties["statusword"]->number_value == 633) {
-//         this->sdo_write(0x6040, 0, 16, 7);
-//         this->setup();
-//     } else if (this->properties["statusword"]->number_value == 635) {
-//         this->sdo_write(0x6040, 0, 16, 15);
-//         this->setup();
-//     } else if (this->properties["statusword"]->number_value == 639) {
-//         return;
-//     } else {
-//         throw std::runtime_error(std::string("D1 setup failed"));
-//     }
-// }
-
 void D1Motor::ppMode(int32_t position) {
     // set mode to profile position mode
     this->sdo_write(0x6060, 0, 8, 1);
@@ -213,4 +207,12 @@ void D1Motor::speedMode(int32_t speed) {
     this->sdo_write(0x6040, 0, 16, 15);
     // start motion
     this->sdo_write(0x6040, 0, 16, 0x1F);
+}
+
+void D1Motor::step() {
+    this->sdo_read(0x6041, 0);
+    this->sdo_read(0x2014, 0);
+    this->sdo_read(0x6064, 0);
+    this->sdo_read(0x606C, 0);
+    Module::step();
 }
