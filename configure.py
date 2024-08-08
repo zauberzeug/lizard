@@ -36,7 +36,10 @@ with serial.Serial(usb_path, baudrate=115200, timeout=1.0) as port:
     send('core.startup_checksum()')
     deadline = time.time() + 1.0
     while time.time() < deadline:
-        line = port.read_until(b'\r\n').decode().rstrip()
+        try:
+            line = port.read_until(b'\r\n').decode().rstrip()
+        except UnicodeDecodeError:
+            continue
         if line.startswith('checksum: '):
             if int(line.split()[1].split("@")[0], 16) == checksum:
                 print('Checksum matches.')

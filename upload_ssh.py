@@ -6,8 +6,8 @@ parser = argparse.ArgumentParser(description='Upload Lizard to a remote host and
 parser.add_argument('host', type=str, help='user@host or user@host:~/path/to/lizard')
 parser.add_argument('flash_args', type=str, nargs='*', help='flash arguments')
 args = parser.parse_args()
-host = args.host.split(':')[0]
-target = args.host.split(':')[-1] or '~/lizard'
+host, *path = args.host.split(':')
+target = path[0] if path else '~/lizard'
 
 print(f'Copying binary files to {host}:{target}...')
 command = f'rsync -zarv --prune-empty-dirs --include="*/" --include="*.bin" --exclude="*" build {host}:{target}'

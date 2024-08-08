@@ -3,13 +3,14 @@
 #include "can.h"
 #include "canopen.h"
 #include "module.h"
+#include "motor.h"
 #include <cstdint>
 #include <memory>
 
 class CanOpenMotor;
 using CanOpenMotor_ptr = std::shared_ptr<CanOpenMotor>;
 
-class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenMotor> {
+class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenMotor>, virtual public Motor {
     Can_ptr can;
     const uint8_t node_id;
 
@@ -41,15 +42,26 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
     void send_control_word(uint16_t value);
     void send_target_position(int32_t value);
     void send_target_velocity(int32_t value);
+
     uint16_t build_ctrl_word(bool new_set_point);
 
     void wait_for_sdo_writes(uint32_t timeout_ms);
     void enter_position_mode(int velocity);
     void enter_velocity_mode(int velocity);
 
+    void set_profile_acceleration(uint16_t acceleration);
+    void set_profile_deceleration(uint16_t deceleration);
+    void set_profile_quick_stop_deceleration(uint16_t deceleration);
+
 public:
     CanOpenMotor(const std::string &name, const Can_ptr can, int64_t node_id);
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
+
+    void stop() override;
+    double get_position() override;
+    void position(const double position, const double speed, const double acceleration) override;
+    double get_speed() override;
+    void speed(const double speed, const double acceleration) override;
 };

@@ -27,8 +27,4 @@ public:
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
     void speed(const double speed);
     double get_speed();
-    void setup();
-    void homing();
-    void ppMode(const int mode);
-    void speedMode(const int mode);
 };
