@@ -8,6 +8,9 @@ class Expander;
 using Expander_ptr = std::shared_ptr<Expander>;
 
 class Expander : public Module {
+private:
+    unsigned long int last_message_millis = 0;
+
 public:
     const ConstSerial_ptr serial;
     const gpio_num_t boot_pin;
