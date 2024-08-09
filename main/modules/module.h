@@ -32,6 +32,7 @@ enum ModuleType {
     dunker_motor,
     dunker_wheels,
     analog,
+    d1_motor,
     proxy,
 };
 
