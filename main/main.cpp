@@ -369,7 +369,20 @@ void process_uart() {
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
         len = check(input, len);
-        process_line(input, len);
+
+        for (int i = 0; i < len; ++i) {
+            if (input[i] == 0x13) {
+                uart_xon = false;
+                echo("XOFF received");
+            } else if (input[i] == 0x11) {
+                uart_xon = true;
+                echo("XON received");
+            }
+        }
+
+        if (uart_xon) {
+            process_line(input, len);
+        }
     }
 }
 
