@@ -32,6 +32,10 @@
 #include <vector>
 
 #define BUFFER_SIZE 1024
+#define XON 0x11
+#define XOFF 0x13
+#define FILTER_MODE 0x80
+#define ID_TAG 0x81
 
 Core_ptr core_module;
 
@@ -356,10 +360,11 @@ void process_line(const char *line, const int len) {
             throw std::runtime_error("unrecognized control command");
         }
     } else {
+        echo("<< %s", line);
         process_lizard(line);
     }
 }
-
+bool adress_mode = false;
 void process_uart() {
     static char input[BUFFER_SIZE];
     while (true) {
@@ -367,22 +372,56 @@ void process_uart() {
         if (pos < 0) {
             break;
         }
+
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+
+        if (adress_mode && !(input[0] == ID_TAG)) {
+            echo("Debug: 0 Character"); // Debug
+            echo("Debug: Adress is: %d", input[0]);
+            echo("Debug: it should be: %d", ID_TAG);
+
+            for (int i = 0; i < len; i++) {
+                echo("0x%02x", input[i]);
+            }
+            break;
+        }
+
+        // print hole buffer
+        for (int i = 0; i < len; i++) {
+            echo("0x%02x", input[i]);
+        }
+
+        echo("Debug: len before check: %d", len);
         len = check(input, len);
+        echo("Debug: len after check: %d", len);
+
+        for (int i = 0; i < len; i++) {
+            echo("0x%02x", input[i]);
+        }
 
         for (int i = 0; i < len; ++i) {
-            if (input[i] == 0x13) {
+            if (input[i] == XOFF) {
                 uart_xon = false;
-                echo("XOFF received");
-            } else if (input[i] == 0x11) {
+                echo("Debug: XOFF received");
+                break;
+            } else if (input[i] == XON) {
                 uart_xon = true;
-                echo("XON received");
+                echo("Debug: XON received");
+                break;
+            } else if (input[i] == FILTER_MODE) {
+                echo("Debug: FILTER_MODE received");
+                if (Storage::get_device_id() == 0x00) {
+                    echo("Debug: FILTER_MODE received and device id is not set. Will not switch to filter mode");
+                    break;
+                }
+                adress_mode = true;
+                break;
             }
         }
-
-        if (uart_xon) {
-            process_line(input, len);
-        }
+        process_line(input, len);
+        // if (uart_xon) {
+        //     process_line(input, len);
+        // }
     }
 }
 
