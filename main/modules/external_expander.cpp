@@ -6,13 +6,49 @@
 #include "utils/uart.h"
 #include <cstring>
 
+#define XON 0x11
+#define XOFF 0x13
+#define FILTER_MODE 0x80
+#define ID_TAG 0x81
+
 ExternalExpander::ExternalExpander(const std::string name,
                                    const ConstSerial_ptr serial,
                                    const uint8_t device_id,
                                    MessageHandler message_handler)
     : Module(external_expander, name), serial(serial), device_id(device_id), message_handler(message_handler) {
+    serial->enable_line_detection();
+    char buffer[1024] = "";
+    int len = 0;
+    const unsigned long int start = millis();
+    do {
+        if (millis_since(start) > 1000) {
+            echo("warning: external expander is not booting");
+            break;
+        }
+        if (serial->available()) {
+            len = serial->read_line(buffer);
+            strip(buffer, len);
+            echo("%s: %s", name.c_str(), buffer);
+        }
+    } while (strcmp("Ready.", buffer));
+
+    serial->write_checked_line((const char *)FILTER_MODE, 1); // activate filter mode on all expanders listening
 }
 
+void ExternalExpander::step() {
+    static char buffer[1024];
+    while (this->serial->has_buffered_lines()) {
+        int len = this->serial->read_line(buffer);
+        check(buffer, len);
+        if (buffer[0] == '!' && buffer[1] == '!') {
+            /* Don't trigger keep-alive from expander updates */
+            this->message_handler(&buffer[2], false, true);
+        } else {
+            echo("%s: %s", this->name.c_str(), buffer);
+        }
+    }
+    Module::step();
+}
 void ExternalExpander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
@@ -23,6 +59,32 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
         Module::expect(arguments, 0);
         this->serial->deinstall();
         echo("%s: disconnected", this->name.c_str()); // Echo the disconnection
+    } else if (method_name == "xoff") {               // debug
+        Module::expect(arguments, 0);
+        this->serial->write_checked_line((const char *)XOFF, 1);
+    } else if (method_name == "xon") { // debug
+        Module::expect(arguments, 0);
+        this->serial->write_checked_line((const char *)XON, 1);
+    } else if (method_name == "filter") { // debug
+        Module::expect(arguments, 0);
+        this->serial->write_checked_line((const char *)FILTER_MODE, 1);
+    } else if (method_name == "idmV") { // debug
+        Module::expect(arguments, 0);
+        // write to core a version comman with the ID 0xFF infront of the message like [0xFF][core.version()]
+        static char buffer[1024];
+        int pos = std::sprintf(buffer, "\xFF");
+        // echo("pos: %d", pos);
+        pos += std::sprintf(&buffer[pos], "core.version()");
+        pos += std::sprintf(&buffer[pos], "\xFE");
+        // echo("pos2: %d", pos);
+        this->serial->write_checked_line(buffer, pos);
+    } else if (method_name == "idmX") { // debug
+        Module::expect(arguments, 0);
+        // write to core a version comman with the ID 0xFF infront of the message like [0xFF][core.version()]
+        static char buffer[1024];
+        int pos = std::sprintf(buffer, "core.version()");
+        // echo("pos2: %d", pos);
+        this->serial->write_checked_line_id(0xFF, buffer, pos);
     } else {
         static char buffer[1024];
         int pos = std::sprintf(buffer, "core.%s(", method_name.c_str());
