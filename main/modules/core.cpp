@@ -83,6 +83,13 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             arguments[2]->evaluate_string(),
         };
         xTaskCreate(ota::ota_task, "ota_task", 8192, params, 5, nullptr);
+    } else if (method_name == "store") {
+        Module::expect(arguments, 1, number);
+        if (arguments[0]->evaluate_number() < 1 || arguments[0]->evaluate_number() > 255) {
+            throw std::runtime_error("Core: ID out of range");
+        }
+        uint8_t id = arguments[0]->evaluate_number();
+        Storage::put_device_id(id);
     } else {
         Module::call(method_name, arguments);
     }
