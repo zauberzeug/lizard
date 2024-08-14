@@ -108,3 +108,18 @@ void Storage::save_startup() {
 void Storage::clear_nvs() {
     Storage::put("");
 }
+
+void Storage::put_device_id(uint8_t id) {
+    std::string id_str = std::to_string(id);
+    write(NAMESPACE, "device_id", id_str);
+}
+
+uint8_t Storage::get_device_id() {
+    try {
+        std::string id_str = read(NAMESPACE, "device_id");
+        return static_cast<uint8_t>(std::stoi(id_str));
+    } catch (const std::runtime_error &e) {
+        printf("Device ID not found: %s\n", e.what());
+        return 0x00;
+    }
+}
