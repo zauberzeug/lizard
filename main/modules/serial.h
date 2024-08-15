@@ -27,6 +27,7 @@ public:
     int read_line(char *buffer) const;
     size_t write(const uint8_t byte) const;
     void write_checked_line(const char *message, const int length) const;
+    void write_checked_line_id(uint8_t id, const char *message, const int length) const;
     void flush() const;
     void clear() const;
     std::string get_output() const override;
