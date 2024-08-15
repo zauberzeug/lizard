@@ -37,6 +37,7 @@ ExternalExpander::ExternalExpander(const std::string name,
 
 void ExternalExpander::step() {
     static char buffer[1024];
+    this->serial->write_checked_line_id(this->device_id, (const char *)XON, 1);
     while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer);
         check(buffer, len);
@@ -47,8 +48,10 @@ void ExternalExpander::step() {
             echo("%s: %s", this->name.c_str(), buffer);
         }
     }
+    this->serial->write_checked_line_id(this->device_id, (const char *)XOFF, 1);
     Module::step();
 }
+
 void ExternalExpander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
