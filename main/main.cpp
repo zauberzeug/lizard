@@ -415,6 +415,7 @@ void process_uart() {
                     break;
                 }
                 adress_mode = true;
+                uart_xon = false;
                 break;
             }
         }
