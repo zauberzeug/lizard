@@ -1,6 +1,7 @@
 #include "module.h"
 #include "../global.h"
 #include "../utils/uart.h"
+#include "D1.h"
 #include "analog.h"
 #include "bluetooth.h"
 #include "can.h"
@@ -309,6 +310,13 @@ Module_ptr Module::create(const std::string type,
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
         const int64_t node_id = arguments[1]->evaluate_integer();
         DunkerMotor_ptr motor = std::make_shared<DunkerMotor>(name, can_module, node_id);
+        motor->subscribe_to_can();
+        return motor;
+    } else if (type == "D1Motor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t node_id = arguments[1]->evaluate_integer();
+        D1Motor_ptr motor = std::make_shared<D1Motor>(name, can_module, node_id);
         motor->subscribe_to_can();
         return motor;
     } else if (type == "DunkerWheels") {
