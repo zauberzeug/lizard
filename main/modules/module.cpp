@@ -13,6 +13,7 @@
 #include "dunker_wheels.h"
 #include "expander.h"
 #include "external_expander.h"
+#include "external_proxy.h"
 #include "imu.h"
 #include "input.h"
 #include "linear_motor.h"
