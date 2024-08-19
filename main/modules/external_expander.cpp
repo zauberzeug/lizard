@@ -6,10 +6,10 @@
 #include "utils/uart.h"
 #include <cstring>
 
-#define XON 0x11
-#define XOFF 0x13
-#define FILTER_MODE 0x80
-#define ID_TAG 0x81
+const char XON = 0x11;
+const char XOFF = 0x13;
+const char FILTER_MODE = 0x80;
+const char ID = 0x81;
 
 ExternalExpander::ExternalExpander(const std::string name,
                                    const ConstSerial_ptr serial,
@@ -31,13 +31,15 @@ ExternalExpander::ExternalExpander(const std::string name,
             echo("%s: %s", name.c_str(), buffer);
         }
     } while (strcmp("Ready.", buffer));
-
-    serial->write_checked_line((const char *)FILTER_MODE, 1); // activate filter mode on all expanders listening
+    echo("Ready.");
+    // 0x80
+    serial->write_checked_line(&FILTER_MODE, 1);
+    echo("TEST 1");
 }
 
 void ExternalExpander::step() {
     static char buffer[1024];
-    this->serial->write_checked_line_id(this->device_id, (const char *)XON, 1);
+    // this->serial->write_checked_line_id(this->device_id, &ON, 1);
     while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer);
         check(buffer, len);
@@ -45,10 +47,10 @@ void ExternalExpander::step() {
             /* Don't trigger keep-alive from expander updates */
             this->message_handler(&buffer[2], false, true);
         } else {
-            echo("%s: %s", this->name.c_str(), buffer);
+            echo("%s: %s !", this->name.c_str(), buffer);
         }
     }
-    this->serial->write_checked_line_id(this->device_id, (const char *)XOFF, 1);
+    // this->serial->write_checked_line_id(this->device_id, &XOFF, 1);
     Module::step();
 }
 
@@ -64,13 +66,13 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
         echo("%s: disconnected", this->name.c_str()); // Echo the disconnection
     } else if (method_name == "xoff") {               // debug
         Module::expect(arguments, 0);
-        this->serial->write_checked_line((const char *)XOFF, 1);
+        this->serial->write_checked_line_id(this->device_id, &XOFF, 1);
     } else if (method_name == "xon") { // debug
         Module::expect(arguments, 0);
-        this->serial->write_checked_line((const char *)XON, 1);
+        this->serial->write_checked_line_id(this->device_id, &XON, 1);
     } else if (method_name == "filter") { // debug
         Module::expect(arguments, 0);
-        this->serial->write_checked_line((const char *)FILTER_MODE, 1);
+        this->serial->write_checked_line(&FILTER_MODE, 1);
     } else if (method_name == "idmV") { // debug
         Module::expect(arguments, 0);
         // write to core a version comman with the ID 0xFF infront of the message like [0xFF][core.version()]
@@ -87,13 +89,13 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
         static char buffer[1024];
         int pos = std::sprintf(buffer, "core.version()");
         // echo("pos2: %d", pos);
-        this->serial->write_checked_line_id(0xFF, buffer, pos);
+        this->serial->write_checked_line_id(this->device_id, buffer, pos);
     } else {
         static char buffer[1024];
         int pos = std::sprintf(buffer, "core.%s(", method_name.c_str());
         pos += write_arguments_to_buffer(arguments, &buffer[pos]);
         pos += std::sprintf(&buffer[pos], ")");
-        this->serial->write_checked_line(buffer, pos);
+        this->serial->write_checked_line_id(this->device_id, buffer, pos);
         echo("%s: %s", this->name.c_str(), buffer); // Echo the generic command
     }
 }
