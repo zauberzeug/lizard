@@ -69,10 +69,15 @@ void Serial::write_checked_line_id(uint8_t id, const char *message, const int le
     static char checksum_buffer[16];
     uint8_t checksum = 0;
     int start = 0;
+    char id_tag = 0x81;
+    // ID-Tag und ID zur Prüfsumme hinzufügen
+    checksum ^= id_tag;
+    checksum ^= id;
     for (unsigned int i = 0; i < length + 1; ++i) {
         if (i >= length || message[i] == '\n') {
             sprintf(checksum_buffer, "@%02x\n", checksum);
-            uart_write_bytes(this->uart_num, &id, 1);
+            uart_write_bytes(this->uart_num, &id_tag, 1);
+            uart_write_bytes(this->uart_num, reinterpret_cast<const char *>(&id), 1);
             uart_write_bytes(this->uart_num, &message[start], i - start);
             uart_write_bytes(this->uart_num, checksum_buffer, 4);
             start = i + 1;
