@@ -210,13 +210,19 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                if (expander_module->type != expander) {
+                if (expander_module->type == expander) {
+                    const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
+                    const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
+                    const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                    Global::add_module(module_name, proxy);
+                } else if (expander_module->type == external_expander) {
+                    const ExternalExpander_ptr external_expander = std::static_pointer_cast<ExternalExpander>(expander_module);
+                    const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
+                    const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, external_expander, arguments);
+                    Global::add_module(module_name, proxy);
+                } else {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
-                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
-                const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
-                Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
@@ -373,6 +379,8 @@ void process_uart() {
             break;
         }
 
+        echo("=========================================");
+
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
 
         if (adress_mode && !(input[0] == ID_TAG)) {
@@ -380,9 +388,9 @@ void process_uart() {
             echo("Debug: Adress is: %d", input[0]);
             echo("Debug: it should be: %d", ID_TAG);
 
-            for (int i = 0; i < len; i++) {
-                echo("0x%02x", input[i]);
-            }
+            // for (int i = 0; i < len; i++) {
+            //     echo("0x%02x", input[i]);
+            // }
             break;
         }
 
@@ -395,14 +403,14 @@ void process_uart() {
         len = check(input, len);
         echo("Debug: len after check: %d", len);
 
-        for (int i = 0; i < len; i++) {
-            echo("0x%02x", input[i]);
-        }
+        // for (int i = 0; i < len; i++) {
+        //     echo("0x%02x", input[i]);
+        // }
 
         for (int i = 0; i < len; ++i) {
             if (input[i] == XOFF) {
-                uart_xon = false;
                 echo("Debug: XOFF received");
+                uart_xon = false;
                 break;
             } else if (input[i] == XON) {
                 uart_xon = true;
@@ -418,6 +426,24 @@ void process_uart() {
                 uart_xon = false;
                 break;
             }
+        }
+
+        if (adress_mode) {
+            // Shift the input buffer 2 positions to the left
+            for (int i = 0; i < len - 2; i++) {
+                input[i] = input[i + 2];
+            }
+
+            // Null-terminate the new string
+            input[len - 2] = '\0';
+
+            // Update the length to reflect the removal of the first two characters
+            len -= 2;
+        }
+
+        // print hole buffer
+        for (int i = 0; i < len; i++) {
+            echo("0x%02x", input[i]);
         }
         process_line(input, len);
         // if (uart_xon) {
