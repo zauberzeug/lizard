@@ -445,10 +445,12 @@ void process_uart() {
         for (int i = 0; i < len; i++) {
             echo("0x%02x", input[i]);
         }
-        process_line(input, len);
-        // if (uart_xon) {
-        //     process_line(input, len);
-        // }
+
+        echo("uart_xon: %d", uart_xon);
+        // process_line(input, len);
+        if (uart_xon) {
+            process_line(input, len);
+        }
     }
 }
 
@@ -474,6 +476,7 @@ void app_main() {
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
+    uart_xon = true;
 
     printf("\nReady.\n");
 
