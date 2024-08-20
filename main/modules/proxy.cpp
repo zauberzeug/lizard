@@ -53,7 +53,7 @@ void Proxy::call(const std::string method_name, const std::vector<ConstExpressio
     if (expander) {
         expander->serial->write_checked_line(buffer, pos);
     } else if (external_expander) {
-        external_expander->serial->write_checked_line(buffer, pos);
+        external_expander->serial->write_checked_line_id(external_expander->device_id, buffer, pos);
     }
 }
 
@@ -68,7 +68,7 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
         if (expander) {
             expander->serial->write_checked_line(buffer, pos);
         } else if (external_expander) {
-            external_expander->serial->write_checked_line(buffer, pos);
+            external_expander->serial->write_checked_line_id(external_expander->device_id, buffer, pos);
         }
     }
     Module::get_property(property_name)->assign(expression);
