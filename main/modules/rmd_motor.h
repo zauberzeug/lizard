@@ -14,9 +14,12 @@ private:
     const Can_ptr can;
     uint8_t last_msg_id = 0;
     int ratio;
+    const double encoder_range;
+    int32_t last_encoder_position;
+    bool has_last_encoder_position = false;
     unsigned long int last_msg_millis = 0;
 
-    void send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
+    bool send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
               const unsigned long int timeout_ms = 3);
 
@@ -27,15 +30,15 @@ public:
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
 
-    void power(double target_power);
-    void speed(double target_speed);
-    void position(double target_position, double target_speed = 0.0);
-    void stop();
-    void off();
-    void hold();
-    void clear_errors();
+    bool power(double target_power);
+    bool speed(double target_speed);
+    bool position(double target_position, double target_speed = 0.0);
+    bool stop();
+    bool off();
+    bool hold();
+    bool clear_errors();
 
     double get_position() const;
     double get_speed() const;
-    void set_acceleration(const uint8_t index, const uint32_t acceleration);
+    bool set_acceleration(const uint8_t index, const uint32_t acceleration);
 };

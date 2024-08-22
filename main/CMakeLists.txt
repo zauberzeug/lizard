@@ -8,7 +8,7 @@ file(GLOB SRC_FILES
 
 idf_component_register(
     SRCS ${SRC_FILES}
-    INCLUDE_DIRS "." "compilation" "modules" "utils"
+    INCLUDE_DIRS "." "compilation" "modules" "utils" "${CMAKE_BINARY_DIR}/generated"
 )
 
 component_compile_options(-std=gnu++17 -Wsuggest-override)

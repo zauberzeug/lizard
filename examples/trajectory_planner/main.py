@@ -4,7 +4,7 @@ import logging
 
 import numpy as np
 import pylab as pl
-from nicegui import ui
+from nicegui import ui, app
 from serial_connection import SerialConnection
 from trajectory import trajectories
 
@@ -30,12 +30,11 @@ BLACK = '#111B1E'
 ui.colors(primary=BLUE, secondary=GREEN)
 
 serial = SerialConnection()
-true_x = 0
-true_y = 0
+truth = {'x': 0, 'y': 0}
 
 with ui.header().style(f'background-color: {BLUE}').classes('items-center'):
     ui.label('RMD Motor Synchronization').classes('text-lg font-medium')
-    input = ui.input('Lizard Command', on_change=lambda e: serial.send(e.value) or e.sender.set_value('')) \
+    command = ui.input('Lizard Command', on_change=lambda e: serial.send(e.value) or e.sender.set_value('')) \
         .props('dark').classes('ml-auto')
     ui.button('Configure', on_click=lambda: serial.configure(STARTUP)).props(f'flat color={WHITE}')
 
@@ -49,23 +48,22 @@ def read() -> None:
         if len(words) != 4:
             return
         try:
-            global true_x, true_y
-            true_x = int(words[2])
-            true_y = int(words[3])
-            true_sphere.move(true_x / SCALE, true_y / SCALE)
+            truth['x'] = int(words[2])
+            truth['y'] = int(words[3])
+            true_sphere.move(truth['x'] / SCALE, truth['y'] / SCALE)
         except ValueError:
             pass
 
 
 ui.timer(0.01, read)
-ui.on_startup(lambda: serial.configure(STARTUP))
+app.on_startup(lambda: serial.configure(STARTUP))
 
 
 async def run() -> None:
     try:
         dt = 0.01
 
-        tx, ty = trajectories(true_x, true_y, x0.value, y0.value, 0, 0, v0.value, w0.value,
+        tx, ty = trajectories(truth['x'], truth['y'], x0.value, y0.value, 0, 0, v0.value, w0.value,
                               v_max.value, a_max.value, True)
         t = np.arange(0, tx.duration, dt)
         x_ = [tx.position(ti) for ti in t]
@@ -120,7 +118,7 @@ async def run() -> None:
             target_sphere.move(x=xi / SCALE, y=yi / SCALE)
             await asyncio.sleep(5 * dt)
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         logging.exception(e)
         ui.notify(str(e) or repr(e), close_button='OK')
 
@@ -148,15 +146,15 @@ with ui.row().classes('w-full items-stretch'):
         w1.bind_visibility_from(curved, 'value')
         ui.button('replay', on_click=run).props('outline icon=replay')
     with ui.column():
-        location_plot = ui.plot(figsize=(4, 3))
+        location_plot = ui.pyplot(figsize=(4, 3))
 
 with ui.row():
     with ui.scene(width=800, height=600) as scene:
         target_sphere = scene.sphere(0.5).material(BLUE)
         true_sphere = scene.sphere(0.5).material(GREEN)
     with ui.column():
-        position_plot = ui.plot(figsize=(6, 2))
-        velocity_plot = ui.plot(figsize=(6, 2))
-        acceleration_plot = ui.plot(figsize=(6, 2))
+        position_plot = ui.pyplot(figsize=(6, 2))
+        velocity_plot = ui.pyplot(figsize=(6, 2))
+        acceleration_plot = ui.pyplot(figsize=(6, 2))
 
 ui.run(title='RMD Motor Synchronization')
