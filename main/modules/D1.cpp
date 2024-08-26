@@ -6,43 +6,15 @@
 
 D1Motor ::D1Motor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(d1_motor, name), can(can), node_id(check_node_id(node_id)) {
-    this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
-    this->properties["reversed"] = std::make_shared<BooleanVariable>();
-    this->properties["shaft_federate"] = std::make_shared<NumberVariable>(50);
-    this->properties["shaft_revolutions"] = std::make_shared<NumberVariable>(30);
-    this->properties["switch_search_speed"] = std::make_shared<NumberVariable>(3);
-    this->properties["zero_search_speed"] = std::make_shared<NumberVariable>(3);
-    this->properties["homing_acceleration"] = std::make_shared<NumberVariable>(50);
-    this->properties["homing_method"] = std::make_shared<NumberVariable>(18);
-    this->properties["homing_offset"] = std::make_shared<NumberVariable>(1000);
-    this->properties["acceleration"] = std::make_shared<NumberVariable>(100);
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["velocity"] = std::make_shared<NumberVariable>();
     this->properties["statusword"] = std::make_shared<NumberVariable>(-1);
     this->properties["status_flag"] = std::make_shared<NumberVariable>();
-    this->properties["PDO1"] = std::make_shared<NumberVariable>();
 }
 
 void D1Motor::subscribe_to_can() {
     can->subscribe(0x700 + node_id, this->shared_from_this()); // NMT response
     can->subscribe(0x580 + node_id, this->shared_from_this()); // SDO response
-    can->subscribe(0x180 + node_id, this->shared_from_this()); // RPDO1
-    can->subscribe(0x201 + node_id, this->shared_from_this()); // RPDO2
-
-    // // setup RPDO
-    // this->sdo_write(0x1800, 1, 32, 0xC00001E0);
-    // this->sdo_write(0x1A00, 0, 8, 0);
-    // this->sdo_write(0x1A00, 1, 32, (0x6041 << 16) | (0 << 8) | 16); // statusword
-    // this->sdo_write(0x1A00, 2, 32, (0x2014 << 16) | (0 << 8) | 32); // status flag(referenced)
-    // this->sdo_write(0x1A00, 0, 8, 2);
-    // this->sdo_write(0x1800, 1, 32, 0x180 + this->node_id);
-    // // setup RPO1
-    // this->sdo_write(0x1801, 1, 32, -1);
-    // this->sdo_write(0x1A01, 0, 8, 0);
-    // this->sdo_write(0x1A01, 1, 32, (0x6064 << 16) | (0 << 8) | 32); // actuel position
-    // this->sdo_write(0x1A01, 2, 32, (0x606C << 16) | (0 << 8) | 32); // actuel velocity
-    // this->sdo_write(0x1A01, 0, 8, 2);
-    // this->sdo_write(0x1801, 1, 32, 0x201 + this->node_id);
 }
 
 void D1Motor::sdo_read(const uint16_t index, const uint8_t sub) {
@@ -152,15 +124,8 @@ void D1Motor::handle_can_msg(const uint32_t id, const int count, const uint8_t *
             this->properties["position"]->number_value = data[5] << 8 | data[4];
         }
         if (data[1] == 0x6C && data[2] == 0x60) {
-            this->properties["velocity"]->number_value = data[5] << 8 | data[4];
+            this->properties["velocity"]->number_value = (data[7] << 24) | (data[6] << 16) | (data[5] << 8) | data[4];
         }
-    } else if (id == 0x180 + this->node_id) {
-        echo("message is there");
-        this->properties["statusword"]->number_value = demarshal_unsigned<uint16_t>(data);
-        this->properties["status_flag"]->number_value = demarshal_unsigned<uint32_t>(data + 2);
-    } else if (id == 0x201 + this->node_id) {
-        this->properties["position"]->number_value = demarshal_i32(data);
-        this->properties["velocity"]->number_value = demarshal_i32(data + 4);
     }
 }
 
@@ -172,15 +137,8 @@ void D1Motor::setup() {
 
 void D1Motor::homing() {
     this->sdo_write(0x6060, 0, 8, 6);
-    this->sdo_write(0x6092, 1, 32, this->properties["shaft_federate"]->number_value);
-    this->sdo_write(0x6092, 2, 32, this->properties["shaft_revolutions"]->number_value);
-    this->sdo_write(0x6099, 1, 32, this->properties["switch_search_speed"]->number_value);
-    this->sdo_write(0x6099, 2, 32, this->properties["zero_search_speed"]->number_value);
-    this->sdo_write(0x609A, 0, 32, this->properties["homing_acceleration"]->number_value);
-    this->sdo_write(0x6098, 0, 8, this->properties["homing_method"]->number_value);
-    this->sdo_write(0x607C, 0, 32, this->properties["homing_offset"]->number_value);
     this->sdo_write(0x6040, 0, 16, 15);
-    this->sdo_write(0x6040, 0, 16, 0x1F); // TODO what code to write here
+    this->sdo_write(0x6040, 0, 16, 0x1F);
 }
 
 void D1Motor::ppMode(int32_t position) {
@@ -188,8 +146,6 @@ void D1Motor::ppMode(int32_t position) {
     this->sdo_write(0x6060, 0, 8, 1);
     // commit target position
     this->sdo_write(0x607A, 0, 32, position);
-    // commit acceleration
-    this->sdo_write(0x6083, 0, 32, this->properties["acceleration"]->number_value);
     // reset controlword
     this->sdo_write(0x6040, 0, 16, 15);
     // start motion
@@ -201,8 +157,6 @@ void D1Motor::speedMode(int32_t speed) {
     this->sdo_write(0x6060, 0, 8, 3);
     // commit target velocity
     this->sdo_write(0x60FF, 0, 32, speed);
-    // commit acceleration
-    this->sdo_write(0x6083, 0, 32, this->properties["acceleration"]->number_value);
     // reset controlword
     this->sdo_write(0x6040, 0, 16, 15);
     // start motion
