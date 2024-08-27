@@ -30,6 +30,7 @@ public:
     void ppMode(const int position);
     void speedMode(const int speed);
     void reset();
+    void stop();
     void setup();
     void step() override;
 };

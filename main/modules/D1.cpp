@@ -163,6 +163,10 @@ void D1Motor::speedMode(int32_t speed) {
     this->sdo_write(0x6040, 0, 16, 0x1F);
 }
 
+void D1Motor::stop() {
+    this->speedMode(0);
+}
+
 void D1Motor::step() {
     this->sdo_read(0x6041, 0);
     this->sdo_read(0x2014, 0);
