@@ -34,7 +34,6 @@ enum ModuleType {
     analog,
     proxy,
     external_expander,
-    external_proxy,
 };
 
 class Module;
