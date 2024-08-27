@@ -378,53 +378,32 @@ void process_uart() {
         if (pos < 0) {
             break;
         }
-
-        echo("=========================================");
-
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
 
         if (adress_mode && !(input[0] == ID_TAG)) {
+            // Keep this debug for multidevice testing
             echo("Debug: 0 Character"); // Debug
             echo("Debug: Adress is: %d", input[0]);
             echo("Debug: it should be: %d", ID_TAG);
-
-            // for (int i = 0; i < len; i++) {
-            //     echo("0x%02x", input[i]);
-            // }
             break;
         }
 
-        // print hole buffer
-        for (int i = 0; i < len; i++) {
-            echo("0x%02x", input[i]);
-        }
-
-        echo("Debug: len before check: %d", len);
         len = check(input, len);
-        echo("Debug: len after check: %d", len);
-
-        // for (int i = 0; i < len; i++) {
-        //     echo("0x%02x", input[i]);
-        // }
-
         for (int i = 0; i < len; ++i) {
             if (input[i] == XOFF) {
-                echo("Debug: XOFF received");
                 uart_xon = false;
-                break;
+                return;
             } else if (input[i] == XON) {
                 uart_xon = true;
-                echo("Debug: XON received");
-                break;
+                return;
             } else if (input[i] == FILTER_MODE) {
-                echo("Debug: FILTER_MODE received");
                 if (Storage::get_device_id() == 0x00) {
                     echo("Debug: FILTER_MODE received and device id is not set. Will not switch to filter mode");
-                    break;
+                    return;
                 }
                 adress_mode = true;
                 uart_xon = false;
-                break;
+                return;
             }
         }
 
@@ -440,13 +419,6 @@ void process_uart() {
             // Update the length to reflect the removal of the first two characters
             len -= 2;
         }
-
-        // print hole buffer
-        for (int i = 0; i < len; i++) {
-            echo("0x%02x", input[i]);
-        }
-
-        echo("uart_xon: %d", uart_xon);
         // process_line(input, len);
         if (uart_xon) {
             process_line(input, len);
