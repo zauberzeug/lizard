@@ -366,7 +366,6 @@ void process_line(const char *line, const int len) {
             throw std::runtime_error("unrecognized control command");
         }
     } else {
-        echo("<< %s", line);
         process_lizard(line);
     }
 }
@@ -419,6 +418,8 @@ void process_uart() {
             // Update the length to reflect the removal of the first two characters
             len -= 2;
         }
+
+        echo("Debug: Xon: %d", uart_xon);
         // process_line(input, len);
         if (uart_xon) {
             process_line(input, len);
@@ -484,6 +485,10 @@ void app_main() {
                 run_step(module);
             }
         }
+        if (adress_mode && !uart_xon) {
+            continue;
+        }
+
         run_step(core_module);
 
         for (auto const &rule : Global::rules) {

@@ -32,9 +32,7 @@ ExternalExpander::ExternalExpander(const std::string name,
         }
     } while (strcmp("Ready.", buffer));
     echo("Ready.");
-    // 0x80
     serial->write_checked_line(&FILTER_MODE, 1);
-    echo("TEST 1");
 }
 
 void ExternalExpander::step() {
@@ -43,13 +41,12 @@ void ExternalExpander::step() {
     while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer);
         check(buffer, len);
-        if (buffer[0] == '!' && buffer[1] == '!') {
+        if (buffer[0] == '!' && buffer[1] == '!') { // debug todo: Add tag to the message to identify the source -> !! to !!<source>MSG
             /* Don't trigger keep-alive from expander updates */
             this->message_handler(&buffer[2], false, true);
-            echo("received message from %s: %s", this->name.c_str(), &buffer[2]); // debug TODO DAS KOMMT GENAUSO AN WIE IM EXPANDER
-
+            // echo("received message from %s: %s", this->name.c_str(), &buffer[2]); // debug
         } else {
-            echo("%s: %s !", this->name.c_str(), buffer); // debug
+            echo("%s: %s", this->name.c_str(), buffer); // debug
         }
     }
     this->serial->write_checked_line_id(this->device_id, &XOFF, 1);
@@ -68,9 +65,9 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
         Module::expect(arguments, 0);
         this->serial->deinstall();
         echo("%s: disconnected", this->name.c_str()); // Echo the disconnection
-        // } else if (method_name == "filter") {             // debug
-        //     Module::expect(arguments, 0);
-        //     this->serial->write_checked_line(&FILTER_MODE, 1);
+    } else if (method_name == "filter") {             // debug -> actives filter mode
+        Module::expect(arguments, 0);
+        this->serial->write_checked_line(&FILTER_MODE, 1);
     } else {
         static char buffer[1024];
         int pos = std::sprintf(buffer, "core.%s(", method_name.c_str());
