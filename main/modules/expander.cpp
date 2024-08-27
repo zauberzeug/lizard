@@ -88,6 +88,12 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         if (!success) {
             throw std::runtime_error("could not flash expander \"" + this->name + "\"");
         }
+    } else if (method_name == "xoff") { // debug
+        Module::expect(arguments, 0);
+        this->serial->write_checked_line("\x13", 1);
+    } else if (method_name == "xon") { // debug
+        Module::expect(arguments, 0);
+        this->serial->write_checked_line("\x11", 1);
     } else {
         static char buffer[1024];
         int pos = std::sprintf(buffer, "core.%s(", method_name.c_str());
