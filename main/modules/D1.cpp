@@ -9,8 +9,9 @@ D1Motor ::D1Motor(const std::string &name, Can_ptr can, int64_t node_id)
     this->properties["switch_search_speed"] = std::make_shared<NumberVariable>();
     this->properties["zero_search_speed"] = std::make_shared<NumberVariable>();
     this->properties["homing_acceleration"] = std::make_shared<NumberVariable>();
-    this->properties["homing_offset"] = std::make_shared<NumberVariable>();
-    this->properties["acceleration"] = std::make_shared<NumberVariable>();
+    this->properties["profile_acceleration"] = std::make_shared<NumberVariable>();
+    this->properties["profile_velocity"] = std::make_shared<NumberVariable>();
+    this->properties["profile_deceleration"] = std::make_shared<NumberVariable>();
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["velocity"] = std::make_shared<NumberVariable>();
     this->properties["statusword"] = std::make_shared<NumberVariable>(-1);
@@ -146,7 +147,6 @@ void D1Motor::homing() {
     this->sdo_write(0x6099, 1, 32, this->properties["switch_search_speed"]->number_value);
     this->sdo_write(0x6099, 2, 32, this->properties["zero_search_speed"]->number_value);
     this->sdo_write(0x609A, 0, 32, this->properties["homing_acceleration"]->number_value);
-    this->sdo_write(0x607C, 0, 32, this->properties["homing_offset"]->number_value);
     this->sdo_write(0x6040, 0, 16, 15);
     this->sdo_write(0x6040, 0, 16, 0x1F);
 }
@@ -156,8 +156,10 @@ void D1Motor::ppMode(int32_t position) {
     this->sdo_write(0x6060, 0, 8, 1);
     // commit target position
     this->sdo_write(0x607A, 0, 32, position);
-    // set acceleration
-    this->sdo_write(0x6083, 0, 32, this->properties["acceleration"]->number_value);
+    // set driving pararmeters
+    this->sdo_write(0x6083, 0, 32, this->properties["profile_acceleration"]->number_value);
+    this->sdo_write(0x6081, 0, 32, this->properties["profile_velocity"]->number_value);
+    this->sdo_write(0x6084, 0, 32, this->properties["profile_deceleration"]->number_value);
     // reset controlword
     this->sdo_write(0x6040, 0, 16, 15);
     // start motion
@@ -169,7 +171,7 @@ void D1Motor::speedMode(int32_t speed) {
     this->sdo_write(0x6060, 0, 8, 3);
     // commit target velocity
     this->sdo_write(0x60FF, 0, 32, speed);
-    this->sdo_write(0x6083, 0, 32, this->properties["acceleration"]->number_value);
+    this->sdo_write(0x6083, 0, 32, this->properties["profile_acceleration"]->number_value);
     // reset controlword
     this->sdo_write(0x6040, 0, 16, 15);
     // start motion
