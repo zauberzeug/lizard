@@ -68,7 +68,6 @@ StepperMotor::StepperMotor(const std::string name,
     ledc_channel_config(&channel_config);
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
-    gpio_matrix_out(step_pin, LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0, 0);
 }
 
 void StepperMotor::read_position() {
@@ -88,6 +87,8 @@ void StepperMotor::read_position() {
 void StepperMotor::set_state(StepperState new_state) {
     this->state = new_state;
     this->properties.at("idle")->boolean_value = (new_state == Idle);
+
+    gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0, 0);
     ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
 }
