@@ -110,6 +110,9 @@ void D1Motor::call(const std::string method_name, const std::vector<ConstExpress
     } else if (method_name == "reset") {
         Module::expect(arguments, 0);
         this->sdo_write(0x6040, 0, 16, 143);
+    } else if (method_name == "stop") {
+        Module::expect(arguments, 0);
+        this->stop();
     } else {
         throw std::runtime_error("Method " + method_name + " not found");
     }
@@ -179,7 +182,7 @@ void D1Motor::speedMode(int32_t speed) {
 }
 
 void D1Motor::stop() {
-    this->speedMode(0);
+    this->sdo_write(0x6040, 0, 16, 7);
 }
 
 void D1Motor::step() {
