@@ -576,6 +576,43 @@ motor.set_ctrl_halt(false)
 motor.set_ctrl_halt(true)
 ```
 
+## D1 Motor
+
+This module controls an [igus D1 motor controller](https://www.igus.eu/product/D1) via CANOpen.
+
+| Constructor                     | Description                     | Arguments         |
+| ------------------------------- | ------------------------------- | ----------------- |
+| `motor = D1Motor(can, node_id)` | CAN module and node ID (1..127) | CAN module, `int` |
+
+| Properties                   | Description                             | Data type |
+| ---------------------------- | --------------------------------------- | --------- |
+| `motor.switch_search_speed`  | Speed for moving into the end stop      | `int`     |
+| `motor.zero_search_speed`    | Speed for moving out ot the end stop    | `int`     |
+| `motor.homing_acceleration`  | Acceleration for homing                 | `int`     |
+| `motor.profile_acceleration` | Acceleration for profile movements      | `int`     |
+| `motor.profile_velocity`     | Velocity for profile position movements | `int`     |
+| `motor.profile_deceleration` | Deceleration for profile movements      | `int`     |
+| `motor.position`             | Current position                        | `int`     |
+| `motor.velocity`             | Current velocity                        | `int`     |
+| `motor.status_word`          | Status word                             | `int`     |
+| `motor.status_flags`         | Status flags                            | `int`     |
+
+Bit 0 of the status flags indicates the motor is referenced (1) or not (0).
+
+The status word (also called "Statusword") is a 16 bit integer with several flags. See the [D1 manual](https://www.igus.eu/product/D1) for details.
+
+| Methods                                         | Description              | Arguments |
+| ----------------------------------------------- | ------------------------ | --------- |
+| `motor.setup()`                                 | Setup (enable) the motor |           |
+| `motor.home()`                                  | Start homing the motor   |           |
+| `motor.profile_position()`                      | Move to given position   | `int`     |
+| `motor.profile_velocity()`                      | Move with given velocity | `int`     |
+| `motor.stop()`                                  | Stop (disable) the motor |           |
+| `motor.reset()`                                 | Reset motor errors       |           |
+| `motor.sdo_read(index[, subindex])`             | Read SDO                 | 2x `int`  |
+| `motor.sdo_write(index, subindex, bits, value)` | Write SDO                | 4x `int`  |
+| `motor.nmt_write()`                             | Write NMT                | `int`     |
+
 ## DunkerMotor
 
 This module controls [dunkermotoren](https://www.dunkermotoren.de/) motor via CANOpen.

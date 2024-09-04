@@ -29,10 +29,10 @@ enum ModuleType {
     motor_axis,
     canopen_motor,
     canopen_master,
+    d1_motor,
     dunker_motor,
     dunker_wheels,
     analog,
-    d1_motor,
     proxy,
 };
 
