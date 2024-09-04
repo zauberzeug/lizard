@@ -6,6 +6,7 @@
 #include "can.h"
 #include "canopen_master.h"
 #include "canopen_motor.h"
+#include "d1_motor.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/pcnt.h"
@@ -304,6 +305,13 @@ Module_ptr Module::create(const std::string type,
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
         CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
         return master;
+    } else if (type == "D1Motor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t node_id = arguments[1]->evaluate_integer();
+        D1Motor_ptr motor = std::make_shared<D1Motor>(name, can_module, node_id);
+        motor->subscribe_to_can();
+        return motor;
     } else if (type == "DunkerMotor") {
         Module::expect(arguments, 2, identifier, integer);
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
