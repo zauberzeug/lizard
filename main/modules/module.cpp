@@ -334,7 +334,7 @@ Module_ptr Module::create(const std::string type,
         const DunkerMotor_ptr left_motor = std::static_pointer_cast<DunkerMotor>(left_module);
         const DunkerMotor_ptr right_motor = std::static_pointer_cast<DunkerMotor>(right_module);
         return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
-    } else if (type == "analog") {
+    } else if (type == "Analog") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");
         }
