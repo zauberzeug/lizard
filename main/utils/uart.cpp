@@ -4,7 +4,12 @@
 #include <stdio.h>
 #include <string>
 
+bool uart_xon = true;
+
 void echo(const char *format, ...) {
+    if (!uart_xon) {
+        return;
+    }
     static char buffer[1024];
     int pos = 0;
 

@@ -64,6 +64,30 @@ void Serial::write_checked_line(const char *message, const int length) const {
     }
 }
 
+void Serial::write_checked_line_id(uint8_t id, const char *message, const int length) const {
+    // do the same as write_checked_line, but add the id at the beginning of the message
+    static char checksum_buffer[16];
+    uint8_t checksum = 0;
+    int start = 0;
+    char id_tag = 0x81;
+    // ID-Tag und ID zur Prüfsumme hinzufügen
+    checksum ^= id_tag;
+    checksum ^= id;
+    for (unsigned int i = 0; i < length + 1; ++i) {
+        if (i >= length || message[i] == '\n') {
+            sprintf(checksum_buffer, "@%02x\n", checksum);
+            uart_write_bytes(this->uart_num, &id_tag, 1);
+            uart_write_bytes(this->uart_num, reinterpret_cast<const char *>(&id), 1);
+            uart_write_bytes(this->uart_num, &message[start], i - start);
+            uart_write_bytes(this->uart_num, checksum_buffer, 4);
+            start = i + 1;
+            checksum = 0;
+        } else {
+            checksum ^= message[i];
+        }
+    }
+}
+
 int Serial::available() const {
     if (!uart_is_driver_installed(this->uart_num)) {
         return 0;

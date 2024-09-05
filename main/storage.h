@@ -16,4 +16,6 @@ public:
     static void print_startup(const std::string substring = "");
     static void save_startup();
     static void clear_nvs();
+    static void put_device_id(uint8_t id);
+    static uint8_t get_device_id();
 };

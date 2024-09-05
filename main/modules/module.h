@@ -34,6 +34,7 @@ enum ModuleType {
     dunker_wheels,
     analog,
     proxy,
+    external_expander,
 };
 
 class Module;

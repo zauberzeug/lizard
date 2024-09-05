@@ -33,6 +33,10 @@
 #include <vector>
 
 #define BUFFER_SIZE 1024
+#define XON 0x11
+#define XOFF 0x13
+#define FILTER_MODE 0x80
+#define ID_TAG 0x81
 
 Core_ptr core_module;
 
@@ -207,13 +211,19 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                if (expander_module->type != expander) {
+                if (expander_module->type == expander) {
+                    const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
+                    const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
+                    const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                    Global::add_module(module_name, proxy);
+                } else if (expander_module->type == external_expander) {
+                    const ExternalExpander_ptr external_expander = std::static_pointer_cast<ExternalExpander>(expander_module);
+                    const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
+                    const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, external_expander, arguments);
+                    Global::add_module(module_name, proxy);
+                } else {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
-                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
-                const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
-                Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);
@@ -360,7 +370,7 @@ void process_line(const char *line, const int len) {
         process_lizard(line);
     }
 }
-
+bool adress_mode = false;
 void process_uart() {
     static char input[BUFFER_SIZE];
     while (true) {
@@ -369,8 +379,52 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+
+        if (adress_mode && !(input[0] == ID_TAG)) {
+            // Keep this debug for multidevice testing
+            echo("Debug: 0 Character"); // Debug
+            echo("Debug: Adress is: %d", input[0]);
+            echo("Debug: it should be: %d", ID_TAG);
+            break;
+        }
+
         len = check(input, len);
-        process_line(input, len);
+        for (int i = 0; i < len; ++i) {
+            if (input[i] == XOFF) {
+                uart_xon = false;
+                return;
+            } else if (input[i] == XON) {
+                uart_xon = true;
+                return;
+            } else if (input[i] == FILTER_MODE) {
+                if (Storage::get_device_id() == 0x00) {
+                    echo("Debug: FILTER_MODE received and device id is not set. Will not switch to filter mode");
+                    return;
+                }
+                adress_mode = true;
+                uart_xon = false;
+                return;
+            }
+        }
+
+        if (adress_mode) {
+            // Shift the input buffer 2 positions to the left
+            for (int i = 0; i < len - 2; i++) {
+                input[i] = input[i + 2];
+            }
+
+            // Null-terminate the new string
+            input[len - 2] = '\0';
+
+            // Update the length to reflect the removal of the first two characters
+            len -= 2;
+        }
+
+        echo("Debug: Xon: %d", uart_xon);
+        // process_line(input, len);
+        if (uart_xon) {
+            process_line(input, len);
+        }
     }
 }
 
@@ -396,6 +450,7 @@ void app_main() {
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
+    uart_xon = true;
 
     printf("\nReady.\n");
 
@@ -431,6 +486,10 @@ void app_main() {
                 run_step(module);
             }
         }
+        if (adress_mode && !uart_xon) {
+            continue;
+        }
+
         run_step(core_module);
 
         for (auto const &rule : Global::rules) {
