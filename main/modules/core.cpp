@@ -96,7 +96,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         if (!(strapping & BIT(0)) && !(strapping & BIT(2)) && (strapping & BIT(12)) && !(strapping & BIT(15))) {
             echo("Flashing is possible.");
         } else {
-            echo("Flashing is not possible.");
+            echo("Flashing might not be possible.");
         }
 
     } else {
