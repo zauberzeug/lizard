@@ -79,6 +79,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         if (this->boot_pin == GPIO_NUM_NC || this->enable_pin == GPIO_NUM_NC) {
             throw std::runtime_error("expander \"" + this->name + "\" does not support flashing, pins not set");
         }
+        this->serial->write_checked_line("core.strapping()", 14);
         Storage::clear_nvs();
         this->serial->deinstall();
         bool success = ZZ::Replicator::flashReplica(this->serial->uart_num,
