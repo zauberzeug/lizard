@@ -8,6 +8,7 @@
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "soc/gpio_reg.h"
 #include <memory>
 #include <stdlib.h>
 
@@ -83,6 +84,21 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             arguments[2]->evaluate_string(),
         };
         xTaskCreate(ota::ota_task, "ota_task", 8192, params, 5, nullptr);
+    } else if (method_name == "strapping") {
+        Module::expect(arguments, 0);
+        uint32_t strapping = REG_READ(GPIO_STRAP_REG);
+        echo("Strapping pin values");
+        echo("GPIO0 (BOOT): %s", (strapping & BIT(0)) ? "HIGH" : "LOW");
+        echo("GPIO2: %s", (strapping & BIT(2)) ? "HIGH" : "LOW");
+        echo("GPIO12 (MTDI): %s", (strapping & BIT(12)) ? "HIGH" : "LOW");
+        echo("GPIO15 (MTDO): %s", (strapping & BIT(15)) ? "HIGH" : "LOW");
+
+        if (!(strapping & BIT(0)) && !(strapping & BIT(2)) && (strapping & BIT(12)) && !(strapping & BIT(15))) {
+            echo("Flashing is possible.");
+        } else {
+            echo("Flashing is not possible.");
+        }
+
     } else {
         Module::call(method_name, arguments);
     }
