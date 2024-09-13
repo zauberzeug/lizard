@@ -203,7 +203,8 @@ double StepperMotor::get_position() {
 
 void StepperMotor::position(const double position, const double speed, const double acceleration) {
     this->target_position = static_cast<int32_t>(position);
-    this->target_speed = static_cast<int32_t>(speed);
+    bool forward = this->target_position > this->properties.at("position")->integer_value;
+    this->target_speed = static_cast<int32_t>(speed) * (forward ? 1 : -1);
     this->target_acceleration = static_cast<uint32_t>(acceleration);
     set_state(Positioning);
 }
