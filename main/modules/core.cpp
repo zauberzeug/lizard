@@ -5,10 +5,12 @@
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "driver/gpio.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "soc/gpio_reg.h"
+#include "soc/io_mux_reg.h"
 #include <memory>
 #include <stdlib.h>
 
@@ -85,20 +87,34 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         };
         xTaskCreate(ota::ota_task, "ota_task", 8192, params, 5, nullptr);
     } else if (method_name == "strapping") {
-        Module::expect(arguments, 0);
-        uint32_t strapping = REG_READ(GPIO_STRAP_REG);
-        echo("Strapping pin values");
-        echo("GPIO0 (BOOT): %s", (strapping & BIT(0)) ? "HIGH" : "LOW");
-        echo("GPIO2: %s", (strapping & BIT(2)) ? "HIGH" : "LOW");
-        echo("GPIO12 (MTDI): %s", (strapping & BIT(12)) ? "HIGH" : "LOW");
-        echo("GPIO15 (MTDO): %s", (strapping & BIT(15)) ? "HIGH" : "LOW");
-
-        if (!(strapping & BIT(0)) && !(strapping & BIT(2)) && (strapping & BIT(12)) && !(strapping & BIT(15))) {
-            echo("Flashing is possible.");
-        } else {
-            echo("Flashing might not be possible.");
+        Module::expect(arguments, 1, integer);
+        const gpio_num_t gpio_num = (gpio_num_t)arguments[0]->evaluate_integer();
+        if (gpio_num < 0 || gpio_num >= GPIO_NUM_MAX) {
+            echo("Invalid GPIO number: %d", gpio_num);
+            return;
         }
 
+        int level = gpio_get_level(gpio_num);
+        bool output_en = (gpio_set_level(gpio_num, level) == ESP_OK);
+        bool input_en = (gpio_get_level(gpio_num) != -1);
+        int od_en = (GPIO.pin[gpio_num].pad_driver == 1);
+
+        esp_err_t pullup_result = gpio_set_pull_mode(gpio_num, GPIO_PULLUP_ONLY);
+        bool pullup_en = (pullup_result == ESP_OK);
+        gpio_set_pull_mode(gpio_num, GPIO_FLOATING);
+
+        esp_err_t pulldown_result = gpio_set_pull_mode(gpio_num, GPIO_PULLDOWN_ONLY);
+        bool pulldown_en = (pulldown_result == ESP_OK);
+        gpio_set_pull_mode(gpio_num, GPIO_FLOATING);
+
+        gpio_config_t io_conf;
+        io_conf.pin_bit_mask = (1ULL << gpio_num);
+        gpio_config(&io_conf);
+
+        int intr_type = io_conf.intr_type;
+
+        echo("GPIO[%d]| InputEn: %d| OutputEn: %d| OpenDrain: %d| Pullup: %d| Pulldown: %d| Intr: %d",
+             gpio_num, input_en, output_en, od_en, pullup_en, pulldown_en, intr_type);
     } else {
         Module::call(method_name, arguments);
     }
