@@ -9,7 +9,7 @@
 #include "d1_motor.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
-#include "driver/pcnt.h"
+#include "driver/pulse_cnt.h"
 #include "dunker_motor.h"
 #include "dunker_wheels.h"
 #include "expander.h"
@@ -270,8 +270,9 @@ Module_ptr Module::create(const std::string type,
         Module::expect(arguments, -1, integer, integer, integer, integer, integer, integer);
         gpio_num_t step_pin = (gpio_num_t)arguments[0]->evaluate_integer();
         gpio_num_t dir_pin = (gpio_num_t)arguments[1]->evaluate_integer();
-        pcnt_unit_t pcnt_unit = arguments.size() > 2 ? (pcnt_unit_t)arguments[2]->evaluate_integer() : PCNT_UNIT_0;
-        pcnt_channel_t pcnt_channel = arguments.size() > 3 ? (pcnt_channel_t)arguments[3]->evaluate_integer() : PCNT_CHANNEL_0;
+        // https://github.com/espressif/esp-idf/blob/59e18382702b6986be3d3f55e9ac7763c1397cf7/components/hal/include/hal/pcnt_types.h no defaults anymore with pointers
+        pcnt_unit_handle_t pcnt_unit = arguments.size() > 2 ? (pcnt_unit_handle_t)arguments[2]->evaluate_integer() : 0;
+        pcnt_channel_handle_t pcnt_channel = arguments.size() > 3 ? (pcnt_channel_handle_t)arguments[3]->evaluate_integer() : 0;
         ledc_timer_t ledc_timer = arguments.size() > 4 ? (ledc_timer_t)arguments[4]->evaluate_integer() : LEDC_TIMER_0;
         ledc_channel_t ledc_channel = arguments.size() > 5 ? (ledc_channel_t)arguments[5]->evaluate_integer() : LEDC_CHANNEL_0;
         return std::make_shared<StepperMotor>(name, step_pin, dir_pin, pcnt_unit, pcnt_channel, ledc_timer, ledc_channel);

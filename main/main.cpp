@@ -9,14 +9,14 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
-#include "driver/gpio.h"
-#include "driver/uart.h"
 #include "global.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
 #include "modules/expander.h"
 #include "modules/module.h"
 #include "proxy.h"
+#include "rom/gpio.h"
+#include "rom/uart.h"
 #include "storage.h"
 #include "utils/ota.h"
 #include "utils/tictoc.h"
@@ -390,7 +390,7 @@ void app_main() {
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .rx_flow_ctrl_thresh = 0,
-        .use_ref_tick = false,
+        .source_clk = UART_SCLK_DEFAULT,
     };
     uart_param_config(UART_NUM_0, &uart_config);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);

@@ -8,7 +8,7 @@
 #include <esp_flash_partitions.h>
 #include <esp_log.h>
 #include <esp_ota_ops.h>
-#include <esp_spi_flash.h>
+#include <spi_flash_mmap.h>
 
 #include <esp32_port.h>
 #include <esp_loader.h>
@@ -86,7 +86,7 @@ static auto upBaudrate(uart_port_t uart_num, uint32_t base_baud_rate) -> bool {
     const uint32_t higherRate{base_baud_rate * 8};
     esp_loader_error_t status{esp_loader_change_baudrate(higherRate)};
 
-    ESP_LOGD(TAG, "esp_loader_change_baudrate(%u)", higherRate);
+    ESP_LOGD(TAG, "esp_loader_change_baudrate(%lu)", higherRate);
     HANDLE_ERROR(status, "raising target baudrate");
 
     esp_err_t ec{uart_set_baudrate(uart_num, higherRate)};
@@ -121,7 +121,7 @@ static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
     const uint32_t pageCount{neededBlocks(usedSize, SPI_FLASH_MMU_PAGE_SIZE)};
     const uint32_t blockCount{neededBlocks(usedSize, transferBlockSize)};
 
-    ESP_LOGI(TAG, "Replicating [%u] bytes, from [%u] pages, in [%u] blocks", usedSize, pageCount, blockCount);
+    ESP_LOGI(TAG, "Replicating [%lu] bytes, from [%lu] pages, in [%lu] blocks", usedSize, pageCount, blockCount);
 
     /* Fill vector with ascending indices starting at 0 */
     std::vector<int> pageIndices(pageCount);
@@ -145,10 +145,10 @@ static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
     int count = 0;
     while (toSend >= transferBlockSize) {
         if ((count++) % 10 == 0) {
-            ESP_LOGI(TAG, "%d/%d kb", (usedSize - toSend) / 1000, usedSize / 1000);
+            ESP_LOGI(TAG, "%lu/%lu kb", (usedSize - toSend) / 1000, usedSize / 1000);
         }
         status = esp_loader_flash_write(bytePtr, transferBlockSize);
-        ESP_LOGD(TAG, "esp_loader_flash_write(0x%08X)", usedSize - toSend);
+        ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", usedSize - toSend);
 
         HANDLE_ERROR(status, "writing target flash");
 
@@ -160,7 +160,7 @@ static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
         /* Send last (partial) block */
         status = esp_loader_flash_write(bytePtr, toSend);
 
-        ESP_LOGD(TAG, "esp_loader_flash_write(0x%08X)", usedSize - toSend);
+        ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", usedSize - toSend);
 
         HANDLE_ERROR(status, "writing target flash");
     }
@@ -211,7 +211,7 @@ auto flashReplica(const uart_port_t uart_num,
         return false;
     }
 
-    ESP_LOGI(TAG, "Running partition: [%s] address: [%X] size: [%X]",
+    ESP_LOGI(TAG, "Running partition: [%s] address: [%lu] size: [%lu]",
              running_partition->label, running_partition->address, running_partition->size);
 
     if (running_partition->size == 0) {

@@ -1,19 +1,23 @@
 #include "stepper_motor.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "soc/gpio_sig_map.h"
 #include <algorithm>
 #include <driver/ledc.h>
-#include <driver/pcnt.h>
+#include <driver/pulse_cnt.h>
 #include <math.h>
 #include <memory>
+#include <stdexcept>
 
 #define MIN_SPEED 490
 
-StepperMotor::StepperMotor(const std::string name,
+// changes https://docs.espressif.com/projects/esp-idf/en/stable/esp32/migration-guides/release-5.x/5.0/peripherals.html#id3
+
+StepperMotor::StepperMotor(const std::string &name,
                            const gpio_num_t step_pin,
                            const gpio_num_t dir_pin,
-                           const pcnt_unit_t pcnt_unit,
-                           const pcnt_channel_t pcnt_channel,
+                           pcnt_unit_handle_t pcnt_unit,
+                           pcnt_channel_handle_t pcnt_channel,
                            const ledc_timer_t ledc_timer,
                            const ledc_channel_t ledc_channel)
     : Module(stepper_motor, name),
@@ -30,22 +34,28 @@ StepperMotor::StepperMotor(const std::string name,
     this->properties["speed"] = std::make_shared<IntegerVariable>();
     this->properties["idle"] = std::make_shared<BooleanVariable>(true);
 
-    pcnt_config_t pcnt_config = {
-        .pulse_gpio_num = step_pin,
-        .ctrl_gpio_num = dir_pin,
-        .lctrl_mode = PCNT_MODE_REVERSE,
-        .hctrl_mode = PCNT_MODE_KEEP,
-        .pos_mode = PCNT_COUNT_INC,
-        .neg_mode = PCNT_COUNT_DIS,
-        .counter_h_lim = 30000,
-        .counter_l_lim = -30000,
-        .unit = this->pcnt_unit,
-        .channel = this->pcnt_channel,
+    pcnt_unit_config_t pcnt_unit_config = {
+        .low_limit = -30000,
+        .high_limit = 30000,
+        .intr_priority = 0,
+        .flags = {},
     };
-    pcnt_unit_config(&pcnt_config);
-    pcnt_counter_pause(this->pcnt_unit);
-    pcnt_counter_clear(this->pcnt_unit);
-    pcnt_counter_resume(this->pcnt_unit);
+    pcnt_new_unit(&pcnt_unit_config, &this->pcnt_unit);
+
+    pcnt_chan_config_t pcnt_channel_config = {
+        .edge_gpio_num = step_pin,
+        .level_gpio_num = dir_pin,
+        .flags = {},
+    };
+    pcnt_new_channel(this->pcnt_unit, &pcnt_channel_config, &this->pcnt_channel);
+
+    //  .hctrl_mode = PCNT_MODE_KEEP, .lctrl_mode = PCNT_MODE_REVERSE,
+    pcnt_channel_set_level_action(this->pcnt_channel, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+    // .pos_mode = PCNT_COUNT_INC, .neg_mode = PCNT_COUNT_DIS,
+    pcnt_channel_set_edge_action(this->pcnt_channel, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE);
+
+    pcnt_unit_clear_count(this->pcnt_unit);
+    pcnt_unit_start(this->pcnt_unit);
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,
@@ -54,6 +64,7 @@ StepperMotor::StepperMotor(const std::string name,
         .freq_hz = 1000,
         .clk_cfg = LEDC_AUTO_CLK,
     };
+
     ledc_channel_config_t channel_config = {
         .gpio_num = step_pin,
         .speed_mode = LEDC_HIGH_SPEED_MODE,
@@ -71,8 +82,9 @@ StepperMotor::StepperMotor(const std::string name,
 }
 
 void StepperMotor::read_position() {
-    int16_t count;
-    pcnt_get_counter_value(this->pcnt_unit, &count);
+    int tempCount;
+    pcnt_unit_get_count(this->pcnt_unit, &tempCount);
+    int16_t count = static_cast<int16_t>(tempCount);
     int16_t d_count = count - this->last_count;
     if (d_count > 15000) {
         d_count -= 30000;
@@ -84,11 +96,11 @@ void StepperMotor::read_position() {
     this->last_count = count;
 }
 
-void StepperMotor::set_state(StepperState new_state) {
+void StepperMotor::set_state(const StepperState new_state) {
     this->state = new_state;
     this->properties.at("idle")->boolean_value = (new_state == Idle);
 
-    gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0, 0);
+    gpio_iomux_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0); // needs to be checked especially
     ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
 }
@@ -104,9 +116,8 @@ void StepperMotor::step() {
         // current state
         int32_t position = this->properties.at("position")->integer_value;
         int32_t speed = this->properties.at("speed")->integer_value;
-
-        // current target speed
         int32_t target_speed = this->target_speed;
+
         if (this->state == Positioning) {
             if (this->target_acceleration == 0) {
                 if ((target_speed > 0 && position + dt * speed / 2 > this->target_position) ||
@@ -114,7 +125,7 @@ void StepperMotor::step() {
                     this->target_speed = target_speed = 0;
                 }
             } else {
-                double squared_speed = (double)speed * speed;
+                double squared_speed = static_cast<double>(speed) * speed;
                 int32_t braking_distance = squared_speed / this->target_acceleration / 2.0;
                 int32_t remaining_distance = this->target_position - position;
                 if (std::abs(remaining_distance) < std::abs(braking_distance)) {
@@ -127,7 +138,7 @@ void StepperMotor::step() {
         if (this->target_acceleration == 0) {
             speed = target_speed;
         } else {
-            int32_t d_speed = std::max(dt * (double)this->target_acceleration, 1.0);
+            int32_t d_speed = std::max(dt * static_cast<double>(this->target_acceleration), 1.0);
             if (speed < target_speed) {
                 speed = std::min(speed + d_speed, target_speed);
             } else if (speed > target_speed) {
@@ -192,8 +203,7 @@ double StepperMotor::get_position() {
 
 void StepperMotor::position(const double position, const double speed, const double acceleration) {
     this->target_position = static_cast<int32_t>(position);
-    bool forward = this->target_position > this->properties.at("position")->integer_value;
-    this->target_speed = static_cast<int32_t>(speed) * (forward ? 1 : -1);
+    this->target_speed = static_cast<int32_t>(speed);
     this->target_acceleration = static_cast<uint32_t>(acceleration);
     set_state(Positioning);
 }
