@@ -46,11 +46,22 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, static_cast<adc_channel_t>(channel), &config));
 
+    adc_cali_line_fitting_efuse_val_t cali_val;
+    esp_err_t cali_check = adc_cali_scheme_line_fitting_check_efuse(&cali_val);
+
     adc_cali_line_fitting_config_t cali_config = {
         .unit_id = static_cast<adc_unit_t>(unit - 1),
         .atten = attenuation,
         .bitwidth = ADC_BITWIDTH_12,
+        .default_vref = 1100,
     };
+
+    if (cali_check == ESP_OK && cali_val != ADC_CALI_LINE_FITTING_EFUSE_VAL_DEFAULT_VREF) {
+        echo("eFuse calibration data found and used.");
+    } else {
+        echo("eFuse calibration data not available, using default reference voltage.");
+    }
+
     ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali_handle));
 
     this->properties["raw"] = std::make_shared<IntegerVariable>();
