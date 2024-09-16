@@ -9,6 +9,7 @@
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hal/gpio_hal.h"
 #include "soc/gpio_reg.h"
 #include "soc/io_mux_reg.h"
 #include <memory>
@@ -87,6 +88,28 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             arguments[2]->evaluate_string(),
         };
         xTaskCreate(ota::ota_task, "ota_task", 8192, params, 5, nullptr);
+    } else if (method_name == "gpio_status") {
+        Module::expect(arguments, 1, integer);
+        int gpio_num = arguments[0]->evaluate_integer();
+        if (gpio_num < 0 || gpio_num >= GPIO_NUM_MAX) {
+            throw std::runtime_error("invalid pin");
+        }
+
+        bool pullup, pulldown, input_enabled, output_enabled, open_drain, sleep_sel_enabled;
+        uint32_t drive_strength, func_sel, signal_output;
+        static gpio_hal_context_t _gpio_hal = {
+            .dev = GPIO_HAL_GET_HW(GPIO_PORT_0)};
+
+        // Retrieve the GPIO configuration using the HAL function (no need to access .dev)
+        gpio_hal_get_io_config(&_gpio_hal, gpio_num, &pullup, &pulldown, &input_enabled, &output_enabled,
+                               &open_drain, &drive_strength, &func_sel, &signal_output, &sleep_sel_enabled);
+
+        // gpio_dump_io_configuration(gpio_num);
+
+        // Output all the information using the echo function
+        echo("GPIO[%d]| InputEn: %d| OutputEn: %d| OpenDrain: %d| Pullup: %d| Pulldown: %d",
+             gpio_num, input_enabled, output_enabled, open_drain, pullup, pulldown);
+
     } else {
         Module::call(method_name, arguments);
     }
