@@ -6,6 +6,7 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -104,12 +105,14 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         gpio_hal_get_io_config(&_gpio_hal, gpio_num, &pullup, &pulldown, &input_enabled, &output_enabled,
                                &open_drain, &drive_strength, &func_sel, &signal_output, &sleep_sel_enabled);
 
+        gpio_get_level((gpio_num_t)gpio_num);
         // gpio_dump_io_configuration(gpio_num);
 
         // Output all the information using the echo function
-        echo("GPIO[%d]| InputEn: %d| OutputEn: %d| OpenDrain: %d| Pullup: %d| Pulldown: %d",
+        echo("GPIO_Status[%d]| InputEn: %d| OutputEn: %d| OpenDrain: %d| Pullup: %d| Pulldown: %d",
              gpio_num, input_enabled, output_enabled, open_drain, pullup, pulldown);
-
+    } else if (method_name == "set_pin") {
+        // Todo
     } else {
         Module::call(method_name, arguments);
     }
