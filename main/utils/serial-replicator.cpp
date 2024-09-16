@@ -147,7 +147,7 @@ static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
         if ((count++) % 10 == 0) {
             ESP_LOGI(TAG, "%lu/%lu kb", (usedSize - toSend) / 1000, usedSize / 1000);
         }
-        status = esp_loader_flash_write(bytePtr, transferBlockSize);
+        status = esp_loader_flash_write(const_cast<std::byte *>(bytePtr), transferBlockSize);
         ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", usedSize - toSend);
 
         HANDLE_ERROR(status, "writing target flash");
@@ -158,7 +158,7 @@ static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
 
     if (toSend > 0) {
         /* Send last (partial) block */
-        status = esp_loader_flash_write(bytePtr, toSend);
+        status = esp_loader_flash_write(const_cast<std::byte *>(bytePtr), toSend);
 
         ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", usedSize - toSend);
 
