@@ -24,15 +24,17 @@ It is automatically created right after the boot sequence.
 | `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
 | `core.heap`   | Free heap memory (bytes)                                | `int`     |
 
-| Methods                         | Description                                       | Arguments |
-| ------------------------------- | ------------------------------------------------- | --------- |
-| `core.restart()`                | Restart the microcontroller                       |           |
-| `core.version()`                | Show lizard version                               |           |
-| `core.info()`                   | Show lizard version, compile time and IDF version |           |
-| `core.print(...)`               | Print arbitrary arguments to the command line     | arbitrary |
-| `core.output(format)`           | Define the output format                          | `str`     |
-| `core.startup_checksum()`       | Show 16-bit checksum of the startup script        |           |
-| `core.ota(ssid, password, url)` | Starts OTA update on a URL with given WiFi        | 3x `str`  |
+| Methods                         | Description                                              | Arguments    |
+| ------------------------------- | -------------------------------------------------------- | ------------ |
+| `core.restart()`                | Restart the microcontroller                              |              |
+| `core.version()`                | Show lizard version                                      |              |
+| `core.info()`                   | Show lizard version, compile time and IDF version        |              |
+| `core.print(...)`               | Print arbitrary arguments to the command line            | arbitrary    |
+| `core.output(format)`           | Define the output format                                 | `str`        |
+| `core.startup_checksum()`       | Show 16-bit checksum of the startup script               |              |
+| `core.ota(ssid, password, url)` | Starts OTA update on a URL with given WiFi               | 3x `str`     |
+| `core.gpio_status(pin)`         | Returns the status of the chosen pin                     | `int`        |
+| `core.set_pin(pin,value)`       | Turns the pin into an output and sets its level to value | `int`, `int` |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -44,6 +46,8 @@ Upon successful updating, the ESP will restart and attempt to verify the OTA upd
 It will reconnect to the WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard.
 The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
 If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
+
+`core.gpio_status(pin)` reads the pin's voltage, not the output state directly.
 
 ## Bluetooth
 
