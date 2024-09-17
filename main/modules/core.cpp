@@ -83,6 +83,12 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             arguments[2]->evaluate_string(),
         };
         xTaskCreate(ota::ota_task, "ota_task", 8192, params, 5, nullptr);
+    } else if (method_name == "tcd") {
+        Module::expect(arguments, 0);
+        int a = 1;
+        int b = 0;
+        int c = a / b;           // This will cause a division by zero error
+        echo("Result: %d\n", c); // This line will not be executed
     } else {
         Module::call(method_name, arguments);
     }
