@@ -83,6 +83,53 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             arguments[2]->evaluate_string(),
         };
         xTaskCreate(ota::ota_task, "ota_task", 8192, params, 5, nullptr);
+    } else if (method_name == "gpio_status") {
+        Module::expect(arguments, 1, integer);
+        int gpio_num = arguments[0]->evaluate_integer();
+        if (gpio_num < 0 || gpio_num >= GPIO_NUM_MAX) {
+            throw std::runtime_error("invalid pin");
+        }
+
+        bool pullup, pulldown, input_enabled, output_enabled, open_drain, sleep_sel_enabled;
+        uint32_t drive_strength, func_sel, signal_output;
+        static gpio_hal_context_t _gpio_hal = {
+            .dev = GPIO_HAL_GET_HW(GPIO_PORT_0)};
+        gpio_hal_get_io_config(&_gpio_hal, gpio_num, &pullup, &pulldown, &input_enabled, &output_enabled,
+                               &open_drain, &drive_strength, &func_sel, &signal_output, &sleep_sel_enabled);
+
+        // gpio_get_level() reads the pin's voltage, not the output state directly.
+        int gpio_level = gpio_get_level(static_cast<gpio_num_t>(gpio_num));
+
+        // Output all the information using the echo function
+        echo("GPIO_Status[%d]| Level: %d| InputEn: %d| OutputEn: %d| OpenDrain: %d| Pullup: %d| Pulldown: %d| "
+             "DriveStrength: %d| SleepSel: %d",
+             gpio_num, gpio_level, input_enabled, output_enabled, open_drain, pullup, pulldown,
+             drive_strength, sleep_sel_enabled);
+
+    } else if (method_name == "set_pin") {
+        Module::expect(arguments, 2, integer, integer);
+        int gpio_num = arguments[0]->evaluate_integer();
+        if (gpio_num < 0 || gpio_num >= GPIO_NUM_MAX) {
+            throw std::runtime_error("invalid pin");
+        }
+        int value = arguments[1]->evaluate_integer();
+        if (value < 0 || value > 1) {
+            throw std::runtime_error("invalid value");
+        }
+
+        gpio_config_t io_conf;
+        io_conf.mode = GPIO_MODE_OUTPUT;
+        io_conf.pin_bit_mask = (1ULL << gpio_num);
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+        io_conf.intr_type = GPIO_INTR_DISABLE;
+        gpio_config(&io_conf);
+
+        esp_err_t err = gpio_set_level(static_cast<gpio_num_t>(gpio_num), value);
+        if (err != ESP_OK) {
+            throw std::runtime_error("failed to set pin");
+        }
+        echo("GPIO_set[%d] set to %d", gpio_num, value);
     } else {
         Module::call(method_name, arguments);
     }
