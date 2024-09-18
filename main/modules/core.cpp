@@ -130,6 +130,37 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             throw std::runtime_error("failed to set pin");
         }
         echo("GPIO_set[%d] set to %d", gpio_num, value);
+    } else if (method_name == "strapping") {
+        Module::expect(arguments, 1, integer);
+        gpio_num_t gpio_num = static_cast<gpio_num_t>(arguments[0]->evaluate_integer());
+        if (gpio_num < 0 || gpio_num >= GPIO_NUM_MAX) {
+            throw std::runtime_error("invalid pin");
+        }
+        uint32_t strapping_reg = REG_READ(GPIO_STRAP_REG);
+        // Register 4.13. GPIO_STRAP_REG (0x0038) https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf
+        switch (gpio_num) {
+        case GPIO_NUM_0:
+            echo("Strapping GPIO0: %d", (strapping_reg & BIT(0)) ? 1 : 0);
+            break;
+        case GPIO_NUM_2:
+            echo("Strapping GPIO2: %d", (strapping_reg & BIT(1)) ? 1 : 0);
+            break;
+        case GPIO_NUM_4:
+            echo("Strapping GPIO4: %d", (strapping_reg & BIT(5)) ? 1 : 0);
+            break;
+        case GPIO_NUM_5:
+            echo("Strapping GPIO5: %d", (strapping_reg & BIT(4)) ? 1 : 0);
+            break;
+        case GPIO_NUM_12:
+            echo("Strapping GPIO12 (MTDI): %d", (strapping_reg & BIT(3)) ? 1 : 0);
+            break;
+        case GPIO_NUM_15:
+            echo("Strapping GPIO15 (MTDO): %d", (strapping_reg & BIT(2)) ? 1 : 0);
+            break;
+        default:
+            echo("Not a strapping pin");
+            break;
+        }
     } else {
         Module::call(method_name, arguments);
     }
