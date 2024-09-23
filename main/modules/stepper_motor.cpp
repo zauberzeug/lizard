@@ -54,8 +54,10 @@ StepperMotor::StepperMotor(const std::string &name,
     // .pos_mode = PCNT_COUNT_INC, .neg_mode = PCNT_COUNT_DIS,
     pcnt_channel_set_edge_action(this->pcnt_channel, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE);
 
+    pcnt_unit_enable(this->pcnt_unit);
     pcnt_unit_clear_count(this->pcnt_unit);
     pcnt_unit_start(this->pcnt_unit);
+    pcnt_unit_stop(this->pcnt_unit);
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,
