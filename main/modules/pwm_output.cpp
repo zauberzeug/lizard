@@ -8,7 +8,7 @@ PwmOutput::PwmOutput(const std::string name,
     : Module(pwm_output, name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
     gpio_reset_pin(pin);
 
-    this->properties["frequency"] = std::make_shared<IntegerVariable>(1000);
+    this->properties["frequency"] = std::make_shared<IntegerVariable>(2000);
     this->properties["duty"] = std::make_shared<IntegerVariable>(128);
 
     ledc_timer_config_t timer_config = {
