@@ -12,7 +12,14 @@
 #define MIN_SPEED 490
 
 // changes https://docs.espressif.com/projects/esp-idf/en/stable/esp32/migration-guides/release-5.x/5.0/peripherals.html#id3
-
+bool echo_if_error(const char *message, esp_err_t err) {
+    if (err != ESP_OK) {
+        const char *error_name = esp_err_to_name(err);
+        echo("Error: %s in %s\n", error_name, message);
+        return false;
+    }
+    return true;
+}
 StepperMotor::StepperMotor(const std::string &name,
                            const gpio_num_t step_pin,
                            const gpio_num_t dir_pin,
@@ -40,24 +47,22 @@ StepperMotor::StepperMotor(const std::string &name,
         .intr_priority = 0,
         .flags = {},
     };
-    pcnt_new_unit(&pcnt_unit_config, &this->pcnt_unit);
+    echo_if_error("new unit", pcnt_new_unit(&pcnt_unit_config, &this->pcnt_unit));
 
     pcnt_chan_config_t pcnt_channel_config = {
         .edge_gpio_num = step_pin,
         .level_gpio_num = dir_pin,
         .flags = {},
     };
-    pcnt_new_channel(this->pcnt_unit, &pcnt_channel_config, &this->pcnt_channel);
-
-    //  .hctrl_mode = PCNT_MODE_KEEP, .lctrl_mode = PCNT_MODE_REVERSE,
-    pcnt_channel_set_level_action(this->pcnt_channel, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
-    // .pos_mode = PCNT_COUNT_INC, .neg_mode = PCNT_COUNT_DIS,
-    pcnt_channel_set_edge_action(this->pcnt_channel, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE);
-
-    pcnt_unit_enable(this->pcnt_unit);
-    pcnt_unit_clear_count(this->pcnt_unit);
-    pcnt_unit_start(this->pcnt_unit);
-    pcnt_unit_stop(this->pcnt_unit);
+    echo_if_error("new channel", pcnt_new_channel(this->pcnt_unit, &pcnt_channel_config, &this->pcnt_channel));
+    // //  .hctrl_mode = PCNT_MODE_KEEP, .lctrl_mode = PCNT_MODE_REVERSE,
+    // pcnt_channel_set_level_action(this->pcnt_channel, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+    // // .pos_mode = PCNT_COUNT_INC, .neg_mode = PCNT_COUNT_DIS,
+    // pcnt_channel_set_edge_action(this->pcnt_channel, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE);
+    echo_if_error("enable", pcnt_unit_enable(this->pcnt_unit));
+    echo_if_error("clear count", pcnt_unit_clear_count(this->pcnt_unit));
+    echo_if_error("start", pcnt_unit_start(this->pcnt_unit));
+    echo_if_error("stop", pcnt_unit_stop(this->pcnt_unit));
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,
@@ -78,15 +83,15 @@ StepperMotor::StepperMotor(const std::string &name,
         .hpoint = 0,
         .flags = {},
     };
-    ledc_timer_config(&timer_config);
-    ledc_channel_config(&channel_config);
-    gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
-    gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
+    echo_if_error("timer config", ledc_timer_config(&timer_config));
+    echo_if_error("ledc channel config", ledc_channel_config(&channel_config));
+    echo_if_error("set step pin", gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT));
+    echo_if_error("set dir pin", gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT));
 }
 
 void StepperMotor::read_position() {
     int tempCount;
-    pcnt_unit_get_count(this->pcnt_unit, &tempCount);
+    echo_if_error("pcnt get count", pcnt_unit_get_count(this->pcnt_unit, &tempCount));
     int16_t count = static_cast<int16_t>(tempCount);
     int16_t d_count = count - this->last_count;
     if (d_count > 15000) {
@@ -104,8 +109,8 @@ void StepperMotor::set_state(const StepperState new_state) {
     this->properties.at("idle")->boolean_value = (new_state == Idle);
 
     gpio_iomux_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0); // needs to be checked especially
-    ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
-    ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
+    echo_if_error("ledc set duty", ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1));
+    echo_if_error("update duty", ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel));
 }
 
 void StepperMotor::step() {
