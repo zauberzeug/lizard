@@ -28,13 +28,42 @@ if 'usb' in sys.argv:
 for p in sys.argv:
     if p.startswith('/dev/'):
         device = p
+
 esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv, orin='orin' in sys.argv, v05='v05' in sys.argv, device=device)
 
+def check_flash_size(device: str) -> bool:
+    """Checks if the ESP32 has 8MB flash using esptool.py."""
+    try:
+        # Run esptool.py to get chip info, including flash size
+        print(f"Checking flash size on {device}...")
+        result = subprocess.run(
+            ['esptool.py', '--chip', 'esp32', '--port', device, 'flash_id'],
+            capture_output=True, text=True, check=True
+        )
+
+        # Search the output for the flash size information
+        output = result.stdout
+        if '8MB' in output or '8388608' in output:
+            print("Device has 8MB flash.")
+            return True
+        else:
+            print("Device does not have 8MB flash.")
+            return False
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to check flash size: {e}")
+        return False
+
+# Check if the device should be enabled
 if 'enable' in sys.argv:
     with esp.pin_config():
         print('Enabling ESP...')
         esp.activate()
     sys.exit()
+
+# Check flash size before proceeding
+if not check_flash_size(esp.device):
+    print("Aborting: Device does not have 8MB flash.")
+    sys.exit(1)
 
 with esp.pin_config(), esp.flash_mode():
     if erase_flash:

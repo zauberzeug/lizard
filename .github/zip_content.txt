@@ -1,8 +1,10 @@
 build/bootloader/bootloader.bin
 build/partition_table/partition-table.bin
+build/lizard.elf
 build/lizard.bin
 backtrace.sh
 configure.py
+core_dumper.py
 esp.py
 flash.py
 monitor.py

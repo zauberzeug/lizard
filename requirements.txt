@@ -4,3 +4,4 @@ mkdocs-material
 mdx-include
 prompt_toolkit
 pyserial
+esp-coredump
