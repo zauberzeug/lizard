@@ -5,10 +5,15 @@
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+// #include "driver/gpio.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+// #include "hal/gpio_hal.h"
+// #include "soc/gpio_reg.h"
+// #include "soc/soc.h"
 #include <memory>
+// #include <stdexcept>
 #include <stdlib.h>
 
 Core::Core(const std::string name) : Module(core, name) {
