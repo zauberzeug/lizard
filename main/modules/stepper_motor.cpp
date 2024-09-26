@@ -1,6 +1,7 @@
 #include "stepper_motor.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "esp32/rom/gpio.h"
 #include "soc/gpio_sig_map.h"
 #include <algorithm>
 #include <driver/ledc.h>
@@ -54,7 +55,7 @@ StepperMotor::StepperMotor(const std::string name,
     // LEDC Timer konfigurieren
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_1_BIT,
+        .duty_resolution = LEDC_TIMER_10_BIT, // Changed to 10-bit for more precision
         .timer_num = this->ledc_timer,
         .freq_hz = 1000,
         .clk_cfg = LEDC_AUTO_CLK,
@@ -68,14 +69,14 @@ StepperMotor::StepperMotor(const std::string name,
         .channel = this->ledc_channel,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = this->ledc_timer,
-        .duty = 0,
+        .duty = 0, // Initial duty cycle is 0
         .hpoint = 0,
         .flags = {},
     };
     ledc_channel_config(&channel_config);
 
-    gpio_set_direction(step_pin, GPIO_MODE_OUTPUT);
-    gpio_set_direction(dir_pin, GPIO_MODE_OUTPUT);
+    gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
+    gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
 }
 
 void StepperMotor::read_position() {
@@ -96,8 +97,8 @@ void StepperMotor::set_state(StepperState new_state) {
     this->state = new_state;
     this->properties.at("idle")->boolean_value = (new_state == Idle);
 
-    // use LEDC to generate step signal
-    ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
+    gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0, 0);
+    ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 512); // 50% duty cycle for testing
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
 }
 
@@ -145,6 +146,7 @@ void StepperMotor::step() {
 
         // set frequency and pause/resume LED controller
         int32_t abs_speed = std::abs(speed);
+
         if (abs_speed < MIN_SPEED) {
             ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
         } else {
@@ -152,7 +154,6 @@ void StepperMotor::step() {
             ledc_timer_resume(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
         }
 
-        // Richtungssteuerung (DIR-Signal)
         gpio_set_level(this->dir_pin, speed > 0 ? 1 : 0);
 
         // stop if target is reached
