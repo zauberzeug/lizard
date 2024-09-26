@@ -17,6 +17,7 @@ PwmOutput::PwmOutput(const std::string name,
         .timer_num = ledc_timer,
         .freq_hz = (uint32_t)this->properties.at("frequency")->integer_value,
         .clk_cfg = LEDC_AUTO_CLK,
+        .deconfigure = false, // check if this is correct
     };
     ledc_channel_config_t channel_config = {
         .gpio_num = pin,

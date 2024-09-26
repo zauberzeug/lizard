@@ -1,6 +1,7 @@
 #include "output.h"
 #include "utils/timing.h"
 #include <math.h>
+#include <stdexcept>
 
 Output::Output(const std::string name) : Module(output, name) {
     this->properties["level"] = std::make_shared<IntegerVariable>();

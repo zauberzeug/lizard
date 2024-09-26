@@ -5,6 +5,7 @@
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include <cstring>
+#include <stdexcept>
 
 Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,

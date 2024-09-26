@@ -1,4 +1,5 @@
 #include "imu.h"
+#include <stdexcept>
 
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0

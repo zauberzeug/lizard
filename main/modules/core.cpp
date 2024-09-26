@@ -5,10 +5,14 @@
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "driver/gpio.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "soc/gpio_reg.h"
+#include "soc/io_mux_reg.h"
 #include <memory>
+#include <stdexcept>
 #include <stdlib.h>
 
 Core::Core(const std::string name) : Module(core, name) {
@@ -30,11 +34,11 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 0);
         esp_restart();
     } else if (method_name == "version") {
-        const esp_app_desc_t *app_desc = esp_ota_get_app_description();
+        const esp_app_desc_t *app_desc = esp_app_get_description();
         echo("version: %s", app_desc->version);
     } else if (method_name == "info") {
         Module::expect(arguments, 0);
-        const esp_app_desc_t *app_desc = esp_ota_get_app_description();
+        const esp_app_desc_t *app_desc = esp_app_get_description();
         echo("lizard version: %s", app_desc->version);
         echo("compile time: %s, %s", app_desc->date, app_desc->time);
         echo("idf version: %s", app_desc->idf_ver);

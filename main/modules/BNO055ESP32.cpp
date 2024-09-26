@@ -56,26 +56,26 @@ BNO055::~BNO055() { stop(); }
 
 std::exception BNO055::getException(uint8_t errcode) {
     switch (errcode) {
-        case 0x02:
-            return BNO055ReadFail();
-        case 0x03:
-            return BNO055WriteFail();
-        case 0x04:
-            return BNO055RegmapInvalidAddress();
-        case 0x05:
-            return BNO055RegmapWriteDisabled();
-        case 0x06:
-            return BNO055WrongStartByte();
-        case 0x07:
-            return BNO055BusOverRunError();
-        case 0x08:
-            return BNO055MaxLengthError();
-        case 0x09:
-            return BNO055MinLengthError();
-        case 0x0A:
-            return BNO055ReceiveCharacterTimeout();
-        default:
-            return BNO055UnknowError();
+    case 0x02:
+        return BNO055ReadFail();
+    case 0x03:
+        return BNO055WriteFail();
+    case 0x04:
+        return BNO055RegmapInvalidAddress();
+    case 0x05:
+        return BNO055RegmapWriteDisabled();
+    case 0x06:
+        return BNO055WrongStartByte();
+    case 0x07:
+        return BNO055BusOverRunError();
+    case 0x08:
+        return BNO055MaxLengthError();
+    case 0x09:
+        return BNO055MinLengthError();
+    case 0x0A:
+        return BNO055ReceiveCharacterTimeout();
+    default:
+        return BNO055UnknowError();
     }
 }
 
@@ -98,7 +98,8 @@ void BNO055::i2c_readLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t tim
             ESP_LOGE(BNO055_LOG_TAG, "(i2c RL1) Error: %d", (int)err);
     }
     i2c_cmd_link_delete(cmd);
-    if (err != ESP_OK) throw BNO055I2CError();
+    if (err != ESP_OK)
+        throw BNO055I2CError();
 
     cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
@@ -116,7 +117,8 @@ void BNO055::i2c_readLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t tim
             ESP_LOGE(BNO055_LOG_TAG, "(i2c RL2) Error: %d", (int)err);
     }
     i2c_cmd_link_delete(cmd);
-    if (err != ESP_OK) throw BNO055I2CError();
+    if (err != ESP_OK)
+        throw BNO055I2CError();
 }
 
 void BNO055::i2c_writeLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t timeoutMS) {
@@ -139,7 +141,8 @@ void BNO055::i2c_writeLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t ti
             ESP_LOGE(BNO055_LOG_TAG, "(i2c WL) Error: %d", (int)err);
     }
     i2c_cmd_link_delete(cmd);
-    if (err != ESP_OK) throw BNO055I2CError();
+    if (err != ESP_OK)
+        throw BNO055I2CError();
 }
 
 void BNO055::uart_readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint32_t timeoutMS) {
@@ -148,10 +151,10 @@ void BNO055::uart_readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint32
     int rxBytes = 0;
     uint8_t cmd[4];
 
-    cmd[0] = 0xAA;  // Start Byte
-    cmd[1] = 0x01;  // Read
+    cmd[0] = 0xAA; // Start Byte
+    cmd[1] = 0x01; // Read
     cmd[2] = reg;
-    cmd[3] = len;  // len in bytes
+    cmd[3] = len; // len in bytes
 
     for (int round = 1; round <= UART_ROUND_NUM; round++) {
 #ifndef BNO055_DEBUG_OFF
@@ -165,12 +168,13 @@ void BNO055::uart_readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint32
         ESP_LOG_BUFFER_HEXDUMP(BNO055_LOG_TAG, (const char *)cmd, 4, ESP_LOG_DEBUG);
 #endif
 
-        if (timeoutMS > 0) {  // check response (if expected)
+        if (timeoutMS > 0) { // check response (if expected)
             if (data == NULL) {
                 data = (uint8_t *)malloc(len + 2);
-                if (data == NULL) throw std::bad_alloc();  // malloc failed
+                if (data == NULL)
+                    throw std::bad_alloc(); // malloc failed
             }
-            rxBytes = uart_read_bytes(_uartPort, data, (len + 2), timeoutMS / portTICK_RATE_MS);
+            rxBytes = uart_read_bytes(_uartPort, data, (len + 2), timeoutMS / portTICK_PERIOD_MS);
             if (rxBytes > 0) {
 #ifndef BNO055_DEBUG_OFF
                 ESP_LOGD(BNO055_LOG_TAG, "(RL) Read %d bytes", rxBytes);
@@ -200,8 +204,10 @@ void BNO055::uart_readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint32
             break;
     }
     free(data);
-    if (rxBytes <= 0 && timeoutMS > 0) throw BNO055UartTimeout();
-    if (res != 0) throw getException(res);
+    if (rxBytes <= 0 && timeoutMS > 0)
+        throw BNO055UartTimeout();
+    if (res != 0)
+        throw getException(res);
 }
 
 void BNO055::uart_writeLen(bno055_reg_t reg, uint8_t *data2write, uint8_t len, uint32_t timeoutMS) {
@@ -209,18 +215,19 @@ void BNO055::uart_writeLen(bno055_reg_t reg, uint8_t *data2write, uint8_t len, u
     uint8_t data[2];
     int rxBytes = 0;
     uint8_t *cmd = (uint8_t *)malloc(len + 4);
-    if (cmd == NULL) throw std::bad_alloc();
+    if (cmd == NULL)
+        throw std::bad_alloc();
 
-    cmd[0] = 0xAA;  // Start Byte
-    cmd[1] = 0x00;  // Write
+    cmd[0] = 0xAA; // Start Byte
+    cmd[1] = 0x00; // Write
     cmd[2] = reg;
-    cmd[3] = len;  // len in bytes
+    cmd[3] = len; // len in bytes
     memcpy(cmd + 4, data2write, len);
 
     // Read data from the UART
     for (int round = 1; round <= UART_ROUND_NUM; round++) {
 #ifndef BNO055_DEBUG_OFF
-        ESP_LOGD(BNO055_LOG_TAG, "(WL) Round %d", round);  // DEBUG
+        ESP_LOGD(BNO055_LOG_TAG, "(WL) Round %d", round); // DEBUG
 #endif
 
         uart_flush(_uartPort);
@@ -230,17 +237,17 @@ void BNO055::uart_writeLen(bno055_reg_t reg, uint8_t *data2write, uint8_t len, u
         ESP_LOG_BUFFER_HEXDUMP(BNO055_LOG_TAG, (const char *)cmd, (len + 4), ESP_LOG_DEBUG);
 #endif
 
-        if (timeoutMS > 0) {  // check response (if expected)
-            rxBytes = uart_read_bytes(_uartPort, data, 2, timeoutMS / portTICK_RATE_MS);
+        if (timeoutMS > 0) { // check response (if expected)
+            rxBytes = uart_read_bytes(_uartPort, data, 2, timeoutMS / portTICK_PERIOD_MS);
             if (rxBytes > 0) {
 #ifndef BNO055_DEBUG_OFF
-                ESP_LOGD(BNO055_LOG_TAG, "(WL) Read %d bytes", rxBytes);  // DEBUG
+                ESP_LOGD(BNO055_LOG_TAG, "(WL) Read %d bytes", rxBytes); // DEBUG
                 ESP_LOG_BUFFER_HEXDUMP(BNO055_LOG_TAG, (const char *)data, rxBytes, ESP_LOG_DEBUG);
 #endif
                 if (data[0] == 0xEE) {
                     res = data[1];
                     if (res == 0x01) {
-                        res = 0;  // Suppress exception
+                        res = 0; // Suppress exception
                         break;
                     } else if (res != 0x07 && res != 0x03 && res != 0x06 && res && 0x0A)
                         break;
@@ -254,12 +261,15 @@ void BNO055::uart_writeLen(bno055_reg_t reg, uint8_t *data2write, uint8_t len, u
             break;
     }
     free(cmd);
-    if (rxBytes <= 0 && timeoutMS > 0) throw BNO055UartTimeout();
-    if (res != 0) throw getException(res);
+    if (rxBytes <= 0 && timeoutMS > 0)
+        throw BNO055UartTimeout();
+    if (res != 0)
+        throw getException(res);
 }
 
 void BNO055::readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint8_t page, uint32_t timeoutMS) {
-    if (reg != BNO055_REG_PAGE_ID) setPage(page);
+    if (reg != BNO055_REG_PAGE_ID)
+        setPage(page);
     if (_i2cFlag) {
         i2c_readLen(reg, buffer, len, timeoutMS);
     } else {
@@ -268,7 +278,8 @@ void BNO055::readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint8_t pag
 }
 
 void BNO055::writeLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint8_t page, uint32_t timeoutMS) {
-    if (reg != BNO055_REG_PAGE_ID) setPage(page);
+    if (reg != BNO055_REG_PAGE_ID)
+        setPage(page);
     if (!_i2cFlag) {
         uart_writeLen(reg, buffer, len, timeoutMS);
     } else {
@@ -318,7 +329,8 @@ void BNO055::setOprModeNdofFmcOff(bool forced) { setOprMode(BNO055_OPERATION_MOD
 void BNO055::setOprModeNdof(bool forced) { setOprMode(BNO055_OPERATION_MODE_NDOF, forced); }
 
 void BNO055::setPwrMode(bno055_powermode_t pwrMode) {
-    if (_mode != BNO055_OPERATION_MODE_CONFIG) throw BNO055WrongOprMode("setPwrMode requires BNO055_OPERATION_MODE_CONFIG");
+    if (_mode != BNO055_OPERATION_MODE_CONFIG)
+        throw BNO055WrongOprMode("setPwrMode requires BNO055_OPERATION_MODE_CONFIG");
 
     writeLen(BNO055_REG_PWR_MODE, (uint8_t *)&pwrMode);
 }
@@ -329,7 +341,8 @@ void BNO055::setPwrModeSuspend() { setPwrMode(BNO055_PWR_MODE_SUSPEND); }
 
 void BNO055::setExtCrystalUse(bool state) {
     uint8_t tmp = 0;
-    if (_mode != BNO055_OPERATION_MODE_CONFIG) throw BNO055WrongOprMode("setExtCrystalUse requires BNO055_OPERATION_MODE_CONFIG");
+    if (_mode != BNO055_OPERATION_MODE_CONFIG)
+        throw BNO055WrongOprMode("setExtCrystalUse requires BNO055_OPERATION_MODE_CONFIG");
 
     readLen(BNO055_REG_SYS_TRIGGER, &tmp);
     tmp |= (state == true) ? 0x80 : 0x0;
@@ -399,20 +412,20 @@ void BNO055::reset() {
     int tmp = 0x20;
     if (_rstPin == GPIO_NUM_MAX) {
 #ifndef BNO055_DEBUG_OFF
-        ESP_LOGD(BNO055_LOG_TAG, "RST -> using serial bus");  // DEBUG
+        ESP_LOGD(BNO055_LOG_TAG, "RST -> using serial bus"); // DEBUG
 #endif
-        writeLen(BNO055_REG_SYS_TRIGGER, (uint8_t *)&tmp, 1, 0, 0);  // RST (0 timeout because RST is not Acknowledged)
+        writeLen(BNO055_REG_SYS_TRIGGER, (uint8_t *)&tmp, 1, 0, 0); // RST (0 timeout because RST is not Acknowledged)
     } else {
 #ifndef BNO055_DEBUG_OFF
-        ESP_LOGD(BNO055_LOG_TAG, "RST -> using hardware pin");  // DEBUG
+        ESP_LOGD(BNO055_LOG_TAG, "RST -> using hardware pin"); // DEBUG
 #endif
-        gpio_pad_select_gpio(_rstPin);
+        esp_rom_gpio_pad_select_gpio(_rstPin);
         gpio_set_direction(_rstPin, GPIO_MODE_OUTPUT);
-        gpio_set_level(_rstPin, 0);  // turn OFF
+        gpio_set_level(_rstPin, 0); // turn OFF
         vTaskDelay(1 / portTICK_PERIOD_MS);
-        gpio_set_level(_rstPin, 1);  // turn ON
+        gpio_set_level(_rstPin, 1); // turn ON
     }
-    vTaskDelay(700 / portTICK_PERIOD_MS);  // (RE)BOOT TIME (datasheet recommends 650ms)
+    vTaskDelay(700 / portTICK_PERIOD_MS); // (RE)BOOT TIME (datasheet recommends 650ms)
 }
 
 bno055_vector_t BNO055::getVector(bno055_vector_type_t vec) {
@@ -425,22 +438,22 @@ bno055_vector_t BNO055::getVector(bno055_vector_type_t vec) {
     double scale = 1;
 
     switch (vec) {
-        case BNO055_VECTOR_MAGNETOMETER:
-            scale = magScale;
-            break;
-        case BNO055_VECTOR_ACCELEROMETER:
-        case BNO055_VECTOR_LINEARACCEL:
-        case BNO055_VECTOR_GRAVITY:
-            scale = accelScale;
-            break;
-        case BNO055_VECTOR_GYROSCOPE:
-            scale = angularRateScale;
-            break;
-        case BNO055_VECTOR_EULER:
-            scale = eulerScale;
-            break;
-        default:
-            break;
+    case BNO055_VECTOR_MAGNETOMETER:
+        scale = magScale;
+        break;
+    case BNO055_VECTOR_ACCELEROMETER:
+    case BNO055_VECTOR_LINEARACCEL:
+    case BNO055_VECTOR_GRAVITY:
+        scale = accelScale;
+        break;
+    case BNO055_VECTOR_GYROSCOPE:
+        scale = angularRateScale;
+        break;
+    case BNO055_VECTOR_EULER:
+        scale = eulerScale;
+        break;
+    default:
+        break;
     }
 
     xyz.x = (int16_t)((buffer[1] << 8) | buffer[0]) / scale;
@@ -480,7 +493,8 @@ bno055_quaternion_t BNO055::getQuaternion() {
 
 bno055_offsets_t BNO055::getSensorOffsets() {
     uint8_t buffer[22];
-    if (_mode != BNO055_OPERATION_MODE_CONFIG) throw BNO055WrongOprMode("getSensorOffsets requires BNO055_OPERATION_MODE_CONFIG");
+    if (_mode != BNO055_OPERATION_MODE_CONFIG)
+        throw BNO055WrongOprMode("getSensorOffsets requires BNO055_OPERATION_MODE_CONFIG");
 
     /* Accel offset range depends on the G-range:
         +/-2g  = +/- 2000 mg
@@ -522,7 +536,8 @@ bno055_offsets_t BNO055::getSensorOffsets() {
 }
 
 void BNO055::setSensorOffsets(bno055_offsets_t newOffsets) {
-    if (_mode != BNO055_OPERATION_MODE_CONFIG) throw BNO055WrongOprMode("setSensorOffsets requires BNO055_OPERATION_MODE_CONFIG");
+    if (_mode != BNO055_OPERATION_MODE_CONFIG)
+        throw BNO055WrongOprMode("setSensorOffsets requires BNO055_OPERATION_MODE_CONFIG");
 
     writeLen(BNO055_REG_ACC_OFFSET_X_LSB, (uint8_t *)&newOffsets, sizeof(newOffsets));
 }
@@ -555,7 +570,7 @@ void BNO055::enableInterrupt(uint8_t flag, bool useInterruptPin) {
     readLen(BNO055_REG_INT_MSK, tmp, 2, 1);
     tmp[0] |= flag;
     tmp[1] = (useInterruptPin == true) ? (tmp[1] | flag) : (tmp[1] & ~flag);
-    writeLen(BNO055_REG_INT_MSK, tmp, 2, 1);  // update
+    writeLen(BNO055_REG_INT_MSK, tmp, 2, 1); // update
 }
 
 void BNO055::disableInterrupt(uint8_t flag) {
@@ -563,7 +578,7 @@ void BNO055::disableInterrupt(uint8_t flag) {
 
     readLen(BNO055_REG_INT_EN, &tmp, 1, 1);
     tmp &= ~flag;
-    writeLen(BNO055_REG_INT_EN, &tmp, 1, 1);  // update
+    writeLen(BNO055_REG_INT_EN, &tmp, 1, 1); // update
 }
 
 void BNO055::enableAccelSlowMotionInterrupt(bool useInterruptPin) { enableInterrupt(0x80, useInterruptPin); }
@@ -577,11 +592,11 @@ void BNO055::setAccelSlowMotionInterrupt(uint8_t threshold, uint8_t duration, bo
     tmp[1] = ((duration << 1) | 0x00);
     writeLen(BNO055_REG_ACC_NM_THRES, tmp, 2, 1);
 
-    readLen(BNO055_REG_ACC_INT_SETTINGS, tmp, 1, 1);  // read the current value to avoid overwrite of other bits
+    readLen(BNO055_REG_ACC_INT_SETTINGS, tmp, 1, 1); // read the current value to avoid overwrite of other bits
     tmp[0] = (xAxis == true) ? (tmp[0] | 0x04) : (tmp[0] & ~0x04);
     tmp[0] = (yAxis == true) ? (tmp[0] | 0x08) : (tmp[0] & ~0x08);
     tmp[0] = (zAxis == true) ? (tmp[0] | 0x10) : (tmp[0] & ~0x10);
-    writeLen(BNO055_REG_ACC_INT_SETTINGS, tmp, 1, 1);  // update
+    writeLen(BNO055_REG_ACC_INT_SETTINGS, tmp, 1, 1); // update
 }
 
 void BNO055::disableAccelSlowMotionInterrupt() { disableInterrupt(0x80); }
@@ -601,7 +616,7 @@ void BNO055::setAccelNoMotionInterrupt(uint8_t threshold, uint8_t duration, bool
     tmp[0] = (xAxis == true) ? (tmp[0] | 0x04) : (tmp[0] & ~0x04);
     tmp[0] = (yAxis == true) ? (tmp[0] | 0x08) : (tmp[0] & ~0x08);
     tmp[0] = (zAxis == true) ? (tmp[0] | 0x10) : (tmp[0] & ~0x10);
-    writeLen(BNO055_REG_ACC_INT_SETTINGS, tmp, 1, 1);  // update
+    writeLen(BNO055_REG_ACC_INT_SETTINGS, tmp, 1, 1); // update
 }
 
 void BNO055::disableAccelNoMotionInterrupt() { disableAccelSlowMotionInterrupt(); }
@@ -701,7 +716,8 @@ void BNO055::disableGyroHRInterrupt() { disableInterrupt(0x08); }
 
 void BNO055::setAxisRemap(bno055_axis_config_t config, bno055_axis_sign_t sign) {
     uint8_t tmp[2];
-    if (_mode != BNO055_OPERATION_MODE_CONFIG) throw BNO055WrongOprMode("setAxisRemap requires BNO055_OPERATION_MODE_CONFIG");
+    if (_mode != BNO055_OPERATION_MODE_CONFIG)
+        throw BNO055WrongOprMode("setAxisRemap requires BNO055_OPERATION_MODE_CONFIG");
 
     tmp[0] = ((uint8_t)config & 0x1F);
     tmp[1] = ((uint8_t)sign & 0x07);
@@ -711,7 +727,8 @@ void BNO055::setAxisRemap(bno055_axis_config_t config, bno055_axis_sign_t sign) 
 void BNO055::setUnits(bno055_accel_unit_t accel, bno055_angular_rate_unit_t angularRate, bno055_euler_unit_t euler,
                       bno055_temperature_unit_t temp, bno055_data_output_format_t format) {
     uint8_t tmp = 0;
-    if (_mode != BNO055_OPERATION_MODE_CONFIG) throw BNO055WrongOprMode("setUnits requires BNO055_OPERATION_MODE_CONFIG");
+    if (_mode != BNO055_OPERATION_MODE_CONFIG)
+        throw BNO055WrongOprMode("setUnits requires BNO055_OPERATION_MODE_CONFIG");
 
     tmp |= accel;
     accelScale = (accel != 0) ? 1 : 100;
@@ -731,7 +748,8 @@ void BNO055::setUnits(bno055_accel_unit_t accel, bno055_angular_rate_unit_t angu
 
 void BNO055::setAccelConfig(bno055_accel_range_t range, bno055_accel_bandwidth_t bandwidth, bno055_accel_mode_t mode) {
     uint8_t tmp = 0;
-    if (_mode != BNO055_OPERATION_MODE_CONFIG) throw BNO055WrongOprMode("setAccelConfig requires BNO055_OPERATION_MODE_CONFIG");
+    if (_mode != BNO055_OPERATION_MODE_CONFIG)
+        throw BNO055WrongOprMode("setAccelConfig requires BNO055_OPERATION_MODE_CONFIG");
 
     tmp |= range;
     tmp |= bandwidth;
@@ -741,7 +759,8 @@ void BNO055::setAccelConfig(bno055_accel_range_t range, bno055_accel_bandwidth_t
 
 void BNO055::setGyroConfig(bno055_gyro_range_t range, bno055_gyro_bandwidth_t bandwidth, bno055_gyro_mode_t mode) {
     uint8_t tmp[2] = {0};
-    if (_mode != BNO055_OPERATION_MODE_CONFIG) throw BNO055WrongOprMode("setGyroConfig requires BNO055_OPERATION_MODE_CONFIG");
+    if (_mode != BNO055_OPERATION_MODE_CONFIG)
+        throw BNO055WrongOprMode("setGyroConfig requires BNO055_OPERATION_MODE_CONFIG");
 
     tmp[0] |= range;
     tmp[0] |= bandwidth;
@@ -751,7 +770,8 @@ void BNO055::setGyroConfig(bno055_gyro_range_t range, bno055_gyro_bandwidth_t ba
 
 void BNO055::setMagConfig(bno055_mag_rate_t rate, bno055_mag_pwrmode_t pwrmode, bno055_mag_mode_t mode) {
     uint8_t tmp = 0;
-    if (_mode != BNO055_OPERATION_MODE_CONFIG) throw BNO055WrongOprMode("setMagConfig requires BNO055_OPERATION_MODE_CONFIG");
+    if (_mode != BNO055_OPERATION_MODE_CONFIG)
+        throw BNO055WrongOprMode("setMagConfig requires BNO055_OPERATION_MODE_CONFIG");
 
     tmp |= rate;
     tmp |= pwrmode;
@@ -786,11 +806,12 @@ void BNO055::begin() {
         uart_param_config(_uartPort, &uart_config);
         uart_set_pin(_uartPort, _txPin, _rxPin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
         esperr = uart_driver_install(_uartPort, 128 * 2, 0, 0, NULL, 0);
-        if (esperr != ESP_OK) throw BNO055UartInitFailed();
+        if (esperr != ESP_OK)
+            throw BNO055UartInitFailed();
     }
 
     if (_intPin != GPIO_NUM_MAX) {
-        gpio_pad_select_gpio(_intPin);
+        esp_rom_gpio_pad_select_gpio(_intPin);
         gpio_set_direction(_intPin, GPIO_MODE_INPUT);
         gpio_set_intr_type(_intPin, GPIO_INTR_POSEDGE);
         gpio_set_pull_mode(_intPin, GPIO_PULLDOWN_ONLY);
@@ -800,9 +821,10 @@ void BNO055::begin() {
     }
     reset();
     readLen(BNO055_REG_CHIP_ID, &id);
-    if (id != 0xA0) throw BNO055ChipNotDetected();  // this is not the correct device, check your wiring
+    if (id != 0xA0)
+        throw BNO055ChipNotDetected(); // this is not the correct device, check your wiring
 
-    setOprMode(BNO055_OPERATION_MODE_CONFIG, true);  // this should be the default OPR_MODE
+    setOprMode(BNO055_OPERATION_MODE_CONFIG, true); // this should be the default OPR_MODE
 }
 
 void BNO055::stop() {

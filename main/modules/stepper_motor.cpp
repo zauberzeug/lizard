@@ -1,11 +1,15 @@
 #include "stepper_motor.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "esp32/rom/gpio.h"
+#include "soc/gpio_sig_map.h"
 #include <algorithm>
 #include <driver/ledc.h>
 #include <driver/pcnt.h>
+#include <esp_rom_gpio.h>
 #include <math.h>
 #include <memory>
+#include <stdexcept>
 
 #define MIN_SPEED 490
 
@@ -54,6 +58,8 @@ StepperMotor::StepperMotor(const std::string name,
         .freq_hz = 1000,
         .clk_cfg = LEDC_AUTO_CLK,
     };
+    ledc_timer_config(&timer_config);
+
     ledc_channel_config_t channel_config = {
         .gpio_num = step_pin,
         .speed_mode = LEDC_HIGH_SPEED_MODE,
@@ -64,8 +70,8 @@ StepperMotor::StepperMotor(const std::string name,
         .hpoint = 0,
         .flags = {},
     };
-    ledc_timer_config(&timer_config);
     ledc_channel_config(&channel_config);
+
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
 }

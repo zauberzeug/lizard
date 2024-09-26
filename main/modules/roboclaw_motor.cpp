@@ -1,5 +1,6 @@
 #include "roboclaw_motor.h"
 #include <memory>
+#include <stdexcept>
 
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
