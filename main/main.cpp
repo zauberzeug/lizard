@@ -201,12 +201,17 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr module = Module::create(module_type, module_name, arguments, process_lizard);
+                // check properties is_ready
+                if (module->type == expander) {
+                    echo("is_ready constructor: %d", module->get_property("is_ready")->boolean_value);
+                }
                 Global::add_module(module_name, module);
             } else {
                 const std::string module_name = identifier_to_string(constructor.module_name);
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
+                echo("expander module is_ready: %d", expander_module->get_property("is_ready")->boolean_value);
                 if (expander_module->type != expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
@@ -383,6 +388,9 @@ void run_step(Module_ptr module) {
 }
 
 void app_main() {
+    // delay so log can get send out completely
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+
     const uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -396,8 +404,6 @@ void app_main() {
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
-
-    printf("\nReady.\n");
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
@@ -418,6 +424,8 @@ void app_main() {
     } catch (const std::runtime_error &e) {
         echo("error while verifying OTA: %s", e.what());
     }
+
+    printf("\nReady.\n");
 
     while (true) {
         try {
