@@ -10,9 +10,11 @@ Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
                    const gpio_num_t boot_pin,
                    const gpio_num_t enable_pin,
+                   const u_int16_t timeout,
                    MessageHandler message_handler)
-    : Module(expander, name), serial(serial), boot_pin(boot_pin), enable_pin(enable_pin), message_handler(message_handler) {
+    : Module(expander, name), serial(serial), boot_pin(boot_pin), enable_pin(enable_pin), timeout(timeout), message_handler(message_handler) {
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
+    this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
 
     serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
@@ -24,22 +26,31 @@ Expander::Expander(const std::string name,
         gpio_set_level(enable_pin, 0);
         delay(100);
         gpio_set_level(enable_pin, 1);
+    } else {
+        serial->write_checked_line("core.restart()", 14);
     }
 
     char buffer[1024] = "";
     int len = 0;
     const unsigned long int start = millis();
-    do {
-        if (millis_since(start) > 1000) {
-            echo("warning: expander is not booting");
-            break;
-        }
+    while (millis_since(start) <= this->timeout) {
         if (serial->available()) {
             len = serial->read_line(buffer);
             strip(buffer, len);
             echo("%s: %s", name.c_str(), buffer);
+
+            if (strcmp("Ready.", buffer) == 0) {
+                this->properties.at("is_ready")->boolean_value = true;
+                break;
+            }
         }
-    } while (strcmp("Ready.", buffer));
+    }
+
+    if (millis_since(start) > this->timeout) {
+        echo("warning: expander %s did not boot in time", name.c_str());
+    } else {
+        echo("%s: booting done", name.c_str());
+    }
 }
 
 void Expander::step() {
