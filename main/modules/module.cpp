@@ -80,13 +80,13 @@ Module_ptr Module::create(const std::string type,
 
         gpio_num_t boot_pin = GPIO_NUM_NC;
         gpio_num_t enable_pin = GPIO_NUM_NC;
-        u_int16_t timeout = 5000;
+        u_int16_t boot_wait_time = 0; // infinite
 
         switch (arguments.size()) {
         case 1:
             break;
         case 2:
-            timeout = arguments[1]->evaluate_integer();
+            boot_wait_time = arguments[1]->evaluate_integer();
             break;
         case 3:
             boot_pin = (gpio_num_t)arguments[1]->evaluate_integer();
@@ -95,10 +95,10 @@ Module_ptr Module::create(const std::string type,
         case 4:
             boot_pin = (gpio_num_t)arguments[1]->evaluate_integer();
             enable_pin = (gpio_num_t)arguments[2]->evaluate_integer();
-            timeout = arguments[3]->evaluate_integer();
+            boot_wait_time = arguments[3]->evaluate_integer();
             break;
         }
-        return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, timeout, message_handler);
+        return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, boot_wait_time, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();
