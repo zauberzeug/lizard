@@ -10,9 +10,11 @@ Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
                    const gpio_num_t boot_pin,
                    const gpio_num_t enable_pin,
+                   const u_int16_t boot_wait_time,
                    MessageHandler message_handler)
-    : Module(expander, name), serial(serial), boot_pin(boot_pin), enable_pin(enable_pin), message_handler(message_handler) {
+    : Module(expander, name), serial(serial), boot_pin(boot_pin), enable_pin(enable_pin), boot_wait_time(boot_wait_time), message_handler(message_handler) {
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
+    this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
 
     serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
@@ -24,22 +26,19 @@ Expander::Expander(const std::string name,
         gpio_set_level(enable_pin, 0);
         delay(100);
         gpio_set_level(enable_pin, 1);
+    } else {
+        serial->write_checked_line("core.restart()", 14);
     }
 
-    char buffer[1024] = "";
-    int len = 0;
     const unsigned long int start = millis();
-    do {
-        if (millis_since(start) > 1000) {
-            echo("warning: expander is not booting");
-            break;
+
+    if (!wait_for_ready_message(start, this->boot_wait_time)) {
+        if (this->boot_wait_time > 0) {
+            echo("warning: expander %s did not boot in the expected time (%d ms)", name.c_str(), this->boot_wait_time);
+        } else {
+            echo("error: expander %s did not boot successfully even after multiple attempts", name.c_str());
         }
-        if (serial->available()) {
-            len = serial->read_line(buffer);
-            strip(buffer, len);
-            echo("%s: %s", name.c_str(), buffer);
-        }
-    } while (strcmp("Ready.", buffer));
+    }
 }
 
 void Expander::step() {
@@ -98,4 +97,31 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         pos += std::sprintf(&buffer[pos], ")");
         this->serial->write_checked_line(buffer, pos);
     }
+}
+
+bool Expander::wait_for_ready_message(unsigned long start, unsigned long max_wait_time) {
+    char buffer[1024] = "";
+    int len = 0;
+
+    while (max_wait_time == 0 || millis_since(start) <= max_wait_time) {
+        if (serial->available()) {
+            len = serial->read_line(buffer);
+            strip(buffer, len);
+            echo("%s: %s", this->name.c_str(), buffer);
+
+            if (strcmp("Ready.", buffer) == 0) {
+                this->properties.at("is_ready")->boolean_value = true;
+                echo("%s: booting done", this->name.c_str());
+                return true;
+            }
+        }
+
+        if (max_wait_time == 0 && millis_since(start) >= 30000) {
+            echo("warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
+            serial->write_checked_line("core.restart()", 14);
+            start = millis();
+        }
+    }
+
+    return false;
 }
