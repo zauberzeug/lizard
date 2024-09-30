@@ -211,9 +211,11 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                echo("expander module is_ready: %d", expander_module->get_property("is_ready")->boolean_value);
                 if (expander_module->type != expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
+                }
+                while (!expander_module->get_property("is_ready")->boolean_value) {
+                    vTaskDelay(1000 / portTICK_PERIOD_MS);
                 }
                 const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
