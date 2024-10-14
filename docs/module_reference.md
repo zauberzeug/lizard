@@ -24,18 +24,18 @@ It is automatically created right after the boot sequence.
 | `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
 | `core.heap`   | Free heap memory (bytes)                                | `int`     |
 
-| Methods                         | Description                                              | Arguments    |
-| ------------------------------- | -------------------------------------------------------- | ------------ |
-| `core.restart()`                | Restart the microcontroller                              |              |
-| `core.version()`                | Show lizard version                                      |              |
-| `core.info()`                   | Show lizard version, compile time and IDF version        |              |
-| `core.print(...)`               | Print arbitrary arguments to the command line            | arbitrary    |
-| `core.output(format)`           | Define the output format                                 | `str`        |
-| `core.startup_checksum()`       | Show 16-bit checksum of the startup script               |              |
-| `core.ota(ssid, password, url)` | Starts OTA update on a URL with given WiFi               | 3x `str`     |
-| `core.gpio_status(pin)`         | Returns the status of the chosen pin                     | `int`        |
-| `core.set_pin(pin,value)`       | Turns the pin into an output and sets its level to value | `int`, `int` |
-| `core.strapping(pin)`           | Returns value of the pin from the strapping register     | `int`        |
+| Methods                          | Description                                        | Arguments    |
+| -------------------------------- | -------------------------------------------------- | ------------ |
+| `core.restart()`                 | Restart the microcontroller                        |              |
+| `core.version()`                 | Show lizard version                                |              |
+| `core.info()`                    | Show lizard version, compile time and IDF version  |              |
+| `core.print(...)`                | Print arbitrary arguments to the command line      | arbitrary    |
+| `core.output(format)`            | Define the output format                           | `str`        |
+| `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
+| `core.ota(ssid, password, url)`  | Starts OTA update on a URL with given WiFi         | 3x `str`     |
+| `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
+| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
+| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
