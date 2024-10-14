@@ -48,7 +48,7 @@ It will reconnect to the WiFi and try to access URL + `/verify` to receive a mes
 The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
 If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
 
-`core.gpio_status(pin)` reads the pin's voltage, not the output state directly.
+`core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
 ## Bluetooth
 
