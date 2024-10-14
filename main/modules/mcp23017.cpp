@@ -1,4 +1,5 @@
 #include "mcp23017.h"
+#include <stdexcept>
 
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0
@@ -61,7 +62,7 @@ void Mcp23017::write_register(mcp23017_reg_t reg, uint8_t value) const {
     i2c_master_write_byte(command, reg, true);
     i2c_master_write_byte(command, value, true);
     i2c_master_stop(command);
-    if (i2c_master_cmd_begin(this->i2c_port, command, 1000 / portTICK_RATE_MS) != ESP_OK) {
+    if (i2c_master_cmd_begin(this->i2c_port, command, 1000 / portTICK_PERIOD_MS) != ESP_OK) {
         i2c_cmd_link_delete(command);
         throw std::runtime_error("unable to send i2c command");
     }
@@ -74,7 +75,7 @@ uint8_t Mcp23017::read_register(mcp23017_reg_t reg) const {
     i2c_master_write_byte(command, (this->address << 1) | I2C_MASTER_WRITE, true);
     i2c_master_write_byte(command, (uint8_t)reg, true);
     i2c_master_stop(command);
-    if (i2c_master_cmd_begin(this->i2c_port, command, 1000 / portTICK_RATE_MS) != ESP_OK) {
+    if (i2c_master_cmd_begin(this->i2c_port, command, 1000 / portTICK_PERIOD_MS) != ESP_OK) {
         i2c_cmd_link_delete(command);
         throw std::runtime_error("unable to prepare mcp23017 to be read");
     }
@@ -85,7 +86,7 @@ uint8_t Mcp23017::read_register(mcp23017_reg_t reg) const {
     i2c_master_write_byte(command, (this->address << 1) | I2C_MASTER_READ, true);
     i2c_master_read_byte(command, &value, I2C_MASTER_NACK);
     i2c_master_stop(command);
-    if (i2c_master_cmd_begin(this->i2c_port, command, 1000 / portTICK_RATE_MS) != ESP_OK) {
+    if (i2c_master_cmd_begin(this->i2c_port, command, 1000 / portTICK_PERIOD_MS) != ESP_OK) {
         i2c_cmd_link_delete(command);
         throw std::runtime_error("unable to read data from mcp23017");
     }
