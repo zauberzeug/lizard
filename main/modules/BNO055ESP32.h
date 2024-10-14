@@ -463,83 +463,83 @@ public:
     BNO055ReadFail(std::string message =
                        "(!*)this is specified in datasheet, but it is not in UART Application note, so it doesn't have an "
                        "official description.")
-        : BNO055BaseException(message) {};
+        : BNO055BaseException(message){};
 };
 
 class BNO055WriteFail : public BNO055BaseException {
 public:
     BNO055WriteFail(std::string message = "Check connection, protocol settings and operation mode of the BNO055.")
-        : BNO055BaseException(message) {};
+        : BNO055BaseException(message){};
 };
 
 class BNO055RegmapInvalidAddress : public BNO055BaseException {
 public:
     BNO055RegmapInvalidAddress(
         std::string message = "Check the if the register is addressable. example in Page 0, should be from 0x38 to 0x6A.")
-        : BNO055BaseException(message) {};
+        : BNO055BaseException(message){};
 };
 
 class BNO055RegmapWriteDisabled : public BNO055BaseException {
 public:
-    BNO055RegmapWriteDisabled(std::string message = "Check the property of register.") : BNO055BaseException(message) {};
+    BNO055RegmapWriteDisabled(std::string message = "Check the property of register.") : BNO055BaseException(message){};
 };
 
 class BNO055WrongStartByte : public BNO055BaseException {
 public:
-    BNO055WrongStartByte(std::string message = "Check if the first byte sent is 0xAA.") : BNO055BaseException(message) {};
+    BNO055WrongStartByte(std::string message = "Check if the first byte sent is 0xAA.") : BNO055BaseException(message){};
 };
 
 class BNO055BusOverRunError : public BNO055BaseException {
 public:
-    BNO055BusOverRunError(std::string message = "Resend the command") : BNO055BaseException(message) {};
+    BNO055BusOverRunError(std::string message = "Resend the command") : BNO055BaseException(message){};
 };
 
 class BNO055MaxLengthError : public BNO055BaseException {
 public:
     BNO055MaxLengthError(std::string message = "Split the command,a single frame must have < 128 Bytes.")
-        : BNO055BaseException(message) {};
+        : BNO055BaseException(message){};
 };
 
 class BNO055MinLengthError : public BNO055BaseException {
 public:
-    BNO055MinLengthError(std::string message = "Send a valid frame.") : BNO055BaseException(message) {};
+    BNO055MinLengthError(std::string message = "Send a valid frame.") : BNO055BaseException(message){};
 };
 
 class BNO055ReceiveCharacterTimeout : public BNO055BaseException {
 public:
     BNO055ReceiveCharacterTimeout(std::string message = "Decrease waiting time between sending of two bytes of one frame.")
-        : BNO055BaseException(message) {};
+        : BNO055BaseException(message){};
 };
 
 class BNO055UnknowError : public BNO055BaseException {
 public:
-    BNO055UnknowError(std::string message = ".") : BNO055BaseException(message) {};
+    BNO055UnknowError(std::string message = ".") : BNO055BaseException(message){};
 };
 
 class BNO055UartTimeout : public BNO055BaseException {
 public:
     BNO055UartTimeout(std::string message = "timeout expired, if you see this often, try to increase timeoutMS.")
-        : BNO055BaseException(message) {};
+        : BNO055BaseException(message){};
 };
 
 class BNO055UartInitFailed : public BNO055BaseException {
 public:
-    BNO055UartInitFailed(std::string message = "ESP32's UART Interface cannot be initialized.") : BNO055BaseException(message) {};
+    BNO055UartInitFailed(std::string message = "ESP32's UART Interface cannot be initialized.") : BNO055BaseException(message){};
 };
 
 class BNO055ChipNotDetected : public BNO055BaseException {
 public:
-    BNO055ChipNotDetected(std::string message = "Check your wiring.") : BNO055BaseException(message) {};
+    BNO055ChipNotDetected(std::string message = "Check your wiring.") : BNO055BaseException(message){};
 };
 
 class BNO055WrongOprMode : public BNO055BaseException {
 public:
-    BNO055WrongOprMode(std::string message = "Check the OperationMode.") : BNO055BaseException(message) {};
+    BNO055WrongOprMode(std::string message = "Check the OperationMode.") : BNO055BaseException(message){};
 };
 
 class BNO055I2CError : public BNO055BaseException {
 public:
-    BNO055I2CError(std::string message = "I2CError: Check your wiring.") : BNO055BaseException(message) {};
+    BNO055I2CError(std::string message = "I2CError: Check your wiring.") : BNO055BaseException(message){};
 };
 
 class BNO055 {
