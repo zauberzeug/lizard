@@ -1025,6 +1025,21 @@ It is automatically created right after the boot sequence.</p>
 <td>Starts OTA update on a URL with given WiFi</td>
 <td>3x <code>str</code></td>
 </tr>
+<tr>
+<td><code>core.get_pin_status(pin)</code></td>
+<td>Print the status of the chosen pin</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>core.set_pin_level(pin, value)</code></td>
+<td>Turns the pin into an output and sets its level</td>
+<td><code>int</code>, <code>int</code></td>
+</tr>
+<tr>
+<td><code>core.get_pin_strapping(pin)</code></td>
+<td>Print value of the pin from the strapping register</td>
+<td><code>int</code></td>
+</tr>
 </tbody>
 </table>
 <p>The output <code>format</code> is a string with multiple space-separated elements of the pattern <code>&lt;module&gt;.&lt;property&gt;[:&lt;precision&gt;]</code> or <code>&lt;variable&gt;[:&lt;precision&gt;]</code>.
@@ -1036,6 +1051,7 @@ Upon successful updating, the ESP will restart and attempt to verify the OTA upd
 It will reconnect to the WiFi and try to access URL + <code>/verify</code> to receive a message with the current version of Lizard.
 The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
 If the newly updated Lizard cannot connect to URL + <code>/verify</code>, the OTA update will be rolled back.</p>
+<p><code>core.get_pin_status(pin)</code> reads the pin's voltage, not the output state directly.</p>
 <h2 id="bluetooth">Bluetooth<a class="headerlink" href="#bluetooth" title="Permanent link">&para;</a></h2>
 <p>Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
 Simply create a Bluetooth module with a device name of your choice.</p>
@@ -2863,8 +2879,8 @@ For detailed specifications of the ESP32 ADC modules, including attenuation leve
 </tr>
 </tbody>
 </table>
-<p>Possible attenuation levels are 0, 2.5, 6, and 11 dB.
-The default attenuation level is 11 dB.</p>
+<p>Possible attenuation levels are 0, 2.5, 6, and 12 dB.
+The default attenuation level is 12 dB.</p>
 <table>
 <thead>
 <tr>
