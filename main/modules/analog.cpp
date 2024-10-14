@@ -27,9 +27,11 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
     } else if (attenuation_level == 6.0) {
         attenuation = ADC_ATTEN_DB_6;
     } else if (attenuation_level == 11.0) {
+        attenuation = ADC_ATTEN_DB_12; // 11 dB is not supported anymore
+    } else if (attenuation_level == 12.0) {
         attenuation = ADC_ATTEN_DB_12;
     } else {
-        echo("error: invalid attenuation level, using default of 11 dB");
+        echo("error: invalid attenuation level, using default of 12 dB");
         attenuation = ADC_ATTEN_DB_12;
     }
 
@@ -48,6 +50,9 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
 
     adc_cali_line_fitting_efuse_val_t cali_val;
     esp_err_t cali_check = adc_cali_scheme_line_fitting_check_efuse(&cali_val);
+    if (cali_check != ESP_OK || cali_val == ADC_CALI_LINE_FITTING_EFUSE_VAL_DEFAULT_VREF) {
+        echo("warning: eFuse calibration data not available, using default reference voltage.");
+    }
 
     adc_cali_line_fitting_config_t cali_config = {
         .unit_id = static_cast<adc_unit_t>(unit - 1),
@@ -55,13 +60,6 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
         .bitwidth = ADC_BITWIDTH_12,
         .default_vref = 1100,
     };
-
-    if (cali_check == ESP_OK && cali_val != ADC_CALI_LINE_FITTING_EFUSE_VAL_DEFAULT_VREF) {
-        echo("eFuse calibration data found and used.");
-    } else {
-        echo("eFuse calibration data not available, using default reference voltage.");
-    }
-
     ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali_handle));
 
     this->properties["raw"] = std::make_shared<IntegerVariable>();
