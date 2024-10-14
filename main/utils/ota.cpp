@@ -207,11 +207,14 @@ void attempt(const char *url) {
     config.timeout_ms = 10 * 1000;
     config.event_handler = http_event_handler;
 
+    esp_https_ota_config_t ota_config{};
+    ota_config.http_config = &config;
+
     total_content_length_ = 0;
     received_length_ = 0;
 
     echo("OTA Attempting to connect to %s", url);
-    err = esp_https_ota(&config);
+    err = esp_https_ota(&ota_config);
     if (err == ESP_OK) {
         check_version_ = true;
         echo_if_error("stopping wifi", esp_wifi_stop());

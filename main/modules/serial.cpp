@@ -1,6 +1,7 @@
 #include "serial.h"
 #include "utils/uart.h"
 #include <cstring>
+#include <stdexcept>
 
 #define RX_BUF_SIZE 1024
 #define TX_BUF_SIZE 1024
@@ -19,7 +20,8 @@ Serial::Serial(const std::string name,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .rx_flow_ctrl_thresh = 0,
-        .use_ref_tick = false,
+        .source_clk = UART_SCLK_DEFAULT,
+        .flags = {},
     };
     uart_param_config(uart_num, &uart_config);
     uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
