@@ -667,8 +667,8 @@ For detailed specifications of the ESP32 ADC modules, including attenuation leve
 | ----------------------------------------------- | ---------------------------------------- | --------------------- |
 | `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (dB) | `int`, `int`, `float` |
 
-Possible attenuation levels are 0, 2.5, 6, and 11 dB.
-The default attenuation level is 11 dB.
+Possible attenuation levels are 0, 2.5, 6, and 12 dB.
+The default attenuation level is 12 dB.
 
 | Properties | Description                    | Data type |
 | ---------- | ------------------------------ | --------- |

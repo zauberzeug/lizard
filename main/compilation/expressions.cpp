@@ -1,6 +1,7 @@
 #include "expressions.h"
 #include "../modules/module.h"
 #include "math.h"
+#include <stdexcept>
 
 int write_arguments_to_buffer(const std::vector<ConstExpression_ptr> arguments, char *buffer) {
     int pos = 0;

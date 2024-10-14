@@ -1,5 +1,6 @@
 #include "motor_axis.h"
 #include "utils/uart.h"
+#include <stdexcept>
 
 MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2)
     : Module(motor_axis, name), motor(motor), input1(input1), input2(input2) {

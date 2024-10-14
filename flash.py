@@ -5,20 +5,21 @@ import sys
 from esp import Esp
 
 
-def help() -> None:
+def show_help() -> None:
     print(f'{sys.argv[0]} [nano | xavier | orin] [nand | v05] [usb | /dev/<name>] [enable] [-e | --erase]')
-    print(f'   -e, --erase   erase the flash before flashing the new firmware')
-    print(f'   nano          flashing Jetson Nano (default)')
-    print(f'   xavier        flashing Jetson Xavier')
-    print(f'   orin          flashing Jetson Orin')
-    print(f'   nand          Robot Brain has piggyboard with NAND gate (eg. older version)')
-    print(f'   v05           Robot Brain has piggyboard with V0.5 or higher (eg. newer version)')
-    print(f'   usb           use /dev/tty.SLAB_USBtoUART as serial device')
-    print(f'   /dev/<name>   use /dev/<name> as serial device')
-    print(f'   enable        enable the ESP32 microcontroller')
+    print('   -e, --erase   erase the flash before flashing the new firmware')
+    print('   nano          flashing Jetson Nano (default)')
+    print('   xavier        flashing Jetson Xavier')
+    print('   orin          flashing Jetson Orin')
+    print('   nand          Robot Brain has piggyboard with NAND gate (eg. older version)')
+    print('   v05           Robot Brain has piggyboard with V0.5 or higher (eg. newer version)')
+    print('   usb           use /dev/tty.SLAB_USBtoUART as serial device')
+    print('   /dev/<name>   use /dev/<name> as serial device')
+    print('   enable        enable the ESP32 microcontroller')
+
 
 if any(h in sys.argv for h in ['--help', '-help', 'help', '-h']):
-    help()
+    show_help()
     sys.exit()
 
 erase_flash = any(e in sys.argv for e in ['-e', '--erase'])
@@ -28,13 +29,29 @@ if 'usb' in sys.argv:
 for p in sys.argv:
     if p.startswith('/dev/'):
         device = p
-esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv, orin='orin' in sys.argv, v05='v05' in sys.argv, device=device)
 
+esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv,
+          orin='orin' in sys.argv, v05='v05' in sys.argv, device=device)
+
+
+# Check if the device should be enabled
 if 'enable' in sys.argv:
     with esp.pin_config():
         print('Enabling ESP...')
         esp.activate()
     sys.exit()
+
+# Check flash size before proceeding
+try:
+    print(f'Checking flash size on {esp.device}...')
+    command = ['esptool.py', '--chip', 'esp32', '--port', esp.device, 'flash_id']
+    output = subprocess.run(command, capture_output=True, text=True, check=True)
+    if '8MB' not in output.stdout and '8388608' not in output.stdout:
+        print('Aborting: Device does not have 8MB flash.')
+        sys.exit(1)
+except subprocess.CalledProcessError as e:
+    print(f'Failed to check flash size: {e}')
+    sys.exit(1)
 
 with esp.pin_config(), esp.flash_mode():
     if erase_flash:
@@ -71,4 +88,4 @@ with esp.pin_config(), esp.flash_mode():
     ], check=False)
     if result.returncode != 0:
         print('Flashing failed. Maybe you need different parameters? Or you forgot "sudo"?\n')
-        help()
+        show_help()
