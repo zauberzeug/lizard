@@ -1,3 +1,4 @@
+esp-coredump
 esptool
 mkdocs
 mkdocs-material
