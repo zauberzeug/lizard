@@ -41,18 +41,6 @@ if 'enable' in sys.argv:
         esp.activate()
     sys.exit()
 
-# Check flash size before proceeding
-try:
-    print(f'Checking flash size on {esp.device}...')
-    command = ['esptool.py', '--chip', 'esp32', '--port', esp.device, 'flash_id']
-    output = subprocess.run(command, capture_output=True, text=True, check=True)
-    if '8MB' not in output.stdout and '8388608' not in output.stdout:
-        print('Aborting: Device does not have 8MB flash.')
-        sys.exit(1)
-except subprocess.CalledProcessError as e:
-    print(f'Failed to check flash size: {e}')
-    sys.exit(1)
-
 with esp.pin_config(), esp.flash_mode():
     if erase_flash:
         print('Erasing Flash...')
