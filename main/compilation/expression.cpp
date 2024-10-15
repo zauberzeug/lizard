@@ -1,4 +1,5 @@
 #include "expression.h"
+#include "../utils/string_utils.h"
 #include <stdexcept>
 
 Expression::Expression(const Type type) : type(type) {

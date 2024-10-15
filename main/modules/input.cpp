@@ -1,5 +1,6 @@
 #include "input.h"
 #include "../utils/uart.h"
+#include "../utils/string_utils.h"
 #include <memory>
 
 Input::Input(const std::string name) : Module(input, name) {

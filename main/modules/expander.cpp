@@ -4,6 +4,7 @@
 #include "utils/serial-replicator.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
+#include "utils/string_utils.h"
 #include <cstring>
 
 Expander::Expander(const std::string name,
@@ -93,7 +94,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         }
     } else {
         static char buffer[1024];
-        int pos = csprintf(buffer, "core.%s(", method_name.c_str());
+        int pos = csprintf(buffer, sizeof(buffer), "core.%s(", method_name.c_str());
         pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
         pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
         this->serial->write_checked_line(buffer, pos);

@@ -1,5 +1,6 @@
 #include "can.h"
 #include "../utils/uart.h"
+#include "../utils/string_utils.h"
 #include "driver/twai.h"
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)

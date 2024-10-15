@@ -1,6 +1,7 @@
 #include "module.h"
 #include "../global.h"
 #include "../utils/uart.h"
+#include "../utils/string_utils.h"
 #include "analog.h"
 #include "bluetooth.h"
 #include "can.h"

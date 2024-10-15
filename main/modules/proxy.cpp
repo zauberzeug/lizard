@@ -1,5 +1,6 @@
 #include "proxy.h"
 #include "driver/uart.h"
+#include "../utils/string_utils.h"
 #include <memory>
 
 Proxy::Proxy(const std::string name,

@@ -1,5 +1,7 @@
 #include "string_utils.h"
 #include <string>
+#include <stdexcept>
+#include <stdarg.h>
 
 std::string cut_first_word(std::string &msg, const char delimiter) {
     const int space = msg.find(delimiter);

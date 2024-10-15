@@ -1,5 +1,6 @@
 #include "variable.h"
 #include "expression.h"
+#include "../utils/string_utils.h"
 #include <stdexcept>
 
 Variable::Variable(const Type type) : type(type) {

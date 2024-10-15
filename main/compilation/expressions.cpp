@@ -1,5 +1,6 @@
 #include "expressions.h"
 #include "../modules/module.h"
+#include "../utils/string_utils.h"
 #include "math.h"
 
 int write_arguments_to_buffer(const std::vector<ConstExpression_ptr> arguments, char *buffer, size_t buffer_len) {

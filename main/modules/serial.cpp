@@ -1,5 +1,6 @@
 #include "serial.h"
 #include "utils/uart.h"
+#include "utils/string_utils.h"
 #include <cstring>
 
 #define RX_BUF_SIZE 1024
@@ -95,7 +96,7 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
             while(uart_pattern_pop_pos(this->uart_num) > 0);
             throw std::runtime_error("buffer too small, but cannot discard line. flushed serial.");
         }
-        
+
         for(int i = 0; i < pos; i++)
             this->read();
         throw std::runtime_error("buffer too small. discarded line.");
@@ -118,7 +119,7 @@ std::string Serial::get_output() const {
     int byte;
     int pos = 0;
     while ((byte = this->read()) >= 0) {
-        pos += cprintf(&buffer[pos], sizeof(buffer) - pos, pos == 0 ? "%02x" : " %02x", byte);
+        pos += csprintf(&buffer[pos], sizeof(buffer) - pos, pos == 0 ? "%02x" : " %02x", byte);
     }
     return buffer;
 }
