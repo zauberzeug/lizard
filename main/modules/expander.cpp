@@ -35,7 +35,7 @@ Expander::Expander(const std::string name,
             break;
         }
         if (serial->available()) {
-            len = serial->read_line(buffer);
+            len = serial->read_line(buffer, sizeof(buffer));
             strip(buffer, len);
             echo("%s: %s", name.c_str(), buffer);
         }
@@ -45,7 +45,7 @@ Expander::Expander(const std::string name,
 void Expander::step() {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
-        int len = this->serial->read_line(buffer);
+        int len = this->serial->read_line(buffer, sizeof(buffer));
         check(buffer, len);
         this->last_message_millis = millis();
         if (buffer[0] == '!' && buffer[1] == '!') {
@@ -93,9 +93,9 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         }
     } else {
         static char buffer[1024];
-        int pos = std::sprintf(buffer, "core.%s(", method_name.c_str());
-        pos += write_arguments_to_buffer(arguments, &buffer[pos]);
-        pos += std::sprintf(&buffer[pos], ")");
+        int pos = csprintf(buffer, "core.%s(", method_name.c_str());
+        pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
+        pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
         this->serial->write_checked_line(buffer, pos);
     }
 }

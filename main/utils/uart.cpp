@@ -13,7 +13,8 @@ void echo(const char *format, ...) {
     pos += std::vsnprintf(&buffer[pos], sizeof buffer - pos - 1, format, args);
     va_end(args);
 
-    pos += std::sprintf(&buffer[pos], "\n");
+    // Cannot overflow since vsnprintf uses sizeof(buffer) - 1 for n
+    pos += printf(&buffer[pos], "\n");
 
     uint8_t checksum = 0;
     int start = 0;
@@ -30,10 +31,11 @@ void echo(const char *format, ...) {
 }
 
 int strip(char *buffer, int len) {
-    while (buffer[len - 1] == ' ' ||
-           buffer[len - 1] == '\t' ||
-           buffer[len - 1] == '\r' ||
-           buffer[len - 1] == '\n') {
+    while (len > 0 &&
+            (buffer[len - 1] == ' ' ||
+            buffer[len - 1] == '\t' ||
+            buffer[len - 1] == '\r' ||
+            buffer[len - 1] == '\n')) {
         len--;
     }
     buffer[len] = 0;

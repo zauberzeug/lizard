@@ -96,10 +96,10 @@ bool Can::receive() {
 
     if (this->output_on) {
         static char buffer[256];
-        int pos = std::sprintf(buffer, "%s %03x", this->name.c_str(), message.identifier);
+        int pos = csprintf(buffer, sizeof(buffer), "%s %03x", this->name.c_str(), message.identifier);
         if (!(message.flags & TWAI_MSG_FLAG_RTR)) {
             for (int i = 0; i < message.data_length_code; ++i) {
-                pos += std::sprintf(&buffer[pos], ",%02x", message.data[i]);
+                pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ",%02x", message.data[i]);
             }
         }
         echo(buffer);
