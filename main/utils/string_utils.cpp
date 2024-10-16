@@ -23,8 +23,6 @@ int csprintf(char* buffer, size_t buffer_len, const char *format, ...) {
     res = std::vsnprintf(buffer, buffer_len, format, args);
     va_end(args);
 
-    printf("%i, %i\n", buffer_len, res);
-
     if(res < 0)
         throw std::runtime_error("encoding error.");
     if(res > buffer_len - 1)
