@@ -14,7 +14,7 @@ void echo(const char *format, ...) {
     va_end(args);
 
     // Cannot overflow since vsnprintf uses sizeof(buffer) - 1 for n
-    pos += printf(&buffer[pos], "\n");
+    pos += sprintf(&buffer[pos], "\n");
 
     uint8_t checksum = 0;
     int start = 0;

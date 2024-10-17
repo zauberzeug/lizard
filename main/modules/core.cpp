@@ -91,7 +91,6 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
 std::string Core::get_output() const {
     static char output_buffer[1024];
     int pos = 0;
-    int res;
     for (auto const &element : this->output_list) {
         if (pos > 0) {
             pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, " ");

@@ -17,7 +17,6 @@ bool starts_with(const std::string haystack, const std::string needle) {
 int csprintf(char* buffer, size_t buffer_len, const char *format, ...) {
     va_list args;
 
-    printf("%i\n", buffer_len);
     int res;
     va_start(args, format);
     res = std::vsnprintf(buffer, buffer_len, format, args);
