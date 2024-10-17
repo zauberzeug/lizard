@@ -7,13 +7,17 @@
 void echo(const char *format, ...) {
     static char buffer[1024];
     int pos = 0;
+    int res;
 
     va_list args;
     va_start(args, format);
-    pos += std::vsnprintf(&buffer[pos], sizeof buffer - pos - 1, format, args);
+    res = std::vsnprintf(&buffer[pos], sizeof buffer - pos - 1, format, args);
+    if(res >= (sizeof buffer - pos - 1))
+        pos = sizeof buffer - pos - 1;
+    else
+        pos += res;
     va_end(args);
 
-    // Cannot overflow since vsnprintf uses sizeof(buffer) - 1 for n
     pos += std::sprintf(&buffer[pos], "\n");
 
     uint8_t checksum = 0;
