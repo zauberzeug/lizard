@@ -4,8 +4,8 @@
 
 void delay(const unsigned int duration_ms);
 
-unsigned long int IRAM_ATTR micros();
-unsigned long int IRAM_ATTR millis();
+unsigned long int micros();
+unsigned long int millis();
 
 unsigned long millis_since(const unsigned long time);
 unsigned long micros_since(const unsigned long time);

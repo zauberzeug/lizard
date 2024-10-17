@@ -237,7 +237,7 @@ Module_ptr Module::create(const std::string type,
         gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
         gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
         long baud_rate = arguments[2]->evaluate_integer();
-        gpio_port_t uart_num = (gpio_port_t)arguments[3]->evaluate_integer();
+        uart_port_t uart_num = (uart_port_t)arguments[3]->evaluate_integer();
         return std::make_shared<Serial>(name, rx_pin, tx_pin, baud_rate, uart_num);
     } else if (type == "RoboClaw") {
         Module::expect(arguments, 2, identifier, integer);

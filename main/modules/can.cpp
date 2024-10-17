@@ -2,6 +2,7 @@
 #include "../utils/uart.h"
 #include "../utils/string_utils.h"
 #include "driver/twai.h"
+#include <stdexcept>
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(can, name) {
@@ -97,7 +98,7 @@ bool Can::receive() {
 
     if (this->output_on) {
         static char buffer[256];
-        int pos = csprintf(buffer, sizeof(buffer), "%s %03x", this->name.c_str(), message.identifier);
+        int pos = csprintf(buffer, sizeof(buffer), "%s %03lx", this->name.c_str(), message.identifier);
         if (!(message.flags & TWAI_MSG_FLAG_RTR)) {
             for (int i = 0; i < message.data_length_code; ++i) {
                 pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ",%02x", message.data[i]);

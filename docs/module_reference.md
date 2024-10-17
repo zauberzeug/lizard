@@ -24,15 +24,18 @@ It is automatically created right after the boot sequence.
 | `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
 | `core.heap`   | Free heap memory (bytes)                                | `int`     |
 
-| Methods                         | Description                                       | Arguments |
-| ------------------------------- | ------------------------------------------------- | --------- |
-| `core.restart()`                | Restart the microcontroller                       |           |
-| `core.version()`                | Show lizard version                               |           |
-| `core.info()`                   | Show lizard version, compile time and IDF version |           |
-| `core.print(...)`               | Print arbitrary arguments to the command line     | arbitrary |
-| `core.output(format)`           | Define the output format                          | `str`     |
-| `core.startup_checksum()`       | Show 16-bit checksum of the startup script        |           |
-| `core.ota(ssid, password, url)` | Starts OTA update on a URL with given WiFi        | 3x `str`  |
+| Methods                          | Description                                        | Arguments    |
+| -------------------------------- | -------------------------------------------------- | ------------ |
+| `core.restart()`                 | Restart the microcontroller                        |              |
+| `core.version()`                 | Show lizard version                                |              |
+| `core.info()`                    | Show lizard version, compile time and IDF version  |              |
+| `core.print(...)`                | Print arbitrary arguments to the command line      | arbitrary    |
+| `core.output(format)`            | Define the output format                           | `str`        |
+| `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
+| `core.ota(ssid, password, url)`  | Starts OTA update on a URL with given WiFi         | 3x `str`     |
+| `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
+| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
+| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -44,6 +47,8 @@ Upon successful updating, the ESP will restart and attempt to verify the OTA upd
 It will reconnect to the WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard.
 The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
 If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
+
+`core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
 ## Bluetooth
 
@@ -662,8 +667,8 @@ For detailed specifications of the ESP32 ADC modules, including attenuation leve
 | ----------------------------------------------- | ---------------------------------------- | --------------------- |
 | `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (dB) | `int`, `int`, `float` |
 
-Possible attenuation levels are 0, 2.5, 6, and 11 dB.
-The default attenuation level is 11 dB.
+Possible attenuation levels are 0, 2.5, 6, and 12 dB.
+The default attenuation level is 12 dB.
 
 | Properties | Description                    | Data type |
 | ---------- | ------------------------------ | --------- |
