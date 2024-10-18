@@ -112,14 +112,25 @@ bool Expander::wait_for_ready_message(unsigned long start, unsigned long max_wai
 
             if (strcmp("Ready.", buffer) == 0) {
                 this->properties.at("is_ready")->boolean_value = true;
-                echo("%s: booting done", this->name.c_str());
+                echo("%s: Booting process completed successfully", this->name.c_str());
                 return true;
             }
         }
 
         if (max_wait_time == 0 && millis_since(start) >= 30000) {
-            echo("warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
-            serial->write_checked_line("core.restart()", 14);
+            echo("Warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
+            if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
+                gpio_reset_pin(boot_pin);
+                gpio_reset_pin(enable_pin);
+                gpio_set_direction(boot_pin, GPIO_MODE_OUTPUT);
+                gpio_set_direction(enable_pin, GPIO_MODE_OUTPUT);
+                gpio_set_level(boot_pin, 1);
+                gpio_set_level(enable_pin, 0);
+                delay(100);
+                gpio_set_level(enable_pin, 1);
+            } else {
+                serial->write_checked_line("core.restart()", 14);
+            }
             start = millis();
         }
     }
