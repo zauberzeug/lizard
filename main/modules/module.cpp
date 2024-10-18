@@ -70,7 +70,7 @@ Module_ptr Module::create(const std::string type,
         if (arguments.size() < 1 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, identifier, integer, integer);
+        Module::expect(arguments, -1, identifier, integer, integer, integer);
         std::string serial_name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(serial_name);
         if (module->type != serial) {
