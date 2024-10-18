@@ -667,7 +667,8 @@ protected:
                                        .stop_bits = UART_STOP_BITS_1,
                                        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
                                        .rx_flow_ctrl_thresh = 0,
-                                       .use_ref_tick = false};
+                                       .source_clk = UART_SCLK_DEFAULT,
+                                       .flags = {}};
 
     typedef enum {
         BNO055_VECTOR_ACCELEROMETER = 0x08, // Default: m/s²

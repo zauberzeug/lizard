@@ -1,6 +1,7 @@
 #include "input.h"
 #include "../utils/uart.h"
 #include <memory>
+#include <stdexcept>
 
 Input::Input(const std::string name) : Module(input, name) {
     this->properties["level"] = std::make_shared<IntegerVariable>();
