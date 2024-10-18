@@ -201,10 +201,6 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr module = Module::create(module_type, module_name, arguments, process_lizard);
-                // check properties is_ready
-                if (module->type == expander) {
-                    echo("is_ready constructor: %d", module->get_property("is_ready")->boolean_value);
-                }
                 Global::add_module(module_name, module);
             } else {
                 const std::string module_name = identifier_to_string(constructor.module_name);
