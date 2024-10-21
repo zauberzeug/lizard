@@ -97,7 +97,8 @@ def serial_connection() -> serial.Serial:
 
 if __name__ == '__main__':
     with serial_connection() as port:
-        loop = asyncio.get_event_loop_policy().get_event_loop()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.create_task(send())
         loop.run_in_executor(None, receive)
         loop.run_forever()
