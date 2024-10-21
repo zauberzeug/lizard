@@ -29,7 +29,6 @@ with serial.Serial(usb_path, baudrate=115200, timeout=1.0) as port:
     send('!-')
     for line in startup.splitlines():
         send(f'!+{line}')
-        time.sleep(0.1)
     send('!.')
     send('core.restart()')
 
