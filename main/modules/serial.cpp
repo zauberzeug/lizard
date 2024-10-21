@@ -31,7 +31,7 @@ Serial::Serial(const std::string name,
 
 void Serial::enable_line_detection() const {
     uart_enable_pattern_det_baud_intr(this->uart_num, '\n', 1, 9, 0, 0);
-    uart_pattern_queue_reset(this->uart_num, 20);
+    uart_pattern_queue_reset(this->uart_num, UART_PATTERN_QUEUE_SIZE);
 }
 
 void Serial::deinstall() const {
