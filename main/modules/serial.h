@@ -24,7 +24,7 @@ public:
     int available() const;
     bool has_buffered_lines() const;
     int read(const uint32_t timeout = 0) const;
-    int read_line(char *buffer) const;
+    int read_line(char *buffer, size_t buffer_len) const;
     size_t write(const uint8_t byte) const;
     void write_checked_line(const char *message, const int length) const;
     void flush() const;
