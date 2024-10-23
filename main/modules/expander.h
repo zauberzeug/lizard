@@ -11,6 +11,18 @@ class Expander : public Module {
 private:
     unsigned long int last_message_millis = 0;
 
+    enum BootState {
+        BOOT_INIT,
+        BOOT_WAITING,
+        BOOT_RESTARTING,
+        BOOT_READY,
+        BOOT_FAILED
+    };
+    BootState boot_state;
+    unsigned long boot_start_time;
+
+    void handle_boot_process();
+
 public:
     const ConstSerial_ptr serial;
     const gpio_num_t boot_pin;
@@ -26,5 +38,4 @@ public:
              MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-    bool wait_for_ready_message(unsigned long start, unsigned long max_wait_time);
 };
