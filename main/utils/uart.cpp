@@ -10,7 +10,7 @@ void echo(const char *format, ...) {
     va_list args;
     va_start(args, format);
     const int num_chars = std::vsnprintf(buffer, sizeof(buffer) - 1, format, args);
-    int pos = std::min(num_chars, static_cast<int>(sizeof(buffer) - 1));
+    int pos = std::min(num_chars, static_cast<int>(sizeof(buffer) - 2));
     va_end(args);
 
     pos += std::sprintf(&buffer[pos], "\n");
