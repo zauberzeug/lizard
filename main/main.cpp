@@ -189,7 +189,7 @@ void process_tree(owl_tree *const tree, bool from_expander) {
         } else if (!statement.expression.empty) {
             const ConstExpression_ptr expression = compile_expression(statement.expression);
             static char buffer[256];
-            expression->print_to_buffer(buffer);
+            expression->print_to_buffer(buffer, sizeof(buffer));
             echo(buffer);
         } else if (!statement.constructor.empty) {
             const struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);

@@ -48,9 +48,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         int pos = 0;
         for (auto const &argument : arguments) {
             if (argument != arguments[0]) {
-                pos += sprintf(&buffer[pos], " ");
+                pos += csprintf(&buffer[pos], sizeof(buffer) - pos, " ");
             }
-            pos += argument->print_to_buffer(&buffer[pos]);
+            pos += argument->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
         }
         echo(buffer);
     } else if (method_name == "output") {
@@ -173,22 +173,22 @@ std::string Core::get_output() const {
     int pos = 0;
     for (auto const &element : this->output_list) {
         if (pos > 0) {
-            pos += sprintf(&output_buffer[pos], " ");
+            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, " ");
         }
         const Variable_ptr variable =
             element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
         switch (variable->type) {
         case boolean:
-            pos += sprintf(&output_buffer[pos], "%s", variable->boolean_value ? "true" : "false");
+            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value ? "true" : "false");
             break;
         case integer:
-            pos += sprintf(&output_buffer[pos], "%lld", variable->integer_value);
+            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value);
             break;
         case number:
-            pos += sprintf(&output_buffer[pos], "%.*f", element.precision, variable->number_value);
+            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value);
             break;
         case string:
-            pos += sprintf(&output_buffer[pos], "\"%s\"", variable->string_value.c_str());
+            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value.c_str());
             break;
         default:
             throw std::runtime_error("invalid type");

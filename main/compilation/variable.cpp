@@ -1,4 +1,5 @@
 #include "variable.h"
+#include "../utils/string_utils.h"
 #include "expression.h"
 #include <stdexcept>
 
@@ -21,18 +22,18 @@ void Variable::assign(const ConstExpression_ptr expression) {
     }
 }
 
-int Variable::print_to_buffer(char *const buffer) const {
+int Variable::print_to_buffer(char *const buffer, size_t buffer_len) const {
     switch (this->type) {
     case boolean:
-        return sprintf(buffer, "%s", this->boolean_value ? "true" : "false");
+        return csprintf(buffer, buffer_len, "%s", this->boolean_value ? "true" : "false");
     case integer:
-        return sprintf(buffer, "%lld", this->integer_value);
+        return csprintf(buffer, buffer_len, "%lld", this->integer_value);
     case number:
-        return sprintf(buffer, "%f", this->number_value);
+        return csprintf(buffer, buffer_len, "%f", this->number_value);
     case string:
-        return sprintf(buffer, "\"%s\"", this->string_value.c_str());
+        return csprintf(buffer, buffer_len, "\"%s\"", this->string_value.c_str());
     case identifier:
-        return sprintf(buffer, "%s", this->identifier_value.c_str());
+        return csprintf(buffer, buffer_len, "%s", this->identifier_value.c_str());
     default:
         throw std::runtime_error("variable has an invalid datatype");
     }

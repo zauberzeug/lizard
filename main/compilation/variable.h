@@ -23,7 +23,7 @@ public:
 
     Variable(const Type type);
     void assign(const ConstExpression_ptr expression);
-    int print_to_buffer(char *const buffer) const;
+    int print_to_buffer(char *const buffer, size_t buffer_len) const;
 };
 
 class BooleanVariable : public Variable {

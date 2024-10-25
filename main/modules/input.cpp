@@ -1,4 +1,5 @@
 #include "input.h"
+#include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include <memory>
 #include <stdexcept>
@@ -38,7 +39,7 @@ void Input::call(const std::string method_name, const std::vector<ConstExpressio
 
 std::string Input::get_output() const {
     static char buffer[256];
-    std::sprintf(buffer, "%d", this->get_level());
+    csprintf(buffer, sizeof(buffer), "%d", this->get_level());
     return buffer;
 }
 
