@@ -6,15 +6,11 @@
 
 void echo(const char *format, ...) {
     static char buffer[1024];
-    int pos = 0;
 
     va_list args;
     va_start(args, format);
-    const int num_chars = std::vsnprintf(&buffer[pos], sizeof(buffer) - pos - 1, format, args);
-    if (num_chars >= (sizeof(buffer) - pos - 1))
-        pos = sizeof(buffer) - pos - 1;
-    else
-        pos += num_chars;
+    const int num_chars = std::vsnprintf(buffer, sizeof(buffer) - 1, format, args);
+    int pos = std::min(num_chars, static_cast<int>(sizeof(buffer) - 1));
     va_end(args);
 
     pos += std::sprintf(&buffer[pos], "\n");
