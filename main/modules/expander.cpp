@@ -2,9 +2,9 @@
 
 #include "storage.h"
 #include "utils/serial-replicator.h"
+#include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
-#include "utils/string_utils.h"
 #include <cstring>
 #include <stdexcept>
 

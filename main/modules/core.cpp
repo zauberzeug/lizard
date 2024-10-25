@@ -182,13 +182,13 @@ std::string Core::get_output() const {
             pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value ? "true" : "false");
             break;
         case integer:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos,  "%lld", variable->integer_value);
+            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value);
             break;
         case number:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos,  "%.*f", element.precision, variable->number_value);
+            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value);
             break;
         case string:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos,  "\"%s\"", variable->string_value.c_str());
+            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value.c_str());
             break;
         default:
             throw std::runtime_error("invalid type");

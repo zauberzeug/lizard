@@ -7,15 +7,14 @@
 void echo(const char *format, ...) {
     static char buffer[1024];
     int pos = 0;
-    int res;
 
     va_list args;
     va_start(args, format);
-    res = std::vsnprintf(&buffer[pos], sizeof buffer - pos - 1, format, args);
-    if(res >= (sizeof buffer - pos - 1))
-        pos = sizeof buffer - pos - 1;
+    const int num_chars = std::vsnprintf(&buffer[pos], sizeof(buffer) - pos - 1, format, args);
+    if (num_chars >= (sizeof(buffer) - pos - 1))
+        pos = sizeof(buffer) - pos - 1;
     else
-        pos += res;
+        pos += num_chars;
     va_end(args);
 
     pos += std::sprintf(&buffer[pos], "\n");
@@ -36,7 +35,7 @@ void echo(const char *format, ...) {
 
 int strip(char *buffer, int len) {
     while (len > 0 &&
-            (buffer[len - 1] == ' ' ||
+           (buffer[len - 1] == ' ' ||
             buffer[len - 1] == '\t' ||
             buffer[len - 1] == '\r' ||
             buffer[len - 1] == '\n')) {

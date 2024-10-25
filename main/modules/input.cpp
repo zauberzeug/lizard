@@ -1,6 +1,6 @@
 #include "input.h"
-#include "../utils/uart.h"
 #include "../utils/string_utils.h"
+#include "../utils/uart.h"
 #include <memory>
 #include <stdexcept>
 

@@ -34,13 +34,13 @@ int Expression::print_to_buffer(char *buffer, size_t buffer_len) const {
     case boolean:
         return csprintf(buffer, buffer_len, "%s", this->evaluate_boolean() ? "true" : "false");
     case integer:
-        return csprintf(buffer, buffer_len,  "%lld", this->evaluate_integer());
+        return csprintf(buffer, buffer_len, "%lld", this->evaluate_integer());
     case number:
-        return csprintf(buffer, buffer_len,  "%f", this->evaluate_number());
+        return csprintf(buffer, buffer_len, "%f", this->evaluate_number());
     case string:
-        return csprintf(buffer, buffer_len,  "\"%s\"", this->evaluate_string().c_str());
+        return csprintf(buffer, buffer_len, "\"%s\"", this->evaluate_string().c_str());
     case identifier:
-        return csprintf(buffer, buffer_len,  "%s", this->evaluate_identifier().c_str());
+        return csprintf(buffer, buffer_len, "%s", this->evaluate_identifier().c_str());
     default:
         throw std::runtime_error("expression has an invalid datatype");
     }

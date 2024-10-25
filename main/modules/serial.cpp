@@ -1,6 +1,6 @@
 #include "serial.h"
-#include "utils/uart.h"
 #include "utils/string_utils.h"
+#include "utils/uart.h"
 #include <cstring>
 #include <stdexcept>
 
@@ -92,14 +92,15 @@ int Serial::read(uint32_t timeout) const {
 
 int Serial::read_line(char *buffer, size_t buffer_len) const {
     int pos = uart_pattern_pop_pos(this->uart_num);
-    if(pos >= buffer_len) {
-        if(this->available() < pos) {
+    if (pos >= buffer_len) {
+        if (this->available() < pos) {
             uart_flush_input(this->uart_num);
-            while(uart_pattern_pop_pos(this->uart_num) > 0);
+            while (uart_pattern_pop_pos(this->uart_num) > 0)
+                ;
             throw std::runtime_error("buffer too small, but cannot discard line. flushed serial.");
         }
 
-        for(int i = 0; i < pos; i++)
+        for (int i = 0; i < pos; i++)
             this->read();
         throw std::runtime_error("buffer too small. discarded line.");
     }

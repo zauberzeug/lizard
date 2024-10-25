@@ -1,6 +1,6 @@
 #include "can.h"
-#include "../utils/uart.h"
 #include "../utils/string_utils.h"
+#include "../utils/uart.h"
 #include "driver/twai.h"
 #include <stdexcept>
 
