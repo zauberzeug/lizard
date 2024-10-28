@@ -15,8 +15,7 @@ private:
         BOOT_INIT,
         BOOT_WAITING,
         BOOT_RESTARTING,
-        BOOT_READY,
-        BOOT_FAILED
+        BOOT_READY
     };
     BootState boot_state;
     unsigned long boot_start_time;

@@ -44,17 +44,21 @@ Expander::Expander(const std::string name,
 }
 
 void Expander::step() {
-    handle_boot_process();
+    if (boot_state != BOOT_READY) {
+        handle_boot_process();
+    }
 
-    static char buffer[1024];
-    while (this->serial->has_buffered_lines()) {
-        int len = this->serial->read_line(buffer);
-        check(buffer, len);
-        this->last_message_millis = millis();
-        if (buffer[0] == '!' && buffer[1] == '!') {
-            this->message_handler(&buffer[2], false, true);
-        } else {
-            echo("%s: %s", this->name.c_str(), buffer);
+    if (boot_state == BOOT_READY) {
+        static char buffer[1024];
+        while (this->serial->has_buffered_lines()) {
+            int len = this->serial->read_line(buffer);
+            check(buffer, len);
+            this->last_message_millis = millis();
+            if (buffer[0] == '!' && buffer[1] == '!') {
+                this->message_handler(&buffer[2], false, true);
+            } else {
+                echo("%s: %s", this->name.c_str(), buffer);
+            }
         }
     }
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
@@ -62,20 +66,20 @@ void Expander::step() {
 }
 
 void Expander::handle_boot_process() {
-    echo("boot state: %d", boot_state);
     switch (boot_state) {
     case BOOT_INIT:
-        boot_start_time = millis();
         boot_state = BOOT_WAITING;
+        boot_start_time = millis();
         break;
 
     case BOOT_WAITING: {
-        char buffer[1024];
-        if (this->serial->available()) {
+        static char buffer[1024];
+        while (this->serial->has_buffered_lines()) {
             int len = this->serial->read_line(buffer);
-            strip(buffer, len);
+            check(buffer, len);
+            this->last_message_millis = millis();
+            // no need for !! here, since we're ready in the waiting state
             echo("%s: %s", this->name.c_str(), buffer);
-
             if (strcmp("Ready.", buffer) == 0) {
                 this->properties.at("is_ready")->boolean_value = true;
                 echo("%s: Booting process completed successfully", this->name.c_str());
@@ -84,17 +88,14 @@ void Expander::handle_boot_process() {
             }
         }
 
-        if (boot_wait_time == 0 && millis_since(boot_start_time) >= 30000) {
-            echo("Warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
+        if (boot_wait_time > 0 && millis_since(boot_start_time) > boot_wait_time) {
             boot_state = BOOT_RESTARTING;
-        } else if (boot_wait_time != 0 && millis_since(boot_start_time) > boot_wait_time) {
-            echo("Error: expander %s did not boot in the expected time (%d ms)", this->name.c_str(), boot_wait_time);
-            boot_state = BOOT_FAILED;
         }
         break;
     }
 
     case BOOT_RESTARTING:
+        echo("Warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
         if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
             gpio_set_level(enable_pin, 0);
             delay(100);
@@ -102,13 +103,11 @@ void Expander::handle_boot_process() {
         } else {
             serial->write_checked_line("core.restart()", 14);
         }
-        boot_start_time = millis();
         boot_state = BOOT_WAITING;
+        boot_start_time = millis();
         break;
 
     case BOOT_READY:
-    case BOOT_FAILED:
-        // Do nothing, boot process is complete
         break;
     }
 }
