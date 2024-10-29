@@ -210,9 +210,6 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 if (expander_module->type != expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
-                while (!expander_module->get_property("is_ready")->boolean_value) {
-                    vTaskDelay(1000 / portTICK_PERIOD_MS);
-                }
                 const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
