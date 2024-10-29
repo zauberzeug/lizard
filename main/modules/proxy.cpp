@@ -8,15 +8,8 @@ Proxy::Proxy(const std::string name,
              const Expander_ptr expander,
              const std::vector<ConstExpression_ptr> arguments)
     : Module(proxy, name), expander(expander) {
-    this->properties["received_message"] = std::make_shared<BooleanVariable>(false);
-
-    static char buffer[256];
-    int pos = std::sprintf(buffer, "%s = %s(", name.c_str(), module_type.c_str());
-    pos += write_arguments_to_buffer(arguments, &buffer[pos]);
-    pos += std::sprintf(&buffer[pos], "); ");
-    pos += std::sprintf(&buffer[pos], "%s.broadcast()", name.c_str());
-
-    expander->serial->write_checked_line(buffer, pos);
+    this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
+    expander->add_proxy(name, module_type, arguments);
 }
 
 void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -30,7 +23,7 @@ void Proxy::call(const std::string method_name, const std::vector<ConstExpressio
 void Proxy::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
     if (!this->properties.count(property_name)) {
         this->properties[property_name] = std::make_shared<Variable>(expression->type);
-        this->properties.at("received_message")->boolean_value = true;
+        this->properties.at("is_ready")->boolean_value = true;
     }
     if (!from_expander) {
         static char buffer[256];
