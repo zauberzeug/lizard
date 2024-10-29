@@ -20,7 +20,16 @@ private:
     BootState boot_state;
     unsigned long boot_start_time;
 
+    struct PendingProxy {
+        std::string module_name;
+        std::string module_type;
+        std::vector<ConstExpression_ptr> arguments;
+        bool is_setup = false;
+    };
+    std::vector<PendingProxy> pending_proxies;
+
     void handle_boot_process();
+    void setup_proxy(const PendingProxy &proxy);
 
 public:
     const ConstSerial_ptr serial;
@@ -37,4 +46,7 @@ public:
              MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void add_proxy(const std::string module_name,
+                   const std::string module_type,
+                   const std::vector<ConstExpression_ptr> arguments);
 };

@@ -4,6 +4,7 @@
 #include "utils/serial-replicator.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
+#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 
@@ -44,11 +45,19 @@ Expander::Expander(const std::string name,
 }
 
 void Expander::step() {
-    if (boot_state != BOOT_READY) {
+    if (!this->properties.at("is_ready")->boolean_value) {
         handle_boot_process();
-    }
+    } else {
+        if (std::any_of(pending_proxies.begin(), pending_proxies.end(),
+                        [](const PendingProxy &p) { return !p.is_setup; })) {
+            for (auto &proxy : pending_proxies) {
+                if (!proxy.is_setup) {
+                    setup_proxy(proxy);
+                    proxy.is_setup = true;
+                }
+            }
+        }
 
-    if (boot_state == BOOT_READY) {
         static char buffer[1024];
         while (this->serial->has_buffered_lines()) {
             int len = this->serial->read_line(buffer);
@@ -72,7 +81,8 @@ void Expander::handle_boot_process() {
         boot_start_time = millis();
         break;
 
-    case BOOT_WAITING: {
+    case BOOT_WAITING:
+        this->properties.at("is_ready")->boolean_value = false;
         static char buffer[1024];
         while (this->serial->has_buffered_lines()) {
             int len = this->serial->read_line(buffer);
@@ -81,8 +91,6 @@ void Expander::handle_boot_process() {
             // no need for !! here, since we're ready in the waiting state
             echo("%s: %s", this->name.c_str(), buffer);
             if (strcmp("Ready.", buffer) == 0) {
-                this->properties.at("is_ready")->boolean_value = true;
-                echo("%s: Booting process completed successfully", this->name.c_str());
                 boot_state = BOOT_READY;
                 return;
             }
@@ -92,9 +100,9 @@ void Expander::handle_boot_process() {
             boot_state = BOOT_RESTARTING;
         }
         break;
-    }
 
     case BOOT_RESTARTING:
+        this->properties.at("is_ready")->boolean_value = false;
         echo("Warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
         if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
             gpio_set_level(enable_pin, 0);
@@ -108,6 +116,8 @@ void Expander::handle_boot_process() {
         break;
 
     case BOOT_READY:
+        echo("%s: Booting process completed successfully", this->name.c_str());
+        this->properties.at("is_ready")->boolean_value = true;
         break;
     }
 }
@@ -152,4 +162,20 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         pos += std::sprintf(&buffer[pos], ")");
         this->serial->write_checked_line(buffer, pos);
     }
+}
+
+void Expander::add_proxy(const std::string module_name,
+                         const std::string module_type,
+                         const std::vector<ConstExpression_ptr> arguments) {
+    pending_proxies.push_back({module_name, module_type, arguments, false});
+}
+
+void Expander::setup_proxy(const PendingProxy &proxy) {
+    static char buffer[256];
+    int pos = std::sprintf(buffer, "%s = %s(",
+                           proxy.module_name.c_str(), proxy.module_type.c_str());
+    pos += write_arguments_to_buffer(proxy.arguments, &buffer[pos]);
+    pos += std::sprintf(&buffer[pos], "); ");
+    pos += std::sprintf(&buffer[pos], "%s.broadcast()", proxy.module_name.c_str());
+    this->serial->write_checked_line(buffer, pos);
 }
