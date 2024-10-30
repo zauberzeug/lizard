@@ -1,10 +1,12 @@
 #include "serial.h"
+#include "utils/string_utils.h"
 #include "utils/uart.h"
 #include <cstring>
 #include <stdexcept>
 
-#define RX_BUF_SIZE 1024
-#define TX_BUF_SIZE 1024
+#define RX_BUF_SIZE 2048
+#define TX_BUF_SIZE 2048
+#define UART_PATTERN_QUEUE_SIZE 20
 
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
@@ -25,12 +27,12 @@ Serial::Serial(const std::string name,
     };
     uart_param_config(uart_num, &uart_config);
     uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    uart_driver_install(uart_num, RX_BUF_SIZE, TX_BUF_SIZE, 0, NULL, 0);
+    uart_driver_install(uart_num, RX_BUF_SIZE, TX_BUF_SIZE, UART_PATTERN_QUEUE_SIZE, NULL, 0);
 }
 
 void Serial::enable_line_detection() const {
     uart_enable_pattern_det_baud_intr(this->uart_num, '\n', 1, 9, 0, 0);
-    uart_pattern_queue_reset(this->uart_num, 100);
+    uart_pattern_queue_reset(this->uart_num, UART_PATTERN_QUEUE_SIZE);
 }
 
 void Serial::deinstall() const {
@@ -55,7 +57,7 @@ void Serial::write_checked_line(const char *message, const int length) const {
     int start = 0;
     for (unsigned int i = 0; i < length + 1; ++i) {
         if (i >= length || message[i] == '\n') {
-            sprintf(checksum_buffer, "@%02x\n", checksum);
+            csprintf(checksum_buffer, sizeof(checksum_buffer), "@%02x\n", checksum);
             uart_write_bytes(this->uart_num, &message[start], i - start);
             uart_write_bytes(this->uart_num, checksum_buffer, 4);
             start = i + 1;
@@ -89,8 +91,20 @@ int Serial::read(uint32_t timeout) const {
     return length > 0 ? data : -1;
 }
 
-int Serial::read_line(char *buffer) const {
+int Serial::read_line(char *buffer, size_t buffer_len) const {
     int pos = uart_pattern_pop_pos(this->uart_num);
+    if (pos >= buffer_len) {
+        if (this->available() < pos) {
+            uart_flush_input(this->uart_num);
+            while (uart_pattern_pop_pos(this->uart_num) > 0)
+                ;
+            throw std::runtime_error("buffer too small, but cannot discard line. flushed serial.");
+        }
+
+        for (int i = 0; i < pos; i++)
+            this->read();
+        throw std::runtime_error("buffer too small. discarded line.");
+    }
     return pos >= 0 ? uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0) : 0;
 }
 
@@ -109,7 +123,7 @@ std::string Serial::get_output() const {
     int byte;
     int pos = 0;
     while ((byte = this->read()) >= 0) {
-        pos += std::sprintf(&buffer[pos], pos == 0 ? "%02x" : " %02x", byte);
+        pos += csprintf(&buffer[pos], sizeof(buffer) - pos, pos == 0 ? "%02x" : " %02x", byte);
     }
     return buffer;
 }

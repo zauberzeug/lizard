@@ -6,11 +6,11 @@
 
 void echo(const char *format, ...) {
     static char buffer[1024];
-    int pos = 0;
 
     va_list args;
     va_start(args, format);
-    pos += std::vsnprintf(&buffer[pos], sizeof buffer - pos - 1, format, args);
+    const int num_chars = std::vsnprintf(buffer, sizeof(buffer) - 1, format, args);
+    int pos = std::min(num_chars, static_cast<int>(sizeof(buffer) - 2));
     va_end(args);
 
     pos += std::sprintf(&buffer[pos], "\n");
@@ -30,10 +30,11 @@ void echo(const char *format, ...) {
 }
 
 int strip(char *buffer, int len) {
-    while (buffer[len - 1] == ' ' ||
-           buffer[len - 1] == '\t' ||
-           buffer[len - 1] == '\r' ||
-           buffer[len - 1] == '\n') {
+    while (len > 0 &&
+           (buffer[len - 1] == ' ' ||
+            buffer[len - 1] == '\t' ||
+            buffer[len - 1] == '\r' ||
+            buffer[len - 1] == '\n')) {
         len--;
     }
     buffer[len] = 0;
