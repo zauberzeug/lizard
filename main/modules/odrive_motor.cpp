@@ -6,6 +6,7 @@ ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32
     : Module(odrive_motor, name), can_id(can_id), can(can), version(version) {
     this->properties["position"] = std::make_shared<NumberVariable>();
     this->properties["speed"] = std::make_shared<NumberVariable>();
+    this->properties["speed_check"] = std::make_shared<BooleanVariable>();
     this->properties["tick_offset"] = std::make_shared<NumberVariable>();
     this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
     this->properties["reversed"] = std::make_shared<BooleanVariable>();
@@ -66,6 +67,9 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "reset_motor") {
         Module::expect(arguments, 0);
         this->reset_motor_error();
+    } else if (method_name == "velocity") {
+        Module::expect(arguments, 1, boolean);
+        this->properties.at("speed_check")->boolean_value = arguments[0]->evaluate_boolean();
     } else {
         Module::call(method_name, arguments);
     }
@@ -170,4 +174,10 @@ double ODriveMotor::get_speed() {
 
 void ODriveMotor::speed(const double speed, const double acceleration) {
     this->speed(static_cast<float>(speed));
+}
+void ODriveMotor::step() {
+    if (this->properties.at("speed_check")->boolean_value) {
+        uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+        this->can->send(this->can_id + 0x009, data, true); // get encoder estimates
+    }
 }
