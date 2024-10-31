@@ -67,7 +67,7 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "reset_motor") {
         Module::expect(arguments, 0);
         this->reset_motor_error();
-    } else if (method_name == "velocity") {
+    } else if (method_name == "speed_check") {
         Module::expect(arguments, 1, boolean);
         this->properties.at("speed_check")->boolean_value = arguments[0]->evaluate_boolean();
     } else {
