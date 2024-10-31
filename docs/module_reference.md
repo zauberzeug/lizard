@@ -289,7 +289,6 @@ The `version` parameter is an optional integer indicating the patch number of th
 | `motor.axis_state`  | State of the motor axis                   | `int`     |
 | `motor.axis_error`  | Error code of the axis                    | `int`     |
 | `motor.motor_error` | Motor error flat (requires version 0.5.6) | `int`     |
-| `motor.speed_check` | Enable speed check                         | `bool`    |
 | `motor.speed`       | Current speed (m/s)                       | `float`   |
 
 | Methods                        | Description                            | Arguments        |

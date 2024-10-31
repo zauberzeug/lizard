@@ -66,7 +66,6 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "reset_motor") {
         Module::expect(arguments, 0);
         this->reset_motor_error();
-
     } else {
         Module::call(method_name, arguments);
     }
