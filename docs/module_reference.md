@@ -283,6 +283,7 @@ The `version` parameter is an optional integer indicating the patch number of th
 | Properties          | Description                               | Data type |
 | ------------------- | ----------------------------------------- | --------- |
 | `motor.position`    | Motor position (meters)                   | `float`   |
+| `motor.speed`       | Motor speed (m/s)                         | `float`   |
 | `motor.tick_offset` | Encoder tick offset                       | `float`   |
 | `motor.m_per_tick`  | Meters per encoder tick                   | `float`   |
 | `motor.reversed`    | Reverse motor direction                   | `bool`    |
