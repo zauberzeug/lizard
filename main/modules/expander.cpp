@@ -141,6 +141,33 @@ void Expander::handle_boot_process() {
     }
 }
 
+void Expander::add_proxy(const std::string module_name,
+                         const std::string module_type,
+                         const std::vector<ConstExpression_ptr> arguments) {
+    pending_proxies.push_back({module_name, module_type, arguments, false});
+}
+
+void Expander::setup_proxy(const PendingProxy &proxy) {
+    static char buffer[256];
+    int pos = csprintf(buffer, sizeof(buffer), "%s = %s(",
+                       proxy.module_name.c_str(), proxy.module_type.c_str());
+    pos += write_arguments_to_buffer(proxy.arguments, &buffer[pos], sizeof(buffer) - pos);
+    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
+    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", proxy.module_name.c_str());
+    this->serial->write_checked_line(buffer, pos);
+}
+
+void Expander::prepare_restart() {
+    boot_state = BOOT_RESTARTING;
+    this->properties.at("is_ready")->boolean_value = false;
+    heartbeat_request_pending = false;
+
+    // Reset all proxy setup flags
+    for (auto &proxy : pending_proxies) {
+        proxy.is_setup = false;
+    }
+}
+
 void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
@@ -184,32 +211,5 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
         pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
         this->serial->write_checked_line(buffer, pos);
-    }
-}
-
-void Expander::add_proxy(const std::string module_name,
-                         const std::string module_type,
-                         const std::vector<ConstExpression_ptr> arguments) {
-    pending_proxies.push_back({module_name, module_type, arguments, false});
-}
-
-void Expander::setup_proxy(const PendingProxy &proxy) {
-    static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%s = %s(",
-                       proxy.module_name.c_str(), proxy.module_type.c_str());
-    pos += write_arguments_to_buffer(proxy.arguments, &buffer[pos], sizeof(buffer) - pos);
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", proxy.module_name.c_str());
-    this->serial->write_checked_line(buffer, pos);
-}
-
-void Expander::prepare_restart() {
-    boot_state = BOOT_RESTARTING;
-    this->properties.at("is_ready")->boolean_value = false;
-    heartbeat_request_pending = false;
-
-    // Reset all proxy setup flags
-    for (auto &proxy : pending_proxies) {
-        proxy.is_setup = false;
     }
 }
