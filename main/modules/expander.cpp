@@ -49,6 +49,8 @@ void Expander::step() {
     if (!this->properties.at("is_ready")->boolean_value) {
         handle_boot_process();
     } else {
+        handle_heartbeat();
+
         if (std::any_of(pending_proxies.begin(), pending_proxies.end(),
                         [](const PendingProxy &p) { return !p.is_setup; })) {
             for (auto &proxy : pending_proxies) {
@@ -75,6 +77,21 @@ void Expander::step() {
     Module::step();
 }
 
+void Expander::handle_heartbeat() {
+    const unsigned long time_since_last_message = millis_since(this->last_message_millis);
+
+    if (!heartbeat_request_pending) {
+        if (time_since_last_message >= HEARTBEAT_TIMEOUT_MS) {
+            this->serial->write_checked_line("core.is_alive()", 15);
+            heartbeat_request_pending = true;
+            heartbeat_request_time = millis();
+        }
+    } else if (millis_since(heartbeat_request_time) >= HEARTBEAT_RESPONSE_TIMEOUT_MS) {
+        echo("Warning: expander %s heartbeat failed, restarting", this->name.c_str());
+        prepare_restart();
+    }
+}
+
 void Expander::handle_boot_process() {
     switch (boot_state) {
     case BOOT_INIT:
@@ -98,14 +115,14 @@ void Expander::handle_boot_process() {
         }
 
         if (boot_wait_time > 0 && millis_since(boot_start_time) > boot_wait_time) {
-            boot_state = BOOT_RESTARTING;
+            echo("Warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
+            prepare_restart();
         }
         break;
     }
 
     case BOOT_RESTARTING:
         this->properties.at("is_ready")->boolean_value = false;
-        echo("Warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
         if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
             gpio_set_level(enable_pin, 0);
             delay(100);
@@ -129,6 +146,10 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         Module::expect(arguments, 1, string);
         std::string command = arguments[0]->evaluate_string();
         this->serial->write_checked_line(command.c_str(), command.length());
+    } else if (method_name == "restart") {
+        Module::expect(arguments, 0);
+        prepare_restart();
+        serial->write_checked_line("core.restart()", 14);
     } else if (method_name == "disconnect") {
         Module::expect(arguments, 0);
         this->serial->deinstall();
@@ -180,4 +201,15 @@ void Expander::setup_proxy(const PendingProxy &proxy) {
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", proxy.module_name.c_str());
     this->serial->write_checked_line(buffer, pos);
+}
+
+void Expander::prepare_restart() {
+    boot_state = BOOT_RESTARTING;
+    this->properties.at("is_ready")->boolean_value = false;
+    heartbeat_request_pending = false;
+
+    // Reset all proxy setup flags
+    for (auto &proxy : pending_proxies) {
+        proxy.is_setup = false;
+    }
 }
