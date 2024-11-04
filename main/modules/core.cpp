@@ -163,6 +163,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             echo("Not a strapping pin");
             break;
         }
+    } else if (method_name == "is_alive") {
+        Module::expect(arguments, 0);
+        echo("lizard is alive");
     } else {
         Module::call(method_name, arguments);
     }
