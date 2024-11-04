@@ -51,16 +51,6 @@ void Expander::step() {
     } else {
         handle_heartbeat();
 
-        if (std::any_of(pending_proxies.begin(), pending_proxies.end(),
-                        [](const PendingProxy &p) { return !p.is_setup; })) {
-            for (auto &proxy : pending_proxies) {
-                if (!proxy.is_setup) {
-                    setup_proxy(proxy);
-                    proxy.is_setup = true;
-                }
-            }
-        }
-
         static char buffer[1024];
         while (this->serial->has_buffered_lines()) {
             int len = this->serial->read_line(buffer, sizeof(buffer));
@@ -106,10 +96,9 @@ void Expander::handle_boot_process() {
             int len = this->serial->read_line(buffer, sizeof(buffer));
             check(buffer, len);
             this->last_message_millis = millis();
-            // no need for !! here, since we're ready in the waiting state
             echo("%s: %s", this->name.c_str(), buffer);
             if (strcmp("Ready.", buffer) == 0) {
-                boot_state = BOOT_READY;
+                boot_state = BOOT_SETTING_UP_PROXIES;
                 return;
             }
         }
@@ -117,6 +106,25 @@ void Expander::handle_boot_process() {
         if (boot_wait_time > 0 && millis_since(boot_start_time) > boot_wait_time) {
             echo("Warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
             prepare_restart();
+        }
+        break;
+    }
+
+    case BOOT_SETTING_UP_PROXIES: {
+        this->properties.at("is_ready")->boolean_value = false;
+        bool all_proxies_setup = true;
+
+        for (auto &proxy : pending_proxies) {
+            if (!proxy.is_setup) {
+                setup_proxy(proxy);
+                proxy.is_setup = true;
+                all_proxies_setup = false;
+                break;
+            }
+        }
+
+        if (all_proxies_setup) {
+            boot_state = BOOT_READY;
         }
         break;
     }
@@ -145,6 +153,13 @@ void Expander::add_proxy(const std::string module_name,
                          const std::string module_type,
                          const std::vector<ConstExpression_ptr> arguments) {
     pending_proxies.push_back({module_name, module_type, arguments, false});
+
+    if (boot_state == BOOT_READY) {
+        echo("%s: New proxy added, setting up...", this->name.c_str());
+        boot_state = BOOT_SETTING_UP_PROXIES;
+        // Reset ready state, since we're not ready until all proxies are setup
+        this->properties.at("is_ready")->boolean_value = false;
+    }
 }
 
 void Expander::setup_proxy(const PendingProxy &proxy) {

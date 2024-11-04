@@ -13,6 +13,7 @@ private:
         BOOT_INIT,
         BOOT_WAITING,
         BOOT_RESTARTING,
+        BOOT_SETTING_UP_PROXIES,
         BOOT_READY
     };
 
