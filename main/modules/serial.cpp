@@ -6,7 +6,7 @@
 
 #define RX_BUF_SIZE 2048
 #define TX_BUF_SIZE 2048
-#define UART_PATTERN_QUEUE_SIZE 20
+#define UART_PATTERN_QUEUE_SIZE 100
 
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
@@ -93,7 +93,7 @@ int Serial::read(uint32_t timeout) const {
 
 int Serial::read_line(char *buffer, size_t buffer_len) const {
     int pos = uart_pattern_pop_pos(this->uart_num);
-    if (pos >= buffer_len) {
+    if (pos >= static_cast<int>(buffer_len)) {
         if (this->available() < pos) {
             uart_flush_input(this->uart_num);
             while (uart_pattern_pop_pos(this->uart_num) > 0)
