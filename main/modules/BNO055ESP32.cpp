@@ -120,6 +120,7 @@ void BNO055::i2c_readLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t tim
 }
 
 void BNO055::i2c_writeLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t timeoutMS) {
+    vTaskDelay(pdMS_TO_TICKS(1));
     esp_err_t err = ESP_FAIL;
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
