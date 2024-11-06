@@ -46,7 +46,7 @@ Expander::Expander(const std::string name,
 }
 
 void Expander::step() {
-    if (!this->properties.at("is_ready")->boolean_value) {
+    if (!this->get_property("is_ready")->boolean_value) {
         handle_boot_process();
     } else {
         handle_heartbeat();
@@ -56,6 +56,7 @@ void Expander::step() {
             int len = this->serial->read_line(buffer, sizeof(buffer));
             check(buffer, len);
             this->last_message_millis = millis();
+            this->heartbeat_request_pending = false;
             if (buffer[0] == '!' && buffer[1] == '!') {
                 this->message_handler(&buffer[2], false, true);
             } else {
@@ -68,17 +69,25 @@ void Expander::step() {
 }
 
 void Expander::handle_heartbeat() {
-    const unsigned long time_since_last_message = millis_since(this->last_message_millis);
-
     if (!heartbeat_request_pending) {
-        if (time_since_last_message >= HEARTBEAT_TIMEOUT_MS) {
+        if (static_cast<int>(this->get_property("last_message_age")->integer_value) >= HEARTBEAT_TIMEOUT_MS) {
             this->serial->write_checked_line("core.is_alive()", 15);
             heartbeat_request_pending = true;
-            heartbeat_request_time = millis();
         }
-    } else if (millis_since(heartbeat_request_time) >= HEARTBEAT_RESPONSE_TIMEOUT_MS) {
+    } else if (static_cast<int>(this->get_property("last_message_age")->integer_value) >= HEARTBEAT_RESPONSE_TIMEOUT_MS + HEARTBEAT_TIMEOUT_MS) {
         echo("Warning: expander %s heartbeat failed, restarting", this->name.c_str());
         prepare_restart();
+    }
+}
+
+void Expander::prepare_restart() {
+    boot_state = BOOT_RESTARTING;
+    this->properties.at("is_ready")->boolean_value = false;
+    heartbeat_request_pending = false;
+
+    // Reset all proxy setup flags
+    for (auto &proxy : pending_proxies) {
+        proxy.is_setup = false;
     }
 }
 
@@ -170,17 +179,6 @@ void Expander::setup_proxy(const PendingProxy &proxy) {
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", proxy.module_name.c_str());
     this->serial->write_checked_line(buffer, pos);
-}
-
-void Expander::prepare_restart() {
-    boot_state = BOOT_RESTARTING;
-    this->properties.at("is_ready")->boolean_value = false;
-    heartbeat_request_pending = false;
-
-    // Reset all proxy setup flags
-    for (auto &proxy : pending_proxies) {
-        proxy.is_setup = false;
-    }
 }
 
 void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

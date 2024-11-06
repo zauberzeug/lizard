@@ -26,12 +26,11 @@ private:
 
     unsigned long int last_message_millis = 0;
     bool heartbeat_request_pending = false;
-    unsigned long heartbeat_request_time = 0;
     BootState boot_state;
     unsigned long boot_start_time;
     std::vector<PendingProxy> pending_proxies;
 
-    static constexpr unsigned long HEARTBEAT_TIMEOUT_MS = 30000;         // 30 seconds
+    static constexpr unsigned long HEARTBEAT_TIMEOUT_MS = 10000;         // 10 seconds
     static constexpr unsigned long HEARTBEAT_RESPONSE_TIMEOUT_MS = 5000; // 5 seconds
 
     void handle_boot_process();
