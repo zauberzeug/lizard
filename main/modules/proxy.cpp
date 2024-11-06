@@ -9,15 +9,8 @@ Proxy::Proxy(const std::string name,
              const Expander_ptr expander,
              const std::vector<ConstExpression_ptr> arguments)
     : Module(proxy, name), expander(expander) {
-    this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
+    this->properties["is_ready"] = expander->get_property("is_ready");
     expander->add_proxy(name, module_type, arguments);
-}
-
-void Proxy::step() {
-    // Update proxy's ready state based on expander's state
-    this->properties.at("is_ready")->boolean_value =
-        expander->get_property("is_ready")->boolean_value;
-    Module::step();
 }
 
 void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
