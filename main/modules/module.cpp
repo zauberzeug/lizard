@@ -30,6 +30,7 @@
 #include "roboclaw_wheels.h"
 #include "serial.h"
 #include "stepper_motor.h"
+#include "uu_motor.h"
 #include <stdarg.h>
 
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
@@ -335,6 +336,23 @@ Module_ptr Module::create(const std::string type,
         const DunkerMotor_ptr left_motor = std::static_pointer_cast<DunkerMotor>(left_module);
         const DunkerMotor_ptr right_motor = std::static_pointer_cast<DunkerMotor>(right_module);
         return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
+    } else if (type == "UUMotor") {
+        Module::expect(arguments, 3, identifier, integer, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const uint32_t can_id = arguments[1]->evaluate_integer();
+        uu_registers::MotorType motor_type;
+        if (arguments[2]->evaluate_integer() == 1) {
+            const uu_registers::MotorType motor_type = uu_registers::MotorType::MOTOR1;
+        } else if (arguments[2]->evaluate_integer() == 2) {
+            const uu_registers::MotorType motor_type = uu_registers::MotorType::MOTOR2;
+        } else if (arguments[2]->evaluate_integer() == 3) {
+            const uu_registers::MotorType motor_type = uu_registers::MotorType::COMBINED;
+        } else {
+            throw std::runtime_error("invalid motor type");
+        }
+        UUMotor_ptr motor = std::make_shared<UUMotor>(name, can_module, can_id, motor_type);
+        motor->subscribe_to_can();
+        return motor;
     } else if (type == "Analog") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");
