@@ -698,7 +698,7 @@ Note that the expander forwards all other method calls to the remote core module
 
 | Properties         | Description                                             | Data type |
 | ------------------ | ------------------------------------------------------- | --------- |
-| `boot_wait_time`   | Time to wait for other microcontroller to boot (s)      | `float`   |
+| `boot_timeout`     | Time to wait for other microcontroller to boot (s)      | `float`   |
 | `ping_interval`    | Time between pings (s)                                  | `float`   |
 | `ping_timeout`     | Time before timing out (s)                              | `float`   |
 | `is_ready`         | Whether the remote module has booted and is ready       | `bool`    |

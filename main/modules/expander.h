@@ -9,7 +9,7 @@ using Expander_ptr = std::shared_ptr<Expander>;
 
 class Expander : public Module {
 private:
-    struct PendingProxy {
+    struct ProxyInformation {
         std::string module_name;
         std::string module_type;
         std::vector<ConstExpression_ptr> arguments;
@@ -19,16 +19,13 @@ private:
     unsigned long int last_message_millis = 0;
     bool ping_pending = false;
     unsigned long boot_start_time;
-    std::vector<PendingProxy> pending_proxies;
+    std::vector<ProxyInformation> proxies;
 
-    static constexpr unsigned long PING_TIMEOUT_MS = 10000;         // 10 seconds
-    static constexpr unsigned long PING_RESPONSE_TIMEOUT_MS = 5000; // 5 seconds
-
-    void advance_boot_process();
+    void check_boot_progress();
     void ping();
     void restart();
     void handle_messages();
-    void setup_proxy(PendingProxy &proxy);
+    void setup_proxy(ProxyInformation &proxy);
 
 public:
     const ConstSerial_ptr serial;
