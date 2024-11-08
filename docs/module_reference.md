@@ -689,6 +689,7 @@ The expander module allows communication with another microcontroller connected 
 | `expander.run(command)` | Run any `command` on the other microcontroller   | `string`  |
 | `expander.disconnect()` | Disconnect serial connection and pins            |           |
 | `expander.flash()`      | Flash other microcontroller with own binary data |           |
+| `expander.restart()`    | Restart other microcontroller                    |           |
 
 The `flash()` method requires the `boot` and `enable` pins to be defined.
 
@@ -698,6 +699,10 @@ Note that the expander forwards all other method calls to the remote core module
 
 | Properties         | Description                                             | Data type |
 | ------------------ | ------------------------------------------------------- | --------- |
+| `boot_timeout`     | Time to wait for other microcontroller to boot (s)      | `float`   |
+| `ping_interval`    | Time between pings (s)                                  | `float`   |
+| `ping_timeout`     | Time before timing out (s)                              | `float`   |
+| `is_ready`         | Whether the remote module has booted and is ready       | `bool`    |
 | `last_message_age` | Time since last message from other microcontroller (ms) | `int`     |
 
 ## Proxy
@@ -714,3 +719,7 @@ Note that the remote module has to have turned on broadcasting: `x.broadcast()`.
 | `module = Proxy()` |
 
 Note that the proxy module forwards all method calls to the remote module.
+
+| Properties | Description                                       | Data type |
+| ---------- | ------------------------------------------------- | --------- |
+| `is_ready` | Whether the remote module has booted and is ready | `bool`    |

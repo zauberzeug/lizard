@@ -9,13 +9,8 @@ Proxy::Proxy(const std::string name,
              const Expander_ptr expander,
              const std::vector<ConstExpression_ptr> arguments)
     : Module(proxy, name), expander(expander) {
-    static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", name.c_str(), module_type.c_str());
-    pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", name.c_str());
-
-    expander->serial->write_checked_line(buffer, pos);
+    this->properties["is_ready"] = expander->get_property("is_ready");
+    expander->add_proxy(name, module_type, arguments);
 }
 
 void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

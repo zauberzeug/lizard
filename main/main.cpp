@@ -383,6 +383,8 @@ void run_step(Module_ptr module) {
 }
 
 void app_main() {
+    vTaskDelay(2000 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
+
     const uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -397,8 +399,6 @@ void app_main() {
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
-
-    printf("\nReady.\n");
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
@@ -419,6 +419,8 @@ void app_main() {
     } catch (const std::runtime_error &e) {
         echo("error while verifying OTA: %s", e.what());
     }
+
+    printf("\nReady.\n");
 
     while (true) {
         try {

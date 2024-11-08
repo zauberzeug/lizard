@@ -51,6 +51,10 @@ size_t Serial::write(const uint8_t byte) const {
     return 1;
 }
 
+void Serial::write_checked_line(const char *message) const {
+    this->write_checked_line(message, std::strlen(message));
+}
+
 void Serial::write_checked_line(const char *message, const int length) const {
     static char checksum_buffer[16];
     uint8_t checksum = 0;
