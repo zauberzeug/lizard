@@ -119,6 +119,9 @@ void Expander::handle_messages() {
         this->ping_pending = false;
         if (buffer[0] == '!' && buffer[1] == '!') {
             this->message_handler(&buffer[2], false, true);
+        } else if (strcmp("\"__PONG__\"", buffer) == 0) {
+            // No echo for pong
+            continue;
         } else {
             echo("%s: %s", this->name.c_str(), buffer);
         }
