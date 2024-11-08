@@ -106,7 +106,7 @@ void UUMotor::can_read(const uint16_t index) {
 
     uint8_t data[8] = {0};
     ESP_LOGI("UUMotor", "Sending CAN message with ID %lx, DLC %d", can_msg_id, 0);
-    this->can->send(can_msg_id, data, true, 0);
+    this->can->send(can_msg_id, data, true, 0, true);
 }
 
 // write a single register
@@ -146,7 +146,7 @@ void UUMotor::can_write(const uint16_t index, const uint8_t dlc, const uint32_t 
     }
     ESP_LOGI("UUMotor", "Data: %s", data_str);
 
-    this->can->send(can_msg_id, data, false, dlc);
+    this->can->send(can_msg_id, data, false, dlc, true);
 }
 
 void UUMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
