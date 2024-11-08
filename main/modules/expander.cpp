@@ -21,7 +21,7 @@ Expander::Expander(const std::string name,
       message_handler(message_handler) {
 
     this->properties["boot_timeout"] = std::make_shared<NumberVariable>(5.0);
-    this->properties["ping_interval"] = std::make_shared<NumberVariable>(1.0);
+    this->properties["ping_interval"] = std::make_shared<NumberVariable>(2.0);
     this->properties["ping_timeout"] = std::make_shared<NumberVariable>(1.0);
     this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
