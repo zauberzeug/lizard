@@ -32,19 +32,32 @@ with serial.Serial(usb_path, baudrate=115200, timeout=1.0) as port:
     send('!.')
     send('core.restart()')
 
-    time.sleep(3.0)
-    send('core.startup_checksum()')
-    deadline = time.time() + 1.0
+    # Wait for "Ready." message
+    deadline = time.time() + 3.0
     while time.time() < deadline:
         try:
             line = port.read_until(b'\r\n').decode().rstrip()
+            if line == "Ready.":
+                print("ESP32 booted and sent 'Ready.'")
+                break
         except UnicodeDecodeError:
             continue
-        if line.startswith('checksum: '):
-            if int(line.split()[1].split("@")[0], 16) == checksum:
-                print('Checksum matches.')
-                break
-            else:
-                raise ValueError('Checksum mismatch!')
+    else:
+        raise TimeoutError('Timeout waiting for device to restart!')
+
+    # Immediately check checksum after ready
+    send('core.startup_checksum()')
+    deadline = time.time() + 3.0
+    while time.time() < deadline:
+        try:
+            line = port.read_until(b'\r\n').decode().rstrip()
+            if line.startswith('checksum: '):
+                if int(line.split()[1].split("@")[0], 16) == checksum:
+                    print('Checksum matches.')
+                    break
+                else:
+                    raise ValueError('Checksum mismatch!')
+        except UnicodeDecodeError:
+            continue
     else:
         raise TimeoutError('Timeout waiting for checksum!')
