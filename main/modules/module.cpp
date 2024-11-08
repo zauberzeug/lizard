@@ -68,38 +68,19 @@ Module_ptr Module::create(const std::string type,
     if (type == "Core") {
         throw std::runtime_error("creating another core module is forbidden");
     } else if (type == "Expander") {
-        if (arguments.size() < 1 || arguments.size() > 4) {
+        if (arguments.size() != 1 && arguments.size() != 3) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, identifier, integer, integer, integer);
+        Module::expect(arguments, -1, identifier, integer, integer);
         std::string serial_name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(serial_name);
         if (module->type != serial) {
             throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
         }
         const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
-
-        gpio_num_t boot_pin = GPIO_NUM_NC;
-        gpio_num_t enable_pin = GPIO_NUM_NC;
-        u_int16_t boot_wait_time = 0; // infinite
-
-        switch (arguments.size()) {
-        case 1:
-            break;
-        case 2:
-            boot_wait_time = arguments[1]->evaluate_integer();
-            break;
-        case 3:
-            boot_pin = (gpio_num_t)arguments[1]->evaluate_integer();
-            enable_pin = (gpio_num_t)arguments[2]->evaluate_integer();
-            break;
-        case 4:
-            boot_pin = (gpio_num_t)arguments[1]->evaluate_integer();
-            enable_pin = (gpio_num_t)arguments[2]->evaluate_integer();
-            boot_wait_time = arguments[3]->evaluate_integer();
-            break;
-        }
-        return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, boot_wait_time, message_handler);
+        const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_NC;
+        const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_NC;
+        return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();

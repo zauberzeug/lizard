@@ -13,20 +13,18 @@ Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
                    const gpio_num_t boot_pin,
                    const gpio_num_t enable_pin,
-                   const u_int16_t boot_wait_time,
                    MessageHandler message_handler)
     : Module(expander, name),
       serial(serial),
       boot_pin(boot_pin),
       enable_pin(enable_pin),
-      boot_wait_time(boot_wait_time),
       message_handler(message_handler) {
 
-    boot_state = BOOT_INIT;
-    boot_start_time = 0;
-
-    this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
+    this->properties["boot_wait_time"] = std::make_shared<NumberVariable>(5.0);
+    this->properties["ping_interval"] = std::make_shared<NumberVariable>(1.0);
+    this->properties["ping_timeout"] = std::make_shared<NumberVariable>(1.0);
     this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
+    this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
 
     serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
@@ -39,139 +37,113 @@ Expander::Expander(const std::string name,
         delay(100);
         gpio_set_level(enable_pin, 1);
     } else {
-        serial->write_checked_line("core.restart()", 14);
+        serial->write_checked_line("core.restart()");
     }
 
-    boot_start_time = millis();
+    this->boot_start_time = millis();
 }
 
 void Expander::step() {
-    if (!this->get_property("is_ready")->boolean_value) {
-        handle_boot_process();
+    if (!this->properties.at("is_ready")->boolean_value) {
+        advance_boot_process();
     } else {
-        handle_heartbeat();
-
-        static char buffer[1024];
-        while (this->serial->has_buffered_lines()) {
-            int len = this->serial->read_line(buffer, sizeof(buffer));
-            check(buffer, len);
-            this->last_message_millis = millis();
-            this->heartbeat_request_pending = false;
-            if (buffer[0] == '!' && buffer[1] == '!') {
-                this->message_handler(&buffer[2], false, true);
-            } else {
-                echo("%s: %s", this->name.c_str(), buffer);
-            }
-        }
+        ping();
+        handle_messages();
     }
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
 }
 
-void Expander::handle_heartbeat() {
-    if (!heartbeat_request_pending) {
-        if (static_cast<int>(this->get_property("last_message_age")->integer_value) >= HEARTBEAT_TIMEOUT_MS) {
-            this->serial->write_checked_line("core.is_alive()", 15);
-            heartbeat_request_pending = true;
+void Expander::advance_boot_process() {
+    static char buffer[1024];
+    while (this->serial->has_buffered_lines()) {
+        const int len = this->serial->read_line(buffer, sizeof(buffer));
+        check(buffer, len);
+        this->last_message_millis = millis();
+        echo("%s: %s", this->name.c_str(), buffer);
+        if (strcmp("Ready.", buffer) == 0) {
+            for (auto &proxy : pending_proxies) {
+                if (!proxy.is_setup) {
+                    setup_proxy(proxy);
+                }
+            }
+            this->properties.at("is_ready")->boolean_value = true;
+            echo("%s: Booting process completed successfully", this->name.c_str());
+            break;
         }
-    } else if (static_cast<int>(this->get_property("last_message_age")->integer_value) >= HEARTBEAT_RESPONSE_TIMEOUT_MS + HEARTBEAT_TIMEOUT_MS) {
-        echo("Warning: expander %s heartbeat failed, restarting", this->name.c_str());
-        prepare_restart();
+    }
+
+    const unsigned long boot_wait_time = this->get_property("boot_wait_time")->number_value * 1000;
+    if (boot_wait_time > 0 && millis_since(this->boot_start_time) > boot_wait_time) {
+        echo("warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
+        restart();
     }
 }
 
-void Expander::prepare_restart() {
-    boot_state = BOOT_RESTARTING;
-    this->properties.at("is_ready")->boolean_value = false;
-    heartbeat_request_pending = false;
+void Expander::ping() {
+    const double last_message_age = this->get_property("last_message_age")->integer_value / 1000.0;
+    const double ping_interval = this->get_property("ping_interval")->number_value;
+    const double ping_timeout = this->get_property("ping_timeout")->number_value;
+    if (!this->ping_pending) {
+        if (last_message_age >= ping_interval) {
+            this->serial->write_checked_line("core.print('__PONG__')");
+            this->ping_pending = true;
+        }
+    } else {
+        if (last_message_age >= ping_interval + ping_timeout) {
+            echo("warning: expander %s ping timed out, restarting", this->name.c_str());
+            restart();
+        }
+    }
+}
 
-    // Reset all proxy setup flags
+void Expander::restart() {
+    this->ping_pending = false;
+
     for (auto &proxy : pending_proxies) {
         proxy.is_setup = false;
     }
+
+    if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
+        gpio_set_level(this->enable_pin, 0);
+        delay(100);
+        gpio_set_level(this->enable_pin, 1);
+    } else {
+        serial->write_checked_line("core.restart()");
+    }
+    this->boot_start_time = millis();
+    this->properties.at("is_ready")->boolean_value = false;
 }
 
-void Expander::handle_boot_process() {
-    switch (boot_state) {
-    case BOOT_INIT:
-        boot_state = BOOT_WAITING;
-        boot_start_time = millis();
-        break;
-
-    case BOOT_WAITING: {
-        this->properties.at("is_ready")->boolean_value = false;
-        static char buffer[1024];
-        while (this->serial->has_buffered_lines()) {
-            int len = this->serial->read_line(buffer, sizeof(buffer));
-            check(buffer, len);
-            this->last_message_millis = millis();
-            echo("%s: %s", this->name.c_str(), buffer);
-            if (strcmp("Ready.", buffer) == 0) {
-                boot_state = BOOT_SETTING_UP_PROXIES;
-                return;
-            }
-        }
-
-        if (boot_wait_time > 0 && millis_since(boot_start_time) > boot_wait_time) {
-            echo("Warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
-            prepare_restart();
-        }
-        break;
-    }
-
-    case BOOT_SETTING_UP_PROXIES: {
-        this->properties.at("is_ready")->boolean_value = false;
-        bool all_proxies_setup = true;
-
-        for (auto &proxy : pending_proxies) {
-            if (!proxy.is_setup) {
-                setup_proxy(proxy);
-                proxy.is_setup = true;
-                all_proxies_setup = false;
-                break;
-            }
-        }
-
-        if (all_proxies_setup) {
-            boot_state = BOOT_READY;
-        }
-        break;
-    }
-
-    case BOOT_RESTARTING:
-        this->properties.at("is_ready")->boolean_value = false;
-        if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
-            gpio_set_level(enable_pin, 0);
-            delay(100);
-            gpio_set_level(enable_pin, 1);
+void Expander::handle_messages() {
+    static char buffer[1024];
+    while (this->serial->has_buffered_lines()) {
+        int len = this->serial->read_line(buffer, sizeof(buffer));
+        check(buffer, len);
+        this->last_message_millis = millis();
+        this->ping_pending = false;
+        if (buffer[0] == '!' && buffer[1] == '!') {
+            this->message_handler(&buffer[2], false, true);
         } else {
-            serial->write_checked_line("core.restart()", 14);
+            echo("%s: %s", this->name.c_str(), buffer);
         }
-        boot_state = BOOT_WAITING;
-        boot_start_time = millis();
-        break;
-
-    case BOOT_READY:
-        echo("%s: Booting process completed successfully", this->name.c_str());
-        this->properties.at("is_ready")->boolean_value = true;
-        break;
     }
 }
 
 void Expander::add_proxy(const std::string module_name,
                          const std::string module_type,
                          const std::vector<ConstExpression_ptr> arguments) {
-    pending_proxies.push_back({module_name, module_type, arguments, false});
+    PendingProxy proxy = {module_name, module_type, arguments, false};
+    pending_proxies.push_back(proxy);
 
-    if (boot_state == BOOT_READY) {
-        echo("%s: New proxy added, setting up...", this->name.c_str());
-        boot_state = BOOT_SETTING_UP_PROXIES;
+    if (this->properties.at("is_ready")->boolean_value) {
         // Reset ready state, since we're not ready until all proxies are setup
-        this->properties.at("is_ready")->boolean_value = false;
+        echo("%s: New proxy added, setting up...", this->name.c_str());
+        setup_proxy(proxy);
     }
 }
 
-void Expander::setup_proxy(const PendingProxy &proxy) {
+void Expander::setup_proxy(PendingProxy &proxy) {
     static char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%s = %s(",
                        proxy.module_name.c_str(), proxy.module_type.c_str());
@@ -179,6 +151,7 @@ void Expander::setup_proxy(const PendingProxy &proxy) {
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", proxy.module_name.c_str());
     this->serial->write_checked_line(buffer, pos);
+    proxy.is_setup = true;
 }
 
 void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -188,8 +161,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         this->serial->write_checked_line(command.c_str(), command.length());
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
-        prepare_restart();
-        serial->write_checked_line("core.restart()", 14);
+        restart();
     } else if (method_name == "disconnect") {
         Module::expect(arguments, 0);
         this->serial->deinstall();
