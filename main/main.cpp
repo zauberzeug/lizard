@@ -383,7 +383,7 @@ void run_step(Module_ptr module) {
 }
 
 void app_main() {
-    vTaskDelay(2000 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
+    vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
     const uart_config_t uart_config = {
         .baud_rate = 115200,
