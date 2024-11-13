@@ -340,18 +340,23 @@ Module_ptr Module::create(const std::string type,
         Module::expect(arguments, 3, identifier, integer, integer);
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
         const uint32_t can_id = arguments[1]->evaluate_integer();
-        uu_registers::MotorType motor_type;
-        if (arguments[2]->evaluate_integer() == 1) {
-            const uu_registers::MotorType motor_type = uu_registers::MotorType::MOTOR1;
-        } else if (arguments[2]->evaluate_integer() == 2) {
-            const uu_registers::MotorType motor_type = uu_registers::MotorType::MOTOR2;
-        } else if (arguments[2]->evaluate_integer() == 3) {
-            const uu_registers::MotorType motor_type = uu_registers::MotorType::COMBINED;
-        } else {
+        UUMotor_ptr motor;
+        switch (arguments[2]->evaluate_integer()) {
+        case 1:
+            motor = std::make_shared<UUMotor_single>(name, can_module, can_id, uu_registers::MotorType::MOTOR1);
+            motor->subscribe_to_can();
+            break;
+        case 2:
+            motor = std::make_shared<UUMotor_single>(name, can_module, can_id, uu_registers::MotorType::MOTOR2);
+            motor->subscribe_to_can();
+            break;
+        case 3:
+            motor = std::make_shared<UUMotor_combined>(name, can_module, can_id, uu_registers::MotorType::COMBINED);
+            motor->subscribe_to_can();
+            break;
+        default:
             throw std::runtime_error("invalid motor type");
         }
-        UUMotor_ptr motor = std::make_shared<UUMotor>(name, can_module, can_id, motor_type);
-        motor->subscribe_to_can();
         return motor;
     } else if (type == "Analog") {
         if (arguments.size() < 2 || arguments.size() > 3) {

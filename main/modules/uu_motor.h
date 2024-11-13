@@ -83,8 +83,8 @@ constexpr uint8_t DLC_U16 = 2;
 constexpr uint8_t DLC_U32 = 4;
 } // namespace uu_registers
 
-class UUMotor : public Module, public std::enable_shared_from_this<UUMotor>, virtual public Motor {
-private:
+class UUMotor : public Module, public std::enable_shared_from_this<UUMotor>, public Motor {
+protected:
     const Can_ptr can;
     const uint32_t can_id;
     const uu_registers::MotorType motor_type;
@@ -92,41 +92,55 @@ private:
     const uint8_t register_number;
     int64_t last_can_msg_time;
 
-    void can_write(const uint16_t index, const uint8_t dlc, const uint32_t value, const bool wait = false);
-    void can_read(const uint16_t index);
-    void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
-    void handle_single_can_msg(const uint16_t reg_addr, const uint8_t *const data);
-    void handle_combined_can_msg(const uint16_t reg_addr, const uint8_t *const data);
     void setup_pdo_motor1();
     void setup_pdo_motor2();
-    void set_mode(const uint16_t control_mode);
+    void can_write(const uint16_t index, const uint8_t dlc, const uint32_t value, const bool wait = false);
+    void can_read(const uint16_t index);
     void reset_motor_error();
-    void speed(const int16_t speed);
-    void setup_motor();
-    void off();
-    void start();
-    void stop() override;
 
-    // Implementierung der reinen virtuellen Funktionen von Motor
-    double get_position() override;
-    void position(const double position, const double speed, const double acceleration) override;
-    double get_speed() override;
-    void speed(const double speed, const double acceleration) override;
+    // unused virtual functions from Motor
+    double get_position() override { return 0.0; }
+    void position(const double position, const double speed, const double acceleration) override {}
+    double get_speed() override { return 0.0; }
+    void speed(const double speed, const double acceleration) override {}
 
 public:
+    virtual void subscribe_to_can() = 0; // Pure virtual function
     UUMotor(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type = uu_registers::MotorType::MOTOR2);
-    void subscribe_to_can();
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-
     void step() override;
 };
 
 class UUMotor_single : public UUMotor {
+private:
+    void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
+    void reset_motor_error();
+    void setup_motor();
+    void off();
+    void start();
+    void stop() override;
+    void set_mode(const uint16_t control_mode);
+
 public:
     UUMotor_single(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type = uu_registers::MotorType::MOTOR1);
+    void subscribe_to_can() override;
+    void set_speed(const int16_t speed);
+    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 };
 
 class UUMotor_combined : public UUMotor {
+private:
+    void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
+    void can_write_combined(const uint16_t index, const uint16_t value);
+    void reset_motor_error();
+    void setup_motor();
+    void set_mode(const uint16_t control_mode);
+    void off();
+    void start();
+    void stop() override;
+
 public:
-    UUMotor_combined(const std::string &name, const Can_ptr can, const uint32_t can_id);
+    UUMotor_combined(const std::string &name, const Can_ptr can, const uint32_t can_id, const uu_registers::MotorType type = uu_registers::MotorType::COMBINED);
+    void subscribe_to_can() override;
+    void set_speed(const int16_t speed);
+    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 };
