@@ -26,6 +26,8 @@ private:
     void restart();
     void handle_messages();
     void setup_proxy(ProxyInformation &proxy);
+    void check_strapping_pins();
+    void handle_pin_status(const char *buffer);
 
 public:
     const ConstSerial_ptr serial;
