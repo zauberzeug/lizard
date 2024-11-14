@@ -81,6 +81,10 @@ constexpr uint8_t DLC_NONE = 0;
 constexpr uint8_t DLC_U8 = 1;
 constexpr uint8_t DLC_U16 = 2;
 constexpr uint8_t DLC_U32 = 4;
+
+// timing
+constexpr uint16_t PDO_DELAY = 100;
+constexpr uint32_t CAN_WATCHDOG_TIME = 3000000; // 3 seconds
 } // namespace uu_registers
 
 class UUMotor : public Module, public std::enable_shared_from_this<UUMotor>, public Motor {
@@ -115,15 +119,15 @@ private:
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
     void reset_motor_error();
     void setup_motor();
+    void set_speed(const int16_t speed);
+    void set_mode(const uint16_t control_mode);
     void off();
     void start();
     void stop() override;
-    void set_mode(const uint16_t control_mode);
 
 public:
     UUMotor_single(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type = uu_registers::MotorType::MOTOR1);
     void subscribe_to_can() override;
-    void set_speed(const int16_t speed);
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 };
 
@@ -133,6 +137,7 @@ private:
     void can_write_combined(const uint16_t index, const uint16_t value);
     void reset_motor_error();
     void setup_motor();
+    void set_speed(const int16_t speed);
     void set_mode(const uint16_t control_mode);
     void off();
     void start();
@@ -141,6 +146,5 @@ private:
 public:
     UUMotor_combined(const std::string &name, const Can_ptr can, const uint32_t can_id, const uu_registers::MotorType type = uu_registers::MotorType::COMBINED);
     void subscribe_to_can() override;
-    void set_speed(const int16_t speed);
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
 };

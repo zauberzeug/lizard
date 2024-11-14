@@ -24,7 +24,7 @@ void UUMotor_combined::subscribe_to_can() {
         this->registers.MOTOR_SPEED_RPM,
         this->registers.ERROR_CODE};
 
-    // Durch alle Register loopen und subscriben
+    // Loop through all registers and subscribe
     for (const auto &reg_addr : register_addresses) {
         uint32_t can_msg_id = 0;
         can_msg_id |= (1 << 28);            // Scope/Direction
@@ -80,6 +80,7 @@ void UUMotor_combined::call(const std::string method_name, const std::vector<Con
 void UUMotor_combined::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     uint16_t reg_addr = id & 0xFFFF; // Extract register address from CAN ID
     this->last_can_msg_time = esp_timer_get_time();
+
     const auto &reg = this->registers;
     if (reg_addr == reg.MOTOR_SPEED_RPM) {
         uint16_t speed1 = data[1] | (data[0] << 8);
@@ -160,7 +161,7 @@ void UUMotor_combined::setup_motor() {
 }
 
 void UUMotor_combined::off() {
-    this->can_write(this->registers.CONTROL_COMMAND, uu_registers::DLC_U16, uu_registers::STOP_MOTOR);
+    this->can_write_combined(this->registers.CONTROL_COMMAND, uu_registers::STOP_MOTOR);
 }
 
 void UUMotor_combined::start() {

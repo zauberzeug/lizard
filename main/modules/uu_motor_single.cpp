@@ -25,7 +25,7 @@ void UUMotor_single::subscribe_to_can() {
         this->registers.MOTOR_SPEED_RPM,
         this->registers.ERROR_CODE};
 
-    // Durch alle Register loopen und subscriben
+    // Loop through all registers and subscribe
     for (const auto &reg_addr : register_addresses) {
         uint32_t can_msg_id = 0;
         can_msg_id |= (1 << 28);            // Scope/Direction
@@ -40,6 +40,7 @@ void UUMotor_single::subscribe_to_can() {
 void UUMotor_single::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     uint16_t reg_addr = id & 0xFFFF; // Extract register address from CAN ID
     this->last_can_msg_time = esp_timer_get_time();
+
     const auto &reg = this->registers;
     if (reg_addr == reg.MOTOR_RUNNING_STATUS) {
         uint16_t motor_running_status = data[1] | (data[0] << 8);
@@ -97,7 +98,7 @@ void UUMotor_single::set_speed(const int16_t speed) {
     if (this->properties.at("motor_running_status")->integer_value != uu_registers::MOTOR_RUNNING_STATUS_RUNNING) {
         this->start();
     }
-    // Single motor mode
+
     if (this->properties.at("control_mode")->integer_value != uu_registers::CONTROL_MODE_SPEED) {
         this->set_mode(uu_registers::CONTROL_MODE_SPEED);
     }
