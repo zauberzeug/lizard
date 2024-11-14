@@ -25,7 +25,6 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
     }
     this->bno = std::make_shared<BNO055>((i2c_port_t)i2c_port, address, GPIO_NUM_MAX, GPIO_NUM_MAX);
     try {
-        ESP_LOGI("IMU", "Initializing BNO055");
         this->bno->begin();
         this->bno->enableExternalCrystal();
         this->bno->setOprModeNdof();

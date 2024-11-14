@@ -122,105 +122,30 @@ void BNO055::i2c_readLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t tim
 }
 
 void BNO055::i2c_writeLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t timeoutMS) {
-    // Setze einen Mindest-Timeout
     if (timeoutMS == 0) {
         timeoutMS = 1000; // 1 Sekunde Timeout als Standard
     }
-
     esp_err_t err = ESP_FAIL;
-
-    // Debug-Ausgaben für I2C-Konfiguration
-    ESP_LOGI(BNO055_LOG_TAG, "I2C Write - Port: %d, Address: 0x%02X, Register: 0x%02X, Length: %d",
-             _i2cPort, _i2cAddr, reg, len);
-
-    // Debug der zu schreibenden Daten
-    if (len > 0 && buffer != nullptr) {
-        ESP_LOGI(BNO055_LOG_TAG, "Data to write:");
-        for (int i = 0; i < len; i++) {
-            ESP_LOGI(BNO055_LOG_TAG, "  Byte %d: 0x%02X", i, buffer[i]);
-        }
-    }
-
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    if (cmd == NULL) {
-        ESP_LOGE(BNO055_LOG_TAG, "Failed to create I2C command link");
-        throw BNO055I2CError();
-    }
-
-    // Debug-Ausgaben für I2C-Kommandos
-    ESP_LOGI(BNO055_LOG_TAG, "Creating I2C command sequence");
-
-    if (i2c_master_start(cmd) != ESP_OK) {
-        ESP_LOGE(BNO055_LOG_TAG, "Failed to add START condition");
-    }
-
-    // Senden der Geräteadresse (Write-Mode)
-    ESP_LOGI(BNO055_LOG_TAG, "Original I2C Address: 0x%02X", _i2cAddr);
-    uint8_t write_addr = (_i2cAddr << 1) | I2C_MASTER_WRITE;
-    ESP_LOGI(BNO055_LOG_TAG, "Shifted I2C Address for write: 0x%02X", write_addr);
-
-    if (i2c_master_write_byte(cmd, write_addr, ACK_EN) != ESP_OK) {
-        ESP_LOGE(BNO055_LOG_TAG, "Failed to add device address");
-    }
-
-    // Senden des Registers
-    ESP_LOGI(BNO055_LOG_TAG, "Writing register address: 0x%02X", reg);
-    if (i2c_master_write_byte(cmd, reg, ACK_EN) != ESP_OK) {
-        ESP_LOGE(BNO055_LOG_TAG, "Failed to add register address");
-    }
-
-    // Senden der Daten
-    if (len > 0 && buffer != nullptr) {
-        ESP_LOGI(BNO055_LOG_TAG, "Writing data bytes");
-        if (i2c_master_write(cmd, buffer, len, ACK_EN) != ESP_OK) {
-            ESP_LOGE(BNO055_LOG_TAG, "Failed to add data bytes");
-        }
-    }
-
-    if (i2c_master_stop(cmd) != ESP_OK) {
-        ESP_LOGE(BNO055_LOG_TAG, "Failed to add STOP condition");
-    }
-
-    // Senden der Kommandos
-    ESP_LOGI(BNO055_LOG_TAG, "Sending I2C commands (timeout: %lu ms)", timeoutMS);
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (_i2cAddr << 1) | I2C_MASTER_WRITE, ACK_EN);
+    i2c_master_write_byte(cmd, reg, ACK_EN);
+    i2c_master_write(cmd, buffer, len, 0x01);
+    i2c_master_stop(cmd);
 
     for (int round = 1; round <= UART_ROUND_NUM; round++) {
-        ESP_LOGI(BNO055_LOG_TAG, "Attempt %d of %d with timeout %lu ms",
-                 round, UART_ROUND_NUM, timeoutMS);
-
+#ifndef BNO055_DEBUG_OFF
+        ESP_LOGD(BNO055_LOG_TAG, "(i2c_WL) Round %d", round);
+#endif
         err = i2c_master_cmd_begin(_i2cPort, cmd, timeoutMS / portTICK_PERIOD_MS);
-
-        if (err == ESP_OK) {
-            ESP_LOGI(BNO055_LOG_TAG, "I2C command successful");
+        if (err == ESP_OK)
             break;
-        } else {
-            ESP_LOGE(BNO055_LOG_TAG, "I2C command failed: %s (error: %d)",
-                     esp_err_to_name(err), err);
-
-            // Zusätzliche Debug-Informationen für spezifische Fehler
-            switch (err) {
-            case ESP_ERR_TIMEOUT:
-                ESP_LOGE(BNO055_LOG_TAG, "Timeout - Check your wiring and pull-up resistors");
-                break;
-            case ESP_ERR_INVALID_ARG:
-                ESP_LOGE(BNO055_LOG_TAG, "Invalid argument - Check I2C configuration");
-                break;
-            case ESP_FAIL:
-                ESP_LOGE(BNO055_LOG_TAG, "Command failed - Check device address and connection");
-                break;
-            default:
-                ESP_LOGE(BNO055_LOG_TAG, "Unknown error occurred");
-                break;
-            }
-        }
+        else
+            ESP_LOGE(BNO055_LOG_TAG, "(i2c WL) Error: %d", (int)err);
     }
-
     i2c_cmd_link_delete(cmd);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(BNO055_LOG_TAG, "I2C write operation failed after all attempts");
+    if (err != ESP_OK)
         throw BNO055I2CError();
-    }
 }
 
 void BNO055::uart_readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint32_t timeoutMS) {
@@ -361,7 +286,6 @@ void BNO055::writeLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len, uint8_t pa
     if (!_i2cFlag) {
         uart_writeLen(reg, buffer, len, timeoutMS);
     } else {
-        ESP_LOGI(BNO055_LOG_TAG, "Writing to BNO055");
         i2c_writeLen(reg, buffer, len, timeoutMS);
     }
 }
@@ -491,12 +415,12 @@ void BNO055::reset() {
     int tmp = 0x20;
     if (_rstPin == GPIO_NUM_MAX) {
 #ifndef BNO055_DEBUG_OFF
-        ESP_LOGI("BNO055_LOG_TAG", "RST -> using serial bus"); // DEBUG
+        ESP_LOGD(BNO055_LOG_TAG, "RST -> using serial bus"); // DEBUG
 #endif
-        writeLen(BNO055_REG_SYS_TRIGGER, (uint8_t *)&tmp, 1, 0, 0); // RST (0 timeout because RST is not Acknowledged)
+        writeLen(BNO055_REG_SYS_TRIGGER, (uint8_t *)&tmp, 1, 0, 1000); // RST (0 timeout because RST is not Acknowledged)
     } else {
 #ifndef BNO055_DEBUG_OFF
-        ESP_LOGI(BNO055_LOG_TAG, "RST -> using hardware pin"); // DEBUG
+        ESP_LOGD(BNO055_LOG_TAG, "RST -> using hardware pin"); // DEBUG
 #endif
         esp_rom_gpio_pad_select_gpio(_rstPin);
         gpio_set_direction(_rstPin, GPIO_MODE_OUTPUT);
@@ -505,7 +429,6 @@ void BNO055::reset() {
         gpio_set_level(_rstPin, 1); // turn ON
     }
     vTaskDelay(700 / portTICK_PERIOD_MS); // (RE)BOOT TIME (datasheet recommends 650ms)
-    ESP_LOGI(BNO055_LOG_TAG, "BNO055 reset complete");
 }
 
 bno055_vector_t BNO055::getVector(bno055_vector_type_t vec) {
@@ -880,7 +803,6 @@ void BNO055::setAccelSleepConfig(bno055_accel_sleep_duration_t sleepDuration, bn
 
 void BNO055::begin() {
     uint8_t id = 0;
-    ESP_LOGI("IMU", "the _i2cFlag is %d", _i2cFlag);
     if (!_i2cFlag) {
         // Setup UART
         esp_err_t esperr = uart_driver_delete(_uartPort);
