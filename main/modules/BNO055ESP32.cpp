@@ -120,9 +120,7 @@ void BNO055::i2c_readLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t tim
 }
 
 void BNO055::i2c_writeLen(uint8_t reg, uint8_t *buffer, uint8_t len, uint32_t timeoutMS) {
-     if (timeoutMS == 0) {
-        timeoutMS = 1000; // 1 Sekunde Timeout als Standard
-    }    esp_err_t err = ESP_FAIL;
+    esp_err_t err = ESP_FAIL;
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (_i2cAddr << 1) | I2C_MASTER_WRITE, ACK_EN);
@@ -403,7 +401,7 @@ void BNO055::reset() {
 #ifndef BNO055_DEBUG_OFF
         ESP_LOGD(BNO055_LOG_TAG, "RST -> using serial bus");  // DEBUG
 #endif
-        writeLen(BNO055_REG_SYS_TRIGGER, (uint8_t *)&tmp, 1, 0, 1000);  // RST (0 timeout because RST is not Acknowledged)
+        writeLen(BNO055_REG_SYS_TRIGGER, (uint8_t *)&tmp, 1, 0, 1000);
     } else {
 #ifndef BNO055_DEBUG_OFF
         ESP_LOGD(BNO055_LOG_TAG, "RST -> using hardware pin");  // DEBUG
