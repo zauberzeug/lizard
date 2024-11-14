@@ -401,7 +401,7 @@ void BNO055::reset() {
 #ifndef BNO055_DEBUG_OFF
         ESP_LOGD(BNO055_LOG_TAG, "RST -> using serial bus");  // DEBUG
 #endif
-        writeLen(BNO055_REG_SYS_TRIGGER, (uint8_t *)&tmp, 1, 0, 0);  // RST (0 timeout because RST is not Acknowledged)
+        writeLen(BNO055_REG_SYS_TRIGGER, (uint8_t *)&tmp, 1, 0, 1000);
     } else {
 #ifndef BNO055_DEBUG_OFF
         ESP_LOGD(BNO055_LOG_TAG, "RST -> using hardware pin");  // DEBUG
