@@ -110,18 +110,20 @@ void Expander::restart() {
     this->properties.at("is_ready")->boolean_value = false;
 }
 
-void Expander::handle_messages() {
+void Expander::handle_messages(bool check_for_strapping_pins) {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer, sizeof(buffer));
         check(buffer, len);
+        if (check_for_strapping_pins) {
+            check_strapping_pins(buffer);
+        }
         this->last_message_millis = millis();
         this->ping_pending = false;
         if (buffer[0] == '!' && buffer[1] == '!') {
             this->message_handler(&buffer[2], false, true);
         } else if (strcmp("\"__PONG__\"", buffer) == 0) {
             // No echo for pong
-            continue;
         } else {
             echo("%s: %s", this->name.c_str(), buffer);
         }
@@ -162,22 +164,28 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         restart();
     } else if (method_name == "disconnect") {
         Module::expect(arguments, 0);
-        this->serial->deinstall();
-        if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
-            gpio_reset_pin(this->boot_pin);
-            gpio_reset_pin(this->enable_pin);
-            gpio_set_direction(this->boot_pin, GPIO_MODE_INPUT);
-            gpio_set_direction(this->enable_pin, GPIO_MODE_INPUT);
-            gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
-            gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
-        }
+        deinstall();
     } else if (method_name == "flash") {
-        Module::expect(arguments, 0);
+        if (arguments.size() > 1) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, boolean);
+        bool force = arguments.size() > 0 ? arguments[0]->evaluate_boolean() : false;
         if (this->boot_pin == GPIO_NUM_NC || this->enable_pin == GPIO_NUM_NC) {
             throw std::runtime_error("expander \"" + this->name + "\" does not support flashing, pins not set");
         }
         Storage::clear_nvs();
-        this->serial->deinstall();
+        gpio_set_level(this->boot_pin, 0);
+        if (!force) {
+            this->serial->write_checked_line("core.get_pin_status(0)");
+            this->serial->write_checked_line("core.get_pin_status(2)");
+            this->serial->write_checked_line("core.get_pin_status(12)");
+            delay(100);
+            this->handle_messages(true);
+        }
+
+        restart();
+        deinstall();
         bool success = ZZ::Replicator::flashReplica(this->serial->uart_num,
                                                     this->enable_pin,
                                                     this->boot_pin,
@@ -194,5 +202,37 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
         pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
         this->serial->write_checked_line(buffer, pos);
+    }
+}
+
+void Expander::check_strapping_pins(const char *buffer) {
+    // We only need to check GPIO 0, 2 and 12 because they directly influence boot mode and flash voltage selection,
+    // ensuring correct operation during boot and flashing. These are not directly controllable by the expander.
+    if (strstr(buffer, "GPIO_Status[12]|") != nullptr) {
+        if (strstr(buffer, "GPIO_Status[12]| Level: 1") != nullptr) {
+            echo("warning: GPIO12 state is HIGH, this can cause issues with flash voltage selection");
+        }
+    }
+    if (strstr(buffer, "GPIO_Status[0]|") != nullptr) {
+        if (strstr(buffer, "GPIO_Status[0]| Level: 1") != nullptr) {
+            throw std::runtime_error("GPIO0 current state is HIGH - must be LOW for boot mode");
+        }
+    }
+    if (strstr(buffer, "GPIO_Status[2]|") != nullptr) {
+        if (strstr(buffer, "GPIO_Status[2]| Level: 1") != nullptr) {
+            throw std::runtime_error("GPIO2 current state is HIGH - must be LOW or floating for flash mode");
+        }
+    }
+}
+
+void Expander::deinstall() {
+    this->serial->deinstall();
+    if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
+        gpio_reset_pin(this->boot_pin);
+        gpio_reset_pin(this->enable_pin);
+        gpio_set_direction(this->boot_pin, GPIO_MODE_INPUT);
+        gpio_set_direction(this->enable_pin, GPIO_MODE_INPUT);
+        gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
+        gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
     }
 }
