@@ -4,7 +4,7 @@
 #include <memory>
 #include <stdexcept>
 
-std::map<std::string, Variable_ptr> Input::default_properties() {
+std::map<std::string, Variable_ptr> Input::get_default_properties() const {
     return {
         {"level", std::make_shared<IntegerVariable>(-1)},
         {"change", std::make_shared<IntegerVariable>(-1)},
@@ -13,7 +13,7 @@ std::map<std::string, Variable_ptr> Input::default_properties() {
 }
 
 Input::Input(const std::string name) : Module(input, name) {
-    this->properties = Input::default_properties();
+    this->properties = this->get_default_properties();
 }
 
 void Input::step() {

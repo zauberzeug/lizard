@@ -3,13 +3,20 @@
 #include "driver/uart.h"
 #include <memory>
 
+std::map<std::string, Variable_ptr> Proxy::get_default_properties() const {
+    return this->cached_default_properties;
+}
+
 Proxy::Proxy(const std::string name,
              const std::string expander_name,
              const std::string module_type,
              const Expander_ptr expander,
              const std::vector<ConstExpression_ptr> arguments)
     : Module(proxy, name), expander(expander), module_type(module_type) {
-    this->properties = Module::get_default_properties_for_type(module_type);
+    // Get defaults once during construction
+    auto temp_module = Module::create(module_type, "temp", arguments, nullptr);
+    this->cached_default_properties = temp_module->get_default_properties();
+    this->properties = this->cached_default_properties;
     this->properties["is_ready"] = expander->get_property("is_ready");
     expander->add_proxy(name, module_type, arguments);
 }
@@ -24,9 +31,8 @@ void Proxy::call(const std::string method_name, const std::vector<ConstExpressio
 
 void Proxy::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
     if (!this->properties.count(property_name)) {
-        auto default_props = Module::get_default_properties_for_type(this->module_type);
-        if (default_props.count(property_name)) {
-            this->properties[property_name] = std::make_shared<Variable>(default_props[property_name]->type);
+        if (this->cached_default_properties.count(property_name)) {
+            this->properties[property_name] = std::make_shared<Variable>(this->cached_default_properties[property_name]->type);
         } else {
             this->properties[property_name] = std::make_shared<Variable>(expression->type);
         }

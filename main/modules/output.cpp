@@ -3,14 +3,14 @@
 #include <math.h>
 #include <stdexcept>
 
-std::map<std::string, Variable_ptr> Output::default_properties() {
+std::map<std::string, Variable_ptr> Output::get_default_properties() const {
     return {
         {"level", std::make_shared<IntegerVariable>(-1)},
         {"change", std::make_shared<IntegerVariable>(-1)}};
 }
 
 Output::Output(const std::string name) : Module(output, name) {
-    this->properties = Output::default_properties();
+    this->properties = this->get_default_properties();
 }
 
 void Output::step() {

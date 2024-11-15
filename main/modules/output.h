@@ -15,9 +15,9 @@ protected:
     Output(const std::string name);
 
 public:
+    std::map<std::string, Variable_ptr> get_default_properties() const override;
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-    static std::map<std::string, Variable_ptr> default_properties();
 };
 
 class GpioOutput : public Output {
