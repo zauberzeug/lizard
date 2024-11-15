@@ -419,3 +419,12 @@ void Module::write_property(const std::string property_name, const ConstExpressi
 void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *data) {
     throw std::runtime_error("CAN message handler is not implemented");
 }
+
+std::map<std::string, Variable_ptr> Module::get_default_properties_for_type(const std::string &module_type) {
+    if (module_type == "Output")
+        return Output::default_properties();
+    if (module_type == "Input")
+        return Input::default_properties();
+    // We'll add other module types as we implement them
+    return {};
+}
