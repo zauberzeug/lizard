@@ -21,6 +21,7 @@ private:
     unsigned long boot_start_time;
     std::vector<ProxyInformation> proxies;
 
+    void deinstall();
     void check_boot_progress();
     void ping();
     void restart();
