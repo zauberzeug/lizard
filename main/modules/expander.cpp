@@ -166,6 +166,9 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         Module::expect(arguments, 0);
         deinstall();
     } else if (method_name == "flash") {
+        if (arguments.size() > 1) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
         Module::expect(arguments, -1, boolean);
         bool force = arguments.size() > 0 ? arguments[0]->evaluate_boolean() : false;
         if (this->boot_pin == GPIO_NUM_NC || this->enable_pin == GPIO_NUM_NC) {

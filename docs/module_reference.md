@@ -691,7 +691,8 @@ The expander module allows communication with another microcontroller connected 
 | `expander.flash([force])` | Flash other microcontroller with own binary data | `bool`    |
 | `expander.restart()`      | Restart other microcontroller                    |           |
 
-The `flash()` method requires the `boot` and `enable` pins to be defined. The optional `force` argument skips the check for strapping pins.
+The `flash()` method requires the `boot` and `enable` pins to be defined.
+The optional `force` argument skips the default check whether certain strapping pins are set correctly.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
 
