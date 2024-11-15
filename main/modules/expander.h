@@ -24,10 +24,9 @@ private:
     void check_boot_progress();
     void ping();
     void restart();
-    void handle_messages();
+    void handle_messages(bool check_for_strapping_pins = false);
     void setup_proxy(ProxyInformation &proxy);
-    void check_strapping_pins();
-    void handle_pin_status(const char *buffer);
+    void check_strapping_pins(const char *buffer);
 
 public:
     const ConstSerial_ptr serial;
