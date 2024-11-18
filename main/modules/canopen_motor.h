@@ -57,6 +57,7 @@ public:
     CanOpenMotor(const std::string &name, const Can_ptr can, int64_t node_id);
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    std::map<std::string, Variable_ptr> get_default_properties() const override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
 
     void stop() override;

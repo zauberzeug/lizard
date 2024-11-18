@@ -40,6 +40,8 @@ public:
              MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    std::map<std::string, Variable_ptr> get_default_properties() const override;
+
     void add_proxy(const std::string module_name,
                    const std::string module_type,
                    const std::vector<ConstExpression_ptr> arguments);

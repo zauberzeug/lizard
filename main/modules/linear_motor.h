@@ -17,6 +17,7 @@ protected:
 public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    std::map<std::string, Variable_ptr> get_default_properties() const override;
 };
 
 class GpioLinearMotor : public LinearMotor {

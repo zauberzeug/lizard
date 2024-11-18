@@ -6,13 +6,18 @@
 #include <math.h>
 #include <memory>
 
+std::map<std::string, Variable_ptr> RmdMotor::get_default_properties() const {
+    return {
+        {"position", std::make_shared<NumberVariable>()},
+        {"torque", std::make_shared<NumberVariable>()},
+        {"speed", std::make_shared<NumberVariable>()},
+        {"temperature", std::make_shared<NumberVariable>()},
+        {"can_age", std::make_shared<NumberVariable>()}};
+}
+
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
     : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
-    this->properties["position"] = std::make_shared<NumberVariable>();
-    this->properties["torque"] = std::make_shared<NumberVariable>();
-    this->properties["speed"] = std::make_shared<NumberVariable>();
-    this->properties["temperature"] = std::make_shared<NumberVariable>();
-    this->properties["can_age"] = std::make_shared<NumberVariable>();
+    this->properties = this->get_default_properties();
 }
 
 void RmdMotor::subscribe_to_can() {

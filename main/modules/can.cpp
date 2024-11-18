@@ -4,8 +4,24 @@
 #include "driver/twai.h"
 #include <stdexcept>
 
+std::map<std::string, Variable_ptr> Can::get_default_properties() const {
+    return {
+        {"state", std::make_shared<StringVariable>()},
+        {"tx_error_counter", std::make_shared<IntegerVariable>()},
+        {"rx_error_counter", std::make_shared<IntegerVariable>()},
+        {"msgs_to_tx", std::make_shared<IntegerVariable>()},
+        {"msgs_to_rx", std::make_shared<IntegerVariable>()},
+        {"tx_failed_count", std::make_shared<IntegerVariable>()},
+        {"rx_missed_count", std::make_shared<IntegerVariable>()},
+        {"rx_overrun_count", std::make_shared<IntegerVariable>()},
+        {"arb_lost_count", std::make_shared<IntegerVariable>()},
+        {"bus_error_count", std::make_shared<IntegerVariable>()}};
+}
+
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(can, name) {
+    this->properties = this->get_default_properties();
+
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config;
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
@@ -41,17 +57,6 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
 
     g_config.rx_queue_len = 20;
     g_config.tx_queue_len = 20;
-
-    this->properties["state"] = std::make_shared<StringVariable>();
-    this->properties["tx_error_counter"] = std::make_shared<IntegerVariable>();
-    this->properties["rx_error_counter"] = std::make_shared<IntegerVariable>();
-    this->properties["msgs_to_tx"] = std::make_shared<IntegerVariable>();
-    this->properties["msgs_to_rx"] = std::make_shared<IntegerVariable>();
-    this->properties["tx_failed_count"] = std::make_shared<IntegerVariable>();
-    this->properties["rx_missed_count"] = std::make_shared<IntegerVariable>();
-    this->properties["rx_overrun_count"] = std::make_shared<IntegerVariable>();
-    this->properties["arb_lost_count"] = std::make_shared<IntegerVariable>();
-    this->properties["bus_error_count"] = std::make_shared<IntegerVariable>();
 
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());

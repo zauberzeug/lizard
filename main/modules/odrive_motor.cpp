@@ -2,16 +2,21 @@
 #include <cstring>
 #include <memory>
 
+std::map<std::string, Variable_ptr> ODriveMotor::get_default_properties() const {
+    return {
+        {"position", std::make_shared<NumberVariable>()},
+        {"speed", std::make_shared<NumberVariable>()},
+        {"tick_offset", std::make_shared<NumberVariable>()},
+        {"m_per_tick", std::make_shared<NumberVariable>(1.0)},
+        {"reversed", std::make_shared<BooleanVariable>()},
+        {"axis_state", std::make_shared<IntegerVariable>()},
+        {"axis_error", std::make_shared<IntegerVariable>()},
+        {"motor_error_flag", std::make_shared<IntegerVariable>()}};
+}
+
 ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version)
     : Module(odrive_motor, name), can_id(can_id), can(can), version(version) {
-    this->properties["position"] = std::make_shared<NumberVariable>();
-    this->properties["speed"] = std::make_shared<NumberVariable>();
-    this->properties["tick_offset"] = std::make_shared<NumberVariable>();
-    this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1.0);
-    this->properties["reversed"] = std::make_shared<BooleanVariable>();
-    this->properties["axis_state"] = std::make_shared<IntegerVariable>();
-    this->properties["axis_error"] = std::make_shared<IntegerVariable>();
-    this->properties["motor_error_flag"] = std::make_shared<IntegerVariable>();
+    this->properties = this->get_default_properties();
 }
 
 void ODriveMotor::subscribe_to_can() {

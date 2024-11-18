@@ -5,9 +5,14 @@
 #define SetDWORDval(arg) (uint8_t)(((uint32_t)arg) >> 24), (uint8_t)(((uint32_t)arg) >> 16), (uint8_t)(((uint32_t)arg) >> 8), (uint8_t)arg
 #define SetWORDval(arg) (uint8_t)(((uint16_t)arg) >> 8), (uint8_t)arg
 
+std::map<std::string, Variable_ptr> RoboClaw::get_default_properties() const {
+    return {
+        {"temperature", std::make_shared<NumberVariable>()}};
+}
+
 RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address)
     : Module(roboclaw, name), address(address), serial(serial) {
-    this->properties["temperature"] = std::make_shared<NumberVariable>();
+    this->properties = this->get_default_properties();
 }
 
 void RoboClaw::step() {

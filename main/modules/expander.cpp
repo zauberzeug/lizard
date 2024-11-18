@@ -9,6 +9,15 @@
 #include <cstring>
 #include <stdexcept>
 
+std::map<std::string, Variable_ptr> Expander::get_default_properties() const {
+    return {
+        {"boot_timeout", std::make_shared<NumberVariable>(5.0)},
+        {"ping_interval", std::make_shared<NumberVariable>(1.0)},
+        {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
+        {"is_ready", std::make_shared<BooleanVariable>(false)},
+        {"last_message_age", std::make_shared<IntegerVariable>()}};
+}
+
 Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
                    const gpio_num_t boot_pin,
@@ -20,11 +29,7 @@ Expander::Expander(const std::string name,
       enable_pin(enable_pin),
       message_handler(message_handler) {
 
-    this->properties["boot_timeout"] = std::make_shared<NumberVariable>(5.0);
-    this->properties["ping_interval"] = std::make_shared<NumberVariable>(1.0);
-    this->properties["ping_timeout"] = std::make_shared<NumberVariable>(2.0);
-    this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
-    this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
+    this->properties = this->get_default_properties();
 
     serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {

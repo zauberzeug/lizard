@@ -3,6 +3,7 @@
 #include "can.h"
 #include "module.h"
 #include <cstdint>
+#include <map>
 #include <memory>
 
 class D1Motor;
@@ -25,6 +26,7 @@ public:
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void step() override;
+    std::map<std::string, Variable_ptr> get_default_properties() const override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
     void setup();
     void home();

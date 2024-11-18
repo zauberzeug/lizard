@@ -47,27 +47,32 @@ static const std::string PROP_PV_IS_MOVING{"pv_is_moving"};
 static const std::string PROP_CTRL_ENA_OP{"ctrl_enable"};
 static const std::string PROP_CTRL_HALT{"ctrl_halt"};
 
+std::map<std::string, Variable_ptr> CanOpenMotor::get_default_properties() const {
+    return {
+        {"initialized", std::make_shared<BooleanVariable>(false)},
+        {"pending_sdo_reads", std::make_shared<IntegerVariable>(0)},
+        {"pending_sdo_writes", std::make_shared<IntegerVariable>(0)},
+        {"last_heartbeat", std::make_shared<IntegerVariable>(-1)},
+        {"raw_state", std::make_shared<IntegerVariable>(-1)},
+        {"is_booting", std::make_shared<BooleanVariable>(false)},
+        {"is_preoperational", std::make_shared<BooleanVariable>(false)},
+        {"is_operational", std::make_shared<BooleanVariable>(false)},
+        {"position_offset", std::make_shared<IntegerVariable>(0)},
+        {"actual_position", std::make_shared<IntegerVariable>(0)},
+        {"actual_velocity", std::make_shared<IntegerVariable>(0)},
+        {"status_enabled", std::make_shared<BooleanVariable>(false)},
+        {"status_fault", std::make_shared<BooleanVariable>(false)},
+        {"status_target_reached", std::make_shared<BooleanVariable>(false)},
+        {"pp_set_point_acknowledge", std::make_shared<BooleanVariable>(false)},
+        {"pv_is_moving", std::make_shared<BooleanVariable>(false)},
+        {"ctrl_enable", std::make_shared<BooleanVariable>(false)},
+        {"ctrl_halt", std::make_shared<BooleanVariable>(true)}};
+}
+
 CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(canopen_motor, name), can(can), node_id(check_node_id(node_id)),
       current_op_mode_disp(OP_MODE_NONE), current_op_mode(OP_MODE_NONE) {
-    this->properties[PROP_INITIALIZED] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_PENDING_READS] = std::make_shared<IntegerVariable>(0);
-    this->properties[PROP_PENDING_WRITES] = std::make_shared<IntegerVariable>(0);
-    this->properties[PROP_HEARTBEAT] = std::make_shared<IntegerVariable>(-1);
-    this->properties[PROP_301_STATE] = std::make_shared<IntegerVariable>(-1);
-    this->properties[PROP_301_STATE_BOOTING] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_301_STATE_PREOP] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_301_STATE_OP] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_OFFSET] = std::make_shared<IntegerVariable>(0);
-    this->properties[PROP_POSITION] = std::make_shared<IntegerVariable>(0);
-    this->properties[PROP_VELOCITY] = std::make_shared<IntegerVariable>(0);
-    this->properties[PROP_402_OP_ENA] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_402_FAULT] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_TARGET_REACHED] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_PP_SET_POINT_ACK] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_PV_IS_MOVING] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_CTRL_ENA_OP] = std::make_shared<BooleanVariable>(false);
-    this->properties[PROP_CTRL_HALT] = std::make_shared<BooleanVariable>(true);
+    this->properties = this->get_default_properties();
 }
 
 void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
