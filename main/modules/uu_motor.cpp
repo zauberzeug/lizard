@@ -35,11 +35,9 @@ void UUMotor::setup_pdo_motor2() {
     this->can_write(0x320E, uu_registers::DLC_U32, motor_running_status2_value);
 }
 
-// read a single register
 void UUMotor::can_read(const uint16_t index) {
     uint32_t can_msg_id = 0;
 
-    // Aufbau der CAN ID nach der Struktur
     can_msg_id |= (0 << 28);                     // Scope/Direction (0 = Request)
     can_msg_id |= (this->can_id << 20);          // Slave ID
     can_msg_id |= (this->register_number << 16); // Register Number (1 = Single motor, 2 = Combined)
@@ -50,11 +48,9 @@ void UUMotor::can_read(const uint16_t index) {
     this->can->send(can_msg_id, data, true, 0, true);
 }
 
-// write a single register
 void UUMotor::can_write(const uint16_t index, const uint8_t dlc, const uint32_t value, const bool wait) {
     uint32_t can_msg_id = 0;
 
-    // Aufbau der CAN ID nach der Struktur
     can_msg_id |= (0 << 28);                     // Scope/Direction (0 = Request)
     can_msg_id |= (this->can_id << 20);          // Slave ID
     can_msg_id |= (this->register_number << 16); // Register Number (1 = Single motor, 2 = Combined)
