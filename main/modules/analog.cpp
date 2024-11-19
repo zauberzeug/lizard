@@ -71,8 +71,6 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
         .default_vref = 1100,
     };
     ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali_handle));
-
-    this->properties = Analog::get_defaults();
 }
 
 void Analog::step() {
