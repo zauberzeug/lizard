@@ -26,10 +26,10 @@ def ota_binary_verify(request: Request) -> Response:
         verify_bin_str = os.path.basename(verify_bin).replace('.bin', '').replace('lizard', '').replace('-', '')
         if verify_bin_str is None:
             log.push('No "Lizard" binary found. But connection established')
-            return Response("No Lizard")
-        if verify_bin_str == "":
+            return Response('No Lizard')
+        if verify_bin_str == '':
             log.push('Binary without version found')
-            return Response("Unknown version")
+            return Response('Unknown version')
         response = Response(verify_bin_str)
         log.push(f'Send response: {verify_bin_str}')
         return response
