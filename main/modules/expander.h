@@ -21,11 +21,13 @@ private:
     unsigned long boot_start_time;
     std::vector<ProxyInformation> proxies;
 
+    void deinstall();
     void check_boot_progress();
     void ping();
     void restart();
-    void handle_messages();
+    void handle_messages(bool check_for_strapping_pins = false);
     void setup_proxy(ProxyInformation &proxy);
+    void check_strapping_pins(const char *buffer);
 
 public:
     const ConstSerial_ptr serial;
@@ -40,8 +42,6 @@ public:
              MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-    std::map<std::string, Variable_ptr> get_default_properties() const override;
-
     void add_proxy(const std::string module_name,
                    const std::string module_type,
                    const std::vector<ConstExpression_ptr> arguments);

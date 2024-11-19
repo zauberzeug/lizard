@@ -4,14 +4,6 @@
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0
 
-std::map<std::string, Variable_ptr> Mcp23017::get_default_properties() const {
-    return {
-        {"levels", std::make_shared<IntegerVariable>()},
-        {"inputs", std::make_shared<IntegerVariable>(0xffff)}, // default: all pins input
-        {"pullups", std::make_shared<IntegerVariable>()},
-    };
-}
-
 Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
     : Module(mcp23017, name), i2c_port(i2c_port), address(address) {
     i2c_config_t config;
@@ -29,7 +21,9 @@ Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_p
         throw std::runtime_error("could not install i2c driver");
     }
 
-    this->properties = this->get_default_properties();
+    this->properties["levels"] = std::make_shared<IntegerVariable>();
+    this->properties["inputs"] = std::make_shared<IntegerVariable>(0xffff); // default: all pins input
+    this->properties["pullups"] = std::make_shared<IntegerVariable>();
 
     this->set_inputs(this->properties.at("inputs")->integer_value);
     this->set_pullups(this->properties.at("pullups")->integer_value);

@@ -4,29 +4,8 @@
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0
 
-std::map<std::string, Variable_ptr> Imu::get_default_properties() const {
-    return {
-        {"acc_x", std::make_shared<NumberVariable>()},
-        {"acc_y", std::make_shared<NumberVariable>()},
-        {"acc_z", std::make_shared<NumberVariable>()},
-        {"roll", std::make_shared<NumberVariable>()},
-        {"pitch", std::make_shared<NumberVariable>()},
-        {"yaw", std::make_shared<NumberVariable>()},
-        {"quat_w", std::make_shared<NumberVariable>()},
-        {"quat_x", std::make_shared<NumberVariable>()},
-        {"quat_y", std::make_shared<NumberVariable>()},
-        {"quat_z", std::make_shared<NumberVariable>()},
-        {"cal_sys", std::make_shared<NumberVariable>()},
-        {"cal_gyr", std::make_shared<NumberVariable>()},
-        {"cal_acc", std::make_shared<NumberVariable>()},
-        {"cal_mag", std::make_shared<NumberVariable>()},
-    };
-}
-
 Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
     : Module(imu, name), i2c_port(i2c_port), address(address) {
-    this->properties = this->get_default_properties();
-
     i2c_config_t config;
     config.mode = I2C_MODE_MASTER;
     config.sda_io_num = sda_pin,
@@ -54,6 +33,20 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
     } catch (std::exception &ex) {
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     }
+    this->properties["acc_x"] = std::make_shared<NumberVariable>();
+    this->properties["acc_y"] = std::make_shared<NumberVariable>();
+    this->properties["acc_z"] = std::make_shared<NumberVariable>();
+    this->properties["roll"] = std::make_shared<NumberVariable>();
+    this->properties["pitch"] = std::make_shared<NumberVariable>();
+    this->properties["yaw"] = std::make_shared<NumberVariable>();
+    this->properties["quat_w"] = std::make_shared<NumberVariable>();
+    this->properties["quat_x"] = std::make_shared<NumberVariable>();
+    this->properties["quat_y"] = std::make_shared<NumberVariable>();
+    this->properties["quat_z"] = std::make_shared<NumberVariable>();
+    this->properties["cal_sys"] = std::make_shared<NumberVariable>();
+    this->properties["cal_gyr"] = std::make_shared<NumberVariable>();
+    this->properties["cal_acc"] = std::make_shared<NumberVariable>();
+    this->properties["cal_mag"] = std::make_shared<NumberVariable>();
 }
 
 void Imu::step() {

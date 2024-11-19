@@ -17,5 +17,4 @@ public:
     ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-    std::map<std::string, Variable_ptr> get_default_properties() const override;
 };

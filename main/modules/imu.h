@@ -18,5 +18,4 @@ private:
 public:
     Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed);
     void step() override;
-    std::map<std::string, Variable_ptr> get_default_properties() const override;
 };

@@ -22,5 +22,4 @@ public:
               const bool rtr = false) const;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void subscribe(const uint32_t id, const Module_ptr module);
-    std::map<std::string, Variable_ptr> get_default_properties() const override;
 };
