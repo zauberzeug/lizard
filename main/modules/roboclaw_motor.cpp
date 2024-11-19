@@ -4,12 +4,21 @@
 
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
+const std::map<std::string, Variable_ptr> &RoboClawMotor::get_defaults() {
+    static const std::map<std::string, Variable_ptr> defaults = {
+        {"position", std::make_shared<IntegerVariable>()},
+    };
+    return defaults;
+}
+
 RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number)
     : Module(roboclaw_motor, name), motor_number(constrain(motor_number, 1, 2)), roboclaw(roboclaw) {
+
+    this->properties = RoboClawMotor::get_defaults();
+
     if (this->motor_number != motor_number) {
         throw std::runtime_error("illegal motor number");
     }
-    this->properties["position"] = std::make_shared<IntegerVariable>();
 }
 
 void RoboClawMotor::step() {

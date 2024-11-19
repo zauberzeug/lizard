@@ -1,6 +1,6 @@
 #include "proxy.h"
-#include "../utils/echo.h"
 #include "../utils/string_utils.h"
+#include "../utils/uart.h"
 #include "driver/uart.h"
 #include <memory>
 

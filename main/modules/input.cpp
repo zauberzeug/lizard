@@ -6,8 +6,8 @@
 
 const std::map<std::string, Variable_ptr> &Input::get_defaults() {
     static const std::map<std::string, Variable_ptr> defaults = {
-        {"level", std::make_shared<IntegerVariable>(-2)},
-        {"change", std::make_shared<IntegerVariable>(-2)},
+        {"level", std::make_shared<IntegerVariable>()},
+        {"change", std::make_shared<IntegerVariable>()},
         {"inverted", std::make_shared<BooleanVariable>()},
         {"active", std::make_shared<BooleanVariable>()},
     };

@@ -2,13 +2,21 @@
 #include "../utils/timing.h"
 #include <memory>
 
+const std::map<std::string, Variable_ptr> &RoboClawWheels::get_defaults() {
+    static const std::map<std::string, Variable_ptr> defaults = {
+        {"width", std::make_shared<NumberVariable>(1)},
+        {"linear_speed", std::make_shared<NumberVariable>()},
+        {"angular_speed", std::make_shared<NumberVariable>()},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
+        {"m_per_tick", std::make_shared<NumberVariable>(1)},
+    };
+    return defaults;
+}
+
 RoboClawWheels::RoboClawWheels(const std::string name, const RoboClawMotor_ptr left_motor, const RoboClawMotor_ptr right_motor)
     : Module(roboclaw_wheels, name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties["width"] = std::make_shared<NumberVariable>(1);
-    this->properties["linear_speed"] = std::make_shared<NumberVariable>();
-    this->properties["angular_speed"] = std::make_shared<NumberVariable>();
-    this->properties["enabled"] = std::make_shared<BooleanVariable>(true);
-    this->properties["m_per_tick"] = std::make_shared<NumberVariable>(1);
+
+    this->properties = RoboClawWheels::get_defaults();
 }
 
 /* Catch unsigned wrap-around by detecting large jumps in encoder deltas */
