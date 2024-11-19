@@ -9,9 +9,6 @@ private:
     const std::string module_type;
     std::map<std::string, Variable_ptr> cached_default_properties;
 
-protected:
-    std::map<std::string, Variable_ptr> get_default_properties() const override;
-
 public:
     Proxy(const std::string name,
           const std::string expander_name,

@@ -32,6 +32,9 @@
 #include "stepper_motor.h"
 #include <stdarg.h>
 
+std::map<std::string, std::map<std::string, Variable_ptr>> Module::default_properties;
+std::map<std::string, Module::DefaultsGetter> Module::defaults_getters;
+
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
 }
 
@@ -420,6 +423,56 @@ void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *d
     throw std::runtime_error("CAN message handler is not implemented");
 }
 
-std::map<std::string, Variable_ptr> Module::get_default_properties() const {
-    return {};
+void Module::register_defaults(const std::string &type_name,
+                               const std::map<std::string, Variable_ptr> &props,
+                               DefaultsGetter getter) {
+    default_properties[type_name] = props;
+    defaults_getters[type_name] = getter;
+}
+
+const std::map<std::string, Variable_ptr> &Module::get_module_defaults(const std::string &type_name) {
+    if (type_name == "expander") {
+        return Expander::get_defaults();
+    } else if (type_name == "input") {
+        return Input::get_defaults();
+    } else if (type_name == "output") {
+        return Output::get_defaults();
+    } else if (type_name == "pwm_output") {
+        return PwmOutput::get_defaults();
+    } else if (type_name == "mcp23017") {
+        return Mcp23017::get_defaults();
+    } else if (type_name == "imu") {
+        return Imu::get_defaults();
+    } else if (type_name == "can") {
+        return Can::get_defaults();
+    } else if (type_name == "odrive_motor") {
+        return ODriveMotor::get_defaults();
+    } else if (type_name == "odrive_wheels") {
+        return ODriveWheels::get_defaults();
+    } else if (type_name == "rmd_motor") {
+        return RmdMotor::get_defaults();
+    } else if (type_name == "rmd_pair") {
+        return RmdPair::get_defaults();
+    } else if (type_name == "roboclaw") {
+        return RoboClaw::get_defaults();
+    } else if (type_name == "roboclaw_motor") {
+        return RoboClawMotor::get_defaults();
+    } else if (type_name == "roboclaw_wheels") {
+        return RoboClawWheels::get_defaults();
+    } else if (type_name == "stepper_motor") {
+        return StepperMotor::get_defaults();
+    } else if (type_name == "canopen_motor") {
+        return CanOpenMotor::get_defaults();
+    } else if (type_name == "canopen_master") {
+        return CanOpenMaster::get_defaults();
+    } else if (type_name == "d1_motor") {
+        return D1Motor::get_defaults();
+    } else if (type_name == "dunker_motor") {
+        return DunkerMotor::get_defaults();
+    } else if (type_name == "dunker_wheels") {
+        return DunkerWheels::get_defaults();
+    } else if (type_name == "analog") {
+        return Analog::get_defaults();
+    }
+    throw std::runtime_error("module type \"" + type_name + "\" not found in defaults list");
 }

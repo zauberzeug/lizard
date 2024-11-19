@@ -51,9 +51,20 @@ protected:
     bool broadcast = false;
 
 public:
+    using DefaultsGetter = const std::map<std::string, Variable_ptr> &(*)();
+    static std::map<std::string, DefaultsGetter> defaults_getters;
+
+    static void register_defaults(const std::string &type_name,
+                                  const std::map<std::string, Variable_ptr> &props,
+                                  DefaultsGetter getter);
+
+    static const std::map<std::string, Variable_ptr> &get_module_defaults(const std::string &type_name);
+
+    static std::map<std::string, std::map<std::string, Variable_ptr>> default_properties;
+
     const ModuleType type;
     const std::string name;
-    virtual std::map<std::string, Variable_ptr> get_default_properties() const;
+    std::map<std::string, Variable_ptr> get_default_properties() const;
 
     Module(const ModuleType type, const std::string name);
     static void expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...);
