@@ -22,15 +22,3 @@ It allows formulating rules that stop critical hardware modules when the connect
 The following example stops a motor when there is no serial communication for 500 ms:
 
     when core.last_message_age > 500 then motor.stop(); end
-
-## Expander watchdog
-
-The `expander` module provides a watchdog feature that restarts the port expander when it gets stuck and does not send messages anymore.
-After `ping_interval` seconds of no messages from the port expander, the `expander` module will instruct the expander to send a "\_\_PONG\_\_" message.
-If the expander does not answer within `ping_timeout` seconds, it will be restarted.
-
-The reception of the "\_\_PONG\_\_" message is handled internally by the expander module and is not printed to the serial output.
-A similar technique can be used by the main computing unit to check if the core microcontroller is still responsive and restart it otherwise.
-
-If a `proxy` module is active, the `ping_interval` will never elapse, because the `expander` module receives messages via the proxy message handling.
-Thus it will not need to ping the expander explicitly.
