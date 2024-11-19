@@ -4,13 +4,14 @@
 #include <memory>
 #include <stdexcept>
 
-const std::map<std::string, Variable_ptr> Input::get_defaults() {
-    return {
+const std::map<std::string, Variable_ptr> &Input::get_defaults() {
+    static const std::map<std::string, Variable_ptr> defaults = {
         {"level", std::make_shared<IntegerVariable>(-2)},
         {"change", std::make_shared<IntegerVariable>(-2)},
         {"inverted", std::make_shared<BooleanVariable>()},
         {"active", std::make_shared<BooleanVariable>()},
     };
+    return defaults;
 }
 
 Input::Input(const std::string name) : Module(input, name) {
