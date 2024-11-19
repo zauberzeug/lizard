@@ -4,7 +4,8 @@
 std::map<std::string, Variable_ptr> LinearMotor::get_default_properties() const {
     return {
         {"in", std::make_shared<BooleanVariable>(false)},
-        {"out", std::make_shared<BooleanVariable>(false)}};
+        {"out", std::make_shared<BooleanVariable>(false)},
+    };
 }
 
 LinearMotor::LinearMotor(const std::string name) : Module(output, name) {

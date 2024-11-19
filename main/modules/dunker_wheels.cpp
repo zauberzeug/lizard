@@ -5,7 +5,8 @@ std::map<std::string, Variable_ptr> DunkerWheels::get_default_properties() const
     return {
         {"width", std::make_shared<NumberVariable>(1)},
         {"linear_speed", std::make_shared<NumberVariable>()},
-        {"angular_speed", std::make_shared<NumberVariable>()}};
+        {"angular_speed", std::make_shared<NumberVariable>()},
+    };
 }
 
 DunkerWheels::DunkerWheels(const std::string name, const DunkerMotor_ptr left_motor, const DunkerMotor_ptr right_motor)

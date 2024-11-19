@@ -7,7 +7,8 @@ std::map<std::string, Variable_ptr> ODriveWheels::get_default_properties() const
         {"width", std::make_shared<NumberVariable>(1)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
-        {"enabled", std::make_shared<BooleanVariable>(true)}};
+        {"enabled", std::make_shared<BooleanVariable>(true)},
+    };
 }
 
 ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor)

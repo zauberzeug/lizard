@@ -6,7 +6,8 @@
 
 std::map<std::string, Variable_ptr> RoboClawMotor::get_default_properties() const {
     return {
-        {"position", std::make_shared<IntegerVariable>()}};
+        {"position", std::make_shared<IntegerVariable>()},
+    };
 }
 
 RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number)

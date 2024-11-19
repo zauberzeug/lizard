@@ -4,7 +4,8 @@
 std::map<std::string, Variable_ptr> PwmOutput::get_default_properties() const {
     return {
         {"frequency", std::make_shared<IntegerVariable>(1000)},
-        {"duty", std::make_shared<IntegerVariable>(128)}};
+        {"duty", std::make_shared<IntegerVariable>(128)},
+    };
 }
 
 PwmOutput::PwmOutput(const std::string name,

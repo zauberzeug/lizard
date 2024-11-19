@@ -2,10 +2,12 @@
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include <math.h>
+
 std::map<std::string, Variable_ptr> RmdPair::get_default_properties() const {
     return {
         {"v_max", std::make_shared<NumberVariable>(360)},
-        {"a_max", std::make_shared<NumberVariable>(10000)}};
+        {"a_max", std::make_shared<NumberVariable>(10000)},
+    };
 }
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)

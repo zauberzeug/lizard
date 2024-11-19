@@ -15,7 +15,8 @@ std::map<std::string, Variable_ptr> Expander::get_default_properties() const {
         {"ping_interval", std::make_shared<NumberVariable>(1.0)},
         {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
         {"is_ready", std::make_shared<BooleanVariable>(false)},
-        {"last_message_age", std::make_shared<IntegerVariable>()}};
+        {"last_message_age", std::make_shared<IntegerVariable>()},
+    };
 }
 
 Expander::Expander(const std::string name,

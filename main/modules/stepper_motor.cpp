@@ -17,7 +17,8 @@ std::map<std::string, Variable_ptr> StepperMotor::get_default_properties() const
     return {
         {"position", std::make_shared<IntegerVariable>()},
         {"speed", std::make_shared<IntegerVariable>()},
-        {"idle", std::make_shared<BooleanVariable>(true)}};
+        {"idle", std::make_shared<BooleanVariable>(true)},
+    };
 }
 
 StepperMotor::StepperMotor(const std::string name,

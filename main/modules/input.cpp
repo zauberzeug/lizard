@@ -9,7 +9,8 @@ std::map<std::string, Variable_ptr> Input::get_default_properties() const {
         {"level", std::make_shared<IntegerVariable>(-1)},
         {"change", std::make_shared<IntegerVariable>(-1)},
         {"inverted", std::make_shared<BooleanVariable>(false)},
-        {"active", std::make_shared<BooleanVariable>(false)}};
+        {"active", std::make_shared<BooleanVariable>(false)},
+    };
 }
 
 Input::Input(const std::string name) : Module(input, name) {

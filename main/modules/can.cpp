@@ -15,7 +15,8 @@ std::map<std::string, Variable_ptr> Can::get_default_properties() const {
         {"rx_missed_count", std::make_shared<IntegerVariable>()},
         {"rx_overrun_count", std::make_shared<IntegerVariable>()},
         {"arb_lost_count", std::make_shared<IntegerVariable>()},
-        {"bus_error_count", std::make_shared<IntegerVariable>()}};
+        {"bus_error_count", std::make_shared<IntegerVariable>()},
+    };
 }
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)

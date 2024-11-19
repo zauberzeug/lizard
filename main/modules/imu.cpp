@@ -19,7 +19,8 @@ std::map<std::string, Variable_ptr> Imu::get_default_properties() const {
         {"cal_sys", std::make_shared<NumberVariable>()},
         {"cal_gyr", std::make_shared<NumberVariable>()},
         {"cal_acc", std::make_shared<NumberVariable>()},
-        {"cal_mag", std::make_shared<NumberVariable>()}};
+        {"cal_mag", std::make_shared<NumberVariable>()},
+    };
 }
 
 Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)

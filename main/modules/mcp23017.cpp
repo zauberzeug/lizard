@@ -8,7 +8,8 @@ std::map<std::string, Variable_ptr> Mcp23017::get_default_properties() const {
     return {
         {"levels", std::make_shared<IntegerVariable>()},
         {"inputs", std::make_shared<IntegerVariable>(0xffff)}, // default: all pins input
-        {"pullups", std::make_shared<IntegerVariable>()}};
+        {"pullups", std::make_shared<IntegerVariable>()},
+    };
 }
 
 Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)

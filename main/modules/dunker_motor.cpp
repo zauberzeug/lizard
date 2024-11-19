@@ -8,7 +8,8 @@ std::map<std::string, Variable_ptr> DunkerMotor::get_default_properties() const 
     return {
         {"speed", std::make_shared<NumberVariable>()},
         {"m_per_turn", std::make_shared<NumberVariable>(1.0)},
-        {"reversed", std::make_shared<BooleanVariable>()}};
+        {"reversed", std::make_shared<BooleanVariable>()},
+    };
 }
 
 DunkerMotor::DunkerMotor(const std::string &name, Can_ptr can, int64_t node_id)

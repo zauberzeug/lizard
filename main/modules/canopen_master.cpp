@@ -2,7 +2,8 @@
 
 std::map<std::string, Variable_ptr> CanOpenMaster::get_default_properties() const {
     return {
-        {"sync_interval", std::make_shared<IntegerVariable>(0)}};
+        {"sync_interval", std::make_shared<IntegerVariable>(0)},
+    };
 }
 
 CanOpenMaster::CanOpenMaster(const std::string &name, const Can_ptr can)

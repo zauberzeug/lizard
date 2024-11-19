@@ -8,7 +8,8 @@ std::map<std::string, Variable_ptr> RoboClawWheels::get_default_properties() con
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
-        {"m_per_tick", std::make_shared<NumberVariable>(1)}};
+        {"m_per_tick", std::make_shared<NumberVariable>(1)},
+    };
 }
 
 RoboClawWheels::RoboClawWheels(const std::string name, const RoboClawMotor_ptr left_motor, const RoboClawMotor_ptr right_motor)

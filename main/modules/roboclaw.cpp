@@ -7,7 +7,8 @@
 
 std::map<std::string, Variable_ptr> RoboClaw::get_default_properties() const {
     return {
-        {"temperature", std::make_shared<NumberVariable>()}};
+        {"temperature", std::make_shared<NumberVariable>()},
+    };
 }
 
 RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address)

@@ -12,7 +12,8 @@ std::map<std::string, Variable_ptr> RmdMotor::get_default_properties() const {
         {"torque", std::make_shared<NumberVariable>()},
         {"speed", std::make_shared<NumberVariable>()},
         {"temperature", std::make_shared<NumberVariable>()},
-        {"can_age", std::make_shared<NumberVariable>()}};
+        {"can_age", std::make_shared<NumberVariable>()},
+    };
 }
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)

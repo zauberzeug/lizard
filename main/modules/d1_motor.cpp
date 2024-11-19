@@ -15,7 +15,8 @@ std::map<std::string, Variable_ptr> D1Motor::get_default_properties() const {
         {"position", std::make_shared<IntegerVariable>()},
         {"velocity", std::make_shared<IntegerVariable>()},
         {"status_word", std::make_shared<IntegerVariable>(-1)},
-        {"status_flags", std::make_shared<IntegerVariable>()}};
+        {"status_flags", std::make_shared<IntegerVariable>()},
+    };
 }
 
 D1Motor::D1Motor(const std::string &name, Can_ptr can, int64_t node_id)

@@ -11,7 +11,8 @@ std::map<std::string, Variable_ptr> ODriveMotor::get_default_properties() const 
         {"reversed", std::make_shared<BooleanVariable>()},
         {"axis_state", std::make_shared<IntegerVariable>()},
         {"axis_error", std::make_shared<IntegerVariable>()},
-        {"motor_error_flag", std::make_shared<IntegerVariable>()}};
+        {"motor_error_flag", std::make_shared<IntegerVariable>()},
+    };
 }
 
 ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version)

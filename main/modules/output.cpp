@@ -6,7 +6,8 @@
 std::map<std::string, Variable_ptr> Output::get_default_properties() const {
     return {
         {"level", std::make_shared<IntegerVariable>(-1)},
-        {"change", std::make_shared<IntegerVariable>(-1)}};
+        {"change", std::make_shared<IntegerVariable>(-1)},
+    };
 }
 
 Output::Output(const std::string name) : Module(output, name) {

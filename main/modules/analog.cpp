@@ -9,7 +9,8 @@
 std::map<std::string, Variable_ptr> Analog::get_default_properties() const {
     return {
         {"raw", std::make_shared<IntegerVariable>()},
-        {"voltage", std::make_shared<NumberVariable>()}};
+        {"voltage", std::make_shared<NumberVariable>()},
+    };
 }
 
 Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level)
