@@ -1,5 +1,6 @@
 #include "proxy.h"
 #include "../utils/string_utils.h"
+#include "../utils/uart.h"
 #include "driver/uart.h"
 #include <memory>
 
@@ -8,7 +9,9 @@ Proxy::Proxy(const std::string name,
              const std::string module_type,
              const Expander_ptr expander,
              const std::vector<ConstExpression_ptr> arguments)
-    : Module(proxy, name), expander(expander) {
+    : Module(proxy, name), expander(expander), module_type(module_type) {
+    this->cached_default_properties = Module::get_module_defaults(module_type);
+    this->properties = this->cached_default_properties;
     this->properties["is_ready"] = expander->get_property("is_ready");
     expander->add_proxy(name, module_type, arguments);
 }
@@ -24,6 +27,7 @@ void Proxy::call(const std::string method_name, const std::vector<ConstExpressio
 void Proxy::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
     if (!this->properties.count(property_name)) {
         this->properties[property_name] = std::make_shared<Variable>(expression->type);
+        echo("%s: Unknown property %s in module type %s", property_name.c_str(), this->module_type.c_str());
     }
     if (!from_expander) {
         static char buffer[256];
