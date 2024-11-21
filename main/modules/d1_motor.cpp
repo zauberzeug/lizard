@@ -4,18 +4,25 @@
 #include "utils/timing.h"
 #include <cinttypes>
 
+const std::map<std::string, Variable_ptr> &D1Motor::get_defaults() {
+    static const std::map<std::string, Variable_ptr> defaults = {
+        {"switch_search_speed", std::make_shared<IntegerVariable>()},
+        {"zero_search_speed", std::make_shared<IntegerVariable>()},
+        {"homing_acceleration", std::make_shared<IntegerVariable>()},
+        {"profile_acceleration", std::make_shared<IntegerVariable>()},
+        {"profile_velocity", std::make_shared<IntegerVariable>()},
+        {"profile_deceleration", std::make_shared<IntegerVariable>()},
+        {"position", std::make_shared<IntegerVariable>()},
+        {"velocity", std::make_shared<IntegerVariable>()},
+        {"status_word", std::make_shared<IntegerVariable>(-1)},
+        {"status_flags", std::make_shared<IntegerVariable>()},
+    };
+    return defaults;
+}
+
 D1Motor::D1Motor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(d1_motor, name), can(can), node_id(check_node_id(node_id)) {
-    this->properties["switch_search_speed"] = std::make_shared<IntegerVariable>();
-    this->properties["zero_search_speed"] = std::make_shared<IntegerVariable>();
-    this->properties["homing_acceleration"] = std::make_shared<IntegerVariable>();
-    this->properties["profile_acceleration"] = std::make_shared<IntegerVariable>();
-    this->properties["profile_velocity"] = std::make_shared<IntegerVariable>();
-    this->properties["profile_deceleration"] = std::make_shared<IntegerVariable>();
-    this->properties["position"] = std::make_shared<IntegerVariable>();
-    this->properties["velocity"] = std::make_shared<IntegerVariable>();
-    this->properties["status_word"] = std::make_shared<IntegerVariable>(-1);
-    this->properties["status_flags"] = std::make_shared<IntegerVariable>();
+    this->properties = D1Motor::get_defaults();
 }
 
 void D1Motor::subscribe_to_can() {

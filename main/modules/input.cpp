@@ -4,11 +4,18 @@
 #include <memory>
 #include <stdexcept>
 
+const std::map<std::string, Variable_ptr> &Input::get_defaults() {
+    static const std::map<std::string, Variable_ptr> defaults = {
+        {"level", std::make_shared<IntegerVariable>()},
+        {"change", std::make_shared<IntegerVariable>()},
+        {"inverted", std::make_shared<BooleanVariable>()},
+        {"active", std::make_shared<BooleanVariable>()},
+    };
+    return defaults;
+}
+
 Input::Input(const std::string name) : Module(input, name) {
-    this->properties["level"] = std::make_shared<IntegerVariable>();
-    this->properties["change"] = std::make_shared<IntegerVariable>();
-    this->properties["inverted"] = std::make_shared<BooleanVariable>();
-    this->properties["active"] = std::make_shared<BooleanVariable>();
+    this->properties = Input::get_defaults();
 }
 
 void Input::step() {
