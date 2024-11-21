@@ -13,7 +13,6 @@ const std::map<std::string, Variable_ptr> &RmdPair::get_defaults() {
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)
     : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
-
     this->properties = RmdPair::get_defaults();
 }
 
