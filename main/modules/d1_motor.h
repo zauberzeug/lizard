@@ -26,6 +26,7 @@ public:
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void step() override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
+    static const std::map<std::string, Variable_ptr> &get_defaults();
     void setup();
     void home();
     void profile_position(const int32_t position);
