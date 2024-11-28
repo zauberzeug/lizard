@@ -11,15 +11,8 @@ Proxy::Proxy(const std::string name,
              const std::vector<ConstExpression_ptr> arguments)
     : Module(proxy, name), expander(expander) {
     this->properties = Module::get_module_defaults(module_type);
+    this->properties["is_ready"] = expander->get_property("is_ready");
     expander->add_proxy(name, module_type, arguments);
-    this->properties["is_ready"] = Proxy::get_defaults().at("is_ready");
-}
-
-const std::map<std::string, Variable_ptr> &Proxy::get_defaults() {
-    static std::map<std::string, Variable_ptr> defaults = {
-        {"is_ready", std::make_shared<Variable>(boolean)},
-    };
-    return defaults;
 }
 
 void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

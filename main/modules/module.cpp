@@ -22,7 +22,6 @@
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
 #include "output.h"
-#include "proxy.h"
 #include "pwm_output.h"
 #include "rmd_motor.h"
 #include "rmd_pair.h"
@@ -468,8 +467,6 @@ const std::map<std::string, Variable_ptr> &Module::get_module_defaults(const std
         return LinearMotor::get_defaults();
     } else if (type_name == "Serial") {
         return Serial::get_defaults();
-    } else if (type_name == "Proxy") {
-        return Proxy::get_defaults();
     } else if (type_name == "Bluetooth") {
         return Bluetooth::get_defaults();
     } else if (type_name == "MotorAxis") {
