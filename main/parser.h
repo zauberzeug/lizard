@@ -1701,7 +1701,7 @@ struct parsed_statements owl_tree_get_parsed_statements(struct owl_tree *tree) {
     check_for_error(tree);
     return parsed_statements_get(owl_tree_root_ref(tree));
 }
-#define HOTFIX_TOKENIZER_ADVANCE_SIZE 254
+#define HOTFIX_TOKENIZER_ADVANCE_SIZE 256
 #define ESCAPE_CHAR(c, info) ((c) == 'b' ? '\b' : (c) == 'f' ? '\f' : (c) == 'n' ? '\n' : (c) == 'r' ? '\r' : (c) == 't' ? '\t' : (c))
 #define IGNORE_TOKEN_WRITE(...)
 #define IGNORE_TOKEN_READ(...) (0)
