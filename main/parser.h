@@ -1844,7 +1844,9 @@ static size_t decode_token_length(struct owl_token_run *run, uint16_t *length_of
     return length;
 }
 static bool OWL_DONT_INLINE owl_default_tokenizer_advance(struct owl_default_tokenizer *tokenizer, struct owl_token_run **previous_run) {
-
+    if (tokenizer->text[tokenizer->offset] == '\0') {
+        return false;
+    }
     struct owl_token_run *run = malloc(sizeof(struct owl_token_run));
     if (!run) return false;
     uint16_t number_of_tokens = 0;
