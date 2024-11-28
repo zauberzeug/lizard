@@ -1,6 +1,11 @@
 #include "bluetooth.h"
 #include "uart.h"
 
+const std::map<std::string, Variable_ptr> &Bluetooth::get_defaults() {
+    static std::map<std::string, Variable_ptr> defaults = {};
+    return defaults;
+}
+
 Bluetooth::Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler)
     : Module(bluetooth, name), device_name(device_name) {
     ZZ::BleCommand::init(device_name, [message_handler](const std::string_view &message) {
@@ -11,6 +16,7 @@ Bluetooth::Bluetooth(const std::string name, const std::string device_name, Mess
             echo("error in bluetooth message handler: %s", e.what());
         }
     });
+    this->properties = Bluetooth::get_defaults();
 }
 
 void Bluetooth::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

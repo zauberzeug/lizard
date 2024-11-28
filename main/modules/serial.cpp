@@ -8,9 +8,16 @@
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
 
+const std::map<std::string, Variable_ptr> &Serial::get_defaults() {
+    static const std::map<std::string, Variable_ptr> defaults = {};
+    return defaults;
+}
+
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
     : Module(serial, name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
+    this->properties = Serial::get_defaults();
+
     if (uart_is_driver_installed(uart_num)) {
         throw std::runtime_error("serial interface is already in use");
     }

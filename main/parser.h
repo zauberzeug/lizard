@@ -1701,6 +1701,7 @@ struct parsed_statements owl_tree_get_parsed_statements(struct owl_tree *tree) {
     check_for_error(tree);
     return parsed_statements_get(owl_tree_root_ref(tree));
 }
+#define HOTFIX_TOKENIZER_ADVANCE_SIZE 256
 #define ESCAPE_CHAR(c, info) ((c) == 'b' ? '\b' : (c) == 'f' ? '\f' : (c) == 'n' ? '\n' : (c) == 'r' ? '\r' : (c) == 't' ? '\t' : (c))
 #define IGNORE_TOKEN_WRITE(...)
 #define IGNORE_TOKEN_READ(...) (0)
@@ -1766,9 +1767,9 @@ struct owl_token_run {
     struct owl_token_run *prev;
     uint16_t number_of_tokens;
     uint16_t lengths_size;
-    uint8_t lengths[4096 * 2];
-    uint32_t tokens[4096];
-    uint32_t states[4096];
+    uint8_t lengths[HOTFIX_TOKENIZER_ADVANCE_SIZE * 2];
+    uint32_t tokens[HOTFIX_TOKENIZER_ADVANCE_SIZE];
+    uint32_t states[HOTFIX_TOKENIZER_ADVANCE_SIZE];
 };
 struct owl_default_tokenizer {
     const char *text;
@@ -1843,6 +1844,9 @@ static size_t decode_token_length(struct owl_token_run *run, uint16_t *length_of
     return length;
 }
 static bool OWL_DONT_INLINE owl_default_tokenizer_advance(struct owl_default_tokenizer *tokenizer, struct owl_token_run **previous_run) {
+    if (tokenizer->text[tokenizer->offset] == '\0') {
+        return false;
+    }
     struct owl_token_run *run = malloc(sizeof(struct owl_token_run));
     if (!run) return false;
     uint16_t number_of_tokens = 0;
@@ -1850,7 +1854,7 @@ static bool OWL_DONT_INLINE owl_default_tokenizer_advance(struct owl_default_tok
     const char *text = tokenizer->text;
     size_t whitespace = tokenizer->whitespace;
     size_t offset = tokenizer->offset;
-    while (number_of_tokens < 4096) {
+    while (number_of_tokens < HOTFIX_TOKENIZER_ADVANCE_SIZE) {
         char c = text[offset];
         if (c == '\0') break;
         size_t whitespace_length = read_whitespace(text + offset, tokenizer->info);
@@ -1975,7 +1979,7 @@ static bool OWL_DONT_INLINE owl_default_tokenizer_advance(struct owl_default_tok
             free(run);
             return false;
         }
-        if (end_token && number_of_tokens + 1 >= 4096) break;
+        if (end_token && number_of_tokens + 1 >= HOTFIX_TOKENIZER_ADVANCE_SIZE) break;
         if (!encode_token_length(run, &lengths_size, token_length, whitespace)) break;
         if (token == 43) {
             write_identifier_token(offset, token_length, tokenizer->info);
@@ -2020,7 +2024,7 @@ static bool OWL_DONT_INLINE owl_default_tokenizer_advance(struct owl_default_tok
         number_of_tokens++;
         offset += token_length;
         if (end_token) {
-            assert(number_of_tokens < 4096);
+            assert(number_of_tokens < HOTFIX_TOKENIZER_ADVANCE_SIZE);
             run->tokens[number_of_tokens] = 4294967295U;
             number_of_tokens++;
         }

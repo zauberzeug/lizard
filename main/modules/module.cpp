@@ -465,6 +465,13 @@ const std::map<std::string, Variable_ptr> &Module::get_module_defaults(const std
         return Analog::get_defaults();
     } else if (type_name == "LinearMotor") {
         return LinearMotor::get_defaults();
+    } else if (type_name == "Serial") {
+        return Serial::get_defaults();
+    } else if (type_name == "Bluetooth") {
+        return Bluetooth::get_defaults();
+    } else if (type_name == "MotorAxis") {
+        return MotorAxis::get_defaults();
+    } else {
+        throw std::runtime_error("module type \"" + type_name + "\" not found in defaults list");
     }
-    throw std::runtime_error("module type \"" + type_name + "\" not found in defaults list");
 }
