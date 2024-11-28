@@ -30,6 +30,11 @@ Serial::Serial(const std::string name,
     uart_driver_install(uart_num, RX_BUF_SIZE, TX_BUF_SIZE, UART_PATTERN_QUEUE_SIZE, NULL, 0);
 }
 
+const std::map<std::string, Variable_ptr> &Serial::get_defaults() {
+    static const std::map<std::string, Variable_ptr> defaults = {};
+    return defaults;
+}
+
 void Serial::enable_line_detection() const {
     uart_enable_pattern_det_baud_intr(this->uart_num, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(this->uart_num, UART_PATTERN_QUEUE_SIZE);

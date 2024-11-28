@@ -13,6 +13,11 @@ Bluetooth::Bluetooth(const std::string name, const std::string device_name, Mess
     });
 }
 
+const std::map<std::string, Variable_ptr> &Bluetooth::get_defaults() {
+    static std::map<std::string, Variable_ptr> defaults = {};
+    return defaults;
+}
+
 void Bluetooth::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "send") {
         expect(arguments, 1, string);

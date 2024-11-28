@@ -6,6 +6,11 @@ MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_
     : Module(motor_axis, name), motor(motor), input1(input1), input2(input2) {
 }
 
+const std::map<std::string, Variable_ptr> &MotorAxis::get_defaults() {
+    static std::map<std::string, Variable_ptr> defaults = {};
+    return defaults;
+}
+
 bool MotorAxis::can_move(const float speed) const {
     if (speed < 0 && this->input1->get_property("active")->boolean_value) {
         return false;
