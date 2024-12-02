@@ -189,8 +189,6 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             delay(100);
             this->handle_messages(true);
         }
-
-        restart();
         deinstall();
         bool success = ZZ::Replicator::flashReplica(this->serial->uart_num,
                                                     this->enable_pin,
@@ -199,8 +197,12 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
                                                     this->serial->tx_pin,
                                                     this->serial->baud_rate);
         Storage::save_startup();
+        delay(100);
+        this->serial->reinitialize_after_flash();
         if (!success) {
             throw std::runtime_error("could not flash expander \"" + this->name + "\"");
+        } else {
+            restart();
         }
     } else {
         static char buffer[1024];
