@@ -19,8 +19,10 @@ public:
 
     Serial(const std::string name,
            const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num);
+    void initialize_uart() const;
     void enable_line_detection() const;
     void deinstall() const;
+    void reinitialize_after_flash() const;
     int available() const;
     bool has_buffered_lines() const;
     int read(const uint32_t timeout = 0) const;

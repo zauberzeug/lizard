@@ -1,5 +1,6 @@
 #include "serial.h"
 #include "utils/string_utils.h"
+#include "utils/timing.h"
 #include "utils/uart.h"
 #include <cstring>
 #include <stdexcept>
@@ -22,6 +23,10 @@ Serial::Serial(const std::string name,
         throw std::runtime_error("serial interface is already in use");
     }
 
+    this->initialize_uart();
+}
+
+void Serial::initialize_uart() const {
     const uart_config_t uart_config = {
         .baud_rate = baud_rate,
         .data_bits = UART_DATA_8_BITS,
@@ -43,13 +48,22 @@ void Serial::enable_line_detection() const {
 }
 
 void Serial::deinstall() const {
-    uart_driver_delete(this->uart_num);
+    if (uart_is_driver_installed(this->uart_num)) {
+        uart_driver_delete(this->uart_num);
+    }
     gpio_reset_pin(this->rx_pin);
     gpio_reset_pin(this->tx_pin);
     gpio_set_direction(this->rx_pin, GPIO_MODE_INPUT);
     gpio_set_direction(this->tx_pin, GPIO_MODE_INPUT);
     gpio_set_pull_mode(this->rx_pin, GPIO_FLOATING);
     gpio_set_pull_mode(this->tx_pin, GPIO_FLOATING);
+}
+
+void Serial::reinitialize_after_flash() const {
+    this->deinstall();
+    delay(50);
+    this->initialize_uart();
+    this->enable_line_detection();
 }
 
 size_t Serial::write(const uint8_t byte) const {
