@@ -420,7 +420,7 @@ void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *d
     throw std::runtime_error("CAN message handler is not implemented");
 }
 
-const std::map<std::string, Variable_ptr> &Module::get_module_defaults(const std::string &type_name) {
+const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std::string &type_name) {
     if (type_name == "Expander") {
         return Expander::get_defaults();
     } else if (type_name == "Input") {

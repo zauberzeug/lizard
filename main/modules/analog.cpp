@@ -6,12 +6,11 @@
 #include "freertos/task.h"
 #include "uart.h"
 
-const std::map<std::string, Variable_ptr> &Analog::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> Analog::get_defaults() {
+    return {
         {"raw", std::make_shared<IntegerVariable>()},
         {"voltage", std::make_shared<NumberVariable>()},
     };
-    return defaults;
 }
 
 Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level)

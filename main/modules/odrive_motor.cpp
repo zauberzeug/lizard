@@ -2,8 +2,8 @@
 #include <cstring>
 #include <memory>
 
-const std::map<std::string, Variable_ptr> &ODriveMotor::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> ODriveMotor::get_defaults() {
+    return {
         {"position", std::make_shared<NumberVariable>()},
         {"speed", std::make_shared<NumberVariable>()},
         {"tick_offset", std::make_shared<NumberVariable>()},
@@ -13,7 +13,6 @@ const std::map<std::string, Variable_ptr> &ODriveMotor::get_defaults() {
         {"axis_error", std::make_shared<IntegerVariable>()},
         {"motor_error_flag", std::make_shared<IntegerVariable>()},
     };
-    return defaults;
 }
 
 ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version)

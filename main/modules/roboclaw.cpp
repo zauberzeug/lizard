@@ -5,11 +5,10 @@
 #define SetDWORDval(arg) (uint8_t)(((uint32_t)arg) >> 24), (uint8_t)(((uint32_t)arg) >> 16), (uint8_t)(((uint32_t)arg) >> 8), (uint8_t)arg
 #define SetWORDval(arg) (uint8_t)(((uint16_t)arg) >> 8), (uint8_t)arg
 
-const std::map<std::string, Variable_ptr> &RoboClaw::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> RoboClaw::get_defaults() {
+    return {
         {"temperature", std::make_shared<NumberVariable>()},
     };
-    return defaults;
 }
 
 RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address)

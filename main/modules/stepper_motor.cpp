@@ -13,13 +13,12 @@
 
 #define MIN_SPEED 490
 
-const std::map<std::string, Variable_ptr> &StepperMotor::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
+    return {
         {"position", std::make_shared<IntegerVariable>()},
         {"speed", std::make_shared<IntegerVariable>()},
         {"idle", std::make_shared<BooleanVariable>(true)},
     };
-    return defaults;
 }
 
 StepperMotor::StepperMotor(const std::string name,

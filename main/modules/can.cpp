@@ -4,8 +4,8 @@
 #include "driver/twai.h"
 #include <stdexcept>
 
-const std::map<std::string, Variable_ptr> &Can::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> Can::get_defaults() {
+    return {
         {"state", std::make_shared<StringVariable>()},
         {"tx_error_counter", std::make_shared<IntegerVariable>()},
         {"rx_error_counter", std::make_shared<IntegerVariable>()},
@@ -17,7 +17,6 @@ const std::map<std::string, Variable_ptr> &Can::get_defaults() {
         {"arb_lost_count", std::make_shared<IntegerVariable>()},
         {"bus_error_count", std::make_shared<IntegerVariable>()},
     };
-    return defaults;
 }
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)

@@ -1,12 +1,11 @@
 #include "pwm_output.h"
 #include <driver/ledc.h>
 
-const std::map<std::string, Variable_ptr> &PwmOutput::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> PwmOutput::get_defaults() {
+    return {
         {"frequency", std::make_shared<IntegerVariable>(1000)},
         {"duty", std::make_shared<IntegerVariable>(128)},
     };
-    return defaults;
 }
 
 PwmOutput::PwmOutput(const std::string name,

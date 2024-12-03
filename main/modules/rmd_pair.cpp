@@ -3,12 +3,11 @@
 #include "utils/uart.h"
 #include <math.h>
 
-const std::map<std::string, Variable_ptr> &RmdPair::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> RmdPair::get_defaults() {
+    return {
         {"v_max", std::make_shared<NumberVariable>(360)},
         {"a_max", std::make_shared<NumberVariable>(10000)},
     };
-    return defaults;
 }
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)

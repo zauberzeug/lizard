@@ -2,15 +2,14 @@
 #include "../utils/timing.h"
 #include <memory>
 
-const std::map<std::string, Variable_ptr> &RoboClawWheels::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> RoboClawWheels::get_defaults() {
+    return {
         {"width", std::make_shared<NumberVariable>(1)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
         {"m_per_tick", std::make_shared<NumberVariable>(1)},
     };
-    return defaults;
 }
 
 RoboClawWheels::RoboClawWheels(const std::string name, const RoboClawMotor_ptr left_motor, const RoboClawMotor_ptr right_motor)

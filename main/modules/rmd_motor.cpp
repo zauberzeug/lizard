@@ -6,15 +6,14 @@
 #include <math.h>
 #include <memory>
 
-const std::map<std::string, Variable_ptr> &RmdMotor::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> RmdMotor::get_defaults() {
+    return {
         {"position", std::make_shared<NumberVariable>()},
         {"torque", std::make_shared<NumberVariable>()},
         {"speed", std::make_shared<NumberVariable>()},
         {"temperature", std::make_shared<NumberVariable>()},
         {"can_age", std::make_shared<NumberVariable>()},
     };
-    return defaults;
 }
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
