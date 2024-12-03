@@ -32,7 +32,7 @@ Expander::Expander(const std::string name,
 
     this->properties = Expander::get_defaults();
 
-    serial->enable_line_detection();
+    this->serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(boot_pin);
         gpio_reset_pin(enable_pin);
@@ -46,10 +46,10 @@ Expander::Expander(const std::string name,
 
 void Expander::step() {
     if (!this->properties.at("is_ready")->boolean_value) {
-        check_boot_progress();
+        this->check_boot_progress();
     } else {
-        ping();
-        handle_messages();
+        this->ping();
+        this->handle_messages();
     }
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
@@ -65,7 +65,7 @@ void Expander::check_boot_progress() {
         if (strcmp("Ready.", buffer) == 0) {
             for (auto &proxy : this->proxies) {
                 if (!proxy.is_setup) {
-                    setup_proxy(proxy);
+                    this->setup_proxy(proxy);
                 }
             }
             this->properties.at("is_ready")->boolean_value = true;
@@ -77,7 +77,7 @@ void Expander::check_boot_progress() {
     const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
     if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
         echo("warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
-        restart();
+        this->restart();
     }
 }
 
@@ -93,7 +93,7 @@ void Expander::ping() {
     } else {
         if (last_message_age >= ping_interval + ping_timeout) {
             echo("warning: expander %s ping timed out, restarting", this->name.c_str());
-            restart();
+            this->restart();
         }
     }
 }
@@ -110,7 +110,7 @@ void Expander::restart() {
         delay(100);
         gpio_set_level(this->enable_pin, 1);
     } else {
-        serial->write_checked_line("core.restart()");
+        this->serial->write_checked_line("core.restart()");
     }
     this->boot_start_time = millis();
     this->properties.at("is_ready")->boolean_value = false;
@@ -122,7 +122,7 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
         int len = this->serial->read_line(buffer, sizeof(buffer));
         check(buffer, len);
         if (check_for_strapping_pins) {
-            check_strapping_pins(buffer);
+            this->check_strapping_pins(buffer);
         }
         this->last_message_millis = millis();
         this->ping_pending = false;
@@ -145,7 +145,7 @@ void Expander::add_proxy(const std::string module_name,
     if (this->properties.at("is_ready")->boolean_value) {
         // Reset ready state, since we're not ready until all proxies are setup
         echo("%s: New proxy added, setting up...", this->name.c_str());
-        setup_proxy(proxy);
+        this->setup_proxy(proxy);
     }
 }
 
@@ -189,8 +189,6 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             delay(100);
             this->handle_messages(true);
         }
-
-        restart();
         deinstall();
         bool success = ZZ::Replicator::flashReplica(this->serial->uart_num,
                                                     this->enable_pin,
@@ -199,8 +197,12 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
                                                     this->serial->tx_pin,
                                                     this->serial->baud_rate);
         Storage::save_startup();
+        delay(100);
+        this->serial->reinitialize_after_flash();
         if (!success) {
             throw std::runtime_error("could not flash expander \"" + this->name + "\"");
+        } else {
+            restart();
         }
     } else {
         static char buffer[1024];
