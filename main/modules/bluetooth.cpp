@@ -1,9 +1,8 @@
 #include "bluetooth.h"
 #include "uart.h"
 
-const std::map<std::string, Variable_ptr> &Bluetooth::get_defaults() {
-    static std::map<std::string, Variable_ptr> defaults = {};
-    return defaults;
+const std::map<std::string, Variable_ptr> Bluetooth::get_defaults() {
+    return {};
 }
 
 Bluetooth::Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler)

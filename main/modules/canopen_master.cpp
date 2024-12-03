@@ -1,10 +1,9 @@
 #include "canopen_master.h"
 
-const std::map<std::string, Variable_ptr> &CanOpenMaster::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> CanOpenMaster::get_defaults() {
+    return {
         {"sync_interval", std::make_shared<IntegerVariable>(0)},
     };
-    return defaults;
 }
 
 CanOpenMaster::CanOpenMaster(const std::string &name, const Can_ptr can)

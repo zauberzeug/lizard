@@ -47,8 +47,8 @@ static const std::string PROP_PV_IS_MOVING{"pv_is_moving"};
 static const std::string PROP_CTRL_ENA_OP{"ctrl_enable"};
 static const std::string PROP_CTRL_HALT{"ctrl_halt"};
 
-const std::map<std::string, Variable_ptr> &CanOpenMotor::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> CanOpenMotor::get_defaults() {
+    return {
         {PROP_INITIALIZED, std::make_shared<BooleanVariable>(false)},
         {PROP_PENDING_READS, std::make_shared<IntegerVariable>(0)},
         {PROP_PENDING_WRITES, std::make_shared<IntegerVariable>(0)},
@@ -68,7 +68,6 @@ const std::map<std::string, Variable_ptr> &CanOpenMotor::get_defaults() {
         {PROP_CTRL_ENA_OP, std::make_shared<BooleanVariable>(false)},
         {PROP_CTRL_HALT, std::make_shared<BooleanVariable>(true)},
     };
-    return defaults;
 }
 
 CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id)

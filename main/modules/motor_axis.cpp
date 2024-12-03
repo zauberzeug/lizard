@@ -2,9 +2,8 @@
 #include "utils/uart.h"
 #include <stdexcept>
 
-const std::map<std::string, Variable_ptr> &MotorAxis::get_defaults() {
-    static std::map<std::string, Variable_ptr> defaults = {};
-    return defaults;
+const std::map<std::string, Variable_ptr> MotorAxis::get_defaults() {
+    return {};
 }
 
 MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2)

@@ -4,8 +4,8 @@
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0
 
-const std::map<std::string, Variable_ptr> &Imu::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> Imu::get_defaults() {
+    return {
         {"acc_x", std::make_shared<NumberVariable>()},
         {"acc_y", std::make_shared<NumberVariable>()},
         {"acc_z", std::make_shared<NumberVariable>()},
@@ -21,7 +21,6 @@ const std::map<std::string, Variable_ptr> &Imu::get_defaults() {
         {"cal_acc", std::make_shared<NumberVariable>()},
         {"cal_mag", std::make_shared<NumberVariable>()},
     };
-    return defaults;
 }
 
 Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)

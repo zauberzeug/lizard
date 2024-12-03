@@ -1,12 +1,11 @@
 #include "linear_motor.h"
 #include <memory>
 
-const std::map<std::string, Variable_ptr> &LinearMotor::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
+    return {
         {"in", std::make_shared<BooleanVariable>()},
         {"out", std::make_shared<BooleanVariable>()},
     };
-    return defaults;
 }
 
 LinearMotor::LinearMotor(const std::string name) : Module(output, name) {

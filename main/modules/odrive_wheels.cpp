@@ -2,14 +2,13 @@
 #include "../utils/timing.h"
 #include <memory>
 
-const std::map<std::string, Variable_ptr> &ODriveWheels::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
+    return {
         {"width", std::make_shared<NumberVariable>(1.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
     };
-    return defaults;
 }
 
 ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor)

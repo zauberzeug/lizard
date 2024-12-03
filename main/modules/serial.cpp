@@ -8,9 +8,8 @@
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
 
-const std::map<std::string, Variable_ptr> &Serial::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {};
-    return defaults;
+const std::map<std::string, Variable_ptr> Serial::get_defaults() {
+    return {};
 }
 
 Serial::Serial(const std::string name,

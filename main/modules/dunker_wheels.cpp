@@ -1,13 +1,12 @@
 #include "dunker_wheels.h"
 #include <memory>
 
-const std::map<std::string, Variable_ptr> &DunkerWheels::get_defaults() {
-    static const std::map<std::string, Variable_ptr> defaults = {
+const std::map<std::string, Variable_ptr> DunkerWheels::get_defaults() {
+    return {
         {"width", std::make_shared<NumberVariable>(1.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
     };
-    return defaults;
 }
 
 DunkerWheels::DunkerWheels(const std::string name, const DunkerMotor_ptr left_motor, const DunkerMotor_ptr right_motor)

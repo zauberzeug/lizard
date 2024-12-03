@@ -62,7 +62,7 @@ public:
                              MessageHandler message_handler);
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
-    static const std::map<std::string, Variable_ptr> &get_module_defaults(const std::string &type_name);
+    static const std::map<std::string, Variable_ptr> get_module_defaults(const std::string &type_name);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     virtual std::string get_output() const;
     Variable_ptr get_property(const std::string property_name) const;
