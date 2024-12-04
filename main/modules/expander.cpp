@@ -159,7 +159,7 @@ void Expander::setup_proxy(ProxyInformation &proxy) {
     this->serial->write_checked_line(buffer, pos);
     delay(50);
     for (const auto &[property_name, expression] : proxy.properties) {
-        setup_property(proxy.module_name, property_name, expression);
+        this->setup_property(proxy.module_name, property_name, expression);
     }
     proxy.is_setup = true;
 }
@@ -259,7 +259,7 @@ void Expander::add_property(const std::string proxy_name, const std::string prop
         if (proxy.module_name == proxy_name) {
             proxy.properties[property_name] = expression;
             if (proxy.is_setup) {
-                setup_property(proxy_name, property_name, expression);
+                this->setup_property(proxy_name, property_name, expression);
             }
             return;
         }
