@@ -29,10 +29,7 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
         echo("%s: Unknown property \"%s\"", this->name.c_str(), property_name.c_str());
     }
     if (!from_expander) {
-        static char buffer[256];
-        int pos = csprintf(buffer, sizeof(buffer), "%s.%s = ", this->name.c_str(), property_name.c_str());
-        pos += expression->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
-        this->expander->serial->write_checked_line(buffer, pos);
+        this->expander->add_property(this->name, property_name, expression);
     }
     Module::get_property(property_name)->assign(expression);
 }
