@@ -1996,22 +1996,22 @@ static bool OWL_DONT_INLINE owl_default_tokenizer_advance(struct owl_default_tok
             const char *string = text + content_offset;
             size_t string_length = content_length;
             if (has_escapes) {
-                for (size_t i = 0;
-                i < content_length;
-                ++i) {
-                    if (text[content_offset + i] == '\\') {
-                        string_length--;
-                        i++;
-                    }
-                }
-                char *unescaped = allocate_string_contents(string_length, tokenizer->info);
+                char *output = malloc(content_length);
                 size_t j = 0;
                 for (size_t i = 0;
                 i < content_length;
                 ++i) {
-                    if (text[content_offset + i] == '\\') i++;
-                    unescaped[j++] = ESCAPE_CHAR(text[content_offset + i], tokenizer->info);
+                    if (string[i] == '\\' && i + 1 < content_length) {
+                        i++;
+                        output[j++] = ESCAPE_CHAR(string[i], tokenizer->info);
+                    } else {
+                        output[j++] = string[i];
+                    }
                 }
+                string_length = j;
+                char *unescaped = allocate_string_contents(string_length, tokenizer->info);
+                memcpy(unescaped, output, string_length);
+                free(output);
                 string = unescaped;
             }
             write_string_token(offset, token_length, string, string_length, has_escapes, tokenizer->info);

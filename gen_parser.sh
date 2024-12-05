@@ -1,11 +1,11 @@
 #!/bin/bash
 
-echo "This generator is does not include changes from PR #107 and should not be used."
-exit 1
-
 echo "Generating parser..."
 if [[ "language.owl" -nt main/parser.h ]]
 then
+    echo "This generator does not include changes from PRs #107 and #112 and should not be used."
+    exit 1
+
     pushd owl
     make
     popd
