@@ -13,6 +13,7 @@ private:
         std::string module_name;
         std::string module_type;
         std::vector<ConstExpression_ptr> arguments;
+        std::map<std::string, ConstExpression_ptr> properties;
         bool is_setup = false;
     };
 
@@ -27,6 +28,7 @@ private:
     void restart();
     void handle_messages(bool check_for_strapping_pins = false);
     void setup_proxy(ProxyInformation &proxy);
+    void setup_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
     void check_strapping_pins(const char *buffer);
 
 public:
@@ -45,5 +47,6 @@ public:
     void add_proxy(const std::string module_name,
                    const std::string module_type,
                    const std::vector<ConstExpression_ptr> arguments);
+    void add_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

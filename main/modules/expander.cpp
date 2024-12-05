@@ -139,7 +139,7 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
 void Expander::add_proxy(const std::string module_name,
                          const std::string module_type,
                          const std::vector<ConstExpression_ptr> arguments) {
-    ProxyInformation proxy = {module_name, module_type, arguments, false};
+    ProxyInformation proxy = {module_name, module_type, arguments, {}, false};
     this->proxies.push_back(proxy);
 
     if (this->properties.at("is_ready")->boolean_value) {
@@ -157,6 +157,10 @@ void Expander::setup_proxy(ProxyInformation &proxy) {
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", proxy.module_name.c_str());
     this->serial->write_checked_line(buffer, pos);
+    delay(50);
+    for (const auto &[property_name, expression] : proxy.properties) {
+        this->setup_property(proxy.module_name, property_name, expression);
+    }
     proxy.is_setup = true;
 }
 
@@ -243,4 +247,24 @@ void Expander::deinstall() {
         gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
         gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
     }
+}
+
+void Expander::setup_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
+    static char buffer[256];
+    int pos = csprintf(buffer, sizeof(buffer), "%s.%s = ", proxy_name.c_str(), property_name.c_str());
+    pos += expression->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
+    this->serial->write_checked_line(buffer, pos);
+}
+
+void Expander::add_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
+    for (auto &proxy : proxies) {
+        if (proxy.module_name == proxy_name) {
+            proxy.properties[property_name] = expression;
+            if (proxy.is_setup) {
+                this->setup_property(proxy_name, property_name, expression);
+            }
+            return;
+        }
+    }
+    throw std::runtime_error("Proxy not found: " + proxy_name);
 }
