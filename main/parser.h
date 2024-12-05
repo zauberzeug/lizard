@@ -1998,7 +1998,9 @@ static bool OWL_DONT_INLINE owl_default_tokenizer_advance(struct owl_default_tok
             if (has_escapes) {
                 char *output = malloc(content_length);
                 size_t j = 0;
-                for (size_t i = 0; i < content_length; i++) {
+                for (size_t i = 0;
+                i < content_length;
+                i++) {
                     if (string[i] == '\\' && i + 1 < content_length) {
                         i++;
                         output[j++] = ESCAPE_CHAR(string[i], tokenizer->info);
