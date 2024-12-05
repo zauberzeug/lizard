@@ -73,7 +73,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
                 this->output_list.push_back({module, property_name, precision});
             }
         }
-        this->output_on = true;
+        this->properties.at("output_on")->boolean_value = true;
     } else if (method_name == "startup_checksum") {
         uint16_t checksum = 0;
         for (char const &c : Storage::startup) {

@@ -47,8 +47,6 @@ private:
 
 protected:
     std::map<std::string, Variable_ptr> properties;
-    bool output_on = false;
-    bool broadcast = false;
 
 public:
     const ModuleType type;

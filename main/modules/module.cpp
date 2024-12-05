@@ -33,6 +33,8 @@
 #include <stdarg.h>
 
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
+    this->properties["output_on"] = std::make_shared<BooleanVariable>(false);
+    this->properties["broadcast"] = std::make_shared<BooleanVariable>(false);
 }
 
 void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
@@ -351,13 +353,13 @@ Module_ptr Module::create(const std::string type,
 }
 
 void Module::step() {
-    if (this->output_on) {
+    if (this->properties["output_on"]->boolean_value) {
         const std::string output = this->get_output();
         if (!output.empty()) {
             echo("%s %s", this->name.c_str(), output.c_str());
         }
     }
-    if (this->broadcast && !this->properties.empty()) {
+    if (this->properties["broadcast"]->boolean_value && !this->properties.empty()) {
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "!!");
         for (auto const &[property_name, property] : this->properties) {
@@ -372,13 +374,13 @@ void Module::step() {
 void Module::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "mute") {
         Module::expect(arguments, 0);
-        this->output_on = false;
+        this->properties.at("output_on")->boolean_value = false;
     } else if (method_name == "unmute") {
         Module::expect(arguments, 0);
-        this->output_on = true;
+        this->properties.at("output_on")->boolean_value = true;
     } else if (method_name == "broadcast") {
         Module::expect(arguments, 0);
-        this->broadcast = true;
+        this->properties.at("broadcast")->boolean_value = true;
     } else if (method_name == "shadow") {
         Module::expect(arguments, 1, identifier);
         std::string target_name = arguments[0]->evaluate_identifier();

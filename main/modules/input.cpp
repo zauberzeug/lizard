@@ -14,7 +14,15 @@ const std::map<std::string, Variable_ptr> Input::get_defaults() {
 }
 
 Input::Input(const std::string name) : Module(input, name) {
-    this->properties = Input::get_defaults();
+    // Get default properties
+    const auto defaults = Input::get_defaults();
+
+    // Merge defaults into properties, without overwriting existing properties
+    for (const auto &[key, value] : defaults) {
+        if (!this->properties.count(key)) {
+            this->properties[key] = value;
+        }
+    }
 }
 
 void Input::step() {
