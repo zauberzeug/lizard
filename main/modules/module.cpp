@@ -477,3 +477,11 @@ const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std:
         throw std::runtime_error("module type \"" + type_name + "\" not found in defaults list");
     }
 }
+
+void Module::merge_properties(const std::map<std::string, Variable_ptr> &defaults) {
+    for (const auto &[key, value] : defaults) {
+        if (!this->properties.count(key)) {
+            this->properties[key] = value;
+        }
+    }
+}
