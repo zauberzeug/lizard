@@ -10,7 +10,6 @@ Proxy::Proxy(const std::string name,
              const Expander_ptr expander,
              const std::vector<ConstExpression_ptr> arguments)
     : Module(proxy, name), expander(expander) {
-    this->merge_properties(Module::get_defaults());
     this->merge_properties(Module::get_module_defaults(module_type));
     this->properties["is_ready"] = expander->get_property("is_ready");
     expander->add_proxy(name, module_type, arguments);
