@@ -14,7 +14,7 @@ const std::map<std::string, Variable_ptr> DunkerMotor::get_defaults() {
 
 DunkerMotor::DunkerMotor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(dunker_motor, name), can(can), node_id(check_node_id(node_id)) {
-    this->properties = DunkerMotor::get_defaults();
+    this->merge_properties(DunkerMotor::get_defaults());
 }
 
 void DunkerMotor::subscribe_to_can() {

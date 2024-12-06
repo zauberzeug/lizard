@@ -15,7 +15,7 @@ PwmOutput::PwmOutput(const std::string name,
     : Module(pwm_output, name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
     gpio_reset_pin(pin);
 
-    this->properties = PwmOutput::get_defaults();
+    this->merge_properties(PwmOutput::get_defaults());
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,

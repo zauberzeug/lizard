@@ -14,7 +14,7 @@ const std::map<std::string, Variable_ptr> Input::get_defaults() {
 }
 
 Input::Input(const std::string name) : Module(input, name) {
-    this->properties = Input::get_defaults();
+    this->merge_properties(Input::get_defaults());
 }
 
 void Input::step() {

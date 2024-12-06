@@ -38,7 +38,7 @@ StepperMotor::StepperMotor(const std::string name,
     gpio_reset_pin(step_pin);
     gpio_reset_pin(dir_pin);
 
-    this->properties = StepperMotor::get_defaults();
+    this->merge_properties(StepperMotor::get_defaults());
 
     pcnt_config_t pcnt_config = {
         .pulse_gpio_num = step_pin,

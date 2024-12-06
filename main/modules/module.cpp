@@ -32,7 +32,15 @@
 #include "stepper_motor.h"
 #include <stdarg.h>
 
+const std::map<std::string, Variable_ptr> Module::get_defaults() {
+    return {
+        {"muted", std::make_shared<BooleanVariable>(true)},
+        {"broadcast", std::make_shared<BooleanVariable>(false)},
+    };
+}
+
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
+    this->merge_properties(Module::get_defaults());
 }
 
 void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
@@ -351,16 +359,19 @@ Module_ptr Module::create(const std::string type,
 }
 
 void Module::step() {
-    if (this->output_on) {
+    if (!this->properties["muted"]->boolean_value) {
         const std::string output = this->get_output();
         if (!output.empty()) {
             echo("%s %s", this->name.c_str(), output.c_str());
         }
     }
-    if (this->broadcast && !this->properties.empty()) {
+    if (this->properties["broadcast"]->boolean_value && !this->properties.empty()) {
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "!!");
         for (auto const &[property_name, property] : this->properties) {
+            if (property_name == "broadcast" || property_name == "muted") {
+                continue;
+            }
             pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.%s=", this->name.c_str(), property_name.c_str());
             pos += property->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
             pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ";");
@@ -372,13 +383,13 @@ void Module::step() {
 void Module::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "mute") {
         Module::expect(arguments, 0);
-        this->output_on = false;
+        this->properties.at("muted")->boolean_value = true;
     } else if (method_name == "unmute") {
         Module::expect(arguments, 0);
-        this->output_on = true;
+        this->properties.at("muted")->boolean_value = false;
     } else if (method_name == "broadcast") {
         Module::expect(arguments, 0);
-        this->broadcast = true;
+        this->properties.at("broadcast")->boolean_value = true;
     } else if (method_name == "shadow") {
         Module::expect(arguments, 1, identifier);
         std::string target_name = arguments[0]->evaluate_identifier();
@@ -473,5 +484,15 @@ const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std:
         return MotorAxis::get_defaults();
     } else {
         throw std::runtime_error("module type \"" + type_name + "\" not found in defaults list");
+    }
+}
+
+void Module::merge_properties(const std::map<std::string, Variable_ptr> &defaults) {
+    for (const auto &[key, value] : defaults) {
+        if (this->properties.count(key) > 0) {
+            echo("Warning: Module %s: Property '%s' already exists, skipping", this->name.c_str(), key.c_str());
+            continue;
+        }
+        this->properties[key] = value;
     }
 }

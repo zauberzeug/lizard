@@ -15,7 +15,7 @@ Bluetooth::Bluetooth(const std::string name, const std::string device_name, Mess
             echo("error in bluetooth message handler: %s", e.what());
         }
     });
-    this->properties = Bluetooth::get_defaults();
+    this->merge_properties(Bluetooth::get_defaults());
 }
 
 void Bluetooth::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

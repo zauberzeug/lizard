@@ -8,7 +8,7 @@ const std::map<std::string, Variable_ptr> CanOpenMaster::get_defaults() {
 
 CanOpenMaster::CanOpenMaster(const std::string &name, const Can_ptr can)
     : Module(canopen_master, name), can(can) {
-    this->properties = CanOpenMaster::get_defaults();
+    this->merge_properties(CanOpenMaster::get_defaults());
 }
 
 void CanOpenMaster::step() {

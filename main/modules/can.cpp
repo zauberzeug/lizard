@@ -57,7 +57,7 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
     g_config.rx_queue_len = 20;
     g_config.tx_queue_len = 20;
 
-    this->properties = Can::get_defaults();
+    this->merge_properties(Can::get_defaults());
 
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());
@@ -102,7 +102,7 @@ bool Can::receive() {
             message.data);
     }
 
-    if (this->output_on) {
+    if (!this->properties.at("muted")->boolean_value) {
         static char buffer[256];
         int pos = csprintf(buffer, sizeof(buffer), "%s %03lx", this->name.c_str(), message.identifier);
         if (!(message.flags & TWAI_MSG_FLAG_RTR)) {

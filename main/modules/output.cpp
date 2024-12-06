@@ -11,7 +11,7 @@ const std::map<std::string, Variable_ptr> Output::get_defaults() {
 }
 
 Output::Output(const std::string name) : Module(output, name) {
-    this->properties = Output::get_defaults();
+    this->merge_properties(Output::get_defaults());
 }
 
 void Output::step() {

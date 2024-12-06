@@ -9,7 +9,7 @@ const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
 }
 
 LinearMotor::LinearMotor(const std::string name) : Module(output, name) {
-    this->properties = LinearMotor::get_defaults();
+    this->merge_properties(LinearMotor::get_defaults());
 }
 
 void LinearMotor::step() {
