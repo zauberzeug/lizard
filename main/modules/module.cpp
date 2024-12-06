@@ -480,8 +480,6 @@ const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std:
 
 void Module::merge_properties(const std::map<std::string, Variable_ptr> &defaults) {
     for (const auto &[key, value] : defaults) {
-        if (!this->properties.count(key)) {
-            this->properties[key] = value;
-        }
+        this->properties[key] = value;
     }
 }
