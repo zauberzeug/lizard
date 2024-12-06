@@ -21,7 +21,7 @@ const std::map<std::string, Variable_ptr> D1Motor::get_defaults() {
 
 D1Motor::D1Motor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(d1_motor, name), can(can), node_id(check_node_id(node_id)) {
-    this->properties = D1Motor::get_defaults();
+    this->merge_properties(D1Motor::get_defaults());
 }
 
 void D1Motor::subscribe_to_can() {

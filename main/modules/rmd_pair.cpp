@@ -12,7 +12,7 @@ const std::map<std::string, Variable_ptr> RmdPair::get_defaults() {
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)
     : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
-    this->properties = RmdPair::get_defaults();
+    this->merge_properties(RmdPair::get_defaults());
 }
 
 RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {

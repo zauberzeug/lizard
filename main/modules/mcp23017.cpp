@@ -29,7 +29,7 @@ Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_p
         throw std::runtime_error("could not install i2c driver");
     }
 
-    this->properties = Mcp23017::get_defaults();
+    this->merge_properties(Mcp23017::get_defaults());
 
     this->set_inputs(this->properties.at("inputs")->integer_value);
     this->set_pullups(this->properties.at("pullups")->integer_value);

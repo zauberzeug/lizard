@@ -11,7 +11,7 @@ const std::map<std::string, Variable_ptr> DunkerWheels::get_defaults() {
 
 DunkerWheels::DunkerWheels(const std::string name, const DunkerMotor_ptr left_motor, const DunkerMotor_ptr right_motor)
     : Module(dunker_wheels, name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties = DunkerWheels::get_defaults();
+    this->merge_properties(DunkerWheels::get_defaults());
 }
 
 void DunkerWheels::step() {

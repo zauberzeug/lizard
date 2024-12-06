@@ -15,7 +15,7 @@ RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw
     if (this->motor_number != motor_number) {
         throw std::runtime_error("illegal motor number");
     }
-    this->properties = RoboClawMotor::get_defaults();
+    this->merge_properties(RoboClawMotor::get_defaults());
 }
 
 void RoboClawMotor::step() {

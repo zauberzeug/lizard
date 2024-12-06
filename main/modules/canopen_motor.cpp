@@ -74,7 +74,7 @@ CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id
     : Module(canopen_motor, name), can(can), node_id(check_node_id(node_id)),
       current_op_mode_disp(OP_MODE_NONE), current_op_mode(OP_MODE_NONE) {
 
-    this->properties = CanOpenMotor::get_defaults();
+    this->merge_properties(CanOpenMotor::get_defaults());
 }
 
 void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
