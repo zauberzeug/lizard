@@ -32,9 +32,15 @@
 #include "stepper_motor.h"
 #include <stdarg.h>
 
+const std::map<std::string, Variable_ptr> Module::get_defaults() {
+    return {
+        {"muted", std::make_shared<BooleanVariable>(true)},
+        {"broadcast", std::make_shared<BooleanVariable>(false)},
+    };
+}
+
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
-    this->properties["muted"] = std::make_shared<BooleanVariable>(true);
-    this->properties["broadcast"] = std::make_shared<BooleanVariable>(false);
+    this->merge_properties(Module::get_defaults());
 }
 
 void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
