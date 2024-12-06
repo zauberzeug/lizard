@@ -369,6 +369,9 @@ void Module::step() {
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "!!");
         for (auto const &[property_name, property] : this->properties) {
+            if (property_name == "broadcast" || property_name == "muted") {
+                continue;
+            }
             pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.%s=", this->name.c_str(), property_name.c_str());
             pos += property->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
             pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ";");
