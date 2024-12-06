@@ -10,7 +10,8 @@ Proxy::Proxy(const std::string name,
              const Expander_ptr expander,
              const std::vector<ConstExpression_ptr> arguments)
     : Module(proxy, name), expander(expander) {
-    this->properties = Module::get_module_defaults(module_type);
+    this->merge_properties(Module::get_defaults());
+    this->merge_properties(Module::get_module_defaults(module_type));
     this->properties["is_ready"] = expander->get_property("is_ready");
     expander->add_proxy(name, module_type, arguments);
 }
@@ -32,4 +33,9 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
         this->expander->add_property(this->name, property_name, expression);
     }
     Module::get_property(property_name)->assign(expression);
+}
+
+void Proxy::step() {
+    // proxies should not broadcast or be muted themselves
+    return;
 }
