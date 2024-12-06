@@ -102,7 +102,7 @@ bool Can::receive() {
             message.data);
     }
 
-    if (this->properties.at("output_on")->boolean_value) {
+    if (!this->properties.at("muted")->boolean_value) {
         static char buffer[256];
         int pos = csprintf(buffer, sizeof(buffer), "%s %03lx", this->name.c_str(), message.identifier);
         if (!(message.flags & TWAI_MSG_FLAG_RTR)) {
