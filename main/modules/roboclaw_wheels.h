@@ -16,5 +16,6 @@ public:
     RoboClawWheels(const std::string name, const RoboClawMotor_ptr left_motor, const RoboClawMotor_ptr right_motor);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

@@ -505,3 +505,54 @@ void CanOpenMotor::speed(const double speed, const double acceleration) {
     this->properties[PROP_CTRL_HALT]->boolean_value = false;
     send_control_word(build_ctrl_word(false));
 }
+
+void CanOpenMotor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "set_target_position") {
+        int32_t target_position = expression->evaluate_integer();
+        int32_t offset = this->properties[PROP_OFFSET]->integer_value;
+        send_target_position(target_position + offset);
+    } else if (property_name == "set_target_velocity") {
+        int32_t target_velocity = expression->evaluate_integer();
+        send_target_velocity(target_velocity);
+    } else if (property_name == "enter_mode") {
+        const std::string mode = expression->evaluate_string();
+        int32_t velocity = this->properties[PROP_VELOCITY]->integer_value;
+        if (mode == "enter_pp_mode") {
+            enter_position_mode(velocity);
+        } else if (mode == "enter_pv_mode") {
+            enter_velocity_mode(velocity);
+        } else {
+            throw std::runtime_error("invalid mode");
+        }
+    } else if (property_name == "set_profile_acceleration") {
+        uint16_t acceleration = expression->evaluate_integer();
+        set_profile_acceleration(acceleration);
+    } else if (property_name == "set_profile_deceleration") {
+        uint16_t deceleration = expression->evaluate_integer();
+        set_profile_deceleration(deceleration);
+    } else if (property_name == "set_profile_quick_stop_deceleration") {
+        uint16_t deceleration = expression->evaluate_integer();
+        set_profile_quick_stop_deceleration(deceleration);
+    } else if (property_name == "commit_target_position") {
+        if (expression->evaluate_boolean()) {
+            send_control_word(build_ctrl_word(true));
+        }
+    } else if (property_name == "set_ctrl_halt") {
+        this->properties[PROP_CTRL_HALT]->boolean_value = expression->evaluate_boolean();
+        send_control_word(build_ctrl_word(false));
+    } else if (property_name == "set_ctrl_enable") {
+        this->properties[PROP_CTRL_ENA_OP]->boolean_value = expression->evaluate_boolean();
+        send_control_word(build_ctrl_word(false));
+    } else if (property_name == "reset_fault") {
+        if (expression->evaluate_boolean()) {
+            this->properties[PROP_CTRL_HALT]->boolean_value = true;
+            uint16_t ctrl_word = build_ctrl_word(false);
+            ctrl_word |= (1 << 7);
+            send_control_word(ctrl_word);
+            ctrl_word &= ~(1 << 7);
+            send_control_word(ctrl_word);
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

@@ -177,3 +177,27 @@ double ODriveMotor::get_speed() {
 void ODriveMotor::speed(const double speed, const double acceleration) {
     this->speed(static_cast<float>(speed));
 }
+
+void ODriveMotor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "zero") {
+        this->properties.at("tick_offset")->number_value +=
+            this->properties.at("position")->number_value /
+            this->properties.at("m_per_tick")->number_value *
+            (this->properties.at("reversed")->boolean_value ? -1 : 1);
+    } else if (property_name == "power") {
+        float torque = expression->evaluate_number();
+        this->power(torque);
+    } else if (property_name == "speed") {
+        float speed = expression->evaluate_number();
+        this->speed(speed);
+    } else if (property_name == "position") {
+        float position = expression->evaluate_number();
+        this->position(position);
+    } else if (property_name == "off") {
+        this->off();
+    } else if (property_name == "reset_motor") {
+        this->reset_motor_error();
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

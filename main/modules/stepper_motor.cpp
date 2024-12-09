@@ -219,3 +219,16 @@ void StepperMotor::speed(const double speed, const double acceleration) {
     this->target_acceleration = static_cast<uint32_t>(acceleration);
     set_state(this->target_speed == 0 ? Idle : Speeding);
 }
+
+void StepperMotor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "speed") {
+        double speed = expression->evaluate_number();
+        this->speed(speed, 0);
+    } else if (property_name == "stop") {
+        if (expression->evaluate_boolean()) {
+            this->stop();
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

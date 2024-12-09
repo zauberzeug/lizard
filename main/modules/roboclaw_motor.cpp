@@ -75,3 +75,22 @@ void RoboClawMotor::speed(int value) {
     }
     throw std::runtime_error("could not set speed after " + std::to_string(max_retries) + " retries");
 }
+
+void RoboClawMotor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "power") {
+        double power = expression->evaluate_number();
+        this->power(power);
+    } else if (property_name == "speed") {
+        double speed = expression->evaluate_number();
+        this->speed(speed);
+    } else if (property_name == "zero") {
+        if (expression->evaluate_boolean()) {
+            bool success = this->motor_number == 1 ? this->roboclaw->SetEncM1(0) : this->roboclaw->SetEncM2(0);
+            if (!success) {
+                throw std::runtime_error("could not reset position");
+            }
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

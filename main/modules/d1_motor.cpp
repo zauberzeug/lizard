@@ -197,3 +197,23 @@ void D1Motor::profile_velocity(const int32_t velocity) {
 void D1Motor::stop() {
     this->sdo_write(0x6040, 0, 16, 7);
 }
+
+void D1Motor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "setup") {
+        this->setup();
+    } else if (property_name == "home") {
+        this->home();
+    } else if (property_name == "profile_position") {
+        int32_t position = expression->evaluate_integer();
+        this->profile_position(position);
+    } else if (property_name == "profile_velocity") {
+        int32_t velocity = expression->evaluate_integer();
+        this->profile_velocity(velocity);
+    } else if (property_name == "stop") {
+        this->stop();
+    } else if (property_name == "reset") {
+        this->sdo_write(0x6040, 0, 16, 143);
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

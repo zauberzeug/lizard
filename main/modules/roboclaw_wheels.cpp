@@ -76,3 +76,14 @@ void RoboClawWheels::call(const std::string method_name, const std::vector<Const
         Module::call(method_name, arguments);
     }
 }
+
+void RoboClawWheels::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "off") {
+        if (expression->evaluate_boolean()) {
+            this->left_motor->power(0);
+            this->right_motor->power(0);
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

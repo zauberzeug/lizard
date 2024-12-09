@@ -60,3 +60,18 @@ void MotorAxis::call(const std::string method_name, const std::vector<ConstExpre
         Module::call(method_name, arguments);
     }
 }
+
+void MotorAxis::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "speed") {
+        float speed = expression->evaluate_number();
+        if (this->can_move(speed)) {
+            this->motor->speed(speed, 0); // Use default acceleration of 0
+        } else {
+            this->motor->stop();
+        }
+    } else if (property_name == "stop") {
+        this->motor->stop();
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

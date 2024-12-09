@@ -1,5 +1,6 @@
 #include "linear_motor.h"
 #include <memory>
+#include <stdexcept>
 
 const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
     return {
@@ -99,4 +100,24 @@ void McpLinearMotor::set_in(bool level) const {
 
 void McpLinearMotor::set_out(bool level) const {
     return this->mcp->set_level(this->move_out, level);
+}
+
+void LinearMotor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "mode") {
+        const std::string mode = expression->evaluate_string();
+        if (mode == "in") {
+            this->set_in(1);
+            this->set_out(0);
+        } else if (mode == "out") {
+            this->set_in(0);
+            this->set_out(1);
+        } else if (mode == "stop") {
+            this->set_in(0);
+            this->set_out(0);
+        } else {
+            throw std::runtime_error("invalid mode");
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
 }

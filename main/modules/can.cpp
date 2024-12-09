@@ -190,3 +190,26 @@ void Can::subscribe(const uint32_t id, const Module_ptr module) {
     }
     this->subscribers[id] = module;
 }
+
+void Can::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "can_mode") {
+        const std::string can_mode = expression->evaluate_string();
+        if (can_mode == "start") {
+            if (twai_start() != ESP_OK) {
+                throw std::runtime_error("could not start twai driver");
+            }
+        } else if (can_mode == "stop") {
+            if (twai_stop() != ESP_OK) {
+                throw std::runtime_error("could not stop twai driver");
+            }
+        } else if (can_mode == "recover") {
+            if (twai_initiate_recovery() != ESP_OK) {
+                throw std::runtime_error("could not initiate recovery");
+            }
+        } else {
+            throw std::runtime_error("unsupported can_mode");
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

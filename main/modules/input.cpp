@@ -80,3 +80,20 @@ void McpInput::set_pull_mode(const gpio_pull_mode_t mode) const {
     }
     this->mcp->set_pullup(this->number, mode == GPIO_PULLUP_ONLY);
 }
+
+void Input::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "pullmode") {
+        const std::string pull_mode = expression->evaluate_string();
+        if (pull_mode == "pullup") {
+            this->set_pull_mode(GPIO_PULLUP_ONLY);
+        } else if (pull_mode == "pulldown") {
+            this->set_pull_mode(GPIO_PULLDOWN_ONLY);
+        } else if (pull_mode == "pulloff") {
+            this->set_pull_mode(GPIO_FLOATING);
+        } else {
+            throw std::runtime_error("invalid pullmode");
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

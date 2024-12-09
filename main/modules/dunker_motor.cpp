@@ -145,3 +145,20 @@ void DunkerMotor::speed(const double speed) {
 double DunkerMotor::get_speed() {
     return this->properties.at("speed")->number_value;
 }
+
+void DunkerMotor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "enable") {
+        if (expression->evaluate_boolean()) {
+            this->sdo_write(0x4004, 1, 8, 1);
+        }
+    } else if (property_name == "disable") {
+        if (expression->evaluate_boolean()) {
+            this->sdo_write(0x4004, 1, 8, 0);
+        }
+    } else if (property_name == "speed") {
+        double speed = expression->evaluate_number();
+        this->speed(speed);
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}

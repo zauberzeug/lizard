@@ -157,3 +157,21 @@ void Mcp23017::set_pullup(const uint8_t number, const bool value) const {
     this->properties.at("pullups")->integer_value = pullups;
     this->set_pullups(pullups);
 }
+
+void Mcp23017::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "levels") {
+        uint16_t value = expression->evaluate_integer();
+        this->properties.at("levels")->integer_value = value;
+        this->write_pins(value);
+    } else if (property_name == "pullups") {
+        uint16_t value = expression->evaluate_integer();
+        this->properties.at("pullups")->integer_value = value;
+        this->set_pullups(value);
+    } else if (property_name == "inputs") {
+        uint16_t value = expression->evaluate_integer();
+        this->properties.at("inputs")->integer_value = value;
+        this->set_inputs(value);
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
+}
