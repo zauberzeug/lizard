@@ -38,7 +38,7 @@ StepperMotor::StepperMotor(const std::string name,
     gpio_reset_pin(step_pin);
     gpio_reset_pin(dir_pin);
 
-    this->properties = StepperMotor::get_defaults();
+    this->merge_properties(StepperMotor::get_defaults());
 
     pcnt_config_t pcnt_config = {
         .pulse_gpio_num = step_pin,
@@ -218,4 +218,17 @@ void StepperMotor::speed(const double speed, const double acceleration) {
     this->target_speed = static_cast<int32_t>(speed);
     this->target_acceleration = static_cast<uint32_t>(acceleration);
     set_state(this->target_speed == 0 ? Idle : Speeding);
+}
+
+void StepperMotor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "speed") {
+        double speed = expression->evaluate_number();
+        this->speed(speed, 0);
+    } else if (property_name == "stop") {
+        if (expression->evaluate_boolean()) {
+            this->stop();
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
 }

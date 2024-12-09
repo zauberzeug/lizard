@@ -15,7 +15,7 @@ PwmOutput::PwmOutput(const std::string name,
     : Module(pwm_output, name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
     gpio_reset_pin(pin);
 
-    this->properties = PwmOutput::get_defaults();
+    this->merge_properties(PwmOutput::get_defaults());
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,
@@ -58,5 +58,13 @@ void PwmOutput::call(const std::string method_name, const std::vector<ConstExpre
         this->is_on = false;
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+void PwmOutput::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "enabled") {
+        this->is_on = expression->evaluate_boolean();
+    } else {
+        Module::write_property(property_name, expression, from_expander);
     }
 }

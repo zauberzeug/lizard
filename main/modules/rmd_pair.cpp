@@ -12,7 +12,7 @@ const std::map<std::string, Variable_ptr> RmdPair::get_defaults() {
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)
     : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
-    this->properties = RmdPair::get_defaults();
+    this->merge_properties(RmdPair::get_defaults());
 }
 
 RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {
@@ -109,5 +109,23 @@ void RmdPair::call(const std::string method_name, const std::vector<ConstExpress
         this->rmd2->clear_errors();
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+void RmdPair::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "stop") {
+        this->rmd1->stop();
+        this->rmd2->stop();
+    } else if (property_name == "off") {
+        this->rmd1->off();
+        this->rmd2->off();
+    } else if (property_name == "hold") {
+        this->rmd1->hold();
+        this->rmd2->hold();
+    } else if (property_name == "clear_errors") {
+        this->rmd1->clear_errors();
+        this->rmd2->clear_errors();
+    } else {
+        Module::write_property(property_name, expression, from_expander);
     }
 }

@@ -14,7 +14,7 @@ const std::map<std::string, Variable_ptr> DunkerMotor::get_defaults() {
 
 DunkerMotor::DunkerMotor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(dunker_motor, name), can(can), node_id(check_node_id(node_id)) {
-    this->properties = DunkerMotor::get_defaults();
+    this->merge_properties(DunkerMotor::get_defaults());
 }
 
 void DunkerMotor::subscribe_to_can() {
@@ -144,4 +144,21 @@ void DunkerMotor::speed(const double speed) {
 
 double DunkerMotor::get_speed() {
     return this->properties.at("speed")->number_value;
+}
+
+void DunkerMotor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "enable") {
+        if (expression->evaluate_boolean()) {
+            this->sdo_write(0x4004, 1, 8, 1);
+        }
+    } else if (property_name == "disable") {
+        if (expression->evaluate_boolean()) {
+            this->sdo_write(0x4004, 1, 8, 0);
+        }
+    } else if (property_name == "speed") {
+        double speed = expression->evaluate_number();
+        this->speed(speed);
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
 }

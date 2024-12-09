@@ -13,7 +13,7 @@ const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
 
 ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor)
     : Module(odrive_wheels, name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties = ODriveWheels::get_defaults();
+    this->merge_properties(ODriveWheels::get_defaults());
 }
 
 void ODriveWheels::step() {
@@ -58,5 +58,16 @@ void ODriveWheels::call(const std::string method_name, const std::vector<ConstEx
         this->right_motor->off();
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+void ODriveWheels::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "off") {
+        if (expression->evaluate_boolean()) {
+            this->left_motor->off();
+            this->right_motor->off();
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
     }
 }

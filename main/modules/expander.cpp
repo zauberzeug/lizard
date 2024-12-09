@@ -30,7 +30,7 @@ Expander::Expander(const std::string name,
       enable_pin(enable_pin),
       message_handler(message_handler) {
 
-    this->properties = Expander::get_defaults();
+    this->merge_properties(Expander::get_defaults());
 
     this->serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
