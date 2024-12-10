@@ -58,7 +58,10 @@ Simply create a Bluetooth module with a device name of your choice.
 | Constructor                          | Description                                        | Arguments |
 | ------------------------------------ | -------------------------------------------------- | --------- |
 | `bluetooth = Bluetooth(device_name)` | initialize bluetooth with advertised `device_name` | `str`     |
-| `bluetooth.send(data)`               | send `data` via notification                       | `str`     |
+
+| Methods                | Description                  | Arguments |
+| ---------------------- | ---------------------------- | --------- |
+| `bluetooth.send(data)` | send `data` via notification | `str`     |
 
 Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0 that allows writing Lizard statements like on the command line. On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
 
