@@ -14,7 +14,7 @@ const std::map<std::string, Variable_ptr> RoboClawWheels::get_defaults() {
 
 RoboClawWheels::RoboClawWheels(const std::string name, const RoboClawMotor_ptr left_motor, const RoboClawMotor_ptr right_motor)
     : Module(roboclaw_wheels, name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties = RoboClawWheels::get_defaults();
+    this->merge_properties(RoboClawWheels::get_defaults());
 }
 
 /* Catch unsigned wrap-around by detecting large jumps in encoder deltas */
@@ -74,5 +74,16 @@ void RoboClawWheels::call(const std::string method_name, const std::vector<Const
         this->right_motor->power(0);
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+void RoboClawWheels::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "off") {
+        if (expression->evaluate_boolean()) {
+            this->left_motor->power(0);
+            this->right_motor->power(0);
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
     }
 }

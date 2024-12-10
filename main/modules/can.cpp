@@ -57,7 +57,7 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
     g_config.rx_queue_len = 20;
     g_config.tx_queue_len = 20;
 
-    this->properties = Can::get_defaults();
+    this->merge_properties(Can::get_defaults());
 
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());
@@ -102,7 +102,7 @@ bool Can::receive() {
             message.data);
     }
 
-    if (this->output_on) {
+    if (!this->properties.at("muted")->boolean_value) {
         static char buffer[256];
         int pos = csprintf(buffer, sizeof(buffer), "%s %03lx", this->name.c_str(), message.identifier);
         if (!(message.flags & TWAI_MSG_FLAG_RTR)) {
@@ -189,4 +189,27 @@ void Can::subscribe(const uint32_t id, const Module_ptr module) {
         throw std::runtime_error("there is already a subscriber for this CAN ID");
     }
     this->subscribers[id] = module;
+}
+
+void Can::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "can_mode") {
+        const std::string can_mode = expression->evaluate_string();
+        if (can_mode == "start") {
+            if (twai_start() != ESP_OK) {
+                throw std::runtime_error("could not start twai driver");
+            }
+        } else if (can_mode == "stop") {
+            if (twai_stop() != ESP_OK) {
+                throw std::runtime_error("could not stop twai driver");
+            }
+        } else if (can_mode == "recover") {
+            if (twai_initiate_recovery() != ESP_OK) {
+                throw std::runtime_error("could not initiate recovery");
+            }
+        } else {
+            throw std::runtime_error("unsupported can_mode");
+        }
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
 }

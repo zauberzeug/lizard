@@ -52,7 +52,7 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
     } catch (std::exception &ex) {
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     }
-    this->properties = Imu::get_defaults();
+    this->merge_properties(Imu::get_defaults());
 }
 
 void Imu::step() {

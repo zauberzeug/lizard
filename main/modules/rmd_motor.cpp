@@ -18,7 +18,7 @@ const std::map<std::string, Variable_ptr> RmdMotor::get_defaults() {
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
     : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
-    this->properties = RmdMotor::get_defaults();
+    this->merge_properties(RmdMotor::get_defaults());
 }
 
 void RmdMotor::subscribe_to_can() {
@@ -276,4 +276,27 @@ bool RmdMotor::set_acceleration(const uint8_t index, const uint32_t acceleration
                       *((uint8_t *)(&acceleration) + 2),
                       *((uint8_t *)(&acceleration) + 3),
                       20);
+}
+
+void RmdMotor::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "power") {
+        double power = expression->evaluate_number();
+        this->power(power);
+    } else if (property_name == "speed") {
+        double speed = expression->evaluate_number();
+        this->speed(speed);
+    } else if (property_name == "position") {
+        double position = expression->evaluate_number();
+        this->position(position, 0); // Use default speed of 0
+    } else if (property_name == "stop") {
+        this->stop();
+    } else if (property_name == "off") {
+        this->off();
+    } else if (property_name == "hold") {
+        this->hold();
+    } else if (property_name == "clear_errors") {
+        this->clear_errors();
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
 }

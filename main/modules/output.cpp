@@ -11,7 +11,7 @@ const std::map<std::string, Variable_ptr> Output::get_defaults() {
 }
 
 Output::Output(const std::string name) : Module(output, name) {
-    this->properties = Output::get_defaults();
+    this->merge_properties(Output::get_defaults());
 }
 
 void Output::step() {
@@ -69,4 +69,24 @@ McpOutput::McpOutput(const std::string name, const Mcp23017_ptr mcp, const uint8
 
 void McpOutput::set_level(bool level) const {
     this->mcp->set_level(this->number, level);
+}
+
+void Output::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "enabled") {
+        bool enabled = expression->evaluate_boolean();
+        this->target_level = enabled ? 1 : 0;
+        this->pulse_interval = 0;
+        this->step();
+    } else if (property_name == "level") {
+        bool level = expression->evaluate_boolean();
+        this->target_level = level;
+        this->pulse_interval = 0;
+        this->step();
+    } else if (property_name == "pulse") {
+        double interval = expression->evaluate_number();
+        this->pulse_interval = interval;
+        this->pulse_duty_cycle = 0.5;
+    } else {
+        Module::write_property(property_name, expression, from_expander);
+    }
 }

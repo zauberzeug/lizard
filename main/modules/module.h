@@ -47,8 +47,6 @@ private:
 
 protected:
     std::map<std::string, Variable_ptr> properties;
-    bool output_on = false;
-    bool broadcast = false;
 
 public:
     const ModuleType type;
@@ -62,10 +60,12 @@ public:
                              MessageHandler message_handler);
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    static const std::map<std::string, Variable_ptr> get_defaults();
     static const std::map<std::string, Variable_ptr> get_module_defaults(const std::string &type_name);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     virtual std::string get_output() const;
     Variable_ptr get_property(const std::string property_name) const;
     virtual void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander = false);
     virtual void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
+    virtual void merge_properties(const std::map<std::string, Variable_ptr> &defaults);
 };
