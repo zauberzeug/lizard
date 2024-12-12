@@ -15,15 +15,11 @@ Proxy::Proxy(const std::string name,
     if (this->properties["is_ready"]->boolean_value == false) {
         throw std::runtime_error("Proxy: Expander \"" + expander->name + "\" is not ready");
     }
-    expander->add_proxy(name, module_type, arguments);
+    expander->write_proxy(name, module_type, arguments);
 }
 
 void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", this->name.c_str(), method_name.c_str());
-    pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
-    this->expander->serial->write_checked_line(buffer, pos);
+    this->expander->write_call(method_name, arguments);
 }
 
 void Proxy::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
@@ -32,7 +28,7 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
         echo("%s: Unknown property \"%s\"", this->name.c_str(), property_name.c_str());
     }
     if (!from_expander) {
-        this->expander->add_property(this->name, property_name, expression);
+        this->expander->write_property(this->name, property_name, expression);
     }
     Module::get_property(property_name)->assign(expression);
 }
