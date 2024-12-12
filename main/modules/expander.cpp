@@ -147,16 +147,6 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
     }
 }
 
-void Expander::write_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
-    static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
-    pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
-    this->serial->write_checked_line(buffer, pos);
-    this->has_proxies_configured = true;
-}
-
 void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
@@ -240,6 +230,16 @@ void Expander::deinstall() {
         gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
         gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
     }
+}
+
+void Expander::write_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
+    static char buffer[256];
+    int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
+    pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
+    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
+    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
+    this->serial->write_checked_line(buffer, pos);
+    this->has_proxies_configured = true;
 }
 
 void Expander::write_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
