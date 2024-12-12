@@ -15,7 +15,7 @@ Proxy::Proxy(const std::string name,
     if (this->properties["is_ready"]->boolean_value == false) {
         throw std::runtime_error("Proxy: Expander \"" + expander->name + "\" is not ready");
     }
-    expander->write_proxy(name, module_type, arguments);
+    this->expander->write_proxy(name, module_type, arguments);
 }
 
 void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
