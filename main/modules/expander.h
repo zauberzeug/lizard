@@ -9,26 +9,16 @@ using Expander_ptr = std::shared_ptr<Expander>;
 
 class Expander : public Module {
 private:
-    struct ProxyInformation {
-        std::string module_name;
-        std::string module_type;
-        std::vector<ConstExpression_ptr> arguments;
-        std::map<std::string, ConstExpression_ptr> properties;
-        bool is_setup = false;
-    };
-
     unsigned long int last_message_millis = 0;
     bool ping_pending = false;
     unsigned long boot_start_time;
-    std::vector<ProxyInformation> proxies;
+    bool has_proxies_configured = false;
 
     void deinstall();
     void check_boot_progress();
     void ping();
     void restart();
     void handle_messages(bool check_for_strapping_pins = false);
-    void setup_proxy(ProxyInformation &proxy);
-    void setup_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
     void check_strapping_pins(const char *buffer);
 
 public:
@@ -44,9 +34,8 @@ public:
              MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-    void add_proxy(const std::string module_name,
-                   const std::string module_type,
-                   const std::vector<ConstExpression_ptr> arguments);
-    void add_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
+    void write_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments);
+    void write_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
+    void write_call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

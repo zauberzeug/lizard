@@ -46,7 +46,7 @@ Expander::Expander(const std::string name,
     while (this->properties.at("is_ready")->boolean_value == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
             echo("warning: expander did not boot.");
-            echo("this will trigger a restart and/or and error in the future");
+            echo("TODO:this will trigger a restart and/or and error in the future");
             break;
         }
         this->check_boot_progress();
@@ -57,7 +57,7 @@ Expander::Expander(const std::string name,
 
 void Expander::step() {
     if (!this->properties.at("is_ready")->boolean_value) {
-        this->check_boot_progress();
+        // handle error state, esp has timed out
     } else {
         this->ping();
         this->handle_messages();
@@ -74,11 +74,11 @@ void Expander::check_boot_progress() {
         this->last_message_millis = millis();
         echo("%s: %s", this->name.c_str(), buffer);
         if (strcmp("Ready.", buffer) == 0) {
-            for (auto &proxy : this->proxies) {
-                if (!proxy.is_setup) {
-                    this->setup_proxy(proxy);
-                }
-            }
+            // for (auto &proxy : this->proxies) {
+            //     if (!proxy.is_setup) {
+            //         this->setup_proxy(proxy);
+            //     }
+            // }
             this->properties.at("is_ready")->boolean_value = true;
             echo("%s: Booting process completed successfully", this->name.c_str());
             break;
@@ -98,8 +98,13 @@ void Expander::ping() {
     const double ping_timeout = this->get_property("ping_timeout")->number_value;
     if (!this->ping_pending) {
         if (last_message_age >= ping_interval) {
-            this->serial->write_checked_line("core.print('__PONG__')");
-            this->ping_pending = true;
+            if (!this->has_proxies_configured) {
+                this->serial->write_checked_line("core.print('__PONG__')");
+                this->ping_pending = true;
+            } else {
+                echo("warning: expander %s had proxies configured, but reached ping interval without sending a message", this->name.c_str());
+                echo("TODO:this will trigger a restart and/or and error in the future");
+            }
         }
     } else {
         if (last_message_age >= ping_interval + ping_timeout) {
@@ -111,11 +116,6 @@ void Expander::ping() {
 
 void Expander::restart() {
     this->ping_pending = false;
-
-    for (auto &proxy : this->proxies) {
-        proxy.is_setup = false;
-    }
-
     if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
         gpio_set_level(this->enable_pin, 0);
         delay(100);
@@ -147,32 +147,14 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
     }
 }
 
-void Expander::add_proxy(const std::string module_name,
-                         const std::string module_type,
-                         const std::vector<ConstExpression_ptr> arguments) {
-    ProxyInformation proxy = {module_name, module_type, arguments, {}, false};
-    this->proxies.push_back(proxy);
-
-    if (this->properties.at("is_ready")->boolean_value) {
-        // Reset ready state, since we're not ready until all proxies are setup
-        echo("%s: New proxy added, setting up...", this->name.c_str());
-        this->setup_proxy(proxy);
-    }
-}
-
-void Expander::setup_proxy(ProxyInformation &proxy) {
+void Expander::write_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
     static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%s = %s(",
-                       proxy.module_name.c_str(), proxy.module_type.c_str());
-    pos += write_arguments_to_buffer(proxy.arguments, &buffer[pos], sizeof(buffer) - pos);
+    int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
+    pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", proxy.module_name.c_str());
+    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
     this->serial->write_checked_line(buffer, pos);
-    delay(50);
-    for (const auto &[property_name, expression] : proxy.properties) {
-        this->setup_property(proxy.module_name, property_name, expression);
-    }
-    proxy.is_setup = true;
+    this->has_proxies_configured = true;
 }
 
 void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -260,22 +242,17 @@ void Expander::deinstall() {
     }
 }
 
-void Expander::setup_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
+void Expander::write_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
     static char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%s.%s = ", proxy_name.c_str(), property_name.c_str());
     pos += expression->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
     this->serial->write_checked_line(buffer, pos);
 }
 
-void Expander::add_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
-    for (auto &proxy : proxies) {
-        if (proxy.module_name == proxy_name) {
-            proxy.properties[property_name] = expression;
-            if (proxy.is_setup) {
-                this->setup_property(proxy_name, property_name, expression);
-            }
-            return;
-        }
-    }
-    throw std::runtime_error("Proxy not found: " + proxy_name);
+void Expander::write_call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+    static char buffer[256];
+    int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", this->name.c_str(), method_name.c_str());
+    pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
+    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
+    this->serial->write_checked_line(buffer, pos);
 }
