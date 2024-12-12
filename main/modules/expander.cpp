@@ -42,6 +42,17 @@ Expander::Expander(const std::string name,
     }
 
     this->restart();
+    const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
+    while (this->properties.at("is_ready")->boolean_value == false) {
+        if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
+            echo("warning: expander did not boot.");
+            echo("this will trigger a restart and/or and error in the future");
+            break;
+        }
+        this->check_boot_progress();
+        delay(30);
+        echo("Debug: Waiting for expander to boot...");
+    }
 }
 
 void Expander::step() {
@@ -74,11 +85,11 @@ void Expander::check_boot_progress() {
         }
     }
 
-    const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
-    if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
-        echo("warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
-        this->restart();
-    }
+    // const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
+    // if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
+    //     echo("warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
+    //     this->restart();
+    // }
 }
 
 void Expander::ping() {
