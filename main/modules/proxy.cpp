@@ -3,7 +3,7 @@
 #include "../utils/uart.h"
 #include "driver/uart.h"
 #include <memory>
-#include <stdexcept>
+
 Proxy::Proxy(const std::string name,
              const std::string expander_name,
              const std::string module_type,
