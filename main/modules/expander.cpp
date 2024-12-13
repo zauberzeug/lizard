@@ -46,6 +46,7 @@ Expander::Expander(const std::string name,
     const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
     while (this->properties.at("is_ready")->boolean_value == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
+            echo("warning: expander %s connection timed out.", this->name.c_str());
             Error_handling::set_error(this->name, Error_code::ERROR_CONNECTION_FAILED);
             break;
         }
@@ -89,7 +90,7 @@ void Expander::ping() {
         }
     } else {
         if (last_message_age >= ping_interval + ping_timeout) {
-            echo("Debug: expander %s ping timed out", this->name.c_str());
+            echo("warning: expander %s connection lost", this->name.c_str());
             Error_handling::set_error(this->name, Error_code::ERROR_CONNECTION_TIMEOUT);
             this->properties.at("is_ready")->boolean_value = false;
         }
