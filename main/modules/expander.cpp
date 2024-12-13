@@ -1,6 +1,7 @@
 #include "expander.h"
 
 #include "storage.h"
+#include "utils/error_handling.h"
 #include "utils/serial-replicator.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
@@ -45,20 +46,16 @@ Expander::Expander(const std::string name,
     const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
     while (this->properties.at("is_ready")->boolean_value == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
-            echo("warning: expander did not boot.");
-            echo("TODO:this will trigger a restart and/or and error in the future");
+            Error_handling::set_error(this->name, Error_code::ERROR_CONNECTION_FAILED);
             break;
         }
         this->check_boot_progress();
         delay(30);
-        echo("Debug: Waiting for expander to boot...");
     }
 }
 
 void Expander::step() {
-    if (!this->properties.at("is_ready")->boolean_value) {
-        // handle error state, esp has timed out
-    } else {
+    if (this->properties.at("is_ready")->boolean_value) {
         this->ping();
         this->handle_messages();
     }
@@ -85,20 +82,16 @@ void Expander::ping() {
     const double last_message_age = this->get_property("last_message_age")->integer_value / 1000.0;
     const double ping_interval = this->get_property("ping_interval")->number_value;
     const double ping_timeout = this->get_property("ping_timeout")->number_value;
-    if (!this->ping_pending) {
+    if (!this->ping_pending && !this->has_proxies_configured) {
         if (last_message_age >= ping_interval) {
-            if (!this->has_proxies_configured) {
-                this->serial->write_checked_line("core.print('__PONG__')");
-                this->ping_pending = true;
-            } else {
-                echo("warning: expander %s had proxies configured, but reached ping interval without sending a message", this->name.c_str());
-                echo("TODO:this will trigger a restart and/or and error in the future");
-            }
+            this->serial->write_checked_line("core.print('__PONG__')");
+            this->ping_pending = true;
         }
     } else {
         if (last_message_age >= ping_interval + ping_timeout) {
-            echo("warning: expander %s ping timed out, restarting", this->name.c_str());
-            this->restart();
+            echo("Debug: expander %s ping timed out", this->name.c_str());
+            Error_handling::set_error(this->name, Error_code::ERROR_CONNECTION_TIMEOUT);
+            this->properties.at("is_ready")->boolean_value = false;
         }
     }
 }
