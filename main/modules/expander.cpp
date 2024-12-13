@@ -1,6 +1,7 @@
 #include "expander.h"
 
 #include "storage.h"
+#include "utils/error_handling.h"
 #include "utils/serial-replicator.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
@@ -46,7 +47,7 @@ Expander::Expander(const std::string name,
     while (this->properties.at("is_ready")->boolean_value == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
             echo("warning: expander %s connection timed out.", this->name.c_str());
-            // TODO: trigger error code
+            Error_handling::set_error(this->name, Error_code::ERROR_CONNECTION_FAILED);
             break;
         }
         this->check_boot_progress();
@@ -90,7 +91,7 @@ void Expander::ping() {
     } else {
         if (last_message_age >= ping_interval + ping_timeout) {
             echo("warning: expander %s connection lost", this->name.c_str());
-            // TODO: trigger error code
+            Error_handling::set_error(this->name, Error_code::ERROR_CONNECTION_TIMEOUT);
             this->properties.at("is_ready")->boolean_value = false;
         }
     }
