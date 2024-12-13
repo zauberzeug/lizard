@@ -34,8 +34,8 @@ public:
              MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-    void write_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments);
-    void write_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
-    void write_call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    void send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments);
+    void send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
+    void send_call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

@@ -74,22 +74,11 @@ void Expander::check_boot_progress() {
         this->last_message_millis = millis();
         echo("%s: %s", this->name.c_str(), buffer);
         if (strcmp("Ready.", buffer) == 0) {
-            // for (auto &proxy : this->proxies) {
-            //     if (!proxy.is_setup) {
-            //         this->setup_proxy(proxy);
-            //     }
-            // }
             this->properties.at("is_ready")->boolean_value = true;
             echo("%s: Booting process completed successfully", this->name.c_str());
             break;
         }
     }
-
-    // const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
-    // if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
-    //     echo("warning: expander %s did not send 'Ready.', trying restart", this->name.c_str());
-    //     this->restart();
-    // }
 }
 
 void Expander::ping() {
@@ -189,7 +178,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         if (!success) {
             throw std::runtime_error("could not flash expander \"" + this->name + "\"");
         } else {
-            restart();
+            this->restart();
         }
     } else {
         static char buffer[1024];
@@ -232,7 +221,7 @@ void Expander::deinstall() {
     }
 }
 
-void Expander::write_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
     static char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
@@ -242,14 +231,14 @@ void Expander::write_proxy(const std::string module_name, const std::string modu
     this->has_proxies_configured = true;
 }
 
-void Expander::write_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
+void Expander::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
     static char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%s.%s = ", proxy_name.c_str(), property_name.c_str());
     pos += expression->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
     this->serial->write_checked_line(buffer, pos);
 }
 
-void Expander::write_call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::send_call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     static char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", this->name.c_str(), method_name.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
