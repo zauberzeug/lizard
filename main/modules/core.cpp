@@ -22,14 +22,14 @@ Core::Core(const std::string name) : Module(core, name) {
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
-    this->properties["error"] = std::make_shared<BooleanVariable>(false);
+    this->properties["has_error"] = std::make_shared<BooleanVariable>(false);
 }
 
 void Core::step() {
     this->properties.at("millis")->integer_value = millis();
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
-    this->properties.at("error")->boolean_value = Error_handling::has_error();
+    this->properties.at("has_error")->boolean_value = Error_handling::has_error();
     Module::step();
 }
 
