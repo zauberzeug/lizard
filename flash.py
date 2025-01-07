@@ -38,7 +38,13 @@ esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv,
 if 'enable' in sys.argv:
     with esp.pin_config():
         print('Enabling ESP...')
-        esp.activate()
+        esp.enable()
+    sys.exit()
+
+if 'reset' in sys.argv:
+    with esp.pin_config():
+        print('Resetting ESP...')
+        esp.reset()
     sys.exit()
 
 with esp.pin_config(), esp.flash_mode():
