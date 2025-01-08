@@ -29,7 +29,7 @@ void Core::step() {
     this->properties.at("millis")->integer_value = millis();
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
-    this->properties.at("has_error")->boolean_value = Error_handling::has_error();
+    this->properties.at("has_error")->boolean_value = ErrorHandling::has_error();
     Module::step();
 }
 
@@ -168,7 +168,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
     } else if (method_name == "get_errors") {
         Module::expect(arguments, 0);
-        const std::map<std::string, Error_code> errors = Error_handling::get_errors();
+        const std::map<std::string, ErrorCode> errors = ErrorHandling::get_errors();
         if (errors.empty()) {
             echo("no errors");
         } else {

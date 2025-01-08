@@ -1,21 +1,21 @@
 #include "error_handling.h"
 
-std::map<std::string, Error_code> Error_handling::error_codes_;
-bool Error_handling::has_error_;
+std::map<std::string, ErrorCode> ErrorHandling::error_codes_;
+bool ErrorHandling::has_error_;
 
-Error_code Error_handling::get_error(const std::string module_name) {
+ErrorCode ErrorHandling::get_error(const std::string module_name) {
     return error_codes_[module_name];
 }
 
-std::map<std::string, Error_code> Error_handling::get_errors() {
+std::map<std::string, ErrorCode> ErrorHandling::get_errors() {
     return error_codes_;
 }
 
-bool Error_handling::has_error() {
+bool ErrorHandling::has_error() {
     return has_error_;
 }
 
-void Error_handling::set_error(const std::string module_name, const Error_code error_code) {
+void ErrorHandling::set_error(const std::string module_name, const ErrorCode error_code) {
     error_codes_[module_name] = error_code;
     has_error_ = true;
 }
