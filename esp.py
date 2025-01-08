@@ -63,7 +63,7 @@ class Esp:
         self.write(f'{self.gpio_en}/value', self.off)
         sleep(0.5)
         yield
-        self.activate()
+        self.reset()
 
     def reset(self) -> None:
         print('Resetting microcontroller...')
