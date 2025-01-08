@@ -32,8 +32,9 @@ with serial.Serial(usb_path, baudrate=115200, timeout=1.0) as port:
     send('!.')
     send('core.restart()')
 
-    # Wait for "Ready." message
-    deadline = time.time() + 3.0
+    # Wait for "Ready." message with a deadline depending on the number of expanders
+    timeout = 3.0 + 3.0 * startup.count('Expander')
+    deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             line = port.read_until(b'\r\n').decode().rstrip()
