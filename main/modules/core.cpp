@@ -176,7 +176,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
 
             std::string output;
             for (auto const &module : Global::modules) {
-                if (module.second->get_error() != 0) {
+                if (module.second->get_property("error_code")->integer_value != 0) {
                     output += module.first + ": " + module.second->get_error_description() + (single_line ? ";" : "\n");
                 }
             }
