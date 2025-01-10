@@ -1,13 +1,13 @@
 #include "expander.h"
 
 #include "storage.h"
-#include "utils/error_handling.h"
 #include "utils/serial-replicator.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include <algorithm>
 #include <cstring>
+#include <sstream>
 #include <stdexcept>
 
 const std::map<std::string, Variable_ptr> Expander::get_defaults() {
@@ -31,7 +31,13 @@ Expander::Expander(const std::string name,
       enable_pin(enable_pin),
       message_handler(message_handler) {
 
-    this->properties = Expander::get_defaults();
+    const auto defaults = Expander::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
+
+    this->error_descriptions = {
+        {0x01, "Expander connection timed out"},
+        {0x02, "Expander connection lost"},
+    };
 
     this->serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
@@ -47,7 +53,7 @@ Expander::Expander(const std::string name,
     while (this->properties.at("is_ready")->boolean_value == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
             echo("warning: expander %s connection timed out.", this->name.c_str());
-            ErrorHandling::set_error(this->name, ErrorCode::ERROR_CONNECTION_FAILED);
+            this->set_error(0x01);
             break;
         }
         this->check_boot_progress();
@@ -91,7 +97,7 @@ void Expander::ping() {
     } else {
         if (last_message_age >= ping_interval + ping_timeout) {
             echo("warning: expander %s connection lost", this->name.c_str());
-            ErrorHandling::set_error(this->name, ErrorCode::ERROR_CONNECTION_TIMEOUT);
+            this->set_error(0x02);
             this->properties.at("is_ready")->boolean_value = false;
         }
     }
