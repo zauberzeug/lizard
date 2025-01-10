@@ -50,6 +50,8 @@ protected:
     bool output_on = false;
     bool broadcast = false;
 
+    static std::map<uint32_t, std::string> error_descriptions;
+
 public:
     const ModuleType type;
     const std::string name;
@@ -68,4 +70,6 @@ public:
     Variable_ptr get_property(const std::string property_name) const;
     virtual void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander = false);
     virtual void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
+    virtual void set_error(uint32_t error_flag);
+    std::string get_error_description() const;
 };

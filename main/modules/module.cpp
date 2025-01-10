@@ -1,5 +1,6 @@
 #include "module.h"
 #include "../global.h"
+#include "../utils/global_error_state.h"
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "analog.h"
@@ -30,9 +31,13 @@
 #include "roboclaw_wheels.h"
 #include "serial.h"
 #include "stepper_motor.h"
+#include <sstream>
 #include <stdarg.h>
 
+std::map<uint32_t, std::string> Module::error_descriptions;
+
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
+    this->properties["error_code"] = std::make_shared<IntegerVariable>(0);
 }
 
 void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
@@ -474,4 +479,25 @@ const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std:
     } else {
         throw std::runtime_error("module type \"" + type_name + "\" not found in defaults list");
     }
+}
+
+void Module::set_error(uint32_t error_flag) {
+    this->properties.at("error_code")->integer_value |= error_flag;
+    GlobalErrorState::set_error();
+}
+
+std::string Module::get_error_description() const {
+    uint32_t error_code = this->get_property("error_code")->integer_value;
+    std::ostringstream description;
+
+    for (const auto &[code, desc] : error_descriptions) {
+        if (error_code & code) {
+            if (!description.str().empty()) {
+                description << ", ";
+            }
+            description << desc;
+        }
+    }
+
+    return description.str();
 }
