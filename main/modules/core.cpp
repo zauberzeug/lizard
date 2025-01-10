@@ -1,7 +1,7 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
-#include "../utils/error_handling.h"
+#include "../utils/global_error_state.h"
 #include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -29,7 +29,7 @@ void Core::step() {
     this->properties.at("millis")->integer_value = millis();
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
-    this->properties.at("has_error")->boolean_value = ErrorHandling::has_error();
+    this->properties.at("has_error")->boolean_value = GlobalErrorState::has_error();
     Module::step();
 }
 
@@ -167,14 +167,22 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             break;
         }
     } else if (method_name == "get_errors") {
-        Module::expect(arguments, 0);
-        const std::map<std::string, ErrorCode> errors = ErrorHandling::get_errors();
-        if (errors.empty()) {
-            echo("no errors");
-        } else {
-            for (auto const &error : errors) {
-                echo("%s: %d", error.first.c_str(), error.second);
+        Module::expect(arguments, -1);
+        if (this->get_property("has_error")->boolean_value) {
+            bool single_line = false;
+            if (arguments.size() == 1) {
+                single_line = arguments[0]->evaluate_boolean();
             }
+
+            std::string output;
+            for (auto const &module : Global::modules) {
+                if (module.second->get_error() != 0) {
+                    output += module.first + ": " + module.second->get_error_description() + (single_line ? ";" : "\n");
+                }
+            }
+            echo(output.c_str());
+        } else {
+            echo("No errors");
         }
     } else {
         Module::call(method_name, arguments);
