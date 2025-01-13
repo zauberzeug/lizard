@@ -18,4 +18,5 @@ public:
     Analog(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level);
     void step() override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+    void set_error_descriptions();
 };
