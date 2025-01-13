@@ -8,7 +8,8 @@ const std::map<std::string, Variable_ptr> MotorAxis::get_defaults() {
 
 MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2)
     : Module(motor_axis, name), motor(motor), input1(input1), input2(input2) {
-    this->properties = MotorAxis::get_defaults();
+    auto defaults = MotorAxis::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 }
 
 bool MotorAxis::can_move(const float speed) const {
