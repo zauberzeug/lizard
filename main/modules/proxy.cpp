@@ -4,6 +4,12 @@
 #include "driver/uart.h"
 #include <memory>
 
+void Proxy::set_error_descriptions() {
+    this->error_descriptions = {
+        {0x01, "Expander is not ready"},
+    };
+}
+
 Proxy::Proxy(const std::string name,
              const std::string expander_name,
              const std::string module_type,
@@ -17,7 +23,7 @@ Proxy::Proxy(const std::string name,
         this->expander->send_proxy(name, module_type, arguments);
         this->properties["is_ready"]->boolean_value = true;
     } else {
-        // TODO: error code handling
+        this->set_error(0x01);
     }
 }
 
