@@ -10,12 +10,19 @@ const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
     };
 }
 
+void RoboClawMotor::set_error_descriptions() {
+    this->error_descriptions = {
+        {0x01, "Could not read motor position"},
+    };
+}
+
 RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number)
     : Module(roboclaw_motor, name), motor_number(constrain(motor_number, 1, 2)), roboclaw(roboclaw) {
     if (this->motor_number != motor_number) {
         throw std::runtime_error("illegal motor number");
     }
-    this->properties = RoboClawMotor::get_defaults();
+    auto defaults = RoboClawMotor::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 }
 
 void RoboClawMotor::step() {
@@ -23,6 +30,7 @@ void RoboClawMotor::step() {
     bool valid;
     int64_t position = this->motor_number == 1 ? this->roboclaw->ReadEncM1(&status, &valid) : this->roboclaw->ReadEncM2(&status, &valid);
     if (!valid) {
+        this->set_error(0x01);
         throw std::runtime_error("could not read motor position");
     }
     this->properties["position"]->integer_value = position;
