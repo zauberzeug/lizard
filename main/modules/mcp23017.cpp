@@ -12,8 +12,17 @@ const std::map<std::string, Variable_ptr> Mcp23017::get_defaults() {
     };
 }
 
+void Mcp23017::set_error_descriptions() {
+    this->error_descriptions = {
+        {0x01, "Could not initialize i2c port"},
+        {0x02, "Could not send i2c command"},
+    };
+}
+
 Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
     : Module(mcp23017, name), i2c_port(i2c_port), address(address) {
+    this->set_error_descriptions();
+
     i2c_config_t config;
     config.mode = I2C_MODE_MASTER;
     config.sda_io_num = sda_pin,
@@ -23,13 +32,16 @@ Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_p
     config.master.clk_speed = clk_speed;
     config.clk_flags = 0;
     if (i2c_param_config(i2c_port, &config) != ESP_OK) {
+        this->set_error(0x01);
         throw std::runtime_error("could not configure i2c port");
     }
     if (i2c_driver_install(i2c_port, I2C_MODE_MASTER, I2C_MASTER_TX_BUF_DISABLE, I2C_MASTER_RX_BUF_DISABLE, 0) != ESP_OK) {
+        this->set_error(0x01);
         throw std::runtime_error("could not install i2c driver");
     }
 
-    this->properties = Mcp23017::get_defaults();
+    auto defaults = Mcp23017::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 
     this->set_inputs(this->properties.at("inputs")->integer_value);
     this->set_pullups(this->properties.at("pullups")->integer_value);
@@ -101,24 +113,41 @@ uint8_t Mcp23017::read_register(mcp23017_reg_t reg) const {
 }
 
 uint16_t Mcp23017::read_pins() const {
-    uint8_t a = this->read_register(MCP23017_REG_GPIOA);
-    uint8_t b = this->read_register(MCP23017_REG_GPIOB);
-    return (b << 8) | a;
+    try {
+        uint8_t a = this->read_register(MCP23017_REG_GPIOA);
+        uint8_t b = this->read_register(MCP23017_REG_GPIOB);
+        return (b << 8) | a;
+    } catch (const std::runtime_error &e) {
+        const_cast<Mcp23017 *>(this)->set_error(0x02);
+        throw e;
+    }
 }
 
 void Mcp23017::write_pins(uint16_t value) const {
-    this->write_register(MCP23017_REG_GPIOA, value);
-    this->write_register(MCP23017_REG_GPIOB, value >> 8);
+    try {
+        this->write_register(MCP23017_REG_GPIOA, value);
+        this->write_register(MCP23017_REG_GPIOB, value >> 8);
+    } catch (const std::runtime_error &e) {
+        const_cast<Mcp23017 *>(this)->set_error(0x02);
+    }
 }
 
 void Mcp23017::set_inputs(uint16_t inputs) const {
-    this->write_register(MCP23017_REG_IODIRA, inputs);
-    this->write_register(MCP23017_REG_IODIRB, inputs >> 8);
+    try {
+        this->write_register(MCP23017_REG_IODIRA, inputs);
+        this->write_register(MCP23017_REG_IODIRB, inputs >> 8);
+    } catch (const std::runtime_error &e) {
+        const_cast<Mcp23017 *>(this)->set_error(0x02);
+    }
 }
 
 void Mcp23017::set_pullups(uint16_t pullups) const {
-    this->write_register(MCP23017_REG_GPPUA, pullups);
-    this->write_register(MCP23017_REG_GPPUB, pullups >> 8);
+    try {
+        this->write_register(MCP23017_REG_GPPUA, pullups);
+        this->write_register(MCP23017_REG_GPPUB, pullups >> 8);
+    } catch (const std::runtime_error &e) {
+        const_cast<Mcp23017 *>(this)->set_error(0x02);
+    }
 }
 
 bool Mcp23017::get_level(const uint8_t number) const {
