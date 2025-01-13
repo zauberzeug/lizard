@@ -176,8 +176,13 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
 
             std::string output;
             for (auto const &module : Global::modules) {
-                if (module.second->get_property("error_code")->integer_value != 0) {
-                    output += module.first + ": " + module.second->get_error_description() + (single_line ? ";" : "\n");
+                try {
+                    auto error_code_property = module.second->get_property("error_code");
+                    if (error_code_property->integer_value != 0) {
+                        output += module.first + ": " + module.second->get_error_description() + (single_line ? ";" : "\n");
+                    }
+                } catch (const std::runtime_error &e) {
+                    echo("Debug: Module %s does not have an error_code property", module.first.c_str());
                 }
             }
             echo(output.c_str());
