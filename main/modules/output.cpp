@@ -10,8 +10,15 @@ const std::map<std::string, Variable_ptr> Output::get_defaults() {
     };
 }
 
+void Output::set_error_descriptions() {
+    this->error_descriptions = {
+        {0x01, "Could not configure GPIO"},
+    };
+}
+
 Output::Output(const std::string name) : Module(output, name) {
-    this->properties = Output::get_defaults();
+    auto defaults = Output::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 }
 
 void Output::step() {
@@ -54,8 +61,14 @@ void Output::call(const std::string method_name, const std::vector<ConstExpressi
 
 GpioOutput::GpioOutput(const std::string name, const gpio_num_t number)
     : Output(name), number(number) {
-    gpio_reset_pin(number);
-    gpio_set_direction(number, GPIO_MODE_OUTPUT);
+    esp_err_t err = gpio_reset_pin(number);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
+    err = gpio_set_direction(number, GPIO_MODE_OUTPUT);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
 }
 
 void GpioOutput::set_level(bool level) const {
