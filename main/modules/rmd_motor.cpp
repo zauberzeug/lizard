@@ -18,7 +18,8 @@ const std::map<std::string, Variable_ptr> RmdMotor::get_defaults() {
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
     : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
-    this->properties = RmdMotor::get_defaults();
+    auto defaults = RmdMotor::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 }
 
 void RmdMotor::subscribe_to_can() {
