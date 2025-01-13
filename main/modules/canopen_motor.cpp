@@ -70,11 +70,19 @@ const std::map<std::string, Variable_ptr> CanOpenMotor::get_defaults() {
     };
 }
 
+void CanOpenMotor::set_error_descriptions() {
+    this->error_descriptions = {
+        {0x01, "Could not initialize CAN driver"},
+        {0x02, "Unexpected state"},
+    };
+}
+
 CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(canopen_motor, name), can(can), node_id(check_node_id(node_id)),
       current_op_mode_disp(OP_MODE_NONE), current_op_mode(OP_MODE_NONE) {
-
-    this->properties = CanOpenMotor::get_defaults();
+    this->set_error_descriptions();
+    auto defaults = CanOpenMotor::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 }
 
 void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
@@ -135,6 +143,7 @@ void CanOpenMotor::subscribe_to_can() {
 
 void CanOpenMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (!this->properties[PROP_INITIALIZED]->boolean_value) {
+        this->set_error(0x01);
         throw std::runtime_error("CanOpenMotor: Not initialized!");
     }
 
@@ -329,6 +338,7 @@ void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
             configure_constants();
             init_state = WaitingForSdoWrites;
         } else if (actual_state == Stopped) {
+            this->set_error(0x02);
             throw std::runtime_error("CanOpenMotor: Unexpected stopped state");
         }
     } else if (init_state == WaitingForSdoWrites) {
@@ -339,6 +349,7 @@ void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
             transition_operational();
             init_state = WaitingForOperational;
         } else {
+            this->set_error(0x02);
             throw std::runtime_error("CanOpenMotor: Unexpected state waiting for SDO writes");
         }
     } else if (init_state == WaitingForOperational) {
@@ -346,6 +357,7 @@ void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
             init_state = InitDone;
             this->properties[PROP_INITIALIZED]->boolean_value = true;
         } else if (actual_state != Preoperational) {
+            this->set_error(0x02);
             throw std::runtime_error("CanOpenMotor: Unexpected state waiting for operational");
         }
     }
