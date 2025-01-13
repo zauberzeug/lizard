@@ -23,8 +23,17 @@ const std::map<std::string, Variable_ptr> Imu::get_defaults() {
     };
 }
 
+void Imu::set_error_descriptions() {
+    this->error_descriptions = {
+        {0x01, "Could not initialize i2c port"},
+        {0x02, "Could not initialize bno055"},
+    };
+}
+
 Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
     : Module(imu, name), i2c_port(i2c_port), address(address) {
+
+    this->set_error_descriptions();
     i2c_config_t config;
     config.mode = I2C_MODE_MASTER;
     config.sda_io_num = sda_pin,
@@ -34,12 +43,15 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
     config.master.clk_speed = clk_speed;
     config.clk_flags = 0;
     if (i2c_param_config(i2c_port, &config) != ESP_OK) {
+        this->set_error(0x01);
         throw std::runtime_error("could not configure i2c port");
     }
     if (i2c_driver_install(i2c_port, I2C_MODE_MASTER, I2C_MASTER_TX_BUF_DISABLE, I2C_MASTER_RX_BUF_DISABLE, 0) != ESP_OK) {
+        this->set_error(0x01);
         throw std::runtime_error("could not install i2c driver");
     }
     if (i2c_set_timeout(i2c_port, 1048575) != ESP_OK) {
+        this->set_error(0x01);
         throw std::runtime_error("could not set i2c timeout");
     }
     this->bno = std::make_shared<BNO055>((i2c_port_t)i2c_port, address);
@@ -48,11 +60,14 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
         this->bno->enableExternalCrystal();
         this->bno->setOprModeNdof();
     } catch (BNO055BaseException &ex) {
+        this->set_error(0x02);
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     } catch (std::exception &ex) {
+        this->set_error(0x02);
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     }
-    this->properties = Imu::get_defaults();
+    auto defaults = Imu::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 }
 
 void Imu::step() {
