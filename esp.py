@@ -63,12 +63,18 @@ class Esp:
         self.write(f'{self.gpio_en}/value', self.off)
         sleep(0.5)
         yield
-        self.activate()
+        self.reset()
 
-    def activate(self) -> None:
-        print('Bringing microcontroller into normal operation mode...')
+    def reset(self) -> None:
+        print('Resetting microcontroller...')
         self.write(f'{self.gpio_g0}/value', self.off)
         sleep(0.5)
         self.write(f'{self.gpio_en}/value', self.on)
+        sleep(0.5)
+        self.write(f'{self.gpio_en}/value', self.off)
+
+    def enable(self) -> None:
+        print('Enabling microcontroller...')
+        self.write(f'{self.gpio_g0}/value', self.off)
         sleep(0.5)
         self.write(f'{self.gpio_en}/value', self.off)
