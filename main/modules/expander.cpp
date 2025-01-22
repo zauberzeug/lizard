@@ -231,9 +231,9 @@ void Expander::send_property(const std::string proxy_name, const std::string pro
     this->serial->write_checked_line(buffer, pos);
 }
 
-void Expander::send_call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", this->name.c_str(), method_name.c_str());
+    int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", proxy_name.c_str(), method_name.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
     this->serial->write_checked_line(buffer, pos);
