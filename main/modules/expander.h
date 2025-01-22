@@ -12,7 +12,6 @@ private:
     unsigned long int last_message_millis = 0;
     bool ping_pending = false;
     unsigned long boot_start_time;
-    bool has_proxies_configured = false;
 
     void deinstall();
     void check_boot_progress();
