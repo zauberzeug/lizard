@@ -12,7 +12,6 @@ private:
     unsigned long int last_message_millis = 0;
     bool ping_pending = false;
     unsigned long boot_start_time;
-    bool has_proxies_configured = false;
 
     void deinstall();
     void check_boot_progress();
@@ -36,6 +35,6 @@ public:
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments);
     void send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
-    void send_call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    void send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     static const std::map<std::string, Variable_ptr> get_defaults();
 };
