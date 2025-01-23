@@ -82,9 +82,11 @@ void Expander::ping() {
     const double last_message_age = this->get_property("last_message_age")->integer_value / 1000.0;
     const double ping_interval = this->get_property("ping_interval")->number_value;
     const double ping_timeout = this->get_property("ping_timeout")->number_value;
-    if (!this->ping_pending && last_message_age >= ping_interval) {
-        this->serial->write_checked_line("core.print('__PONG__')");
-        this->ping_pending = true;
+    if (!this->ping_pending) {
+        if (last_message_age >= ping_interval) {
+            this->serial->write_checked_line("core.print('__PONG__')");
+            this->ping_pending = true;
+        }
     } else {
         if (last_message_age >= ping_interval + ping_timeout) {
             echo("warning: expander %s connection lost", this->name.c_str());
