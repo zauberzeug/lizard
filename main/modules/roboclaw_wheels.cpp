@@ -14,7 +14,8 @@ const std::map<std::string, Variable_ptr> RoboClawWheels::get_defaults() {
 
 RoboClawWheels::RoboClawWheels(const std::string name, const RoboClawMotor_ptr left_motor, const RoboClawMotor_ptr right_motor)
     : Module(roboclaw_wheels, name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties = RoboClawWheels::get_defaults();
+    auto defaults = RoboClawWheels::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 }
 
 /* Catch unsigned wrap-around by detecting large jumps in encoder deltas */

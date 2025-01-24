@@ -13,8 +13,16 @@ const std::map<std::string, Variable_ptr> Input::get_defaults() {
     };
 }
 
+void Input::set_error_descriptions() {
+    this->error_descriptions = {
+        {0x01, "Could not initialize input"},
+    };
+}
+
 Input::Input(const std::string name) : Module(input, name) {
-    this->properties = Input::get_defaults();
+    this->set_error_descriptions();
+    auto defaults = Input::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 }
 
 void Input::step() {
@@ -51,8 +59,14 @@ std::string Input::get_output() const {
 
 GpioInput::GpioInput(const std::string name, const gpio_num_t number)
     : Input(name), number(number) {
-    gpio_reset_pin(number);
-    gpio_set_direction(number, GPIO_MODE_INPUT);
+    esp_err_t err = gpio_reset_pin(number);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
+    err = gpio_set_direction(number, GPIO_MODE_INPUT);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
     this->properties.at("level")->integer_value = this->get_level();
 }
 

@@ -13,12 +13,22 @@ const std::map<std::string, Variable_ptr> Serial::get_defaults() {
     return {};
 }
 
+void Serial::set_error_descriptions() {
+    this->error_descriptions = {
+        {0x01, "Could not initialize UART"},
+        {0x02, "UART is already in use"},
+        {0x03, "Could not deinstall UART driver"},
+    };
+}
+
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
     : Module(serial, name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
-    this->properties = Serial::get_defaults();
+    auto defaults = Serial::get_defaults();
+    this->properties.insert(defaults.begin(), defaults.end());
 
     if (uart_is_driver_installed(uart_num)) {
+        this->set_error(0x02);
         throw std::runtime_error("serial interface is already in use");
     }
 
@@ -36,9 +46,13 @@ void Serial::initialize_uart() const {
         .source_clk = UART_SCLK_DEFAULT,
         .flags = {},
     };
-    uart_param_config(uart_num, &uart_config);
-    uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    uart_driver_install(uart_num, RX_BUF_SIZE, TX_BUF_SIZE, UART_PATTERN_QUEUE_SIZE, NULL, 0);
+    esp_err_t err = ESP_OK;
+    err |= uart_param_config(uart_num, &uart_config);
+    err |= uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    err |= uart_driver_install(uart_num, RX_BUF_SIZE, TX_BUF_SIZE, UART_PATTERN_QUEUE_SIZE, NULL, 0);
+    if (err != ESP_OK) {
+        const_cast<Serial *>(this)->set_error(0x01);
+    }
 }
 
 void Serial::enable_line_detection() const {
@@ -48,14 +62,18 @@ void Serial::enable_line_detection() const {
 
 void Serial::deinstall() const {
     if (uart_is_driver_installed(this->uart_num)) {
-        uart_driver_delete(this->uart_num);
+        esp_err_t err = ESP_OK;
+        err |= uart_driver_delete(this->uart_num);
+        err |= gpio_reset_pin(this->rx_pin);
+        err |= gpio_reset_pin(this->tx_pin);
+        err |= gpio_set_direction(this->rx_pin, GPIO_MODE_INPUT);
+        err |= gpio_set_direction(this->tx_pin, GPIO_MODE_INPUT);
+        err |= gpio_set_pull_mode(this->rx_pin, GPIO_FLOATING);
+        err |= gpio_set_pull_mode(this->tx_pin, GPIO_FLOATING);
+        if (err != ESP_OK) {
+            const_cast<Serial *>(this)->set_error(0x03);
+        }
     }
-    gpio_reset_pin(this->rx_pin);
-    gpio_reset_pin(this->tx_pin);
-    gpio_set_direction(this->rx_pin, GPIO_MODE_INPUT);
-    gpio_set_direction(this->tx_pin, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(this->rx_pin, GPIO_FLOATING);
-    gpio_set_pull_mode(this->tx_pin, GPIO_FLOATING);
 }
 
 void Serial::reinitialize_after_flash() const {

@@ -20,6 +20,7 @@ public:
     static const std::map<std::string, Variable_ptr> get_defaults();
     std::string get_output() const override;
     virtual bool get_level() const = 0;
+    void set_error_descriptions();
 };
 
 class GpioInput : public Input {
