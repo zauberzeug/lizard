@@ -4,21 +4,6 @@
 #include "driver/twai.h"
 #include <stdexcept>
 
-const std::map<std::string, Variable_ptr> Can::get_defaults() {
-    return {
-        {"state", std::make_shared<StringVariable>()},
-        {"tx_error_counter", std::make_shared<IntegerVariable>()},
-        {"rx_error_counter", std::make_shared<IntegerVariable>()},
-        {"msgs_to_tx", std::make_shared<IntegerVariable>()},
-        {"msgs_to_rx", std::make_shared<IntegerVariable>()},
-        {"tx_failed_count", std::make_shared<IntegerVariable>()},
-        {"rx_missed_count", std::make_shared<IntegerVariable>()},
-        {"rx_overrun_count", std::make_shared<IntegerVariable>()},
-        {"arb_lost_count", std::make_shared<IntegerVariable>()},
-        {"bus_error_count", std::make_shared<IntegerVariable>()},
-    };
-}
-
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(can, name) {
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
@@ -57,7 +42,16 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
     g_config.rx_queue_len = 20;
     g_config.tx_queue_len = 20;
 
-    this->properties = Can::get_defaults();
+    this->properties["state"] = std::make_shared<StringVariable>();
+    this->properties["tx_error_counter"] = std::make_shared<IntegerVariable>();
+    this->properties["rx_error_counter"] = std::make_shared<IntegerVariable>();
+    this->properties["msgs_to_tx"] = std::make_shared<IntegerVariable>();
+    this->properties["msgs_to_rx"] = std::make_shared<IntegerVariable>();
+    this->properties["tx_failed_count"] = std::make_shared<IntegerVariable>();
+    this->properties["rx_missed_count"] = std::make_shared<IntegerVariable>();
+    this->properties["rx_overrun_count"] = std::make_shared<IntegerVariable>();
+    this->properties["arb_lost_count"] = std::make_shared<IntegerVariable>();
+    this->properties["bus_error_count"] = std::make_shared<IntegerVariable>();
 
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());

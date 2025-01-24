@@ -3,15 +3,9 @@
 #include <math.h>
 #include <stdexcept>
 
-const std::map<std::string, Variable_ptr> Output::get_defaults() {
-    return {
-        {"level", std::make_shared<IntegerVariable>()},
-        {"change", std::make_shared<IntegerVariable>()},
-    };
-}
-
 Output::Output(const std::string name) : Module(output, name) {
-    this->properties = Output::get_defaults();
+    this->properties["level"] = std::make_shared<IntegerVariable>();
+    this->properties["change"] = std::make_shared<IntegerVariable>();
 }
 
 void Output::step() {
