@@ -231,18 +231,17 @@ void Expander::send_call(const std::string proxy_name, const std::string method_
     this->serial->write_checked_line(buffer, pos);
 }
 
-void Expander::await_broadcast(const std::string module_name) {
-    // Wait for confirmation message starting with "!!+" followed by module name
+void Expander::await_proxy_broadcast(const std::string module_name) {
     const unsigned long start_time = millis();
-    const unsigned long timeout = 5000; // 5 second timeout
-    bool received_confirmation = false;
+    const unsigned long timeout = 5000;
+    bool received_proxy_messages = false;
     static char read_buffer[1024];
     std::string expected_start = "!!" + module_name;
 
-    echo("DEBUG: Waiting for broadcast message '!!+%s'...", module_name.c_str());
-    while (!received_confirmation) {
+    while (!received_proxy_messages) {
         if (millis_since(start_time) > timeout) {
-            echo("warning: timeout waiting for broadcast message from %s after %lu ms",
+            // will have error code in the future
+            echo("error: Timeout waiting for broadcast message from %s after %lu ms",
                  module_name.c_str(), millis_since(start_time));
             return;
         }
@@ -252,22 +251,12 @@ void Expander::await_broadcast(const std::string module_name) {
             check(read_buffer, len);
             this->last_message_millis = millis();
 
-            // echo("DEBUG: Received message while waiting: '%s'", read_buffer);
-
             if (strncmp(read_buffer, expected_start.c_str(), expected_start.length()) == 0) {
-                received_confirmation = true;
-                echo("DEBUG: Got broadcast message for %s after %lu ms",
-                     module_name.c_str(), millis_since(start_time));
-                this->message_handler(&read_buffer[2], false, true); // Skip the "!!" prefix
+                received_proxy_messages = true;
+                this->message_handler(&read_buffer[2], false, true);
                 break;
             }
         }
         delay(10);
-    }
-
-    if (received_confirmation) {
-        echo("DEBUG: Broadcast message for %s received successfully", module_name.c_str());
-    } else {
-        echo("DEBUG: Failed to get broadcast message for %s", module_name.c_str());
     }
 }
