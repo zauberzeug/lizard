@@ -4,17 +4,11 @@
 #include "utils/timing.h"
 #include <cinttypes>
 
-const std::map<std::string, Variable_ptr> DunkerMotor::get_defaults() {
-    return {
-        {"speed", std::make_shared<NumberVariable>()},
-        {"m_per_turn", std::make_shared<NumberVariable>(1.0)},
-        {"reversed", std::make_shared<BooleanVariable>()},
-    };
-}
-
 DunkerMotor::DunkerMotor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(dunker_motor, name), can(can), node_id(check_node_id(node_id)) {
-    this->properties = DunkerMotor::get_defaults();
+    this->properties["speed"] = std::make_shared<NumberVariable>();
+    this->properties["m_per_turn"] = std::make_shared<NumberVariable>(1.0);
+    this->properties["reversed"] = std::make_shared<BooleanVariable>();
 }
 
 void DunkerMotor::subscribe_to_can() {

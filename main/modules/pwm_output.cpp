@@ -1,13 +1,6 @@
 #include "pwm_output.h"
 #include <driver/ledc.h>
 
-const std::map<std::string, Variable_ptr> PwmOutput::get_defaults() {
-    return {
-        {"frequency", std::make_shared<IntegerVariable>(1000)},
-        {"duty", std::make_shared<IntegerVariable>(128)},
-    };
-}
-
 PwmOutput::PwmOutput(const std::string name,
                      const gpio_num_t pin,
                      const ledc_timer_t ledc_timer,
@@ -15,7 +8,8 @@ PwmOutput::PwmOutput(const std::string name,
     : Module(pwm_output, name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
     gpio_reset_pin(pin);
 
-    this->properties = PwmOutput::get_defaults();
+    this->properties["frequency"] = std::make_shared<IntegerVariable>(1000);
+    this->properties["duty"] = std::make_shared<IntegerVariable>(128);
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,

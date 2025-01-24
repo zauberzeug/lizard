@@ -2,18 +2,12 @@
 #include "../utils/timing.h"
 #include <memory>
 
-const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
-    return {
-        {"width", std::make_shared<NumberVariable>(1.0)},
-        {"linear_speed", std::make_shared<NumberVariable>()},
-        {"angular_speed", std::make_shared<NumberVariable>()},
-        {"enabled", std::make_shared<BooleanVariable>(true)},
-    };
-}
-
 ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor)
     : Module(odrive_wheels, name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties = ODriveWheels::get_defaults();
+    this->properties["width"] = std::make_shared<NumberVariable>(1);
+    this->properties["linear_speed"] = std::make_shared<NumberVariable>();
+    this->properties["angular_speed"] = std::make_shared<NumberVariable>();
+    this->properties["enabled"] = std::make_shared<BooleanVariable>(true);
 }
 
 void ODriveWheels::step() {

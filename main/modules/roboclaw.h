@@ -117,7 +117,6 @@ class RoboClaw : public Module {
 public:
     RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address);
     void step() override;
-    static const std::map<std::string, Variable_ptr> get_defaults();
 
     bool ForwardM1(uint8_t speed);
     bool BackwardM1(uint8_t speed);

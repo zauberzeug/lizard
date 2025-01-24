@@ -1,15 +1,9 @@
 #include "linear_motor.h"
 #include <memory>
 
-const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
-    return {
-        {"in", std::make_shared<BooleanVariable>()},
-        {"out", std::make_shared<BooleanVariable>()},
-    };
-}
-
 LinearMotor::LinearMotor(const std::string name) : Module(output, name) {
-    this->properties = LinearMotor::get_defaults();
+    this->properties["in"] = std::make_shared<BooleanVariable>();
+    this->properties["out"] = std::make_shared<BooleanVariable>();
 }
 
 void LinearMotor::step() {

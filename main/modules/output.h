@@ -17,7 +17,6 @@ protected:
 public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-    static const std::map<std::string, Variable_ptr> get_defaults();
 };
 
 class GpioOutput : public Output {

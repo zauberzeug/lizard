@@ -1,17 +1,11 @@
 #include "dunker_wheels.h"
 #include <memory>
 
-const std::map<std::string, Variable_ptr> DunkerWheels::get_defaults() {
-    return {
-        {"width", std::make_shared<NumberVariable>(1.0)},
-        {"linear_speed", std::make_shared<NumberVariable>()},
-        {"angular_speed", std::make_shared<NumberVariable>()},
-    };
-}
-
 DunkerWheels::DunkerWheels(const std::string name, const DunkerMotor_ptr left_motor, const DunkerMotor_ptr right_motor)
     : Module(dunker_wheels, name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties = DunkerWheels::get_defaults();
+    this->properties["width"] = std::make_shared<NumberVariable>(1.0);
+    this->properties["linear_speed"] = std::make_shared<NumberVariable>();
+    this->properties["angular_speed"] = std::make_shared<NumberVariable>();
 }
 
 void DunkerWheels::step() {
