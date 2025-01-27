@@ -14,4 +14,5 @@ private:
 public:
     CanOpenMaster(const std::string &name, const Can_ptr can);
     void step() override;
+    static const std::map<std::string, Variable_ptr> get_defaults();
 };

@@ -29,6 +29,7 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
+    static const std::map<std::string, Variable_ptr> get_defaults();
 
     bool power(double target_power);
     bool speed(double target_speed);

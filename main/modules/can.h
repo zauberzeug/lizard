@@ -15,6 +15,7 @@ public:
     Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    static const std::map<std::string, Variable_ptr> get_defaults();
 
     bool receive();
     void send(const uint32_t id, const uint8_t data[8], const bool rtr = false, const uint8_t dlc = 8) const;

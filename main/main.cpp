@@ -214,7 +214,6 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
                 Global::add_module(module_name, proxy);
-                expander->await_proxy_broadcast(module_name);
             }
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);

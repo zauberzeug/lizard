@@ -3,9 +3,16 @@
 #include <math.h>
 #include <stdexcept>
 
+REGISTER_MODULE_DEFAULTS(Output)
+const std::map<std::string, Variable_ptr> Output::get_defaults() {
+    return {
+        {"level", std::make_shared<IntegerVariable>()},
+        {"change", std::make_shared<IntegerVariable>()},
+    };
+}
+
 Output::Output(const std::string name) : Module(output, name) {
-    this->properties["level"] = std::make_shared<IntegerVariable>();
-    this->properties["change"] = std::make_shared<IntegerVariable>();
+    this->properties = Output::get_defaults();
 }
 
 void Output::step() {

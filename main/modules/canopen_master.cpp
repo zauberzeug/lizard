@@ -1,8 +1,16 @@
 #include "canopen_master.h"
 
+REGISTER_MODULE_DEFAULTS(CanOpenMaster)
+
+const std::map<std::string, Variable_ptr> CanOpenMaster::get_defaults() {
+    return {
+        {"sync_interval", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
 CanOpenMaster::CanOpenMaster(const std::string &name, const Can_ptr can)
     : Module(canopen_master, name), can(can) {
-    this->properties["sync_interval"] = std::make_shared<IntegerVariable>(0);
+    this->properties = CanOpenMaster::get_defaults();
 }
 
 void CanOpenMaster::step() {

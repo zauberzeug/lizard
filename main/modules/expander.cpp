@@ -9,6 +9,18 @@
 #include <cstring>
 #include <stdexcept>
 
+REGISTER_MODULE_DEFAULTS(Expander)
+
+const std::map<std::string, Variable_ptr> Expander::get_defaults() {
+    return {
+        {"boot_timeout", std::make_shared<NumberVariable>(5.0)},
+        {"ping_interval", std::make_shared<NumberVariable>(1.0)},
+        {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
+        {"is_ready", std::make_shared<BooleanVariable>(false)},
+        {"last_message_age", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
 Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
                    const gpio_num_t boot_pin,
@@ -19,11 +31,8 @@ Expander::Expander(const std::string name,
       boot_pin(boot_pin),
       enable_pin(enable_pin),
       message_handler(message_handler) {
-    this->properties["boot_timeout"] = std::make_shared<NumberVariable>(5.0);
-    this->properties["ping_interval"] = std::make_shared<NumberVariable>(1.0);
-    this->properties["ping_timeout"] = std::make_shared<NumberVariable>(2.0);
-    this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
-    this->properties["last_message_age"] = std::make_shared<IntegerVariable>(0);
+
+    this->properties = Expander::get_defaults();
 
     this->serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
@@ -229,34 +238,4 @@ void Expander::send_call(const std::string proxy_name, const std::string method_
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
     this->serial->write_checked_line(buffer, pos);
-}
-
-void Expander::await_proxy_broadcast(const std::string module_name) {
-    const unsigned long start_time = millis();
-    const unsigned long timeout = 5000;
-    bool received_proxy_messages = false;
-    static char read_buffer[1024];
-    std::string expected_start = "!!" + module_name;
-
-    while (!received_proxy_messages) {
-        if (millis_since(start_time) > timeout) {
-            // will have error code in the future
-            echo("error: Timeout waiting for broadcast message from %s after %lu ms",
-                 module_name.c_str(), millis_since(start_time));
-            return;
-        }
-
-        while (this->serial->has_buffered_lines()) {
-            int len = this->serial->read_line(read_buffer, sizeof(read_buffer));
-            check(read_buffer, len);
-            this->last_message_millis = millis();
-
-            if (strncmp(read_buffer, expected_start.c_str(), expected_start.length()) == 0) {
-                received_proxy_messages = true;
-                this->message_handler(&read_buffer[2], false, true);
-                break;
-            }
-        }
-        delay(10);
-    }
 }

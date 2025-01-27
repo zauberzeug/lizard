@@ -13,6 +13,16 @@
 
 #define MIN_SPEED 490
 
+REGISTER_MODULE_DEFAULTS(StepperMotor)
+
+const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
+    return {
+        {"position", std::make_shared<IntegerVariable>()},
+        {"speed", std::make_shared<IntegerVariable>()},
+        {"idle", std::make_shared<BooleanVariable>(true)},
+    };
+}
+
 StepperMotor::StepperMotor(const std::string name,
                            const gpio_num_t step_pin,
                            const gpio_num_t dir_pin,
@@ -30,9 +40,7 @@ StepperMotor::StepperMotor(const std::string name,
     gpio_reset_pin(step_pin);
     gpio_reset_pin(dir_pin);
 
-    this->properties["position"] = std::make_shared<IntegerVariable>();
-    this->properties["speed"] = std::make_shared<IntegerVariable>();
-    this->properties["idle"] = std::make_shared<BooleanVariable>(true);
+    this->properties = StepperMotor::get_defaults();
 
     pcnt_config_t pcnt_config = {
         .pulse_gpio_num = step_pin,
