@@ -2,10 +2,21 @@
 
 #include "../compilation/expression.h"
 #include "../compilation/variable.h"
+#include <functional>
 #include <list>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+#define REGISTER_MODULE_DEFAULTS(module_name)                                   \
+    namespace {                                                                 \
+    struct RegisterDefaults {                                                   \
+        RegisterDefaults() {                                                    \
+            Module::register_defaults(#module_name, module_name::get_defaults); \
+        }                                                                       \
+    } register_defaults;                                                        \
+    } // namespace
 
 enum ModuleType {
     bluetooth,
@@ -44,6 +55,7 @@ using MessageHandler = void (*)(const char *line, bool trigger_keep_alive, bool 
 class Module {
 private:
     std::list<Module_ptr> shadow_modules;
+    static std::map<std::string, std::function<std::map<std::string, Variable_ptr>()>> &get_defaults_registry();
 
 protected:
     std::map<std::string, Variable_ptr> properties;
@@ -62,6 +74,9 @@ public:
                              MessageHandler message_handler);
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    static void register_defaults(const std::string &type_name,
+                                  std::function<std::map<std::string, Variable_ptr>()> defaults_func);
+    static const std::map<std::string, Variable_ptr> get_module_defaults(const std::string &type_name);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     virtual std::string get_output() const;
     Variable_ptr get_property(const std::string property_name) const;
