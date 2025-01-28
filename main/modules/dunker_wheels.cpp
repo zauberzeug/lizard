@@ -1,6 +1,8 @@
 #include "dunker_wheels.h"
 #include <memory>
 
+REGISTER_MODULE_DEFAULTS(DunkerWheels)
+
 const std::map<std::string, Variable_ptr> DunkerWheels::get_defaults() {
     return {
         {"width", std::make_shared<NumberVariable>(1.0)},

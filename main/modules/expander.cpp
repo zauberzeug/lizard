@@ -9,6 +9,8 @@
 #include <cstring>
 #include <stdexcept>
 
+REGISTER_MODULE_DEFAULTS(Expander)
+
 const std::map<std::string, Variable_ptr> Expander::get_defaults() {
     return {
         {"boot_timeout", std::make_shared<NumberVariable>(5.0)},

@@ -4,6 +4,8 @@
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0
 
+REGISTER_MODULE_DEFAULTS(Mcp23017)
+
 const std::map<std::string, Variable_ptr> Mcp23017::get_defaults() {
     return {
         {"levels", std::make_shared<IntegerVariable>()},

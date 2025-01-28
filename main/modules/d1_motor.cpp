@@ -4,6 +4,8 @@
 #include "utils/timing.h"
 #include <cinttypes>
 
+REGISTER_MODULE_DEFAULTS(D1Motor)
+
 const std::map<std::string, Variable_ptr> D1Motor::get_defaults() {
     return {
         {"switch_search_speed", std::make_shared<IntegerVariable>()},

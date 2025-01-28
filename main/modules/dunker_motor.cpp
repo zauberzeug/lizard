@@ -4,6 +4,8 @@
 #include "utils/timing.h"
 #include <cinttypes>
 
+REGISTER_MODULE_DEFAULTS(DunkerMotor)
+
 const std::map<std::string, Variable_ptr> DunkerMotor::get_defaults() {
     return {
         {"speed", std::make_shared<NumberVariable>()},

@@ -1,5 +1,7 @@
 #include "canopen_master.h"
 
+REGISTER_MODULE_DEFAULTS(CanOpenMaster)
+
 const std::map<std::string, Variable_ptr> CanOpenMaster::get_defaults() {
     return {
         {"sync_interval", std::make_shared<IntegerVariable>(0)},

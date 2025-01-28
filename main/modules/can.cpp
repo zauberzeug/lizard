@@ -4,6 +4,8 @@
 #include "driver/twai.h"
 #include <stdexcept>
 
+REGISTER_MODULE_DEFAULTS(Can)
+
 const std::map<std::string, Variable_ptr> Can::get_defaults() {
     return {
         {"state", std::make_shared<StringVariable>()},

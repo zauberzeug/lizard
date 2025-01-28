@@ -420,58 +420,19 @@ void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *d
     throw std::runtime_error("CAN message handler is not implemented");
 }
 
+DefaultsRegistry &Module::get_defaults_registry() {
+    static DefaultsRegistry defaults_registry;
+    return defaults_registry;
+}
+
+void Module::register_defaults(const std::string &type_name, DefaultsFunction defaults_function) {
+    get_defaults_registry()[type_name] = defaults_function;
+}
+
 const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std::string &type_name) {
-    if (type_name == "Expander") {
-        return Expander::get_defaults();
-    } else if (type_name == "Input") {
-        return Input::get_defaults();
-    } else if (type_name == "Output") {
-        return Output::get_defaults();
-    } else if (type_name == "PwmOutput") {
-        return PwmOutput::get_defaults();
-    } else if (type_name == "Mcp23017") {
-        return Mcp23017::get_defaults();
-    } else if (type_name == "Imu") {
-        return Imu::get_defaults();
-    } else if (type_name == "Can") {
-        return Can::get_defaults();
-    } else if (type_name == "ODriveMotor") {
-        return ODriveMotor::get_defaults();
-    } else if (type_name == "ODriveWheels") {
-        return ODriveWheels::get_defaults();
-    } else if (type_name == "RmdMotor") {
-        return RmdMotor::get_defaults();
-    } else if (type_name == "RmdPair") {
-        return RmdPair::get_defaults();
-    } else if (type_name == "RoboClaw") {
-        return RoboClaw::get_defaults();
-    } else if (type_name == "RoboClawMotor") {
-        return RoboClawMotor::get_defaults();
-    } else if (type_name == "RoboClawWheels") {
-        return RoboClawWheels::get_defaults();
-    } else if (type_name == "StepperMotor") {
-        return StepperMotor::get_defaults();
-    } else if (type_name == "CanOpenMotor") {
-        return CanOpenMotor::get_defaults();
-    } else if (type_name == "CanOpenMaster") {
-        return CanOpenMaster::get_defaults();
-    } else if (type_name == "D1Motor") {
-        return D1Motor::get_defaults();
-    } else if (type_name == "DunkerMotor") {
-        return DunkerMotor::get_defaults();
-    } else if (type_name == "DunkerWheels") {
-        return DunkerWheels::get_defaults();
-    } else if (type_name == "Analog") {
-        return Analog::get_defaults();
-    } else if (type_name == "LinearMotor") {
-        return LinearMotor::get_defaults();
-    } else if (type_name == "Serial") {
-        return Serial::get_defaults();
-    } else if (type_name == "Bluetooth") {
-        return Bluetooth::get_defaults();
-    } else if (type_name == "MotorAxis") {
-        return MotorAxis::get_defaults();
-    } else {
-        throw std::runtime_error("module type \"" + type_name + "\" not found in defaults list");
+    auto it = get_defaults_registry().find(type_name);
+    if (it == get_defaults_registry().end()) {
+        throw std::runtime_error("No defaults registered for module type \"" + type_name + "\"");
     }
+    return it->second();
 }

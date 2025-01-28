@@ -4,6 +4,8 @@
 
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
+REGISTER_MODULE_DEFAULTS(RoboClawMotor)
+
 const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
     return {
         {"position", std::make_shared<IntegerVariable>()},

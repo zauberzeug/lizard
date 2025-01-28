@@ -6,6 +6,8 @@
 #include "freertos/task.h"
 #include "uart.h"
 
+REGISTER_MODULE_DEFAULTS(Analog)
+
 const std::map<std::string, Variable_ptr> Analog::get_defaults() {
     return {
         {"raw", std::make_shared<IntegerVariable>()},

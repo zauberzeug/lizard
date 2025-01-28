@@ -1,6 +1,8 @@
 #include "pwm_output.h"
 #include <driver/ledc.h>
 
+REGISTER_MODULE_DEFAULTS(PwmOutput)
+
 const std::map<std::string, Variable_ptr> PwmOutput::get_defaults() {
     return {
         {"frequency", std::make_shared<IntegerVariable>(1000)},

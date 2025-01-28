@@ -47,6 +47,8 @@ static const std::string PROP_PV_IS_MOVING{"pv_is_moving"};
 static const std::string PROP_CTRL_ENA_OP{"ctrl_enable"};
 static const std::string PROP_CTRL_HALT{"ctrl_halt"};
 
+REGISTER_MODULE_DEFAULTS(CanOpenMotor)
+
 const std::map<std::string, Variable_ptr> CanOpenMotor::get_defaults() {
     return {
         {PROP_INITIALIZED, std::make_shared<BooleanVariable>(false)},
