@@ -420,14 +420,13 @@ void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *d
     throw std::runtime_error("CAN message handler is not implemented");
 }
 
-std::map<std::string, std::function<std::map<std::string, Variable_ptr>()>> &Module::get_defaults_registry() {
-    static std::map<std::string, std::function<std::map<std::string, Variable_ptr>()>> defaults_registry;
+DefaultsRegistry &Module::get_defaults_registry() {
+    static DefaultsRegistry defaults_registry;
     return defaults_registry;
 }
 
-void Module::register_defaults(const std::string &type_name,
-                               std::function<std::map<std::string, Variable_ptr>()> defaults_func) {
-    get_defaults_registry()[type_name] = defaults_func;
+void Module::register_defaults(const std::string &type_name, DefaultsFunction defaults_function) {
+    get_defaults_registry()[type_name] = defaults_function;
 }
 
 const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std::string &type_name) {

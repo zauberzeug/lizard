@@ -51,11 +51,13 @@ class Module;
 using Module_ptr = std::shared_ptr<Module>;
 using ConstModule_ptr = std::shared_ptr<const Module>;
 using MessageHandler = void (*)(const char *line, bool trigger_keep_alive, bool from_expander);
+using DefaultsFunction = std::function<std::map<std::string, Variable_ptr>()>;
+using DefaultsRegistry = std::map<std::string, DefaultsFunction>;
 
 class Module {
 private:
     std::list<Module_ptr> shadow_modules;
-    static std::map<std::string, std::function<std::map<std::string, Variable_ptr>()>> &get_defaults_registry();
+    static DefaultsRegistry &get_defaults_registry();
 
 protected:
     std::map<std::string, Variable_ptr> properties;
@@ -74,8 +76,7 @@ public:
                              MessageHandler message_handler);
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
-    static void register_defaults(const std::string &type_name,
-                                  std::function<std::map<std::string, Variable_ptr>()> defaults_func);
+    static void register_defaults(const std::string &type_name, DefaultsFunction defaults_function);
     static const std::map<std::string, Variable_ptr> get_module_defaults(const std::string &type_name);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     virtual std::string get_output() const;
