@@ -23,7 +23,7 @@ Proxy::Proxy(const std::string name,
         this->expander->send_proxy(name, module_type, arguments);
         this->properties["is_ready"]->boolean_value = true;
     } else {
-        this->set_error(0x01);
+        echo("%s: Expander not ready", this->name.c_str());
     }
 }
 
