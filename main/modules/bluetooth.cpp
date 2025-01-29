@@ -8,7 +8,7 @@ const std::map<std::string, Variable_ptr> Bluetooth::get_defaults() {
 }
 
 void Bluetooth::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Setup failed"},
         {0x02, "Send failed"},
     };
@@ -16,7 +16,6 @@ void Bluetooth::set_error_descriptions() {
 
 Bluetooth::Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler)
     : Module(bluetooth, name), device_name(device_name) {
-    this->set_error_descriptions();
     ZZ::BleCommand::init(device_name, [this, message_handler](const std::string_view &message) {
         try {
             std::string message_string(message.data(), message.length());

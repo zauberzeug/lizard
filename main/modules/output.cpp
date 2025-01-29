@@ -13,7 +13,7 @@ const std::map<std::string, Variable_ptr> Output::get_defaults() {
 }
 
 void Output::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Could not configure GPIO"},
     };
 }

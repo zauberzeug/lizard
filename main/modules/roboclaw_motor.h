@@ -11,12 +11,14 @@ private:
     const unsigned int motor_number;
     const RoboClaw_ptr roboclaw;
 
+protected:
+    void set_error_descriptions() override;
+
 public:
     RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
-    void set_error_descriptions();
 
     int64_t get_position() const;
     void power(double value);

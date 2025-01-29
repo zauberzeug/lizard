@@ -26,7 +26,7 @@ const std::map<std::string, Variable_ptr> Imu::get_defaults() {
 }
 
 void Imu::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Could not initialize i2c port"},
         {0x02, "Could not initialize bno055"},
     };
@@ -34,8 +34,6 @@ void Imu::set_error_descriptions() {
 
 Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
     : Module(imu, name), i2c_port(i2c_port), address(address) {
-
-    this->set_error_descriptions();
     i2c_config_t config;
     config.mode = I2C_MODE_MASTER;
     config.sda_io_num = sda_pin,

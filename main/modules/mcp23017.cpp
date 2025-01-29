@@ -15,7 +15,7 @@ const std::map<std::string, Variable_ptr> Mcp23017::get_defaults() {
 }
 
 void Mcp23017::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Could not initialize i2c port"},
         {0x02, "Could not send i2c command"},
     };
@@ -23,7 +23,6 @@ void Mcp23017::set_error_descriptions() {
 
 Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
     : Module(mcp23017, name), i2c_port(i2c_port), address(address) {
-    this->set_error_descriptions();
 
     i2c_config_t config;
     config.mode = I2C_MODE_MASTER;

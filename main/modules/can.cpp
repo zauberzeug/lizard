@@ -22,7 +22,7 @@ const std::map<std::string, Variable_ptr> Can::get_defaults() {
 }
 
 void Can::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Setup failed"},
         {0x02, "Could not get status info"},
         {0x03, "Could not send CAN message"},
@@ -32,7 +32,6 @@ void Can::set_error_descriptions() {
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(can, name) {
-    this->set_error_descriptions();
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config;
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();

@@ -16,13 +16,12 @@ const std::map<std::string, Variable_ptr> Input::get_defaults() {
 }
 
 void Input::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Could not initialize input"},
     };
 }
 
 Input::Input(const std::string name) : Module(input, name) {
-    this->set_error_descriptions();
     auto defaults = Input::get_defaults();
     this->properties.insert(defaults.begin(), defaults.end());
 }

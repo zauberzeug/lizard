@@ -11,6 +11,9 @@ class Can : public Module {
 private:
     std::map<uint32_t, Module_ptr> subscribers;
 
+protected:
+    void set_error_descriptions() override;
+
 public:
     Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate);
     void step() override;
@@ -24,5 +27,4 @@ public:
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
               const bool rtr = false) const;
     void subscribe(const uint32_t id, const Module_ptr module);
-    void set_error_descriptions();
 };

@@ -11,6 +11,9 @@ private:
     const ledc_channel_t ledc_channel;
     bool is_on = false;
 
+protected:
+    void set_error_descriptions() override;
+
 public:
     PwmOutput(const std::string name,
               const gpio_num_t pin,
@@ -19,5 +22,4 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
-    void set_error_descriptions();
 };

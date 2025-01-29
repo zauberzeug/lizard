@@ -23,7 +23,7 @@ const std::map<std::string, Variable_ptr> Expander::get_defaults() {
 }
 
 void Expander::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Expander connection timed out"},
         {0x02, "Expander connection lost"},
     };
@@ -42,8 +42,6 @@ Expander::Expander(const std::string name,
 
     const auto defaults = Expander::get_defaults();
     this->properties.insert(defaults.begin(), defaults.end());
-
-    this->set_error_descriptions();
 
     this->serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {

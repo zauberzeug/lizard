@@ -16,7 +16,7 @@ const std::map<std::string, Variable_ptr> Analog::get_defaults() {
 }
 
 void Analog::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Setup failed"},
         {0x02, "Read failed"},
     };
@@ -26,7 +26,6 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
     : Module(analog, name), unit(unit), channel(channel) {
 
     const auto defaults = Analog::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
 
     if (unit < 1 || unit > 2) {
         echo("warning: invalid unit, using default 1");

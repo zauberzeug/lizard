@@ -53,6 +53,9 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
     void set_profile_deceleration(uint16_t deceleration);
     void set_profile_quick_stop_deceleration(uint16_t deceleration);
 
+protected:
+    void set_error_descriptions() override;
+
 public:
     CanOpenMotor(const std::string &name, const Can_ptr can, int64_t node_id);
     void subscribe_to_can();
@@ -65,5 +68,4 @@ public:
     void position(const double position, const double speed, const double acceleration) override;
     double get_speed() override;
     void speed(const double speed, const double acceleration) override;
-    void set_error_descriptions();
 };

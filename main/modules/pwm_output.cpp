@@ -11,7 +11,7 @@ const std::map<std::string, Variable_ptr> PwmOutput::get_defaults() {
 }
 
 void PwmOutput::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Could not configure PWM"},
         {0x02, "Could not update PWM"},
     };

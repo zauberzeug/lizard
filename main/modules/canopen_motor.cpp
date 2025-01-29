@@ -73,7 +73,7 @@ const std::map<std::string, Variable_ptr> CanOpenMotor::get_defaults() {
 }
 
 void CanOpenMotor::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Could not initialize CAN driver"},
         {0x02, "Unexpected state"},
     };
@@ -82,7 +82,6 @@ void CanOpenMotor::set_error_descriptions() {
 CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(canopen_motor, name), can(can), node_id(check_node_id(node_id)),
       current_op_mode_disp(OP_MODE_NONE), current_op_mode(OP_MODE_NONE) {
-    this->set_error_descriptions();
     auto defaults = CanOpenMotor::get_defaults();
     this->properties.insert(defaults.begin(), defaults.end());
 }

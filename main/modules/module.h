@@ -64,6 +64,7 @@ protected:
     bool output_on = false;
     bool broadcast = false;
 
+    virtual void set_error_descriptions() {}
     static std::map<uint32_t, std::string> error_descriptions;
 
 public:
@@ -87,4 +88,6 @@ public:
     virtual void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
     virtual void set_error(uint32_t error_flag);
     std::string get_error_description() const;
+
+    static const std::map<std::string, Variable_ptr> get_defaults();
 };

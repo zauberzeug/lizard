@@ -16,7 +16,7 @@ const std::map<std::string, Variable_ptr> Serial::get_defaults() {
 }
 
 void Serial::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Could not initialize UART"},
         {0x02, "UART is already in use"},
         {0x03, "Could not deinstall UART driver"},

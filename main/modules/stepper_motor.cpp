@@ -24,7 +24,7 @@ const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
 }
 
 void StepperMotor::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "Could not initialize stepper motor"},
         {0x02, "Could not initialize PCNT"},
         {0x03, "Could not initialize LEDC"},
@@ -47,7 +47,6 @@ StepperMotor::StepperMotor(const std::string name,
       pcnt_channel(pcnt_channel),
       ledc_timer(ledc_timer),
       ledc_channel(ledc_channel) {
-    this->set_error_descriptions();
     auto defaults = StepperMotor::get_defaults();
     this->properties.insert(defaults.begin(), defaults.end());
     esp_err_t gpio_err = ESP_OK;

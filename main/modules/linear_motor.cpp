@@ -11,14 +11,13 @@ const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
 }
 
 void LinearMotor::set_error_descriptions() {
-    this->error_descriptions = {
+    error_descriptions = {
         {0x01, "GPIO Linear Motor: Could not initialize GPIO pins"},
         {0x02, "MCP Linear Motor: Could not initialize MCP"},
     };
 }
 
 LinearMotor::LinearMotor(const std::string name) : Module(output, name) {
-    this->set_error_descriptions();
     auto defaults = LinearMotor::get_defaults();
     this->properties.insert(defaults.begin(), defaults.end());
 }

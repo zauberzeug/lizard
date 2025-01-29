@@ -13,12 +13,12 @@ private:
 
 protected:
     Output(const std::string name);
+    void set_error_descriptions() override;
 
 public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
-    void set_error_descriptions();
 };
 
 class GpioOutput : public Output {
