@@ -9,10 +9,12 @@
 REGISTER_MODULE_DEFAULTS(Analog)
 
 const std::map<std::string, Variable_ptr> Analog::get_defaults() {
-    return {
+    auto properties = Module::get_defaults();
+    properties.insert({
         {"raw", std::make_shared<IntegerVariable>()},
         {"voltage", std::make_shared<NumberVariable>()},
-    };
+    });
+    return properties;
 }
 
 void Analog::set_error_descriptions() {
@@ -25,7 +27,7 @@ void Analog::set_error_descriptions() {
 Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level)
     : Module(analog, name), unit(unit), channel(channel) {
 
-    const auto defaults = Analog::get_defaults();
+    this->properties = Analog::get_defaults();
 
     if (unit < 1 || unit > 2) {
         echo("warning: invalid unit, using default 1");
