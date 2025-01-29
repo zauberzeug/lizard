@@ -2,6 +2,8 @@
 #include <cstring>
 #include <memory>
 
+REGISTER_MODULE_DEFAULTS(ODriveMotor)
+
 const std::map<std::string, Variable_ptr> ODriveMotor::get_defaults() {
     return {
         {"position", std::make_shared<NumberVariable>()},

@@ -1,6 +1,8 @@
 #include "bluetooth.h"
 #include "uart.h"
 
+REGISTER_MODULE_DEFAULTS(Bluetooth)
+
 const std::map<std::string, Variable_ptr> Bluetooth::get_defaults() {
     return {};
 }

@@ -13,6 +13,8 @@
 
 #define MIN_SPEED 490
 
+REGISTER_MODULE_DEFAULTS(StepperMotor)
+
 const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
     return {
         {"position", std::make_shared<IntegerVariable>()},

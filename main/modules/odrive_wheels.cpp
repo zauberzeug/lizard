@@ -2,6 +2,8 @@
 #include "../utils/timing.h"
 #include <memory>
 
+REGISTER_MODULE_DEFAULTS(ODriveWheels)
+
 const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
     return {
         {"width", std::make_shared<NumberVariable>(1.0)},

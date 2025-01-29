@@ -2,6 +2,8 @@
 #include "utils/uart.h"
 #include <stdexcept>
 
+REGISTER_MODULE_DEFAULTS(MotorAxis)
+
 const std::map<std::string, Variable_ptr> MotorAxis::get_defaults() {
     return {};
 }

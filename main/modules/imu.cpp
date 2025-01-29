@@ -4,6 +4,8 @@
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0
 
+REGISTER_MODULE_DEFAULTS(Imu)
+
 const std::map<std::string, Variable_ptr> Imu::get_defaults() {
     return {
         {"acc_x", std::make_shared<NumberVariable>()},

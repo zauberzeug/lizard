@@ -9,6 +9,8 @@
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
 
+REGISTER_MODULE_DEFAULTS(Serial)
+
 const std::map<std::string, Variable_ptr> Serial::get_defaults() {
     return {};
 }

@@ -6,6 +6,8 @@
 #include <math.h>
 #include <memory>
 
+REGISTER_MODULE_DEFAULTS(RmdMotor)
+
 const std::map<std::string, Variable_ptr> RmdMotor::get_defaults() {
     return {
         {"position", std::make_shared<NumberVariable>()},

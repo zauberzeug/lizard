@@ -10,6 +10,8 @@
 #include <sstream>
 #include <stdexcept>
 
+REGISTER_MODULE_DEFAULTS(Expander)
+
 const std::map<std::string, Variable_ptr> Expander::get_defaults() {
     return {
         {"boot_timeout", std::make_shared<NumberVariable>(5.0)},
@@ -93,7 +95,7 @@ void Expander::ping() {
     const double last_message_age = this->get_property("last_message_age")->integer_value / 1000.0;
     const double ping_interval = this->get_property("ping_interval")->number_value;
     const double ping_timeout = this->get_property("ping_timeout")->number_value;
-    if (!this->ping_pending && !this->has_proxies_configured) {
+    if (!this->ping_pending) {
         if (last_message_age >= ping_interval) {
             this->serial->write_checked_line("core.print('__PONG__')");
             this->ping_pending = true;
@@ -232,7 +234,6 @@ void Expander::send_proxy(const std::string module_name, const std::string modul
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
     this->serial->write_checked_line(buffer, pos);
-    this->has_proxies_configured = true;
 }
 
 void Expander::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
@@ -242,9 +243,9 @@ void Expander::send_property(const std::string proxy_name, const std::string pro
     this->serial->write_checked_line(buffer, pos);
 }
 
-void Expander::send_call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", this->name.c_str(), method_name.c_str());
+    int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", proxy_name.c_str(), method_name.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
     this->serial->write_checked_line(buffer, pos);

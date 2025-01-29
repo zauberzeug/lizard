@@ -4,6 +4,8 @@
 #include <memory>
 #include <stdexcept>
 
+REGISTER_MODULE_DEFAULTS(Input)
+
 const std::map<std::string, Variable_ptr> Input::get_defaults() {
     return {
         {"level", std::make_shared<IntegerVariable>()},

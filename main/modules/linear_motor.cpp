@@ -1,6 +1,8 @@
 #include "linear_motor.h"
 #include <memory>
 
+REGISTER_MODULE_DEFAULTS(LinearMotor)
+
 const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
     return {
         {"in", std::make_shared<BooleanVariable>()},
