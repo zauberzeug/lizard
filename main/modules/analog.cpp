@@ -26,7 +26,6 @@ void Analog::set_error_descriptions() {
 
 Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level)
     : Module(analog, name), unit(unit), channel(channel) {
-
     this->properties = Analog::get_defaults();
 
     if (unit < 1 || unit > 2) {
