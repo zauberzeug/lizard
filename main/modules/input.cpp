@@ -12,6 +12,7 @@ const std::map<std::string, Variable_ptr> Input::get_defaults() {
         {"change", std::make_shared<IntegerVariable>()},
         {"inverted", std::make_shared<BooleanVariable>()},
         {"active", std::make_shared<BooleanVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -22,8 +23,7 @@ void Input::set_error_descriptions() {
 }
 
 Input::Input(const std::string name) : Module(input, name) {
-    auto defaults = Input::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = Input::get_defaults();
 }
 
 void Input::step() {

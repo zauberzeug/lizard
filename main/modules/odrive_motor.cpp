@@ -19,8 +19,7 @@ const std::map<std::string, Variable_ptr> ODriveMotor::get_defaults() {
 
 ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version)
     : Module(odrive_motor, name), can_id(can_id), can(can), version(version) {
-    auto defaults = ODriveMotor::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = ODriveMotor::get_defaults();
 }
 
 void ODriveMotor::subscribe_to_can() {

@@ -9,6 +9,7 @@ REGISTER_MODULE_DEFAULTS(RoboClawMotor)
 const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
     return {
         {"position", std::make_shared<IntegerVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -23,8 +24,7 @@ RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw
     if (this->motor_number != motor_number) {
         throw std::runtime_error("illegal motor number");
     }
-    auto defaults = RoboClawMotor::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = RoboClawMotor::get_defaults();
 }
 
 void RoboClawMotor::step() {

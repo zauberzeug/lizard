@@ -7,6 +7,7 @@ const std::map<std::string, Variable_ptr> PwmOutput::get_defaults() {
     return {
         {"frequency", std::make_shared<IntegerVariable>(1000)},
         {"duty", std::make_shared<IntegerVariable>(128)},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -23,8 +24,7 @@ PwmOutput::PwmOutput(const std::string name,
                      const ledc_channel_t ledc_channel)
     : Module(pwm_output, name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
 
-    auto defaults = PwmOutput::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = PwmOutput::get_defaults();
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,

@@ -15,8 +15,7 @@ const std::map<std::string, Variable_ptr> RoboClaw::get_defaults() {
 
 RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address)
     : Module(roboclaw, name), address(address), serial(serial) {
-    auto defaults = RoboClaw::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = RoboClaw::get_defaults();
 }
 
 void RoboClaw::step() {

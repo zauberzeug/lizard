@@ -22,6 +22,7 @@ const std::map<std::string, Variable_ptr> Imu::get_defaults() {
         {"cal_gyr", std::make_shared<NumberVariable>()},
         {"cal_acc", std::make_shared<NumberVariable>()},
         {"cal_mag", std::make_shared<NumberVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -66,8 +67,7 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
         this->set_error(0x02);
         throw std::runtime_error(std::string("imu setup failed: ") + ex.what());
     }
-    auto defaults = Imu::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = Imu::get_defaults();
 }
 
 void Imu::step() {

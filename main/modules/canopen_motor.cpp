@@ -69,6 +69,7 @@ const std::map<std::string, Variable_ptr> CanOpenMotor::get_defaults() {
         {PROP_PV_IS_MOVING, std::make_shared<BooleanVariable>(false)},
         {PROP_CTRL_ENA_OP, std::make_shared<BooleanVariable>(false)},
         {PROP_CTRL_HALT, std::make_shared<BooleanVariable>(true)},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -82,8 +83,7 @@ void CanOpenMotor::set_error_descriptions() {
 CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id)
     : Module(canopen_motor, name), can(can), node_id(check_node_id(node_id)),
       current_op_mode_disp(OP_MODE_NONE), current_op_mode(OP_MODE_NONE) {
-    auto defaults = CanOpenMotor::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = CanOpenMotor::get_defaults();
 }
 
 void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {

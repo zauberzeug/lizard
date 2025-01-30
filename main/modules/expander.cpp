@@ -19,6 +19,7 @@ const std::map<std::string, Variable_ptr> Expander::get_defaults() {
         {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
         {"is_ready", std::make_shared<BooleanVariable>(false)},
         {"last_message_age", std::make_shared<IntegerVariable>(0)},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -40,8 +41,7 @@ Expander::Expander(const std::string name,
       enable_pin(enable_pin),
       message_handler(message_handler) {
 
-    const auto defaults = Expander::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = Expander::get_defaults();
 
     this->serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {

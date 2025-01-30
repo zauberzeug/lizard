@@ -20,6 +20,7 @@ const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
         {"position", std::make_shared<IntegerVariable>()},
         {"speed", std::make_shared<IntegerVariable>()},
         {"idle", std::make_shared<BooleanVariable>(true)},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -47,8 +48,8 @@ StepperMotor::StepperMotor(const std::string name,
       pcnt_channel(pcnt_channel),
       ledc_timer(ledc_timer),
       ledc_channel(ledc_channel) {
-    auto defaults = StepperMotor::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = StepperMotor::get_defaults();
+
     esp_err_t gpio_err = ESP_OK;
     gpio_err |= gpio_reset_pin(step_pin);
     gpio_err |= gpio_reset_pin(dir_pin);

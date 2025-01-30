@@ -15,8 +15,7 @@ const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
 
 ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor)
     : Module(odrive_wheels, name), left_motor(left_motor), right_motor(right_motor) {
-    auto defaults = ODriveWheels::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = ODriveWheels::get_defaults();
 }
 
 void ODriveWheels::step() {

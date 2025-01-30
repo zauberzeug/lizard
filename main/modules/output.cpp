@@ -9,6 +9,7 @@ const std::map<std::string, Variable_ptr> Output::get_defaults() {
     return {
         {"level", std::make_shared<IntegerVariable>()},
         {"change", std::make_shared<IntegerVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -19,8 +20,7 @@ void Output::set_error_descriptions() {
 }
 
 Output::Output(const std::string name) : Module(output, name) {
-    auto defaults = Output::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = Output::get_defaults();
 }
 
 void Output::step() {

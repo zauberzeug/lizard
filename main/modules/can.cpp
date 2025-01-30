@@ -18,6 +18,7 @@ const std::map<std::string, Variable_ptr> Can::get_defaults() {
         {"rx_overrun_count", std::make_shared<IntegerVariable>()},
         {"arb_lost_count", std::make_shared<IntegerVariable>()},
         {"bus_error_count", std::make_shared<IntegerVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -32,6 +33,7 @@ void Can::set_error_descriptions() {
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(can, name) {
+    this->properties = Can::get_defaults();
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config;
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
@@ -67,9 +69,6 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
 
     g_config.rx_queue_len = 20;
     g_config.tx_queue_len = 20;
-
-    auto defaults = Can::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
 
     esp_err_t err = ESP_OK;
     err |= twai_driver_install(&g_config, &t_config, &f_config);

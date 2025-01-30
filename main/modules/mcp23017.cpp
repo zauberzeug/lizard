@@ -11,6 +11,7 @@ const std::map<std::string, Variable_ptr> Mcp23017::get_defaults() {
         {"levels", std::make_shared<IntegerVariable>()},
         {"inputs", std::make_shared<IntegerVariable>(0xffff)}, // default: all pins input
         {"pullups", std::make_shared<IntegerVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -41,8 +42,7 @@ Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_p
         throw std::runtime_error("could not install i2c driver");
     }
 
-    auto defaults = Mcp23017::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = Mcp23017::get_defaults();
 
     this->set_inputs(this->properties.at("inputs")->integer_value);
     this->set_pullups(this->properties.at("pullups")->integer_value);

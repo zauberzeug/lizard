@@ -37,7 +37,6 @@
 std::map<uint32_t, std::string> Module::error_descriptions;
 
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
-    this->properties["error_code"] = std::make_shared<IntegerVariable>(0);
     this->set_error_descriptions();
 }
 
@@ -462,10 +461,4 @@ std::string Module::get_error_description() const {
     }
 
     return description.str();
-}
-
-const std::map<std::string, Variable_ptr> Module::get_defaults() {
-    return {
-        {"error", std::make_shared<IntegerVariable>()},
-    };
 }

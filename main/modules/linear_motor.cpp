@@ -7,6 +7,7 @@ const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
     return {
         {"in", std::make_shared<BooleanVariable>()},
         {"out", std::make_shared<BooleanVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -18,8 +19,7 @@ void LinearMotor::set_error_descriptions() {
 }
 
 LinearMotor::LinearMotor(const std::string name) : Module(output, name) {
-    auto defaults = LinearMotor::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = LinearMotor::get_defaults();
 }
 
 void LinearMotor::step() {

@@ -12,7 +12,9 @@
 REGISTER_MODULE_DEFAULTS(Serial)
 
 const std::map<std::string, Variable_ptr> Serial::get_defaults() {
-    return {};
+    return {
+        {"error_code", std::make_shared<IntegerVariable>(0)},
+    };
 }
 
 void Serial::set_error_descriptions() {
@@ -26,8 +28,7 @@ void Serial::set_error_descriptions() {
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
     : Module(serial, name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
-    auto defaults = Serial::get_defaults();
-    this->properties.insert(defaults.begin(), defaults.end());
+    this->properties = Serial::get_defaults();
 
     if (uart_is_driver_installed(uart_num)) {
         this->set_error(0x02);
