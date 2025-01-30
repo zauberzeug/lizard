@@ -7,6 +7,7 @@
 #include "utils/uart.h"
 #include <algorithm>
 #include <cstring>
+#include <sstream>
 #include <stdexcept>
 
 REGISTER_MODULE_DEFAULTS(Expander)
@@ -18,6 +19,14 @@ const std::map<std::string, Variable_ptr> Expander::get_defaults() {
         {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
         {"is_ready", std::make_shared<BooleanVariable>(false)},
         {"last_message_age", std::make_shared<IntegerVariable>(0)},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
+void Expander::set_error_descriptions() {
+    error_descriptions = {
+        {0x01, "Expander connection timed out"},
+        {0x02, "Expander connection lost"},
     };
 }
 
@@ -48,7 +57,7 @@ Expander::Expander(const std::string name,
     while (this->properties.at("is_ready")->boolean_value == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
             echo("warning: expander %s connection timed out.", this->name.c_str());
-            // TODO: trigger error code
+            this->set_error(0x01);
             break;
         }
         this->check_boot_progress();
@@ -92,7 +101,7 @@ void Expander::ping() {
     } else {
         if (last_message_age >= ping_interval + ping_timeout) {
             echo("warning: expander %s connection lost", this->name.c_str());
-            // TODO: trigger error code
+            this->set_error(0x02);
             this->properties.at("is_ready")->boolean_value = false;
         }
     }

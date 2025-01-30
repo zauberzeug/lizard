@@ -35,6 +35,9 @@ private:
     void read_position();
     void set_state(StepperState new_state);
 
+protected:
+    void set_error_descriptions() override;
+
 public:
     StepperMotor(const std::string name,
                  const gpio_num_t step_pin,

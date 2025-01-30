@@ -20,6 +20,9 @@ private:
     void handle_messages(bool check_for_strapping_pins = false);
     void check_strapping_pins(const char *buffer);
 
+protected:
+    void set_error_descriptions() override;
+
 public:
     const ConstSerial_ptr serial;
     const gpio_num_t boot_pin;

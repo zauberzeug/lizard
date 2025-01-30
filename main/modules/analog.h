@@ -14,6 +14,9 @@ private:
     adc_oneshot_unit_handle_t adc_handle;
     adc_cali_handle_t adc_cali_handle;
 
+protected:
+    void set_error_descriptions() override;
+
 public:
     Analog(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level);
     void step() override;

@@ -1,6 +1,7 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
+#include "../utils/global_error_state.h"
 #include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -21,12 +22,14 @@ Core::Core(const std::string name) : Module(core, name) {
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
+    this->properties["has_error"] = std::make_shared<BooleanVariable>(false);
 }
 
 void Core::step() {
     this->properties.at("millis")->integer_value = millis();
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
+    this->properties.at("has_error")->boolean_value = GlobalErrorState::has_error();
     Module::step();
 }
 
@@ -162,6 +165,29 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         default:
             echo("Not a strapping pin");
             break;
+        }
+    } else if (method_name == "get_errors") {
+        Module::expect(arguments, -1);
+        if (this->get_property("has_error")->boolean_value) {
+            bool single_line = false;
+            if (arguments.size() == 1) {
+                single_line = arguments[0]->evaluate_boolean();
+            }
+
+            std::string output;
+            for (auto const &module : Global::modules) {
+                try {
+                    auto error_code_property = module.second->get_property("error_code");
+                    if (error_code_property->integer_value != 0) {
+                        output += module.first + ": " + module.second->get_error_description() + (single_line ? ";" : "\n");
+                    }
+                } catch (const std::runtime_error &e) {
+                    echo("Debug: Module %s does not have an error_code property", module.first.c_str());
+                }
+            }
+            echo(output.c_str());
+        } else {
+            echo("No errors");
         }
     } else {
         Module::call(method_name, arguments);
