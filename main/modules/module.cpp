@@ -130,7 +130,7 @@ Module_ptr Module::create(const std::string type,
         Module::expect(arguments, -1, integer, integer, integer, integer, integer);
         i2c_port_t port = arguments.size() > 0 ? (i2c_port_t)arguments[0]->evaluate_integer() : I2C_NUM_0;
         gpio_num_t sda_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_21;
-        gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_22;
+        gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_42;
         uint8_t address = arguments.size() > 3 ? arguments[3]->evaluate_integer() : 0x20;
         int clk_speed = arguments.size() > 4 ? arguments[4]->evaluate_integer() : 100000;
         return std::make_shared<Mcp23017>(name, port, sda_pin, scl_pin, address, clk_speed);
@@ -141,7 +141,7 @@ Module_ptr Module::create(const std::string type,
         Module::expect(arguments, -1, integer, integer, integer, integer, integer);
         i2c_port_t port = arguments.size() > 0 ? (i2c_port_t)arguments[0]->evaluate_integer() : I2C_NUM_0;
         gpio_num_t sda_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_21;
-        gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_22;
+        gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_42;
         uint8_t address = arguments.size() > 3 ? arguments[3]->evaluate_integer() : 0x28;
         int clk_speed = arguments.size() > 4 ? arguments[4]->evaluate_integer() : 100000;
         return std::make_shared<Imu>(name, port, sda_pin, scl_pin, address, clk_speed);
