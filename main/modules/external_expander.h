@@ -5,23 +5,33 @@
 #include <map>
 #include <string>
 
+class ExternalExpander;
+using ExternalExpander_ptr = std::shared_ptr<ExternalExpander>;
+
 class ExternalExpander : public Module {
 private:
-    const ConstSerial_ptr serial;
     unsigned long int last_message_millis = 0;
     bool ping_pending = false;
-    std::map<uint8_t, std::string> expander_names; // Maps expander IDs to their names
+    unsigned long boot_start_time;
 
-    void handle_messages();
+    void check_boot_progress();
     void ping();
+    void restart();
+    void handle_messages();
 
 public:
-    ExternalExpander(const std::string name, const ConstSerial_ptr serial);
+    const ConstSerial_ptr serial;
+    const char *expander_id;
+    MessageHandler message_handler;
+
+    ExternalExpander(const std::string name,
+                     const ConstSerial_ptr serial,
+                     const char *expander_id,
+                     MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-
-    // Register a new external expander
-    void register_expander(uint8_t id, const std::string &name);
-
+    void send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments);
+    void send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
+    void send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     static const std::map<std::string, Variable_ptr> get_defaults();
 };
