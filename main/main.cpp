@@ -369,6 +369,26 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+
+        if (input[0] == '0x80') {
+            core_module->set_external_mode(true);
+        } else if (input[0] == '0x81') {
+            core_module->set_external_mode(false);
+        } else if (core_module->is_external()) {
+            if (input[0] == '@' && !(input[1] == core_module->get_expander_id())) {
+                echo("Debug: not for me");
+                continue;
+            }
+        }
+
+        // shift away the adress and @ if it is external
+        if (core_module->is_external()) {
+            for (int i = 0; i < len - 2; i++) {
+                input[i] = input[i + 2];
+            }
+            len -= 2;
+        }
+
         len = check(input, len);
         process_line(input, len);
     }
@@ -427,6 +447,10 @@ void app_main() {
             process_uart();
         } catch (const std::runtime_error &e) {
             echo("error processing uart0: %s", e.what());
+        }
+
+        if (core_module->is_external()) {
+            continue;
         }
 
         for (auto const &[module_name, module] : Global::modules) {
