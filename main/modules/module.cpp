@@ -14,6 +14,7 @@
 #include "dunker_motor.h"
 #include "dunker_wheels.h"
 #include "expander.h"
+#include "external_expander.h"
 #include "imu.h"
 #include "input.h"
 #include "linear_motor.h"
@@ -81,6 +82,16 @@ Module_ptr Module::create(const std::string type,
         const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_NC;
         const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_NC;
         return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
+    } else if (type == "ExternalExpander") {
+        Module::expect(arguments, 2, identifier, integer);
+        std::string serial_name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(serial_name);
+        if (module->type != serial) {
+            throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
+        }
+        const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
+        uint8_t id = arguments[1]->evaluate_integer();
+        return std::make_shared<ExternalExpander>(name, serial, id, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();

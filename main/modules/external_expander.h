@@ -22,12 +22,12 @@ private:
 
 public:
     const ConstSerial_ptr serial;
-    const char *expander_id;
+    const uint8_t expander_id;
     MessageHandler message_handler;
 
     ExternalExpander(const std::string name,
                      const ConstSerial_ptr serial,
-                     const char *expander_id,
+                     uint8_t expander_id,
                      MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
