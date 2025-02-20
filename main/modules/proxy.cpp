@@ -1,19 +1,18 @@
 #include "proxy.h"
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
-#include "driver/uart.h"
 #include <memory>
 
 Proxy::Proxy(const std::string name,
              const std::string expander_name,
              const std::string module_type,
-             const Expander_ptr expander,
+             std::shared_ptr<Expandable> expander,
              const std::vector<ConstExpression_ptr> arguments)
     : Module(proxy, name), expander(expander) {
     this->properties = Module::get_module_defaults(module_type);
     this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
 
-    if (this->expander->get_property("is_ready")->boolean_value) {
+    if (this->expander->is_ready()) {
         this->expander->send_proxy(name, module_type, arguments);
         this->properties["is_ready"]->boolean_value = true;
     } else {
