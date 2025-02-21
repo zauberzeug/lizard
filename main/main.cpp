@@ -34,6 +34,10 @@
 
 #define BUFFER_SIZE 1024
 
+#define ID_TAG 0x82
+#define EXTERNAL_MODE_ON 0x80
+#define EXTERNAL_MODE_OFF 0x81
+
 Core_ptr core_module;
 
 extern "C" {
@@ -369,28 +373,57 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+        // echo("Debug: Raw input before check [%d bytes]:", len);
+        // for (int i = 0; i < len; i++) {
+        //     echo(" %02x", (uint8_t)input[i]);
+        // }
+        // echo("\n");
 
-        if (input[0] == '0x80') {
+        len = check(input, len);
+
+        // echo("Debug: Raw input after check [%d bytes]:", len);
+        // for (int i = 0; i < len; i++) {
+        //     echo(" %02x", (uint8_t)input[i]);
+        // }
+        // echo("\nDebug: As text: '%s'", input);
+
+        // handle tags first
+        if (input[0] == EXTERNAL_MODE_ON) {
+            echo("Debug: Setting external mode to true");
             core_module->set_external_mode(true);
-        } else if (input[0] == '0x81') {
+            return;
+        } else if (input[0] == EXTERNAL_MODE_OFF) {
+            echo("Debug: Setting external mode to false");
             core_module->set_external_mode(false);
-        } else if (core_module->is_external()) {
-            if (input[0] == '@' && !(input[1] == core_module->get_expander_id())) {
-                echo("Debug: not for me");
-                continue;
+            return;
+        } else if (input[0] == ID_TAG) {
+            if (core_module->is_external()) {
+                if ((uint8_t)input[1] != core_module->get_expander_id()) {
+                    echo("Debug: not for me (id 0x%02x != 0x%02x)", (uint8_t)input[1], core_module->get_expander_id());
+                    continue;
+                }
+            } else {
+                echo("Detected tag, but not in external mode");
             }
-        }
 
-        // shift away the adress and @ if it is external
-        if (core_module->is_external()) {
+            echo("Debug: Processing message for my id 0x%02x", core_module->get_expander_id());
+
+            // Shift the input buffer 2 positions to the left
             for (int i = 0; i < len - 2; i++) {
                 input[i] = input[i + 2];
             }
-            len -= 2;
-        }
 
-        len = check(input, len);
-        process_line(input, len);
+            // Null-terminate the new string
+            input[len - 2] = '\0';
+
+            // Update the length
+            len -= 2;
+
+            // echo("Debug: Shifted input (len %d): '%s'", len, input);
+            process_line(input, len);
+        } else {
+            process_line(input, len);
+        }
     }
 }
 
@@ -450,6 +483,7 @@ void app_main() {
         }
 
         if (core_module->is_external()) {
+            delay(10);
             continue;
         }
 

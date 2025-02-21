@@ -185,6 +185,8 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         } catch (const std::runtime_error &e) {
             echo("error in core module: %s", e.what());
         }
+    } else if (method_name == "ee") {
+        echo("EE status: %d", is_external_expander);
     } else {
         Module::call(method_name, arguments);
     }
