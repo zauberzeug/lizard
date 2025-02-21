@@ -171,11 +171,11 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
 }
 
 void Serial::activate_external_mode() const {
-    uart_write_bytes(this->uart_num, "\x80\n", 2);
-    echo("Debug: Activated external mode");
+    echo("Debug: Sending external mode ON command");
+    uart_write_bytes(this->uart_num, "\x80", 1);
 }
 
 void Serial::deactivate_external_mode() const {
-    uart_write_bytes(this->uart_num, "\x81\n", 2);
-    echo("Debug: Deactivated external mode");
+    echo("Debug: Sending external mode OFF command");
+    uart_write_bytes(this->uart_num, "\x81", 1);
 }

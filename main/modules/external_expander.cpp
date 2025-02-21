@@ -37,12 +37,28 @@ ExternalExpander::ExternalExpander(const std::string name,
     char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%u_READY__')", ID_TAG, expander_id, expander_id);
     this->serial->write_checked_line(buffer, pos);
-    this->handle_messages();
+
+    const int max_retries = 10;
+    for (int i = 0; i < max_retries; i++) {
+        echo("Debug: Waiting for READY response (attempt %d/%d)", i + 1, max_retries);
+        delay(100);
+        this->handle_messages();
+        if (this->properties.at("is_ready")->boolean_value) {
+            echo("Debug: Got READY response");
+            return;
+        }
+    }
+    echo("Warning: No READY response received");
 }
 
 void ExternalExpander::step() {
+    if (this->properties.at("is_ready")->boolean_value == false) {
+        // REMOVE ME
+        echo("is false, debug make it true");
+        this->properties.at("is_ready")->boolean_value = true;
+    }
     if (this->properties.at("is_ready")->boolean_value) {
-        this->ping();
+        // this->ping(); WARNING PING IS DISABLED FOR NOW
 
         char buffer[256];
         int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.run_step()", ID_TAG, expander_id);
@@ -61,8 +77,6 @@ void ExternalExpander::handle_messages() {
         check(buffer, len);
         this->last_message_millis = millis();
         this->ping_pending = false;
-
-        echo("Debug: received message: %s", buffer);
 
         if (buffer[0] == '!' && buffer[1] == '!') {
             // Property update from expander

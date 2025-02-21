@@ -1,8 +1,18 @@
 #include "uart.h"
 #include <cstdarg>
+#include <cstdint>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
+
+// File-static variables for UART context
+static bool uart_external_mode = false;
+static uint8_t uart_expander_id = 0;
+
+void set_uart_external_mode(bool mode) { uart_external_mode = mode; }
+void set_uart_expander_id(uint8_t id) { uart_expander_id = id; }
+bool get_uart_external_mode() { return uart_external_mode; }
+uint8_t get_uart_expander_id() { return uart_expander_id; }
 
 void echo(const char *format, ...) {
     static char buffer[1024];
@@ -20,7 +30,12 @@ void echo(const char *format, ...) {
     for (unsigned int i = 0; i < pos; ++i) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
-            printf("%s@%02x\n", &buffer[start], checksum);
+            if (uart_external_mode) {
+                // Debug output
+                printf("eemode:%s@%02x\n", &buffer[start], checksum);
+            } else {
+                printf("%s@%02x\n", &buffer[start], checksum);
+            }
             start = i + 1;
             checksum = 0;
         } else {

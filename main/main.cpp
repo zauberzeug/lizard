@@ -373,11 +373,23 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        // echo("Debug: Raw input before check [%d bytes]:", len);
-        // for (int i = 0; i < len; i++) {
-        //     echo(" %02x", (uint8_t)input[i]);
-        // }
-        // echo("\n");
+
+        // handle control tags first
+        if (input[0] == EXTERNAL_MODE_ON) {
+            echo("Debug: Setting external mode to true");
+            core_module->set_external_mode(true);
+            set_uart_external_mode(true);                         // Set UART context
+            set_uart_expander_id(core_module->get_expander_id()); // Set ID
+            // flush input buffer
+            uart_flush_input(UART_NUM_0);
+            return;
+        } else if (input[0] == EXTERNAL_MODE_OFF) {
+            core_module->set_external_mode(false);
+            set_uart_external_mode(false); // Clear UART context
+            // flush input buffer
+            uart_flush_input(UART_NUM_0);
+            return;
+        }
 
         len = check(input, len);
 
@@ -387,39 +399,25 @@ void process_uart() {
         // }
         // echo("\nDebug: As text: '%s'", input);
 
-        // handle tags first
-        if (input[0] == EXTERNAL_MODE_ON) {
-            echo("Debug: Setting external mode to true");
-            core_module->set_external_mode(true);
-            return;
-        } else if (input[0] == EXTERNAL_MODE_OFF) {
-            echo("Debug: Setting external mode to false");
-            core_module->set_external_mode(false);
-            return;
-        } else if (input[0] == ID_TAG) {
+        // handle id tags
+        if (input[0] == ID_TAG) {
             if (core_module->is_external()) {
                 if ((uint8_t)input[1] != core_module->get_expander_id()) {
                     echo("Debug: not for me (id 0x%02x != 0x%02x)", (uint8_t)input[1], core_module->get_expander_id());
                     continue;
                 }
             } else {
-                echo("Detected tag, but not in external mode");
+                // echo("Detected tag, but not in external mode");
             }
 
-            echo("Debug: Processing message for my id 0x%02x", core_module->get_expander_id());
+            // echo("Debug: Processing message for my id 0x%02x", core_module->get_expander_id());
 
             // Shift the input buffer 2 positions to the left
             for (int i = 0; i < len - 2; i++) {
                 input[i] = input[i + 2];
             }
-
-            // Null-terminate the new string
             input[len - 2] = '\0';
-
-            // Update the length
             len -= 2;
-
-            // echo("Debug: Shifted input (len %d): '%s'", len, input);
             process_line(input, len);
         } else {
             process_line(input, len);
@@ -482,34 +480,31 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
-        if (core_module->is_external()) {
-            delay(10);
-            continue;
-        }
-
-        for (auto const &[module_name, module] : Global::modules) {
-            if (module != core_module) {
-                run_step(module);
-            }
-        }
-        run_step(core_module);
-
-        for (auto const &rule : Global::rules) {
-            try {
-                if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
-                    rule->routine->start();
+        if (!core_module->is_external()) {
+            for (auto const &[module_name, module] : Global::modules) {
+                if (module != core_module) {
+                    run_step(module);
                 }
-                rule->routine->step();
-            } catch (const std::runtime_error &e) {
-                echo("error in rule: %s", e.what());
             }
-        }
+            run_step(core_module);
 
-        for (auto const &[routine_name, routine] : Global::routines) {
-            try {
-                routine->step();
-            } catch (const std::runtime_error &e) {
-                echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
+            for (auto const &rule : Global::rules) {
+                try {
+                    if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
+                        rule->routine->start();
+                    }
+                    rule->routine->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in rule: %s", e.what());
+                }
+            }
+
+            for (auto const &[routine_name, routine] : Global::routines) {
+                try {
+                    routine->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
+                }
             }
         }
 
