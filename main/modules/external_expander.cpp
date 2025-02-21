@@ -37,7 +37,6 @@ ExternalExpander::ExternalExpander(const std::string name,
     char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%u_READY__')", ID_TAG, expander_id, expander_id);
     this->serial->write_checked_line(buffer, pos);
-    echo("Debug: writing: %s", buffer);
     this->handle_messages();
 }
 
@@ -62,6 +61,8 @@ void ExternalExpander::handle_messages() {
         check(buffer, len);
         this->last_message_millis = millis();
         this->ping_pending = false;
+
+        echo("Debug: received message: %s", buffer);
 
         if (buffer[0] == '!' && buffer[1] == '!') {
             // Property update from expander
