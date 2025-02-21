@@ -127,8 +127,24 @@ void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t
         message.data[i] = data[i];
     }
     if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
-        if (twai_stop() != ESP_OK || twai_start() != ESP_OK) {
-            throw std::runtime_error("could not send CAN message and could not restart twai driver");
+        twai_status_info_t status_info;
+
+        if (twai_get_status_info(&status_info) != ESP_OK) {
+            throw std::runtime_error("could not get twai status");
+        }
+        if (status_info.state == TWAI_STATE_BUS_OFF) {
+            if (twai_initiate_recovery() != ESP_OK) {
+                throw std::runtime_error("could not initiate recovery");
+            }
+            vTaskDelay(pdMS_TO_TICKS(100)); // Wait for recovery to start
+        }
+        if (status_info.state != TWAI_STATE_STOPPED) {
+            if (twai_stop() != ESP_OK) {
+                throw std::runtime_error("could not stop twai driver");
+            }
+        }
+        if (twai_start() != ESP_OK) {
+            throw std::runtime_error("could not restart twai driver");
         }
         throw std::runtime_error("could not send CAN message");
     }
