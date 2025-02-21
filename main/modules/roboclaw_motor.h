@@ -11,6 +11,9 @@ private:
     const unsigned int motor_number;
     const RoboClaw_ptr roboclaw;
 
+protected:
+    void set_error_descriptions() override;
+
 public:
     RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number);
     void step() override;

@@ -7,6 +7,14 @@ const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
     return {
         {"in", std::make_shared<BooleanVariable>()},
         {"out", std::make_shared<BooleanVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
+void LinearMotor::set_error_descriptions() {
+    error_descriptions = {
+        {0x01, "GPIO Linear Motor: Could not initialize GPIO pins"},
+        {0x02, "MCP Linear Motor: Could not initialize MCP"},
     };
 }
 
@@ -44,14 +52,19 @@ GpioLinearMotor::GpioLinearMotor(const std::string name,
                                  const gpio_num_t end_in,
                                  const gpio_num_t end_out)
     : LinearMotor(name), move_in(move_in), move_out(move_out), end_in(end_in), end_out(end_out) {
-    gpio_reset_pin(move_in);
-    gpio_reset_pin(move_out);
-    gpio_reset_pin(end_in);
-    gpio_reset_pin(end_out);
-    gpio_set_direction(move_in, GPIO_MODE_OUTPUT);
-    gpio_set_direction(move_out, GPIO_MODE_OUTPUT);
-    gpio_set_direction(end_in, GPIO_MODE_INPUT);
-    gpio_set_direction(end_out, GPIO_MODE_INPUT);
+
+    esp_err_t err = ESP_OK;
+    err |= gpio_reset_pin(move_in);
+    err |= gpio_reset_pin(move_out);
+    err |= gpio_reset_pin(end_in);
+    err |= gpio_reset_pin(end_out);
+    err |= gpio_set_direction(move_in, GPIO_MODE_OUTPUT);
+    err |= gpio_set_direction(move_out, GPIO_MODE_OUTPUT);
+    err |= gpio_set_direction(end_in, GPIO_MODE_INPUT);
+    err |= gpio_set_direction(end_out, GPIO_MODE_INPUT);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
     this->properties.at("in")->boolean_value = this->get_in();
     this->properties.at("out")->boolean_value = this->get_out();
 }

@@ -18,11 +18,22 @@ const std::map<std::string, Variable_ptr> Can::get_defaults() {
         {"rx_overrun_count", std::make_shared<IntegerVariable>()},
         {"arb_lost_count", std::make_shared<IntegerVariable>()},
         {"bus_error_count", std::make_shared<IntegerVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
+void Can::set_error_descriptions() {
+    error_descriptions = {
+        {0x01, "Setup failed"},
+        {0x02, "Could not get status info"},
+        {0x03, "Could not send CAN message"},
+        {0x04, "There is already a subscriber for this CAN ID"},
     };
 }
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(can, name) {
+    this->properties = Can::get_defaults();
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config;
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
@@ -59,10 +70,13 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
     g_config.rx_queue_len = 20;
     g_config.tx_queue_len = 20;
 
-    this->properties = Can::get_defaults();
-
-    ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
-    ESP_ERROR_CHECK(twai_start());
+    esp_err_t err = ESP_OK;
+    err |= twai_driver_install(&g_config, &t_config, &f_config);
+    err |= twai_start();
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+        abort();
+    }
 }
 
 void Can::step() {
@@ -71,6 +85,7 @@ void Can::step() {
 
     twai_status_info_t status_info;
     if (twai_get_status_info(&status_info) != ESP_OK) {
+        this->set_error(0x02);
         throw std::runtime_error("could not get status info");
     }
     this->properties.at("state")->string_value = status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
@@ -161,15 +176,20 @@ void Can::send(uint32_t id,
 void Can::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "send") {
         Module::expect(arguments, 9, integer, integer, integer, integer, integer, integer, integer, integer, integer);
-        this->send(arguments[0]->evaluate_integer(),
-                   arguments[1]->evaluate_integer(),
-                   arguments[2]->evaluate_integer(),
-                   arguments[3]->evaluate_integer(),
-                   arguments[4]->evaluate_integer(),
-                   arguments[5]->evaluate_integer(),
-                   arguments[6]->evaluate_integer(),
-                   arguments[7]->evaluate_integer(),
-                   arguments[8]->evaluate_integer());
+        try {
+            this->send(arguments[0]->evaluate_integer(),
+                       arguments[1]->evaluate_integer(),
+                       arguments[2]->evaluate_integer(),
+                       arguments[3]->evaluate_integer(),
+                       arguments[4]->evaluate_integer(),
+                       arguments[5]->evaluate_integer(),
+                       arguments[6]->evaluate_integer(),
+                       arguments[7]->evaluate_integer(),
+                       arguments[8]->evaluate_integer());
+        } catch (const std::runtime_error &e) {
+            this->set_error(0x03);
+            throw std::runtime_error(e.what());
+        }
     } else if (method_name == "status") {
         Module::expect(arguments, 0);
         echo("state:            %s", this->properties.at("state")->string_value.c_str());
@@ -185,16 +205,19 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
     } else if (method_name == "start") {
         Module::expect(arguments, 0);
         if (twai_start() != ESP_OK) {
+            this->set_error(0x01);
             throw std::runtime_error("could not start twai driver");
         }
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
         if (twai_stop() != ESP_OK) {
+            this->set_error(0x01);
             throw std::runtime_error("could not stop twai driver");
         }
     } else if (method_name == "recover") {
         Module::expect(arguments, 0);
         if (twai_initiate_recovery() != ESP_OK) {
+            this->set_error(0x01);
             throw std::runtime_error("could not initiate recovery");
         }
     } else {
@@ -204,6 +227,7 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
 
 void Can::subscribe(const uint32_t id, const Module_ptr module) {
     if (this->subscribers.count(id)) {
+        this->set_error(0x04);
         throw std::runtime_error("there is already a subscriber for this CAN ID");
     }
     this->subscribers[id] = module;

@@ -9,6 +9,13 @@ const std::map<std::string, Variable_ptr> Output::get_defaults() {
     return {
         {"level", std::make_shared<IntegerVariable>()},
         {"change", std::make_shared<IntegerVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
+void Output::set_error_descriptions() {
+    error_descriptions = {
+        {0x01, "Could not configure GPIO"},
     };
 }
 
@@ -56,8 +63,14 @@ void Output::call(const std::string method_name, const std::vector<ConstExpressi
 
 GpioOutput::GpioOutput(const std::string name, const gpio_num_t number)
     : Output(name), number(number) {
-    gpio_reset_pin(number);
-    gpio_set_direction(number, GPIO_MODE_OUTPUT);
+    esp_err_t err = gpio_reset_pin(number);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
+    err = gpio_set_direction(number, GPIO_MODE_OUTPUT);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
 }
 
 void GpioOutput::set_level(bool level) const {

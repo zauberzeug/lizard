@@ -7,6 +7,14 @@ const std::map<std::string, Variable_ptr> PwmOutput::get_defaults() {
     return {
         {"frequency", std::make_shared<IntegerVariable>(1000)},
         {"duty", std::make_shared<IntegerVariable>(128)},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
+void PwmOutput::set_error_descriptions() {
+    error_descriptions = {
+        {0x01, "Could not configure PWM"},
+        {0x02, "Could not update PWM"},
     };
 }
 
@@ -15,7 +23,6 @@ PwmOutput::PwmOutput(const std::string name,
                      const ledc_timer_t ledc_timer,
                      const ledc_channel_t ledc_channel)
     : Module(pwm_output, name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
-    gpio_reset_pin(pin);
 
     this->properties = PwmOutput::get_defaults();
 
@@ -37,17 +44,27 @@ PwmOutput::PwmOutput(const std::string name,
         .hpoint = 0,
         .flags = {},
     };
-    ledc_timer_config(&timer_config);
-    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
-    ledc_channel_config(&channel_config);
+
+    esp_err_t err = ESP_OK;
+    err |= gpio_reset_pin(pin);
+    err |= ledc_timer_config(&timer_config);
+    err |= gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+    err |= ledc_channel_config(&channel_config);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
 }
 
 void PwmOutput::step() {
+    esp_err_t err = ESP_OK;
     uint32_t frequency = this->properties.at("frequency")->integer_value;
-    ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, frequency);
+    err |= ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, frequency);
     uint32_t duty = this->properties.at("duty")->integer_value;
-    ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
-    ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
+    err |= ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
+    err |= ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
+    if (err != ESP_OK) {
+        this->set_error(0x02);
+    }
     Module::step();
 }
 

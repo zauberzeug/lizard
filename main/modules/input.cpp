@@ -12,6 +12,13 @@ const std::map<std::string, Variable_ptr> Input::get_defaults() {
         {"change", std::make_shared<IntegerVariable>()},
         {"inverted", std::make_shared<BooleanVariable>()},
         {"active", std::make_shared<BooleanVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
+void Input::set_error_descriptions() {
+    error_descriptions = {
+        {0x01, "Could not initialize input"},
     };
 }
 
@@ -53,8 +60,14 @@ std::string Input::get_output() const {
 
 GpioInput::GpioInput(const std::string name, const gpio_num_t number)
     : Input(name), number(number) {
-    gpio_reset_pin(number);
-    gpio_set_direction(number, GPIO_MODE_INPUT);
+    esp_err_t err = gpio_reset_pin(number);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
+    err = gpio_set_direction(number, GPIO_MODE_INPUT);
+    if (err != ESP_OK) {
+        this->set_error(0x01);
+    }
     this->properties.at("level")->integer_value = this->get_level();
 }
 

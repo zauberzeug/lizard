@@ -9,6 +9,13 @@ REGISTER_MODULE_DEFAULTS(RoboClawMotor)
 const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
     return {
         {"position", std::make_shared<IntegerVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
+void RoboClawMotor::set_error_descriptions() {
+    error_descriptions = {
+        {0x01, "Could not read motor position"},
     };
 }
 
@@ -25,6 +32,7 @@ void RoboClawMotor::step() {
     bool valid;
     int64_t position = this->motor_number == 1 ? this->roboclaw->ReadEncM1(&status, &valid) : this->roboclaw->ReadEncM2(&status, &valid);
     if (!valid) {
+        this->set_error(0x01);
         throw std::runtime_error("could not read motor position");
     }
     this->properties["position"]->integer_value = position;

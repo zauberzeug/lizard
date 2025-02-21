@@ -15,6 +15,9 @@ private:
     const uint8_t address;
     Bno_ptr bno;
 
+protected:
+    void set_error_descriptions() override;
+
 public:
     Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed);
     void step() override;

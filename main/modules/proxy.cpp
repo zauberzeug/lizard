@@ -17,7 +17,7 @@ Proxy::Proxy(const std::string name,
         this->expander->send_proxy(name, module_type, arguments);
         this->properties["is_ready"]->boolean_value = true;
     } else {
-        echo("%s: Expander not ready", this->name.c_str());
+        echo("Error: Expander \"%s\" is not ready", expander_name.c_str());
     }
 }
 

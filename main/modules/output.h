@@ -13,6 +13,7 @@ private:
 
 protected:
     Output(const std::string name);
+    void set_error_descriptions() override;
 
 public:
     void step() override;

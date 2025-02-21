@@ -11,6 +11,10 @@ using Serial_ptr = std::shared_ptr<Serial>;
 using ConstSerial_ptr = std::shared_ptr<const Serial>;
 
 class Serial : public Module {
+
+protected:
+    void set_error_descriptions() override;
+
 public:
     const gpio_num_t rx_pin;
     const gpio_num_t tx_pin;

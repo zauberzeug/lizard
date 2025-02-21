@@ -20,6 +20,17 @@ const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
         {"position", std::make_shared<IntegerVariable>()},
         {"speed", std::make_shared<IntegerVariable>()},
         {"idle", std::make_shared<BooleanVariable>(true)},
+        {"error_code", std::make_shared<IntegerVariable>(0)},
+    };
+}
+
+void StepperMotor::set_error_descriptions() {
+    error_descriptions = {
+        {0x01, "Could not initialize stepper motor"},
+        {0x02, "Could not initialize PCNT"},
+        {0x03, "Could not initialize LEDC"},
+        {0x04, "Could not read position"},
+        {0x05, "Could not set state"},
     };
 }
 
@@ -37,10 +48,14 @@ StepperMotor::StepperMotor(const std::string name,
       pcnt_channel(pcnt_channel),
       ledc_timer(ledc_timer),
       ledc_channel(ledc_channel) {
-    gpio_reset_pin(step_pin);
-    gpio_reset_pin(dir_pin);
-
     this->properties = StepperMotor::get_defaults();
+
+    esp_err_t gpio_err = ESP_OK;
+    gpio_err |= gpio_reset_pin(step_pin);
+    gpio_err |= gpio_reset_pin(dir_pin);
+    if (gpio_err != ESP_OK) {
+        this->set_error(0x01);
+    }
 
     pcnt_config_t pcnt_config = {
         .pulse_gpio_num = step_pin,
@@ -54,10 +69,14 @@ StepperMotor::StepperMotor(const std::string name,
         .unit = this->pcnt_unit,
         .channel = this->pcnt_channel,
     };
-    pcnt_unit_config(&pcnt_config);
-    pcnt_counter_pause(this->pcnt_unit);
-    pcnt_counter_clear(this->pcnt_unit);
-    pcnt_counter_resume(this->pcnt_unit);
+    esp_err_t pcnt_err = ESP_OK;
+    pcnt_err |= pcnt_unit_config(&pcnt_config);
+    pcnt_err |= pcnt_counter_pause(this->pcnt_unit);
+    pcnt_err |= pcnt_counter_clear(this->pcnt_unit);
+    pcnt_err |= pcnt_counter_resume(this->pcnt_unit);
+    if (pcnt_err != ESP_OK) {
+        this->set_error(0x02);
+    }
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_HIGH_SPEED_MODE,
@@ -66,7 +85,8 @@ StepperMotor::StepperMotor(const std::string name,
         .freq_hz = 1000,
         .clk_cfg = LEDC_AUTO_CLK,
     };
-    ledc_timer_config(&timer_config);
+    esp_err_t ledc_err = ESP_OK;
+    ledc_err |= ledc_timer_config(&timer_config);
 
     ledc_channel_config_t channel_config = {
         .gpio_num = step_pin,
@@ -78,15 +98,24 @@ StepperMotor::StepperMotor(const std::string name,
         .hpoint = 0,
         .flags = {},
     };
-    ledc_channel_config(&channel_config);
+    ledc_err |= ledc_channel_config(&channel_config);
+    if (ledc_err != ESP_OK) {
+        this->set_error(0x03);
+    }
 
-    gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
-    gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
+    gpio_err |= gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
+    gpio_err |= gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
+    if (gpio_err != ESP_OK) {
+        this->set_error(0x01);
+    }
 }
 
 void StepperMotor::read_position() {
     int16_t count;
-    pcnt_get_counter_value(this->pcnt_unit, &count);
+    esp_err_t err = pcnt_get_counter_value(this->pcnt_unit, &count);
+    if (err != ESP_OK) {
+        this->set_error(0x04);
+    }
     int16_t d_count = count - this->last_count;
     if (d_count > 15000) {
         d_count -= 30000;
@@ -102,9 +131,13 @@ void StepperMotor::set_state(StepperState new_state) {
     this->state = new_state;
     this->properties.at("idle")->boolean_value = (new_state == Idle);
 
+    esp_err_t err = ESP_OK;
     gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0, 0);
-    ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
-    ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
+    err |= ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
+    err |= ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
+    if (err != ESP_OK) {
+        this->set_error(0x05);
+    }
 }
 
 void StepperMotor::step() {
