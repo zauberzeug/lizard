@@ -90,8 +90,17 @@ Module_ptr Module::create(const std::string type,
             throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
         }
         const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
-        uint8_t id = arguments[1]->evaluate_integer();
-        return std::make_shared<ExternalExpander>(name, serial, id, message_handler);
+
+        // Validate and convert ID here
+        int id = arguments[1]->evaluate_integer();
+        if (id < 0 || id > 99) {
+            throw std::runtime_error("expander id must be between 0 and 99");
+        }
+        char expander_id[2] = {
+            static_cast<char>('0' + (id / 10)),
+            static_cast<char>('0' + (id % 10))};
+
+        return std::make_shared<ExternalExpander>(name, serial, expander_id, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();

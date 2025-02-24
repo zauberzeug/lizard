@@ -1,6 +1,7 @@
 #pragma once
 
 #include "module.h"
+#include <cstdio>
 #include <memory>
 #include <utility>
 
@@ -17,7 +18,7 @@ class Core : public Module {
 private:
     std::list<struct output_element_t> output_list;
     unsigned long int last_message_millis = 0;
-    uint8_t expander_id = 255;
+    char expander_id[2] = {'9', '9'}; // CHANGE DEFAULT ID!
     bool is_external_expander = false;
 
 public:
@@ -28,7 +29,7 @@ public:
     void set(std::string property_name, double value);
     std::string get_output() const override;
     void keep_alive();
-    uint8_t get_expander_id() const;
+    const char *get_expander_id() const;
     void set_expander_id(uint8_t id);
     void set_external_mode(bool external);
     bool is_external() const;

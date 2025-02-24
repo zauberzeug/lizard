@@ -8,7 +8,7 @@
 
 REGISTER_MODULE_DEFAULTS(ExternalExpander)
 
-#define ID_TAG 0x82
+#define ID_TAG '$'
 
 const std::map<std::string, Variable_ptr> ExternalExpander::get_defaults() {
     return {
@@ -22,11 +22,11 @@ const std::map<std::string, Variable_ptr> ExternalExpander::get_defaults() {
 
 ExternalExpander::ExternalExpander(const std::string name,
                                    const ConstSerial_ptr serial,
-                                   uint8_t expander_id,
+                                   const char id[2],
                                    MessageHandler message_handler)
     : Module(external_expander, name),
       serial(serial),
-      expander_id(expander_id),
+      expander_id{id[0], id[1]},
       message_handler(message_handler) {
 
     this->properties = ExternalExpander::get_defaults();
@@ -35,7 +35,8 @@ ExternalExpander::ExternalExpander(const std::string name,
 
     // check if external expander is answering
     char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%u_READY__')", ID_TAG, expander_id, expander_id);
+    int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.print('__%c%c_READY__')",
+                       ID_TAG, expander_id[0], expander_id[1], expander_id[0], expander_id[1]);
     this->serial->write_checked_line(buffer, pos);
 
     const int max_retries = 10;
@@ -52,16 +53,11 @@ ExternalExpander::ExternalExpander(const std::string name,
 }
 
 void ExternalExpander::step() {
-    if (this->properties.at("is_ready")->boolean_value == false) {
-        // REMOVE ME
-        echo("is false, debug make it true");
-        this->properties.at("is_ready")->boolean_value = true;
-    }
     if (this->properties.at("is_ready")->boolean_value) {
         // this->ping(); WARNING PING IS DISABLED FOR NOW
-
+        // echo("stepping");
         char buffer[256];
-        int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.run_step()", ID_TAG, expander_id);
+        int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.run_step()", ID_TAG, expander_id[0], expander_id[1]);
         this->serial->write_checked_line(buffer, pos);
 
         this->handle_messages();
@@ -93,12 +89,21 @@ void ExternalExpander::handle_messages() {
                 }
                 this->properties[property_name]->string_value = property_value;
             }
-        } else if (strstr(buffer, ("__" + std::to_string(this->expander_id) + "_PONG__").c_str()) != nullptr) {
-            // No echo for pong
-        } else if (strstr(buffer, ("__" + std::to_string(this->expander_id) + "_READY__").c_str()) != nullptr) {
-            echo("external expander %u is ready", this->expander_id);
-            this->properties.at("is_ready")->boolean_value = true;
         } else {
+            char pattern[32];
+            snprintf(pattern, sizeof(pattern), "__%c%c_PONG__", expander_id[0], expander_id[1]);
+            if (strstr(buffer, pattern) != nullptr) {
+                // No echo for pong
+                continue;
+            }
+
+            snprintf(pattern, sizeof(pattern), "__%c%c_READY__", expander_id[0], expander_id[1]);
+            if (strstr(buffer, pattern) != nullptr) {
+                echo("external expander %c%c is ready", expander_id[0], expander_id[1]);
+                this->properties.at("is_ready")->boolean_value = true;
+                continue;
+            }
+
             echo("%s: %s", this->name.c_str(), buffer);
         }
     }
@@ -113,7 +118,7 @@ void ExternalExpander::ping() {
         if (last_message_age >= ping_interval) {
             // Ping all expanders
             char buffer[256];
-            int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%u_PONG__')", ID_TAG, expander_id, expander_id);
+            int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.print('__%c%c_PONG__')", ID_TAG, expander_id[0], expander_id[1], expander_id[0], expander_id[1]);
             this->serial->write_checked_line(buffer, pos);
             this->ping_pending = true;
         }
@@ -130,7 +135,7 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
         Module::expect(arguments, 1, string);
         std::string command = arguments[0]->evaluate_string();
         char buffer[1024];
-        int pos = csprintf(buffer, sizeof(buffer), "%c%c%s", ID_TAG, expander_id, command.c_str());
+        int pos = csprintf(buffer, sizeof(buffer), "%c%c%c%s", ID_TAG, expander_id[0], expander_id[1], command.c_str());
         this->serial->write_checked_line(buffer, pos);
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
@@ -143,7 +148,7 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
         this->serial->deactivate_external_mode();
     } else {
         static char buffer[1024];
-        int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.%s(", ID_TAG, expander_id, method_name.c_str());
+        int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.%s(", ID_TAG, expander_id[0], expander_id[1], method_name.c_str());
         pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
         pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
         this->serial->write_checked_line(buffer, pos);
@@ -152,7 +157,7 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
 
 void ExternalExpander::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
     static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%c%s = %s(", ID_TAG, expander_id, module_name.c_str(), module_type.c_str());
+    int pos = csprintf(buffer, sizeof(buffer), "%c%c%c%s = %s(", ID_TAG, expander_id[0], expander_id[1], module_name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
@@ -161,14 +166,14 @@ void ExternalExpander::send_proxy(const std::string module_name, const std::stri
 
 void ExternalExpander::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
     static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%c%s.%s = ", ID_TAG, expander_id, proxy_name.c_str(), property_name.c_str());
+    int pos = csprintf(buffer, sizeof(buffer), "%c%c%c%s.%s = ", ID_TAG, expander_id[0], expander_id[1], proxy_name.c_str(), property_name.c_str());
     pos += expression->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
     this->serial->write_checked_line(buffer, pos);
 }
 
 void ExternalExpander::send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%c%s.%s(", ID_TAG, expander_id, proxy_name.c_str(), method_name.c_str());
+    int pos = csprintf(buffer, sizeof(buffer), "%c%c%c%s.%s(", ID_TAG, expander_id[0], expander_id[1], proxy_name.c_str(), method_name.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
     this->serial->write_checked_line(buffer, pos);

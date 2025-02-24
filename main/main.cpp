@@ -34,7 +34,7 @@
 
 #define BUFFER_SIZE 1024
 
-#define ID_TAG 0x82
+#define ID_TAG '$'
 #define EXTERNAL_MODE_ON 0x80
 #define EXTERNAL_MODE_OFF 0x81
 
@@ -378,9 +378,8 @@ void process_uart() {
         if (input[0] == EXTERNAL_MODE_ON) {
             echo("Debug: Setting external mode to true");
             core_module->set_external_mode(true);
-            set_uart_external_mode(true);                         // Set UART context
-            set_uart_expander_id(core_module->get_expander_id()); // Set ID
-            // flush input buffer
+            set_uart_external_mode(true);
+            set_uart_expander_id(core_module->get_expander_id());
             uart_flush_input(UART_NUM_0);
             return;
         } else if (input[0] == EXTERNAL_MODE_OFF) {
@@ -402,22 +401,22 @@ void process_uart() {
         // handle id tags
         if (input[0] == ID_TAG) {
             if (core_module->is_external()) {
-                if ((uint8_t)input[1] != core_module->get_expander_id()) {
-                    echo("Debug: not for me (id 0x%02x != 0x%02x)", (uint8_t)input[1], core_module->get_expander_id());
+                const char *expected_id = core_module->get_expander_id();
+                if (input[1] != expected_id[0] || input[2] != expected_id[1]) {
+                    echo("Debug: not for me (id %c%c != %c%c)",
+                         input[1], input[2], expected_id[0], expected_id[1]);
                     continue;
                 }
             } else {
                 // echo("Detected tag, but not in external mode");
             }
 
-            // echo("Debug: Processing message for my id 0x%02x", core_module->get_expander_id());
-
-            // Shift the input buffer 2 positions to the left
-            for (int i = 0; i < len - 2; i++) {
-                input[i] = input[i + 2];
+            // Shift the input buffer 3 positions to the left (tag + 2 digit id)
+            for (int i = 0; i < len - 3; i++) {
+                input[i] = input[i + 3];
             }
-            input[len - 2] = '\0';
-            len -= 2;
+            input[len - 3] = '\0';
+            len -= 3;
             process_line(input, len);
         } else {
             process_line(input, len);
