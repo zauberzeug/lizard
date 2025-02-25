@@ -33,6 +33,7 @@ ExternalExpander::ExternalExpander(const std::string name,
     this->properties = ExternalExpander::get_defaults();
 
     this->serial->enable_line_detection();
+    this->serial->activate_external_mode();
 
     // check if external expander is answering
     char buffer[256];
@@ -43,8 +44,9 @@ ExternalExpander::ExternalExpander(const std::string name,
     const int max_retries = 10;
     for (int i = 0; i < max_retries; i++) {
         echo("Debug: Waiting for READY response (attempt %d/%d)", i + 1, max_retries);
-        delay(100);
         this->handle_messages();
+        delay(100);
+        this->serial->write_checked_line(buffer, pos);
         if (this->properties.at("is_ready")->boolean_value) {
             echo("Debug: Got READY response");
             return;
@@ -86,24 +88,26 @@ void ExternalExpander::handle_messages() {
     while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer, sizeof(buffer));
         check(buffer, len);
+
+        // echo("Debug: Received message: %s", buffer);
+
+        // tag handling: msg looks like this: $99XXXXXXX
+        if (buffer[0] == ID_TAG && buffer[1] == expander_id[0] && buffer[2] == expander_id[1]) {
+            // tag found, remove it
+            strcpy(buffer, buffer + 3);
+        } else {
+            // tag not found, echo the message
+            echo("Debug: msg receivded. Tag and Id did not match");
+
+            // skip this line
+            continue;
+        }
+
         this->last_message_millis = millis();
         this->ping_pending = false;
 
         if (buffer[0] == '!' && buffer[1] == '!') {
-            // Property update from expander
-            // Format: !!property_name=value
-            char *equals = strchr(buffer + 2, '=');
-            if (equals) {
-                *equals = 0;
-                std::string property_name = buffer + 2;
-                std::string property_value = equals + 1;
-
-                // Update property in manager
-                if (!this->properties.count(property_name)) {
-                    this->properties[property_name] = std::make_shared<StringVariable>();
-                }
-                this->properties[property_name]->string_value = property_value;
-            }
+            this->message_handler(&buffer[2], false, true);
         } else if (strstr(buffer, "__step_done__") != nullptr) {
             this->properties.at("step_in_progress")->boolean_value = false;
         } else if (strstr(buffer, "_PONG__") != nullptr) {
@@ -167,8 +171,9 @@ void ExternalExpander::send_proxy(const std::string module_name, const std::stri
     static char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%c%c%c%s = %s(", ID_TAG, expander_id[0], expander_id[1], module_name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
+    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
+    echo("Debug: Sending proxy command: %s", buffer);
     this->serial->write_checked_line(buffer, pos);
 }
 

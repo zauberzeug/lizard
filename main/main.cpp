@@ -13,6 +13,7 @@
 #include "modules/bluetooth.h"
 #include "modules/core.h"
 #include "modules/expander.h"
+#include "modules/external_expander.h"
 #include "modules/module.h"
 #include "proxy.h"
 #include "rom/gpio.h"
@@ -211,12 +212,22 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                if (expander_module->type != expander) {
+
+                // Check if the module is either an Expander or ExternalExpander
+                if (expander_module->type != expander && expander_module->type != external_expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
-                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
+
+                // Use static_cast based on the module type
+                std::shared_ptr<Expandable> expandable;
+                if (expander_module->type == expander) {
+                    expandable = std::static_pointer_cast<Expander>(expander_module);
+                } else { // must be external_expander
+                    expandable = std::static_pointer_cast<ExternalExpander>(expander_module);
+                }
+
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expandable, arguments);
                 Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
@@ -392,12 +403,6 @@ void process_uart() {
 
         len = check(input, len);
 
-        // echo("Debug: Raw input after check [%d bytes]:", len);
-        // for (int i = 0; i < len; i++) {
-        //     echo(" %02x", (uint8_t)input[i]);
-        // }
-        // echo("\nDebug: As text: '%s'", input);
-
         // handle id tags
         if (input[0] == ID_TAG) {
             if (core_module->is_external()) {
@@ -417,6 +422,8 @@ void process_uart() {
             }
             input[len - 3] = '\0';
             len -= 3;
+
+            // echo("Debug: Processed input: %s", input);
             process_line(input, len);
         } else {
             process_line(input, len);
