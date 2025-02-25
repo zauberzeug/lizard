@@ -185,6 +185,8 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         } catch (const std::runtime_error &e) {
             echo("error in core module: %s", e.what());
         }
+
+        echo("__step_done__");
     } else if (method_name == "ee") {
         echo("EE status: %d", is_external_expander);
     } else {
@@ -225,12 +227,16 @@ void Core::keep_alive() {
     this->last_message_millis = millis();
 }
 
-uint8_t Core::get_expander_id() const {
-    return this->expander_id;
+const char *Core::get_expander_id() const {
+    return expander_id;
 }
 
 void Core::set_expander_id(uint8_t id) {
-    this->expander_id = id;
+    if (id > 99) {
+        throw std::runtime_error("expander id must be between 0 and 99");
+    }
+    expander_id[0] = '0' + (id / 10);
+    expander_id[1] = '0' + (id % 10);
 }
 
 void Core::set_external_mode(bool external) {

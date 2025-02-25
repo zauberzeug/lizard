@@ -17,6 +17,7 @@ const std::map<std::string, Variable_ptr> ExternalExpander::get_defaults() {
         {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
         {"is_ready", std::make_shared<BooleanVariable>(false)},
         {"last_message_age", std::make_shared<IntegerVariable>(0)},
+        {"step_in_progress", std::make_shared<BooleanVariable>(false)},
     };
 }
 
@@ -54,14 +55,28 @@ ExternalExpander::ExternalExpander(const std::string name,
 
 void ExternalExpander::step() {
     if (this->properties.at("is_ready")->boolean_value) {
-        // this->ping(); WARNING PING IS DISABLED FOR NOW
-        // echo("stepping");
+        // Send run_step command
         char buffer[256];
         int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.run_step()", ID_TAG, expander_id[0], expander_id[1]);
         this->serial->write_checked_line(buffer, pos);
+        this->properties.at("step_in_progress")->boolean_value = true;
+        // Wait for step_done message
+        const unsigned long start_time = millis();
+        const unsigned long timeout = 1000; // 1 second timeout
 
-        this->handle_messages();
+        while (this->properties.at("step_in_progress")->boolean_value && (millis() - start_time < timeout)) {
+            // Process messages
+            this->handle_messages();
+
+            // Small delay to prevent CPU hogging
+            delay(1);
+        }
+
+        if (this->properties.at("step_in_progress")->boolean_value) {
+            echo("Warning: step_done not received within timeout");
+        }
     }
+
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
 }
@@ -89,21 +104,14 @@ void ExternalExpander::handle_messages() {
                 }
                 this->properties[property_name]->string_value = property_value;
             }
+        } else if (strstr(buffer, "__step_done__") != nullptr) {
+            this->properties.at("step_in_progress")->boolean_value = false;
+        } else if (strstr(buffer, "_PONG__") != nullptr) {
+            // No echo for pong
+        } else if (strstr(buffer, "_READY__") != nullptr) {
+            echo("external expander %c%c is ready", expander_id[0], expander_id[1]);
+            this->properties.at("is_ready")->boolean_value = true;
         } else {
-            char pattern[32];
-            snprintf(pattern, sizeof(pattern), "__%c%c_PONG__", expander_id[0], expander_id[1]);
-            if (strstr(buffer, pattern) != nullptr) {
-                // No echo for pong
-                continue;
-            }
-
-            snprintf(pattern, sizeof(pattern), "__%c%c_READY__", expander_id[0], expander_id[1]);
-            if (strstr(buffer, pattern) != nullptr) {
-                echo("external expander %c%c is ready", expander_id[0], expander_id[1]);
-                this->properties.at("is_ready")->boolean_value = true;
-                continue;
-            }
-
             echo("%s: %s", this->name.c_str(), buffer);
         }
     }
