@@ -163,6 +163,32 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             echo("Not a strapping pin");
             break;
         }
+    } else if (method_name == "run_step") {
+        // Only execute if we're an external expander
+        if (!is_external_expander)
+            return;
+
+        // Run one step of all modules
+        for (auto const &[module_name, module] : Global::modules) {
+            if (module->name != "core") {
+                try {
+                    module->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in module \"%s\": %s", module->name.c_str(), e.what());
+                }
+            }
+        }
+
+        // Run core module last
+        try {
+            Module::step();
+        } catch (const std::runtime_error &e) {
+            echo("error in core module: %s", e.what());
+        }
+
+        echo("__step_done__");
+    } else if (method_name == "ee") {
+        echo("EE status: %d", is_external_expander);
     } else {
         Module::call(method_name, arguments);
     }
@@ -199,4 +225,24 @@ std::string Core::get_output() const {
 
 void Core::keep_alive() {
     this->last_message_millis = millis();
+}
+
+const char *Core::get_expander_id() const {
+    return expander_id;
+}
+
+void Core::set_expander_id(uint8_t id) {
+    if (id > 99) {
+        throw std::runtime_error("expander id must be between 0 and 99");
+    }
+    expander_id[0] = '0' + (id / 10);
+    expander_id[1] = '0' + (id % 10);
+}
+
+void Core::set_external_mode(bool external) {
+    this->is_external_expander = external;
+}
+
+bool Core::is_external() const {
+    return this->is_external_expander;
 }

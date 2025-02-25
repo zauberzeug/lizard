@@ -32,6 +32,8 @@ public:
     void write_checked_line(const char *message, const int length) const;
     void flush() const;
     void clear() const;
+    void activate_external_mode() const;
+    void deactivate_external_mode() const;
     std::string get_output() const override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();

@@ -34,6 +34,10 @@
 
 #define BUFFER_SIZE 1024
 
+#define ID_TAG '$'
+#define EXTERNAL_MODE_ON 0x80
+#define EXTERNAL_MODE_OFF 0x81
+
 Core_ptr core_module;
 
 extern "C" {
@@ -369,8 +373,54 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+
+        // handle control tags first
+        if (input[0] == EXTERNAL_MODE_ON) {
+            echo("Debug: Setting external mode to true");
+            core_module->set_external_mode(true);
+            set_uart_external_mode(true);
+            set_uart_expander_id(core_module->get_expander_id());
+            uart_flush_input(UART_NUM_0);
+            return;
+        } else if (input[0] == EXTERNAL_MODE_OFF) {
+            core_module->set_external_mode(false);
+            set_uart_external_mode(false); // Clear UART context
+            // flush input buffer
+            uart_flush_input(UART_NUM_0);
+            return;
+        }
+
         len = check(input, len);
-        process_line(input, len);
+
+        // echo("Debug: Raw input after check [%d bytes]:", len);
+        // for (int i = 0; i < len; i++) {
+        //     echo(" %02x", (uint8_t)input[i]);
+        // }
+        // echo("\nDebug: As text: '%s'", input);
+
+        // handle id tags
+        if (input[0] == ID_TAG) {
+            if (core_module->is_external()) {
+                const char *expected_id = core_module->get_expander_id();
+                if (input[1] != expected_id[0] || input[2] != expected_id[1]) {
+                    echo("Debug: not for me (id %c%c != %c%c)",
+                         input[1], input[2], expected_id[0], expected_id[1]);
+                    continue;
+                }
+            } else {
+                // echo("Detected tag, but not in external mode");
+            }
+
+            // Shift the input buffer 3 positions to the left (tag + 2 digit id)
+            for (int i = 0; i < len - 3; i++) {
+                input[i] = input[i + 3];
+            }
+            input[len - 3] = '\0';
+            len -= 3;
+            process_line(input, len);
+        } else {
+            process_line(input, len);
+        }
     }
 }
 
@@ -429,29 +479,31 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
-        for (auto const &[module_name, module] : Global::modules) {
-            if (module != core_module) {
-                run_step(module);
-            }
-        }
-        run_step(core_module);
-
-        for (auto const &rule : Global::rules) {
-            try {
-                if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
-                    rule->routine->start();
+        if (!core_module->is_external()) {
+            for (auto const &[module_name, module] : Global::modules) {
+                if (module != core_module) {
+                    run_step(module);
                 }
-                rule->routine->step();
-            } catch (const std::runtime_error &e) {
-                echo("error in rule: %s", e.what());
             }
-        }
+            run_step(core_module);
 
-        for (auto const &[routine_name, routine] : Global::routines) {
-            try {
-                routine->step();
-            } catch (const std::runtime_error &e) {
-                echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
+            for (auto const &rule : Global::rules) {
+                try {
+                    if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
+                        rule->routine->start();
+                    }
+                    rule->routine->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in rule: %s", e.what());
+                }
+            }
+
+            for (auto const &[routine_name, routine] : Global::routines) {
+                try {
+                    routine->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
+                }
             }
         }
 

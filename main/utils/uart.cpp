@@ -1,8 +1,22 @@
 #include "uart.h"
 #include <cstdarg>
+#include <cstdint>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
+
+// File-static variables for UART context
+static bool uart_external_mode = false;
+static char uart_expander_id[2] = {'0', '0'}; // Changed to char[2]
+#define ID_TAG '$'                            // Single-byte ASCII character
+
+void set_uart_external_mode(bool mode) { uart_external_mode = mode; }
+void set_uart_expander_id(const char *id) {
+    uart_expander_id[0] = id[0];
+    uart_expander_id[1] = id[1];
+}
+bool get_uart_external_mode() { return uart_external_mode; }
+const char *get_uart_expander_id() { return uart_expander_id; }
 
 void echo(const char *format, ...) {
     static char buffer[1024];
@@ -20,7 +34,19 @@ void echo(const char *format, ...) {
     for (unsigned int i = 0; i < pos; ++i) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
-            printf("%s@%02x\n", &buffer[start], checksum);
+            if (uart_external_mode) {
+                // Calculate checksum including the ID tag and expander ID
+                checksum = ID_TAG;
+                checksum ^= uart_expander_id[0];
+                checksum ^= uart_expander_id[1];
+                for (const char *p = &buffer[start]; *p; p++) {
+                    checksum ^= *p;
+                }
+                printf("%c%c%c%s@%02x\n", ID_TAG, uart_expander_id[0], uart_expander_id[1],
+                       &buffer[start], checksum);
+            } else {
+                printf("%s@%02x\n", &buffer[start], checksum);
+            }
             start = i + 1;
             checksum = 0;
         } else {
