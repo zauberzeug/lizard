@@ -471,6 +471,8 @@ void app_main() {
         echo("error while loading startup script: %s", e.what());
     }
 
+    core_module->load_expander_id();
+
     try {
         xTaskCreate(&ota::verify_task, "ota_verify_task", 8192, NULL, 5, NULL);
     } catch (const std::runtime_error &e) {

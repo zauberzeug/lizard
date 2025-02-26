@@ -30,6 +30,7 @@ public:
     std::string get_output() const override;
     void keep_alive();
     const char *get_expander_id() const;
+    void load_expander_id();
     void set_expander_id(uint8_t id);
     void set_external_mode(bool external);
     bool is_external() const;

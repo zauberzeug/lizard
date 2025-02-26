@@ -188,7 +188,14 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
 
         echo("__step_done__");
     } else if (method_name == "ee") {
-        echo("EE status: %d", is_external_expander);
+        echo("Debug: EE status: %d", is_external_expander);
+    } else if (method_name == "set_device_id") {
+        Module::expect(arguments, 1, integer);
+        uint8_t id = arguments[0]->evaluate_integer();
+        this->set_expander_id(id);
+        echo("Device ID set to %c%c", this->expander_id[0], this->expander_id[1]);
+    } else if (method_name == "get_device_id") {
+        echo("Device ID: %c%c", this->expander_id[0], this->expander_id[1]);
     } else {
         Module::call(method_name, arguments);
     }
@@ -237,6 +244,11 @@ void Core::set_expander_id(uint8_t id) {
     }
     expander_id[0] = '0' + (id / 10);
     expander_id[1] = '0' + (id % 10);
+    Storage::put_device_id(expander_id);
+}
+
+void Core::load_expander_id() {
+    Storage::get_device_id(this->expander_id);
 }
 
 void Core::set_external_mode(bool external) {
