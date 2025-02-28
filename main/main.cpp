@@ -391,12 +391,13 @@ void process_uart() {
             core_module->set_external_mode(true);
             set_uart_external_mode(true);
             set_uart_expander_id(core_module->get_expander_id());
+            ESP_ERROR_CHECK(uart_set_mode(UART_NUM_0, UART_MODE_RS485_HALF_DUPLEX));
             uart_flush_input(UART_NUM_0);
             return;
         } else if (input[0] == EXTERNAL_MODE_OFF) {
             core_module->set_external_mode(false);
             set_uart_external_mode(false); // Clear UART context
-            // flush input buffer
+            ESP_ERROR_CHECK(uart_set_mode(UART_NUM_0, UART_MODE_UART));
             uart_flush_input(UART_NUM_0);
             return;
         }
