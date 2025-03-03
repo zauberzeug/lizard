@@ -170,16 +170,14 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
     }
 }
 
-void Serial::activate_external_mode() {
+void Serial::activate_external_mode() const {
     echo("Debug: Sending external mode ON command");
-    half_duplex_mode = true;
     ESP_ERROR_CHECK(uart_set_mode(uart_num, UART_MODE_RS485_HALF_DUPLEX));
     uart_write_bytes(this->uart_num, "\x80", 1);
 }
 
-void Serial::deactivate_external_mode() {
+void Serial::deactivate_external_mode() const {
     echo("Debug: Sending external mode OFF command");
     uart_write_bytes(this->uart_num, "\x81", 1);
-    half_duplex_mode = false;
     ESP_ERROR_CHECK(uart_set_mode(uart_num, UART_MODE_UART));
 }
