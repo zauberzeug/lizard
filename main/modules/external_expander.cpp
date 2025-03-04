@@ -39,20 +39,22 @@ ExternalExpander::ExternalExpander(const std::string name,
 
     // check if external expander is answering
     char buffer[256];
-    csprintf(buffer, sizeof(buffer), "core.print('__%c%c_READY__')",
-             expander_id[0], expander_id[1]);
-    buffer_message(buffer);
+    int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.print('__%c%c_READY__')",
+                       ID_TAG, expander_id[0], expander_id[1], expander_id[0], expander_id[1]);
+    this->serial->write_checked_line(buffer, pos);
 
     const int max_retries = 10;
     for (int i = 0; i < max_retries; i++) {
         echo("Debug: Waiting for READY response (attempt %d/%d)", i + 1, max_retries);
         this->handle_messages();
         delay(100);
+        this->serial->write_checked_line(buffer, pos);
         if (this->properties.at("is_ready")->boolean_value) {
             echo("Debug: Got READY response");
             return;
         }
     }
+    this->properties.at("is_ready")->boolean_value = true; // FOR DEBUGGING
     echo("Warning: No READY response received");
 }
 
@@ -100,6 +102,7 @@ void ExternalExpander::step() {
     if (this->properties.at("is_ready")->boolean_value) {
         // First process any buffered messages
         if (buffer_pos > 0) {
+            echo("Debug: Buffer: %s", message_buffer);
             this->serial->write_checked_line(message_buffer, buffer_pos);
             buffer_pos = 0; // Clear buffer after sending
 
@@ -107,25 +110,28 @@ void ExternalExpander::step() {
             delay(10); // TODO: check if this is needed
         }
 
-        // Send run_step command
-        char buffer[256];
-        int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.run_step()", ID_TAG, expander_id[0], expander_id[1]);
-        this->serial->write_checked_line(buffer, pos);
-        this->properties.at("step_in_progress")->boolean_value = true;
+        // testing just to see if the messages are processed
+        this->handle_messages();
 
-        // Wait for step_done message
-        const unsigned long start_time = millis();
-        const unsigned long timeout = 1000; // 1 second timeout
+        // // Send run_step command
+        // char buffer[256];
+        // int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.run_step()", ID_TAG, expander_id[0], expander_id[1]);
+        // this->serial->write_checked_line(buffer, pos);
+        // this->properties.at("step_in_progress")->boolean_value = true;
 
-        while (this->properties.at("step_in_progress")->boolean_value && (millis() - start_time < timeout)) {
-            // Process messages
-            this->handle_messages();
-            delay(1);
-        }
+        // // Wait for step_done message
+        // const unsigned long start_time = millis();
+        // const unsigned long timeout = 1000; // 1 second timeout
 
-        if (this->properties.at("step_in_progress")->boolean_value) {
-            echo("Warning: step_done not received within timeout");
-        }
+        // while (this->properties.at("step_in_progress")->boolean_value && (millis() - start_time < timeout)) {
+        //     // Process messages
+        //     this->handle_messages();
+        //     delay(1);
+        // }
+
+        // if (this->properties.at("step_in_progress")->boolean_value) {
+        //     echo("Warning: step_done not received within timeout");
+        // }
     }
 
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
@@ -145,6 +151,7 @@ void ExternalExpander::handle_messages() {
         } else {
             // tag not found, echo the message
             echo("Debug: msg received. Tag and Id did not match");
+            echo("Debug: buffer: %s", buffer);
             continue;
         }
 

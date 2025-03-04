@@ -20,6 +20,9 @@ bool get_uart_external_mode() { return uart_external_mode; }
 const char *get_uart_expander_id() { return uart_expander_id; }
 
 void echo(const char *format, ...) {
+    if (uart_external_mode) {
+        gpio_set_direction(GPIO_NUM_3, GPIO_MODE_OUTPUT);
+    }
     static char buffer[1024];
 
     va_list args;
@@ -36,9 +39,6 @@ void echo(const char *format, ...) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
             if (uart_external_mode) {
-                // Switch to output mode
-                gpio_set_direction(GPIO_NUM_0, GPIO_MODE_OUTPUT);
-
                 // Calculate checksum including the ID tag and expander ID
                 checksum = ID_TAG;
                 checksum ^= uart_expander_id[0];
@@ -49,8 +49,6 @@ void echo(const char *format, ...) {
                 printf("%c%c%c%s@%02x\n", ID_TAG, uart_expander_id[0], uart_expander_id[1],
                        &buffer[start], checksum);
 
-                // Switch back to input mode
-                gpio_set_direction(GPIO_NUM_0, GPIO_MODE_INPUT);
             } else {
                 printf("%s@%02x\n", &buffer[start], checksum);
             }
@@ -59,6 +57,9 @@ void echo(const char *format, ...) {
         } else {
             checksum ^= buffer[i];
         }
+    }
+    if (uart_external_mode) {
+        gpio_set_direction(GPIO_NUM_3, GPIO_MODE_INPUT);
     }
 }
 
