@@ -68,8 +68,14 @@ void Serial::reinitialize_after_flash() const {
 }
 
 size_t Serial::write(const uint8_t byte) const {
+    if (is_single_pin_mode) {
+        set_pin_output();
+    }
     const char send = byte;
     uart_write_bytes(this->uart_num, &send, 1);
+    if (is_single_pin_mode) {
+        set_pin_input();
+    }
     return 1;
 }
 
@@ -78,6 +84,10 @@ void Serial::write_checked_line(const char *message) const {
 }
 
 void Serial::write_checked_line(const char *message, const int length) const {
+    if (is_single_pin_mode) {
+        set_pin_output();
+    }
+
     static char checksum_buffer[16];
     uint8_t checksum = 0;
     int start = 0;
@@ -91,6 +101,10 @@ void Serial::write_checked_line(const char *message, const int length) const {
         } else {
             checksum ^= message[i];
         }
+    }
+
+    if (is_single_pin_mode) {
+        set_pin_input();
     }
 }
 
@@ -170,14 +184,40 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
     }
 }
 
-void Serial::activate_external_mode() const {
+void Serial::activate_external_mode() {
     echo("Debug: Sending external mode ON command");
-    ESP_ERROR_CHECK(uart_set_mode(uart_num, UART_MODE_RS485_HALF_DUPLEX));
+    set_single_pin_mode(); // Enable single pin mode
+    set_pin_output();
     uart_write_bytes(this->uart_num, "\x80", 1);
+    set_pin_input();
 }
 
-void Serial::deactivate_external_mode() const {
+void Serial::deactivate_external_mode() {
     echo("Debug: Sending external mode OFF command");
+    set_pin_output();
     uart_write_bytes(this->uart_num, "\x81", 1);
-    ESP_ERROR_CHECK(uart_set_mode(uart_num, UART_MODE_UART));
+    set_pin_input();
+    is_single_pin_mode = false;                                                     // Disable single pin mode
+    uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE); // Restore normal pin configuration
+}
+
+void Serial::set_pin_mode(gpio_mode_t mode) const {
+    if (is_single_pin_mode) {
+        gpio_set_direction(tx_pin, mode);
+    }
+}
+
+void Serial::set_pin_input() const {
+    set_pin_mode(GPIO_MODE_INPUT);
+}
+
+void Serial::set_pin_output() const {
+    set_pin_mode(GPIO_MODE_OUTPUT);
+}
+
+void Serial::set_single_pin_mode() {
+    is_single_pin_mode = true;
+    // Configure UART for single pin operation using tx_pin
+    uart_set_pin(uart_num, tx_pin, tx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    set_pin_input(); // Default to input mode
 }

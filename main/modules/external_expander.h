@@ -5,6 +5,7 @@
 #include "serial.h"
 #include <map>
 #include <string>
+#include <vector>
 
 class ExternalExpander;
 using ExternalExpander_ptr = std::shared_ptr<ExternalExpander>;
@@ -15,18 +16,24 @@ private:
     bool ping_pending = false;
     unsigned long boot_start_time;
 
+    static const size_t MSG_BUFFER_SIZE = 1024;
+    char message_buffer[MSG_BUFFER_SIZE];
+    size_t buffer_pos = 0;
+
     void check_boot_progress();
     void ping();
     void restart();
     void handle_messages();
+    void buffer_message(const char *message);
+    bool wait_for_response(const char *expected_response, unsigned long timeout_ms = 1000);
 
 public:
-    const ConstSerial_ptr serial;
+    Serial_ptr serial;
     char expander_id[2];
     MessageHandler message_handler;
 
     ExternalExpander(const std::string name,
-                     const ConstSerial_ptr serial,
+                     ConstSerial_ptr const_serial,
                      const char expander_id[2],
                      MessageHandler message_handler);
     void step() override;

@@ -11,6 +11,10 @@ using Serial_ptr = std::shared_ptr<Serial>;
 using ConstSerial_ptr = std::shared_ptr<const Serial>;
 
 class Serial : public Module {
+private:
+    bool is_single_pin_mode = false;
+    void set_pin_mode(gpio_mode_t mode) const;
+
 public:
     const gpio_num_t rx_pin;
     const gpio_num_t tx_pin;
@@ -32,8 +36,11 @@ public:
     void write_checked_line(const char *message, const int length) const;
     void flush() const;
     void clear() const;
-    void activate_external_mode() const;
-    void deactivate_external_mode() const;
+    void activate_external_mode();
+    void deactivate_external_mode();
+    void set_single_pin_mode();
+    void set_pin_input() const;
+    void set_pin_output() const;
     std::string get_output() const override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();

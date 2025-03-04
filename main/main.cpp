@@ -391,13 +391,16 @@ void process_uart() {
             core_module->set_external_mode(true);
             set_uart_external_mode(true);
             set_uart_expander_id(core_module->get_expander_id());
-            ESP_ERROR_CHECK(uart_set_mode(UART_NUM_0, UART_MODE_RS485_HALF_DUPLEX));
+            // Configure RX pin for input
+            gpio_set_direction(GPIO_NUM_0, GPIO_MODE_INPUT);
+            gpio_set_pull_mode(GPIO_NUM_0, GPIO_PULLUP_ONLY);
             uart_flush_input(UART_NUM_0);
             return;
         } else if (input[0] == EXTERNAL_MODE_OFF) {
             core_module->set_external_mode(false);
             set_uart_external_mode(false); // Clear UART context
-            ESP_ERROR_CHECK(uart_set_mode(UART_NUM_0, UART_MODE_UART));
+            // Reset RX pin to default state
+            gpio_reset_pin(GPIO_NUM_0);
             uart_flush_input(UART_NUM_0);
             return;
         }
@@ -409,8 +412,10 @@ void process_uart() {
             if (core_module->is_external()) {
                 const char *expected_id = core_module->get_expander_id();
                 if (input[1] != expected_id[0] || input[2] != expected_id[1]) {
-                    echo("Debug: not for me (id %c%c != %c%c)",
-                         input[1], input[2], expected_id[0], expected_id[1]);
+                    // echo("Debug: not for me (id %c%c != %c%c)",
+                    //      input[1], input[2], expected_id[0], expected_id[1]);
+                    // flush that line
+                    uart_flush_input(UART_NUM_0);
                     continue;
                 }
             } else {
@@ -443,6 +448,13 @@ void run_step(Module_ptr module) {
 void app_main() {
     vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
+    // Configure UART pins before UART initialization
+    gpio_reset_pin(GPIO_NUM_1); // TX
+    gpio_reset_pin(GPIO_NUM_0); // RX
+    gpio_set_direction(GPIO_NUM_1, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_NUM_0, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(GPIO_NUM_0, GPIO_PULLUP_ONLY);
+
     const uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -454,6 +466,8 @@ void app_main() {
         .flags = {},
     };
     uart_param_config(UART_NUM_0, &uart_config);
+    // Explicitly set UART pins to default GPIO1 (TX) and GPIO0 (RX)
+    uart_set_pin(UART_NUM_0, GPIO_NUM_1, GPIO_NUM_0, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
@@ -481,6 +495,12 @@ void app_main() {
     }
 
     printf("\nReady.\n");
+
+    // uint8_t expander_id = 33;
+    // core_module->set_expander_id(expander_id);
+    // core_module->set_external_mode(true);
+    // set_uart_external_mode(true);
+    // set_uart_expander_id(core_module->get_expander_id());
 
     while (true) {
         try {

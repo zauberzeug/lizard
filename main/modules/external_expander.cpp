@@ -22,31 +22,32 @@ const std::map<std::string, Variable_ptr> ExternalExpander::get_defaults() {
 }
 
 ExternalExpander::ExternalExpander(const std::string name,
-                                   const ConstSerial_ptr serial,
+                                   ConstSerial_ptr const_serial,
                                    const char id[2],
                                    MessageHandler message_handler)
     : Module(external_expander, name),
-      serial(serial),
+      // Cast away const-ness to allow calling non-const methods
+      serial(std::const_pointer_cast<Serial>(const_serial)),
       expander_id{id[0], id[1]},
       message_handler(message_handler) {
 
     this->properties = ExternalExpander::get_defaults();
+    buffer_pos = 0; // Initialize buffer position
 
     this->serial->enable_line_detection();
     this->serial->activate_external_mode();
 
     // check if external expander is answering
     char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.print('__%c%c_READY__')",
-                       ID_TAG, expander_id[0], expander_id[1], expander_id[0], expander_id[1]);
-    this->serial->write_checked_line(buffer, pos);
+    csprintf(buffer, sizeof(buffer), "core.print('__%c%c_READY__')",
+             expander_id[0], expander_id[1]);
+    buffer_message(buffer);
 
     const int max_retries = 10;
     for (int i = 0; i < max_retries; i++) {
         echo("Debug: Waiting for READY response (attempt %d/%d)", i + 1, max_retries);
         this->handle_messages();
         delay(100);
-        this->serial->write_checked_line(buffer, pos);
         if (this->properties.at("is_ready")->boolean_value) {
             echo("Debug: Got READY response");
             return;
@@ -55,13 +56,63 @@ ExternalExpander::ExternalExpander(const std::string name,
     echo("Warning: No READY response received");
 }
 
+void ExternalExpander::buffer_message(const char *message) {
+    size_t msg_len = strlen(message);
+
+    // If buffer is empty, add the ID tag and expander ID
+    if (buffer_pos == 0) {
+        message_buffer[0] = ID_TAG;
+        message_buffer[1] = expander_id[0];
+        message_buffer[2] = expander_id[1];
+        buffer_pos = 3;
+    } else {
+        // Add semicolon separator if not the first command
+        message_buffer[buffer_pos++] = ';';
+    }
+
+    // Check if we have enough space
+    if (buffer_pos + msg_len < MSG_BUFFER_SIZE) {
+        strcpy(&message_buffer[buffer_pos], message);
+        buffer_pos += msg_len;
+    } else {
+        echo("Warning: Message buffer overflow, message dropped");
+    }
+}
+
+bool ExternalExpander::wait_for_response(const char *expected_response, unsigned long timeout_ms) {
+    const unsigned long start_time = millis();
+    while (millis() - start_time < timeout_ms) {
+        handle_messages();
+        if (strstr(message_buffer, expected_response) != nullptr) {
+            // Clear the found message from buffer
+            const char *found = strstr(message_buffer, expected_response);
+            size_t remaining_len = strlen(found + strlen(expected_response));
+            memmove(message_buffer, found + strlen(expected_response), remaining_len + 1);
+            buffer_pos -= strlen(expected_response);
+            return true;
+        }
+        delay(1);
+    }
+    return false;
+}
+
 void ExternalExpander::step() {
     if (this->properties.at("is_ready")->boolean_value) {
+        // First process any buffered messages
+        if (buffer_pos > 0) {
+            this->serial->write_checked_line(message_buffer, buffer_pos);
+            buffer_pos = 0; // Clear buffer after sending
+
+            // Give some time for processing
+            delay(10); // TODO: check if this is needed
+        }
+
         // Send run_step command
         char buffer[256];
         int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.run_step()", ID_TAG, expander_id[0], expander_id[1]);
         this->serial->write_checked_line(buffer, pos);
         this->properties.at("step_in_progress")->boolean_value = true;
+
         // Wait for step_done message
         const unsigned long start_time = millis();
         const unsigned long timeout = 1000; // 1 second timeout
@@ -69,8 +120,6 @@ void ExternalExpander::step() {
         while (this->properties.at("step_in_progress")->boolean_value && (millis() - start_time < timeout)) {
             // Process messages
             this->handle_messages();
-
-            // Small delay to prevent CPU hogging
             delay(1);
         }
 
@@ -89,17 +138,13 @@ void ExternalExpander::handle_messages() {
         int len = this->serial->read_line(buffer, sizeof(buffer));
         check(buffer, len);
 
-        // echo("Debug: Received message: %s", buffer);
-
         // tag handling: msg looks like this: $99XXXXXXX
         if (buffer[0] == ID_TAG && buffer[1] == expander_id[0] && buffer[2] == expander_id[1]) {
             // tag found, remove it
             strcpy(buffer, buffer + 3);
         } else {
             // tag not found, echo the message
-            echo("Debug: msg receivded. Tag and Id did not match");
-
-            // skip this line
+            echo("Debug: msg received. Tag and Id did not match");
             continue;
         }
 
@@ -146,9 +191,7 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
         std::string command = arguments[0]->evaluate_string();
-        char buffer[1024];
-        int pos = csprintf(buffer, sizeof(buffer), "%c%c%c%s", ID_TAG, expander_id[0], expander_id[1], command.c_str());
-        this->serial->write_checked_line(buffer, pos);
+        buffer_message(command.c_str());
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
         echo("restarting not supported for external expander right now");
@@ -159,37 +202,36 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
         Module::expect(arguments, 0);
         this->serial->deactivate_external_mode();
     } else {
-        static char buffer[1024];
-        int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.%s(", ID_TAG, expander_id[0], expander_id[1], method_name.c_str());
+        char buffer[1024];
+        int pos = csprintf(buffer, sizeof(buffer), "core.%s(", method_name.c_str());
         pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
         pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
-        this->serial->write_checked_line(buffer, pos);
+        buffer_message(buffer);
     }
 }
 
 void ExternalExpander::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
-    static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%c%c%s = %s(", ID_TAG, expander_id[0], expander_id[1], module_name.c_str(), module_type.c_str());
+    char buffer[256];
+    int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
-    echo("Debug: Sending proxy command: %s", buffer);
-    this->serial->write_checked_line(buffer, pos);
+    buffer_message(buffer);
 }
 
 void ExternalExpander::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
-    static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%c%c%s.%s = ", ID_TAG, expander_id[0], expander_id[1], proxy_name.c_str(), property_name.c_str());
+    char buffer[256];
+    int pos = csprintf(buffer, sizeof(buffer), "%s.%s = ", proxy_name.c_str(), property_name.c_str());
     pos += expression->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
-    this->serial->write_checked_line(buffer, pos);
+    buffer_message(buffer);
 }
 
 void ExternalExpander::send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    static char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%c%c%s.%s(", ID_TAG, expander_id[0], expander_id[1], proxy_name.c_str(), method_name.c_str());
+    char buffer[256];
+    int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", proxy_name.c_str(), method_name.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
-    this->serial->write_checked_line(buffer, pos);
+    buffer_message(buffer);
 }
 
 bool ExternalExpander::is_ready() const {
