@@ -30,12 +30,14 @@ ExternalExpander::ExternalExpander(const std::string name,
       serial(std::const_pointer_cast<Serial>(const_serial)),
       expander_id{id[0], id[1]},
       message_handler(message_handler) {
-
     this->properties = ExternalExpander::get_defaults();
     buffer_pos = 0; // Initialize buffer position
 
     this->serial->enable_line_detection();
+    this->serial->write_checked_line("core.print('test')");
+    delay(200); // Increased delay to ensure test message is processed
     this->serial->activate_external_mode();
+    delay(100); // Add delay after activating external mode
 
     // check if external expander is answering
     char buffer[256];
@@ -44,16 +46,16 @@ ExternalExpander::ExternalExpander(const std::string name,
     this->serial->write_checked_line(buffer, pos);
 
     const int max_retries = 10;
-    for (int i = 0; i < max_retries; i++) {
-        echo("Debug: Waiting for READY response (attempt %d/%d)", i + 1, max_retries);
-        this->handle_messages();
-        delay(100);
-        this->serial->write_checked_line(buffer, pos);
-        if (this->properties.at("is_ready")->boolean_value) {
-            echo("Debug: Got READY response");
-            return;
-        }
-    }
+    // for (int i = 0; i < max_retries; i++) {
+    //     echo("Debug: Waiting for READY response (attempt %d/%d)", i + 1, max_retries);
+    //     this->handle_messages();
+    //     delay(200); // Increased delay between retries
+    //     this->serial->write_checked_line(buffer, pos);
+    //     if (this->properties.at("is_ready")->boolean_value) {
+    //         echo("Debug: Got READY response");
+    //         return;
+    //     }
+    // }
     this->properties.at("is_ready")->boolean_value = true; // FOR DEBUGGING
     echo("Warning: No READY response received");
 }
@@ -102,7 +104,6 @@ void ExternalExpander::step() {
     if (this->properties.at("is_ready")->boolean_value) {
         // First process any buffered messages
         if (buffer_pos > 0) {
-            echo("Debug: Buffer: %s", message_buffer);
             this->serial->write_checked_line(message_buffer, buffer_pos);
             buffer_pos = 0; // Clear buffer after sending
 

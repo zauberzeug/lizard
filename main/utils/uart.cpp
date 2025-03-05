@@ -21,7 +21,7 @@ const char *get_uart_expander_id() { return uart_expander_id; }
 
 void echo(const char *format, ...) {
     if (uart_external_mode) {
-        gpio_set_direction(GPIO_NUM_3, GPIO_MODE_OUTPUT);
+        gpio_set_direction(GPIO_NUM_1, GPIO_MODE_OUTPUT);
     }
     static char buffer[1024];
 
@@ -59,7 +59,7 @@ void echo(const char *format, ...) {
         }
     }
     if (uart_external_mode) {
-        gpio_set_direction(GPIO_NUM_3, GPIO_MODE_INPUT);
+        gpio_set_direction(GPIO_NUM_1, GPIO_MODE_INPUT);
     }
 }
 

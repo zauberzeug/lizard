@@ -36,8 +36,8 @@
 #define BUFFER_SIZE 1024
 
 #define ID_TAG '$'
-#define EXTERNAL_MODE_ON 0x80
-#define EXTERNAL_MODE_OFF 0x81
+#define TX_PIN GPIO_NUM_1
+#define RX_PIN GPIO_NUM_3
 
 Core_ptr core_module;
 
@@ -384,28 +384,34 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-
+        echo("Debug: Input: %s", input);
         // handle control tags first
-        if (input[0] == EXTERNAL_MODE_ON) {
+        if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '1') {
             echo("Debug: Setting external mode to true");
             core_module->set_external_mode(true);
+            gpio_pad_select_gpio(TX_PIN);
             set_uart_external_mode(true);
             set_uart_expander_id(core_module->get_expander_id());
-            // Configure RX pin for input
-            gpio_set_direction(GPIO_NUM_0, GPIO_MODE_INPUT);
-            gpio_set_pull_mode(GPIO_NUM_0, GPIO_PULLUP_ONLY);
+            // Configure for single pin mode
+            // uart_set_pin(UART_NUM_0, RX_PIN, RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+            gpio_set_direction(RX_PIN, GPIO_MODE_INPUT);
+            gpio_set_direction(TX_PIN, GPIO_MODE_INPUT);
             uart_flush_input(UART_NUM_0);
+
+            // do the double line MODE FOR WEDNESDAY
             return;
-        } else if (input[0] == EXTERNAL_MODE_OFF) {
+        } else if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '0') {
             core_module->set_external_mode(false);
             set_uart_external_mode(false); // Clear UART context
-            // Reset RX pin to default state
-            gpio_reset_pin(GPIO_NUM_0);
+            // back to normal mode
+            // uart_set_pin(UART_NUM_0, TX_PIN, RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+            gpio_set_direction(RX_PIN, GPIO_MODE_INPUT);
+            gpio_set_direction(TX_PIN, GPIO_MODE_OUTPUT);
             uart_flush_input(UART_NUM_0);
             return;
         }
-
         len = check(input, len);
+        echo("Debug: Len: %d", len);
 
         // handle id tags
         if (input[0] == ID_TAG) {
@@ -448,13 +454,6 @@ void run_step(Module_ptr module) {
 void app_main() {
     vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
-    // Configure UART pins before UART initialization
-    gpio_reset_pin(GPIO_NUM_1); // TX
-    gpio_reset_pin(GPIO_NUM_0); // RX
-    gpio_set_direction(GPIO_NUM_1, GPIO_MODE_OUTPUT);
-    gpio_set_direction(GPIO_NUM_0, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(GPIO_NUM_0, GPIO_PULLUP_ONLY);
-
     const uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -466,11 +465,15 @@ void app_main() {
         .flags = {},
     };
     uart_param_config(UART_NUM_0, &uart_config);
-    // Explicitly set UART pins to default GPIO1 (TX) and GPIO0 (RX)
-    uart_set_pin(UART_NUM_0, GPIO_NUM_1, GPIO_NUM_0, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
+
+    gpio_pad_select_gpio(TX_PIN);
+    gpio_pad_select_gpio(RX_PIN);
+
+    gpio_set_direction(TX_PIN, GPIO_MODE_OUTPUT_OD);
+    gpio_set_direction(RX_PIN, GPIO_MODE_OUTPUT_OD);
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));

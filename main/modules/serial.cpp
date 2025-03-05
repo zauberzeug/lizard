@@ -1,4 +1,5 @@
 #include "serial.h"
+#include "driver/gpio.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -69,12 +70,12 @@ void Serial::reinitialize_after_flash() const {
 
 size_t Serial::write(const uint8_t byte) const {
     if (is_single_pin_mode) {
-        set_pin_output();
+        gpio_set_direction(this->tx_pin, GPIO_MODE_OUTPUT);
     }
     const char send = byte;
     uart_write_bytes(this->uart_num, &send, 1);
     if (is_single_pin_mode) {
-        set_pin_input();
+        gpio_set_direction(this->tx_pin, GPIO_MODE_INPUT);
     }
     return 1;
 }
@@ -84,8 +85,17 @@ void Serial::write_checked_line(const char *message) const {
 }
 
 void Serial::write_checked_line(const char *message, const int length) const {
+    echo("== start ==");
+    echo("Debug: TX pin state (before): %d", gpio_get_level(this->tx_pin));
+
+    // Only change pin direction if we're in single pin mode
+    bool changed_pin_direction = false;
     if (is_single_pin_mode) {
-        set_pin_output();
+        echo("Debug: Setting pin output");
+        esp_rom_gpio_pad_select_gpio(this->tx_pin);
+        gpio_set_direction(this->tx_pin, GPIO_MODE_OUTPUT);
+        changed_pin_direction = true;
+        echo("Debug: TX pin state: %d", gpio_get_level(this->tx_pin));
     }
 
     static char checksum_buffer[16];
@@ -96,6 +106,8 @@ void Serial::write_checked_line(const char *message, const int length) const {
             csprintf(checksum_buffer, sizeof(checksum_buffer), "@%02x\n", checksum);
             uart_write_bytes(this->uart_num, &message[start], i - start);
             uart_write_bytes(this->uart_num, checksum_buffer, 4);
+            echo("Debug: Sending message: %s with checksum: %s", &message[start], checksum_buffer);
+            echo("Debug: TX pin state (sending): %d", gpio_get_level(this->tx_pin));
             start = i + 1;
             checksum = 0;
         } else {
@@ -103,9 +115,15 @@ void Serial::write_checked_line(const char *message, const int length) const {
         }
     }
 
-    if (is_single_pin_mode) {
-        set_pin_input();
+    // Only change pin direction back if we changed it earlier
+    if (changed_pin_direction && is_single_pin_mode) {
+        // Add a delay to ensure all data is transmitted
+        delay(20); // 20ms delay for more reliability
+        echo("Debug: Setting pin input");
+        gpio_set_direction(this->tx_pin, GPIO_MODE_INPUT);
+        echo("Debug: TX pin state: %d", gpio_get_level(this->tx_pin));
     }
+    echo("== end ==");
 }
 
 int Serial::available() const {
@@ -186,38 +204,59 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
 
 void Serial::activate_external_mode() {
     echo("Debug: Sending external mode ON command");
-    set_single_pin_mode(); // Enable single pin mode
-    set_pin_output();
-    uart_write_bytes(this->uart_num, "\x80", 1);
-    set_pin_input();
+
+    // First check the current pin states
+    echo("Debug: Before activation - TX pin state: %d", gpio_get_level(this->tx_pin));
+    echo("Debug: Before activation - RX pin state: %d", gpio_get_level(this->rx_pin));
+
+    // Send the command while pins are in normal mode
+    write_checked_line("$$1", 3);
+
+    // Make sure TX pin is in output mode before sending
+    esp_rom_gpio_pad_select_gpio(this->tx_pin);
+    esp_rom_gpio_pad_select_gpio(this->rx_pin);
+    gpio_set_direction(this->tx_pin, GPIO_MODE_OUTPUT);
+    gpio_set_direction(this->rx_pin, GPIO_MODE_INPUT);
+
+    // Add a delay to ensure the command is fully transmitted
+    delay(50); // Increased delay to ensure command is processed
+
+    // Now switch to single pin mode
+    gpio_set_direction(this->tx_pin, GPIO_MODE_INPUT); // no sending right now
+    gpio_set_direction(this->rx_pin, GPIO_MODE_INPUT); // set to input as well
+
+    // Check final pin states
+    echo("Debug: After activation - TX pin state: %d", gpio_get_level(this->tx_pin));
+    echo("Debug: After activation - RX pin state: %d", gpio_get_level(this->rx_pin));
+
+    // Set the flag AFTER all pin configurations are done
+    is_single_pin_mode = true;
 }
 
 void Serial::deactivate_external_mode() {
     echo("Debug: Sending external mode OFF command");
-    set_pin_output();
-    uart_write_bytes(this->uart_num, "\x81", 1);
-    set_pin_input();
-    is_single_pin_mode = false;                                                     // Disable single pin mode
-    uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE); // Restore normal pin configuration
-}
 
-void Serial::set_pin_mode(gpio_mode_t mode) const {
-    if (is_single_pin_mode) {
-        gpio_set_direction(tx_pin, mode);
-    }
-}
+    // First check the current pin states
+    echo("Debug: Before deactivation - TX pin state: %d", gpio_get_level(this->tx_pin));
+    echo("Debug: Before deactivation - RX pin state: %d", gpio_get_level(this->rx_pin));
 
-void Serial::set_pin_input() const {
-    set_pin_mode(GPIO_MODE_INPUT);
-}
+    // Send the command
+    write_checked_line("$$0", 3);
+    // Set is_single_pin_mode to false BEFORE sending the command
+    // This will prevent write_checked_line from changing pin directions
 
-void Serial::set_pin_output() const {
-    set_pin_mode(GPIO_MODE_OUTPUT);
-}
+    // Now set the pins to the correct mode for normal operation
+    esp_rom_gpio_pad_select_gpio(this->tx_pin);
+    esp_rom_gpio_pad_select_gpio(this->rx_pin);
+    gpio_set_direction(this->tx_pin, GPIO_MODE_OUTPUT); // set to output again
+    gpio_set_direction(this->rx_pin, GPIO_MODE_INPUT);  // is default
 
-void Serial::set_single_pin_mode() {
-    is_single_pin_mode = true;
-    // Configure UART for single pin operation using tx_pin
-    uart_set_pin(uart_num, tx_pin, tx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    set_pin_input(); // Default to input mode
+    is_single_pin_mode = false;
+
+    // Add a delay to ensure the command is fully transmitted
+    delay(50); // Increased delay to ensure command is processed
+
+    // Check final pin states
+    echo("Debug: After deactivation - TX pin state: %d", gpio_get_level(this->tx_pin));
+    echo("Debug: After deactivation - RX pin state: %d", gpio_get_level(this->rx_pin));
 }
