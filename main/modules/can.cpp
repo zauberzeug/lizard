@@ -170,7 +170,7 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
                    arguments[6]->evaluate_integer(),
                    arguments[7]->evaluate_integer(),
                    arguments[8]->evaluate_integer());
-    } else if (method_name == "status") {
+    } else if (method_name == "get_status") {
         Module::expect(arguments, 0);
         echo("state:            %s", this->properties.at("state")->string_value.c_str());
         echo("msgs_to_tx:       %d", (int)this->properties.at("msgs_to_tx")->integer_value);
