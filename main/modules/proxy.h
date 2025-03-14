@@ -1,17 +1,17 @@
 #pragma once
 
-#include "expander.h"
+#include "expandable.h"
 #include "module.h"
 
 class Proxy : public Module {
 private:
-    const Expander_ptr expander;
+    std::shared_ptr<Expandable> expander;
 
 public:
     Proxy(const std::string name,
           const std::string expander_name,
           const std::string module_type,
-          const Expander_ptr expander,
+          std::shared_ptr<Expandable> expander,
           const std::vector<ConstExpression_ptr> arguments);
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) override;

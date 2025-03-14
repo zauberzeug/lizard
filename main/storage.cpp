@@ -2,6 +2,7 @@
 #include "esp_check.h"
 #include "nvs_flash.h"
 #include "utils/string_utils.h"
+#include "utils/timing.h"
 #include "utils/uart.h"
 #include <stdexcept>
 #include <string>
@@ -12,7 +13,11 @@
 std::string Storage::startup;
 
 void Storage::init() {
-    nvs_flash_init();
+    esp_err_t err = nvs_flash_init();
+    if (err != ESP_OK) {
+        throw std::runtime_error("could not initialize nvs flash (" + std::string(esp_err_to_name(err)) + ")");
+    }
+
     Storage::startup = Storage::get();
 }
 
@@ -107,4 +112,52 @@ void Storage::save_startup() {
 
 void Storage::clear_nvs() {
     Storage::put("");
+}
+
+void Storage::put_device_id(const char id[2]) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace for device ID");
+    }
+
+    // Store each character separately
+    if ((err = nvs_set_u8(handle, "device_id_0", id[0])) != ESP_OK ||
+        (err = nvs_set_u8(handle, "device_id_1", id[1])) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not write device ID to storage");
+    }
+
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit device ID to storage");
+    }
+    nvs_close(handle);
+}
+
+void Storage::load_device_id() {
+    esp_err_t err;
+    nvs_handle handle;
+    char id[2];
+    if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace for device ID");
+    }
+
+    uint8_t value0, value1;
+    esp_err_t err0 = nvs_get_u8(handle, "device_id_0", &value0);
+    if (err0 != ESP_OK && err0 != ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
+        throw std::runtime_error("could not read device ID from storage");
+    }
+
+    esp_err_t err1 = nvs_get_u8(handle, "device_id_1", &value1);
+    if (err1 != ESP_OK && err1 != ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
+        throw std::runtime_error("could not read device ID from storage");
+    }
+
+    id[0] = (err0 == ESP_OK && err1 == ESP_OK) ? value0 : '0';
+    id[1] = (err0 == ESP_OK && err1 == ESP_OK) ? value1 : '0';
+    set_uart_expander_id(id);
+    nvs_close(handle);
 }

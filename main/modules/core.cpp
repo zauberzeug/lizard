@@ -163,6 +163,48 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             echo("Not a strapping pin");
             break;
         }
+    } else if (method_name == "run_step") {
+        // Only execute if we're an external expander
+        if (!get_uart_external_mode())
+            return;
+
+        // Run one step of all modules
+        for (auto const &[module_name, module] : Global::modules) {
+            if (module->name != "core") {
+                try {
+                    module->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in module \"%s\": %s", module->name.c_str(), e.what());
+                }
+            }
+        }
+
+        // Run core module last
+        try {
+            Module::step();
+        } catch (const std::runtime_error &e) {
+            echo("error in core module: %s", e.what());
+        }
+
+        echo("__step_done__");
+    } else if (method_name == "ee") {
+        echo("Debug: EE status: %d", get_uart_external_mode());
+    } else if (method_name == "set_device_id") {
+        Module::expect(arguments, 1, integer);
+        uint8_t id = arguments[0]->evaluate_integer();
+        if (id > 99) {
+            throw std::runtime_error("expander id must be between 0 and 99");
+        }
+        char id_str[2];
+        id_str[0] = '0' + (id / 10);
+        id_str[1] = '0' + (id % 10);
+        set_uart_expander_id(id_str);
+        Storage::put_device_id(id_str);
+        echo("Device ID set to %c%c", id_str[0], id_str[1]);
+    } else if (method_name == "get_device_id") {
+        Module::expect(arguments, 0);
+        const char *id = get_uart_expander_id();
+        echo("Device ID: %c%c", id[0], id[1]);
     } else {
         Module::call(method_name, arguments);
     }
