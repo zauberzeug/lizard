@@ -384,39 +384,21 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        echo("Debug: Input: %s", input);
         // handle control tags first
         if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '1') {
             echo("Debug: Setting external mode to true");
-            core_module->set_external_mode(true);
-            gpio_pad_select_gpio(TX_PIN);
-            set_uart_external_mode(true);
-            set_uart_expander_id(core_module->get_expander_id());
-            // Configure for single pin mode
-            // uart_set_pin(UART_NUM_0, RX_PIN, RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-            gpio_set_direction(RX_PIN, GPIO_MODE_INPUT);
-            gpio_set_direction(TX_PIN, GPIO_MODE_INPUT);
-            uart_flush_input(UART_NUM_0);
-
-            // do the double line MODE FOR WEDNESDAY
+            activate_uart_external_mode();
             return;
         } else if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '0') {
-            core_module->set_external_mode(false);
-            set_uart_external_mode(false); // Clear UART context
-            // back to normal mode
-            // uart_set_pin(UART_NUM_0, TX_PIN, RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-            gpio_set_direction(RX_PIN, GPIO_MODE_INPUT);
-            gpio_set_direction(TX_PIN, GPIO_MODE_OUTPUT);
-            uart_flush_input(UART_NUM_0);
+            deactivate_uart_external_mode();
             return;
         }
         len = check(input, len);
-        echo("Debug: Len: %d", len);
 
         // handle id tags
         if (input[0] == ID_TAG) {
-            if (core_module->is_external()) {
-                const char *expected_id = core_module->get_expander_id();
+            if (get_uart_external_mode()) {
+                const char *expected_id = get_uart_expander_id();
                 if (input[1] != expected_id[0] || input[2] != expected_id[1]) {
                     // echo("Debug: not for me (id %c%c != %c%c)",
                     //      input[1], input[2], expected_id[0], expected_id[1]);
@@ -469,12 +451,6 @@ void app_main() {
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
 
-    gpio_pad_select_gpio(TX_PIN);
-    gpio_pad_select_gpio(RX_PIN);
-
-    gpio_set_direction(TX_PIN, GPIO_MODE_OUTPUT_OD);
-    gpio_set_direction(RX_PIN, GPIO_MODE_OUTPUT_OD);
-
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
     } catch (const std::runtime_error &e) {
@@ -485,11 +461,10 @@ void app_main() {
     try {
         Storage::init();
         process_lizard(Storage::startup.c_str());
+        Storage::load_device_id();
     } catch (const std::runtime_error &e) {
         echo("error while loading startup script: %s", e.what());
     }
-
-    core_module->load_expander_id();
 
     try {
         xTaskCreate(&ota::verify_task, "ota_verify_task", 8192, NULL, 5, NULL);
@@ -499,12 +474,6 @@ void app_main() {
 
     printf("\nReady.\n");
 
-    // uint8_t expander_id = 33;
-    // core_module->set_expander_id(expander_id);
-    // core_module->set_external_mode(true);
-    // set_uart_external_mode(true);
-    // set_uart_expander_id(core_module->get_expander_id());
-
     while (true) {
         try {
             process_uart();
@@ -512,7 +481,7 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
-        if (!core_module->is_external()) {
+        if (!get_uart_external_mode()) {
             for (auto const &[module_name, module] : Global::modules) {
                 if (module != core_module) {
                     run_step(module);

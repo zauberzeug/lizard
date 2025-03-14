@@ -21,7 +21,6 @@ private:
     size_t buffer_pos = 0;
 
     void check_boot_progress();
-    void ping();
     void restart();
     void handle_messages();
     void buffer_message(const char *message);

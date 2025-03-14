@@ -165,7 +165,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
     } else if (method_name == "run_step") {
         // Only execute if we're an external expander
-        if (!is_external_expander)
+        if (!get_uart_external_mode())
             return;
 
         // Run one step of all modules
@@ -188,14 +188,23 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
 
         echo("__step_done__");
     } else if (method_name == "ee") {
-        echo("Debug: EE status: %d", is_external_expander);
+        echo("Debug: EE status: %d", get_uart_external_mode());
     } else if (method_name == "set_device_id") {
         Module::expect(arguments, 1, integer);
         uint8_t id = arguments[0]->evaluate_integer();
-        this->set_expander_id(id);
-        echo("Device ID set to %c%c", this->expander_id[0], this->expander_id[1]);
+        if (id > 99 || id < 0) {
+            throw std::runtime_error("expander id must be between 0 and 99");
+        }
+        char id_str[2];
+        id_str[0] = '0' + (id / 10);
+        id_str[1] = '0' + (id % 10);
+        set_uart_expander_id(id_str);
+        Storage::put_device_id(id_str);
+        echo("Device ID set to %c%c", id_str[0], id_str[1]);
     } else if (method_name == "get_device_id") {
-        echo("Device ID: %c%c", this->expander_id[0], this->expander_id[1]);
+        Module::expect(arguments, 0);
+        const char *id = get_uart_expander_id();
+        echo("Device ID: %c%c", id[0], id[1]);
     } else {
         Module::call(method_name, arguments);
     }
@@ -232,29 +241,4 @@ std::string Core::get_output() const {
 
 void Core::keep_alive() {
     this->last_message_millis = millis();
-}
-
-const char *Core::get_expander_id() const {
-    return expander_id;
-}
-
-void Core::set_expander_id(uint8_t id) {
-    if (id > 99) {
-        throw std::runtime_error("expander id must be between 0 and 99");
-    }
-    expander_id[0] = '0' + (id / 10);
-    expander_id[1] = '0' + (id % 10);
-    Storage::put_device_id(expander_id);
-}
-
-void Core::load_expander_id() {
-    Storage::get_device_id(this->expander_id);
-}
-
-void Core::set_external_mode(bool external) {
-    this->is_external_expander = external;
-}
-
-bool Core::is_external() const {
-    return this->is_external_expander;
 }

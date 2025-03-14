@@ -1,5 +1,7 @@
 #include "uart.h"
 #include "driver/gpio.h"
+#include "driver/uart.h"
+#include "soc/uart_periph.h"
 #include <cstdarg>
 #include <cstdint>
 #include <stdexcept>
@@ -10,18 +12,11 @@
 static bool uart_external_mode = false;
 static char uart_expander_id[2] = {'0', '0'}; // Changed to char[2]
 #define ID_TAG '$'                            // Single-byte ASCII character
-
-void set_uart_external_mode(bool mode) { uart_external_mode = mode; }
-void set_uart_expander_id(const char *id) {
-    uart_expander_id[0] = id[0];
-    uart_expander_id[1] = id[1];
-}
-bool get_uart_external_mode() { return uart_external_mode; }
-const char *get_uart_expander_id() { return uart_expander_id; }
+#define TX_TIMEOUT_MS 200
 
 void echo(const char *format, ...) {
     if (uart_external_mode) {
-        gpio_set_direction(GPIO_NUM_1, GPIO_MODE_OUTPUT);
+        connect_tx_pin();
     }
     static char buffer[1024];
 
@@ -59,7 +54,8 @@ void echo(const char *format, ...) {
         }
     }
     if (uart_external_mode) {
-        gpio_set_direction(GPIO_NUM_1, GPIO_MODE_INPUT);
+        uart_wait_tx_done(UART_NUM_0, TX_TIMEOUT_MS);
+        disconnect_tx_pin();
     }
 }
 
@@ -90,4 +86,36 @@ int check(char *buffer, int len) {
     }
     buffer[len] = 0;
     return len;
+}
+
+void activate_uart_external_mode() {
+    uart_external_mode = true;
+    disconnect_tx_pin();
+}
+
+void deactivate_uart_external_mode() {
+    uart_external_mode = false;
+    connect_tx_pin();
+}
+
+void set_uart_expander_id(const char *id) {
+    uart_expander_id[0] = id[0];
+    uart_expander_id[1] = id[1];
+}
+
+bool get_uart_external_mode() {
+    return uart_external_mode;
+}
+const char *get_uart_expander_id() {
+    return uart_expander_id;
+}
+
+void connect_tx_pin() {
+    gpio_set_level(GPIO_NUM_1, 1);
+    esp_rom_gpio_connect_out_signal(GPIO_NUM_1, UART_PERIPH_SIGNAL(UART_NUM_0, SOC_UART_TX_PIN_IDX), 0, 0);
+}
+
+void disconnect_tx_pin() {
+    gpio_set_level(GPIO_NUM_1, 0);
+    esp_rom_gpio_connect_out_signal(GPIO_NUM_1, SIG_GPIO_OUT_IDX, 0, 0);
 }

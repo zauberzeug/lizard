@@ -40,4 +40,6 @@ public:
     std::string get_output() const override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+    void connect_tx_pin() const;
+    void disconnect_tx_pin() const;
 };

@@ -19,5 +19,5 @@ public:
 
     // Device ID functions
     static void put_device_id(const char id[2]);
-    static void get_device_id(char id[2]);
+    static void load_device_id();
 };

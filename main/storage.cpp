@@ -130,9 +130,10 @@ void Storage::put_device_id(const char id[2]) {
     nvs_close(handle);
 }
 
-void Storage::get_device_id(char id[2]) {
+void Storage::load_device_id() {
     esp_err_t err;
     nvs_handle handle;
+    char id[2];
     if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
         throw std::runtime_error("could not open storage namespace for device ID");
     }
@@ -152,5 +153,6 @@ void Storage::get_device_id(char id[2]) {
 
     id[0] = (err0 == ESP_OK && err1 == ESP_OK) ? value0 : '0';
     id[1] = (err0 == ESP_OK && err1 == ESP_OK) ? value1 : '0';
+    set_uart_expander_id(id);
     nvs_close(handle);
 }

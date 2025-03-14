@@ -31,13 +31,10 @@ ExternalExpander::ExternalExpander(const std::string name,
       expander_id{id[0], id[1]},
       message_handler(message_handler) {
     this->properties = ExternalExpander::get_defaults();
-    buffer_pos = 0; // Initialize buffer position
+    buffer_pos = 0;
 
     this->serial->enable_line_detection();
-    this->serial->write_checked_line("core.print('test')");
-    delay(200); // Increased delay to ensure test message is processed
     this->serial->activate_external_mode();
-    delay(100); // Add delay after activating external mode
 
     // check if external expander is answering
     char buffer[256];
@@ -46,17 +43,16 @@ ExternalExpander::ExternalExpander(const std::string name,
     this->serial->write_checked_line(buffer, pos);
 
     const int max_retries = 10;
-    // for (int i = 0; i < max_retries; i++) {
-    //     echo("Debug: Waiting for READY response (attempt %d/%d)", i + 1, max_retries);
-    //     this->handle_messages();
-    //     delay(200); // Increased delay between retries
-    //     this->serial->write_checked_line(buffer, pos);
-    //     if (this->properties.at("is_ready")->boolean_value) {
-    //         echo("Debug: Got READY response");
-    //         return;
-    //     }
-    // }
-    this->properties.at("is_ready")->boolean_value = true; // FOR DEBUGGING
+    for (int i = 0; i < max_retries; i++) {
+        echo("Debug: Waiting for READY response (attempt %d/%d)", i + 1, max_retries);
+        this->handle_messages();
+        delay(200); // Increased delay between retries
+        this->serial->write_checked_line(buffer, pos);
+        if (this->properties.at("is_ready")->boolean_value) {
+            echo("Debug: Got READY response");
+            return;
+        }
+    }
     echo("Warning: No READY response received");
 }
 
@@ -105,34 +101,28 @@ void ExternalExpander::step() {
         // First process any buffered messages
         if (buffer_pos > 0) {
             this->serial->write_checked_line(message_buffer, buffer_pos);
-            buffer_pos = 0; // Clear buffer after sending
-
-            // Give some time for processing
-            delay(10); // TODO: check if this is needed
+            buffer_pos = 0;
         }
 
-        // testing just to see if the messages are processed
-        this->handle_messages();
+        // Send run_step command
+        char buffer[256];
+        int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.run_step()", ID_TAG, expander_id[0], expander_id[1]);
+        this->serial->write_checked_line(buffer, pos);
+        this->properties.at("step_in_progress")->boolean_value = true;
 
-        // // Send run_step command
-        // char buffer[256];
-        // int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.run_step()", ID_TAG, expander_id[0], expander_id[1]);
-        // this->serial->write_checked_line(buffer, pos);
-        // this->properties.at("step_in_progress")->boolean_value = true;
+        // Wait for step_done message
+        const unsigned long start_time = millis();
+        const unsigned long timeout = 1000; // 1 second timeout
 
-        // // Wait for step_done message
-        // const unsigned long start_time = millis();
-        // const unsigned long timeout = 1000; // 1 second timeout
+        while (this->properties.at("step_in_progress")->boolean_value && (millis() - start_time < timeout)) {
+            // Process messages
+            this->handle_messages();
+            delay(1);
+        }
 
-        // while (this->properties.at("step_in_progress")->boolean_value && (millis() - start_time < timeout)) {
-        //     // Process messages
-        //     this->handle_messages();
-        //     delay(1);
-        // }
-
-        // if (this->properties.at("step_in_progress")->boolean_value) {
-        //     echo("Warning: step_done not received within timeout");
-        // }
+        if (this->properties.at("step_in_progress")->boolean_value) {
+            echo("Warning: step_done not received within timeout");
+        }
     }
 
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
@@ -163,34 +153,11 @@ void ExternalExpander::handle_messages() {
             this->message_handler(&buffer[2], false, true);
         } else if (strstr(buffer, "__step_done__") != nullptr) {
             this->properties.at("step_in_progress")->boolean_value = false;
-        } else if (strstr(buffer, "_PONG__") != nullptr) {
-            // No echo for pong
         } else if (strstr(buffer, "_READY__") != nullptr) {
             echo("external expander %c%c is ready", expander_id[0], expander_id[1]);
             this->properties.at("is_ready")->boolean_value = true;
         } else {
             echo("%s: %s", this->name.c_str(), buffer);
-        }
-    }
-}
-
-void ExternalExpander::ping() {
-    const double last_message_age = this->get_property("last_message_age")->integer_value / 1000.0;
-    const double ping_interval = this->get_property("ping_interval")->number_value;
-    const double ping_timeout = this->get_property("ping_timeout")->number_value;
-
-    if (!this->ping_pending) {
-        if (last_message_age >= ping_interval) {
-            // Ping all expanders
-            char buffer[256];
-            int pos = csprintf(buffer, sizeof(buffer), "%c%c%ccore.print('__%c%c_PONG__')", ID_TAG, expander_id[0], expander_id[1], expander_id[0], expander_id[1]);
-            this->serial->write_checked_line(buffer, pos);
-            this->ping_pending = true;
-        }
-    } else {
-        if (last_message_age >= ping_interval + ping_timeout) {
-            echo("warning: external expander connection lost");
-            this->properties.at("is_ready")->boolean_value = false;
         }
     }
 }
@@ -203,10 +170,10 @@ void ExternalExpander::call(const std::string method_name, const std::vector<Con
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
         echo("restarting not supported for external expander right now");
-    } else if (method_name == "ee_on") {
+    } else if (method_name == "ee_on") { // Debug function remove later
         Module::expect(arguments, 0);
         this->serial->activate_external_mode();
-    } else if (method_name == "ee_off") {
+    } else if (method_name == "ee_off") { // Debug function remove later
         Module::expect(arguments, 0);
         this->serial->deactivate_external_mode();
     } else {
