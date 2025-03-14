@@ -2,6 +2,7 @@
 #include "esp_check.h"
 #include "nvs_flash.h"
 #include "utils/string_utils.h"
+#include "utils/timing.h"
 #include "utils/uart.h"
 #include <stdexcept>
 #include <string>
@@ -12,7 +13,11 @@
 std::string Storage::startup;
 
 void Storage::init() {
-    nvs_flash_init();
+    esp_err_t err = nvs_flash_init();
+    if (err != ESP_OK) {
+        throw std::runtime_error("could not initialize nvs flash (" + std::string(esp_err_to_name(err)) + ")");
+    }
+
     Storage::startup = Storage::get();
 }
 

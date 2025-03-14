@@ -79,23 +79,6 @@ void ExternalExpander::buffer_message(const char *message) {
     }
 }
 
-bool ExternalExpander::wait_for_response(const char *expected_response, unsigned long timeout_ms) {
-    const unsigned long start_time = millis();
-    while (millis() - start_time < timeout_ms) {
-        handle_messages();
-        if (strstr(message_buffer, expected_response) != nullptr) {
-            // Clear the found message from buffer
-            const char *found = strstr(message_buffer, expected_response);
-            size_t remaining_len = strlen(found + strlen(expected_response));
-            memmove(message_buffer, found + strlen(expected_response), remaining_len + 1);
-            buffer_pos -= strlen(expected_response);
-            return true;
-        }
-        delay(1);
-    }
-    return false;
-}
-
 void ExternalExpander::step() {
     if (this->properties.at("is_ready")->boolean_value) {
         // First process any buffered messages

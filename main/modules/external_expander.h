@@ -24,7 +24,6 @@ private:
     void restart();
     void handle_messages();
     void buffer_message(const char *message);
-    bool wait_for_response(const char *expected_response, unsigned long timeout_ms = 1000);
 
 public:
     Serial_ptr serial;

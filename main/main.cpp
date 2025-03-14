@@ -446,7 +446,11 @@ void app_main() {
         .source_clk = UART_SCLK_DEFAULT,
         .flags = {},
     };
+
+    gpio_set_level(RX_PIN, 0); // that alone did not work
+
     uart_param_config(UART_NUM_0, &uart_config);
+    uart_set_pin(UART_NUM_0, TX_PIN, RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
@@ -461,10 +465,11 @@ void app_main() {
     try {
         Storage::init();
         process_lizard(Storage::startup.c_str());
-        Storage::load_device_id();
     } catch (const std::runtime_error &e) {
         echo("error while loading startup script: %s", e.what());
     }
+
+    Storage::load_device_id();
 
     try {
         xTaskCreate(&ota::verify_task, "ota_verify_task", 8192, NULL, 5, NULL);

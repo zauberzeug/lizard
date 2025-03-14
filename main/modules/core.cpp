@@ -192,7 +192,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "set_device_id") {
         Module::expect(arguments, 1, integer);
         uint8_t id = arguments[0]->evaluate_integer();
-        if (id > 99 || id < 0) {
+        if (id > 99) {
             throw std::runtime_error("expander id must be between 0 and 99");
         }
         char id_str[2];

@@ -194,8 +194,9 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
 void Serial::activate_external_mode() {
     echo("Debug: Sending external mode ON command");
 
-    write_checked_line("$$1", 3);
-
+    static const char *command = "$$1\n";
+    uart_write_bytes(this->uart_num, command, 4);
+    uart_wait_tx_done(this->uart_num, TX_TIMEOUT_MS);
     // deactivate the tx pin for default sending
     this->disconnect_tx_pin();
 
@@ -205,9 +206,9 @@ void Serial::activate_external_mode() {
 void Serial::deactivate_external_mode() {
     echo("Debug: Sending external mode OFF command");
 
-    // Send the command
-    write_checked_line("$$0", 3);
-
+    static const char *command = "$$0\n";
+    uart_write_bytes(this->uart_num, command, 4);
+    uart_wait_tx_done(this->uart_num, TX_TIMEOUT_MS);
     // activate the tx pin for default sending
     this->connect_tx_pin();
 
