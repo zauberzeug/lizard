@@ -446,7 +446,7 @@ void app_main() {
         .source_clk = UART_SCLK_DEFAULT,
         .flags = {},
     };
-
+    uart_driver_delete(UART_NUM_0);
     gpio_set_level(RX_PIN, 0); // that alone did not work
 
     uart_param_config(UART_NUM_0, &uart_config);
@@ -454,6 +454,10 @@ void app_main() {
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
+
+    // gpio_set_level(TX_PIN, 0); =>> no deactivation because of usb to uart converter
+    // esp_rom_gpio_connect_out_signal(TX_PIN, SIG_GPIO_OUT_IDX, 0, 0);
+    // esp_rom_gpio_connect_in_signal(RX_PIN, SIG_GPIO_OUT_IDX, 0);
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
