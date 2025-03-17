@@ -13,6 +13,7 @@
 #include "modules/bluetooth.h"
 #include "modules/core.h"
 #include "modules/expander.h"
+#include "modules/external_expander.h"
 #include "modules/module.h"
 #include "proxy.h"
 #include "rom/gpio.h"
@@ -33,6 +34,10 @@
 #include <vector>
 
 #define BUFFER_SIZE 1024
+
+#define ID_TAG '$'
+#define TX_PIN GPIO_NUM_1
+#define RX_PIN GPIO_NUM_3
 
 Core_ptr core_module;
 
@@ -207,12 +212,22 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                if (expander_module->type != expander) {
+
+                // Check if the module is either an Expander or ExternalExpander
+                if (expander_module->type != expander && expander_module->type != external_expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
-                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
+
+                // Use static_cast based on the module type
+                std::shared_ptr<Expandable> expandable;
+                if (expander_module->type == expander) {
+                    expandable = std::static_pointer_cast<Expander>(expander_module);
+                } else { // must be external_expander
+                    expandable = std::static_pointer_cast<ExternalExpander>(expander_module);
+                }
+
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expandable, arguments);
                 Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
@@ -369,8 +384,44 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+        // handle control tags first
+        if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '1') {
+            echo("Debug: Setting external mode to true");
+            activate_uart_external_mode();
+            return;
+        } else if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '0') {
+            deactivate_uart_external_mode();
+            return;
+        }
         len = check(input, len);
-        process_line(input, len);
+
+        // handle id tags
+        if (input[0] == ID_TAG) {
+            if (get_uart_external_mode()) {
+                const char *expected_id = get_uart_expander_id();
+                if (input[1] != expected_id[0] || input[2] != expected_id[1]) {
+                    // echo("Debug: not for me (id %c%c != %c%c)",
+                    //      input[1], input[2], expected_id[0], expected_id[1]);
+                    // flush that line
+                    uart_flush_input(UART_NUM_0);
+                    continue;
+                }
+            } else {
+                // echo("Detected tag, but not in external mode");
+            }
+
+            // Shift the input buffer 3 positions to the left (tag + 2 digit id)
+            for (int i = 0; i < len - 3; i++) {
+                input[i] = input[i + 3];
+            }
+            input[len - 3] = '\0';
+            len -= 3;
+
+            // echo("Debug: Processed input: %s", input);
+            process_line(input, len);
+        } else {
+            process_line(input, len);
+        }
     }
 }
 
@@ -395,10 +446,18 @@ void app_main() {
         .source_clk = UART_SCLK_DEFAULT,
         .flags = {},
     };
+    uart_driver_delete(UART_NUM_0);
+    gpio_set_level(RX_PIN, 0); // that alone did not work
+
     uart_param_config(UART_NUM_0, &uart_config);
+    uart_set_pin(UART_NUM_0, TX_PIN, RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 0, NULL, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
+
+    // gpio_set_level(TX_PIN, 0); =>> no deactivation because of usb to uart converter
+    // esp_rom_gpio_connect_out_signal(TX_PIN, SIG_GPIO_OUT_IDX, 0, 0);
+    // esp_rom_gpio_connect_in_signal(RX_PIN, SIG_GPIO_OUT_IDX, 0);
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
@@ -413,6 +472,8 @@ void app_main() {
     } catch (const std::runtime_error &e) {
         echo("error while loading startup script: %s", e.what());
     }
+
+    Storage::load_device_id();
 
     try {
         xTaskCreate(&ota::verify_task, "ota_verify_task", 8192, NULL, 5, NULL);
@@ -429,29 +490,31 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
-        for (auto const &[module_name, module] : Global::modules) {
-            if (module != core_module) {
-                run_step(module);
-            }
-        }
-        run_step(core_module);
-
-        for (auto const &rule : Global::rules) {
-            try {
-                if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
-                    rule->routine->start();
+        if (!get_uart_external_mode()) {
+            for (auto const &[module_name, module] : Global::modules) {
+                if (module != core_module) {
+                    run_step(module);
                 }
-                rule->routine->step();
-            } catch (const std::runtime_error &e) {
-                echo("error in rule: %s", e.what());
             }
-        }
+            run_step(core_module);
 
-        for (auto const &[routine_name, routine] : Global::routines) {
-            try {
-                routine->step();
-            } catch (const std::runtime_error &e) {
-                echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
+            for (auto const &rule : Global::rules) {
+                try {
+                    if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
+                        rule->routine->start();
+                    }
+                    rule->routine->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in rule: %s", e.what());
+                }
+            }
+
+            for (auto const &[routine_name, routine] : Global::routines) {
+                try {
+                    routine->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
+                }
             }
         }
 

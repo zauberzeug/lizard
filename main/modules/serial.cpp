@@ -1,4 +1,6 @@
 #include "serial.h"
+#include "driver/gpio.h"
+#include "soc/uart_periph.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -8,6 +10,7 @@
 #define RX_BUF_SIZE 2048
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
+#define TX_TIMEOUT_MS 200
 
 REGISTER_MODULE_DEFAULTS(Serial)
 
@@ -68,8 +71,14 @@ void Serial::reinitialize_after_flash() const {
 }
 
 size_t Serial::write(const uint8_t byte) const {
+    if (is_single_pin_mode) {
+        gpio_set_direction(this->tx_pin, GPIO_MODE_OUTPUT);
+    }
     const char send = byte;
     uart_write_bytes(this->uart_num, &send, 1);
+    if (is_single_pin_mode) {
+        gpio_set_direction(this->tx_pin, GPIO_MODE_INPUT);
+    }
     return 1;
 }
 
@@ -78,6 +87,10 @@ void Serial::write_checked_line(const char *message) const {
 }
 
 void Serial::write_checked_line(const char *message, const int length) const {
+    if (is_single_pin_mode) {
+        this->connect_tx_pin();
+    }
+
     static char checksum_buffer[16];
     uint8_t checksum = 0;
     int start = 0;
@@ -91,6 +104,14 @@ void Serial::write_checked_line(const char *message, const int length) const {
         } else {
             checksum ^= message[i];
         }
+    }
+
+    if (is_single_pin_mode) {
+        esp_err_t result = uart_wait_tx_done(this->uart_num, TX_TIMEOUT_MS);
+        if (result != ESP_OK) {
+            echo("UART TX timeout reached: error code %d", result);
+        }
+        this->connect_tx_pin();
     }
 }
 
@@ -168,4 +189,38 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void Serial::activate_external_mode() {
+    echo("Debug: Sending external mode ON command");
+
+    static const char *command = "$$1\n";
+    uart_write_bytes(this->uart_num, command, 4);
+    uart_wait_tx_done(this->uart_num, TX_TIMEOUT_MS);
+    // deactivate the tx pin for default sending
+    this->disconnect_tx_pin();
+
+    is_single_pin_mode = true;
+}
+
+void Serial::deactivate_external_mode() {
+    echo("Debug: Sending external mode OFF command");
+
+    static const char *command = "$$0\n";
+    uart_write_bytes(this->uart_num, command, 4);
+    uart_wait_tx_done(this->uart_num, TX_TIMEOUT_MS);
+    // activate the tx pin for default sending
+    this->connect_tx_pin();
+
+    is_single_pin_mode = false;
+}
+
+void Serial::connect_tx_pin() const {
+    gpio_set_level(this->tx_pin, 1);
+    esp_rom_gpio_connect_out_signal(this->tx_pin, UART_PERIPH_SIGNAL(this->uart_num, SOC_UART_TX_PIN_IDX), 0, 0);
+}
+
+void Serial::disconnect_tx_pin() const {
+    gpio_set_level(this->tx_pin, 0);
+    esp_rom_gpio_connect_out_signal(this->tx_pin, SIG_GPIO_OUT_IDX, 0, 0);
 }
