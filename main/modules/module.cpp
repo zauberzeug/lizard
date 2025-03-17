@@ -442,3 +442,20 @@ void Module::write_property(const std::string property_name, const ConstExpressi
 void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *data) {
     throw std::runtime_error("CAN message handler is not implemented");
 }
+
+DefaultsRegistry &Module::get_defaults_registry() {
+    static DefaultsRegistry defaults_registry;
+    return defaults_registry;
+}
+
+void Module::register_defaults(const std::string &type_name, DefaultsFunction defaults_function) {
+    get_defaults_registry()[type_name] = defaults_function;
+}
+
+const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std::string &type_name) {
+    auto it = get_defaults_registry().find(type_name);
+    if (it == get_defaults_registry().end()) {
+        throw std::runtime_error("No defaults registered for module type \"" + type_name + "\"");
+    }
+    return it->second();
+}

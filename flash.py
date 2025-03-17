@@ -6,7 +6,7 @@ from esp import Esp
 
 
 def show_help() -> None:
-    print(f'{sys.argv[0]} [nano | xavier | orin] [nand | v05] [usb | /dev/<name>] [enable] [-e | --erase]')
+    print(f'{sys.argv[0]} [nano | xavier | orin] [nand | v05] [usb | /dev/<name>] [enable] [-e | --erase] [reset]')
     print('   -e, --erase   erase the flash before flashing the new firmware')
     print('   nano          flashing Jetson Nano (default)')
     print('   xavier        flashing Jetson Xavier')
@@ -16,6 +16,7 @@ def show_help() -> None:
     print('   usb           use /dev/tty.SLAB_USBtoUART as serial device')
     print('   /dev/<name>   use /dev/<name> as serial device')
     print('   enable        enable the ESP32 microcontroller')
+    print('   reset         reset the ESP32 microcontroller')
 
 
 if any(h in sys.argv for h in ['--help', '-help', 'help', '-h']):
@@ -38,7 +39,13 @@ esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv,
 if 'enable' in sys.argv:
     with esp.pin_config():
         print('Enabling ESP...')
-        esp.activate()
+        esp.enable()
+    sys.exit()
+
+if 'reset' in sys.argv:
+    with esp.pin_config():
+        print('Resetting ESP...')
+        esp.reset()
     sys.exit()
 
 with esp.pin_config(), esp.flash_mode():

@@ -7,21 +7,21 @@ import serial
 
 if len(sys.argv) != 3:
     print(f'Usage: {sys.argv[0]} <config_file> <device_path>')
-    exit()
+    sys.exit()
 
 txt_path, usb_path = sys.argv[1:]
 
 
-def send(line) -> None:
-    print(f'Sending: {line}')
-    checksum = 0
-    for c in line:
-        checksum ^= ord(c)
-    port.write((f'{line}@{checksum:02x}\n').encode())
+def send(line_: str) -> None:
+    print(f'Sending: {line_}')
+    checksum_ = 0
+    for c in line_:
+        checksum_ ^= ord(c)
+    port.write((f'{line_}@{checksum_:02x}\n').encode())
 
 
 with serial.Serial(usb_path, baudrate=115200, timeout=1.0) as port:
-    startup = Path(txt_path).read_text()
+    startup = Path(txt_path).read_text('utf-8')
     if not startup.endswith('\n'):
         startup += '\n'
     checksum = sum(ord(c) for c in startup) % 0x10000
@@ -32,16 +32,30 @@ with serial.Serial(usb_path, baudrate=115200, timeout=1.0) as port:
     send('!.')
     send('core.restart()')
 
-    time.sleep(3.0)
+    # Wait for "Ready." message with a deadline depending on the number of expanders
+    timeout = 3.0 + 3.0 * startup.count('Expander')
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            line = port.read_until(b'\r\n').decode().rstrip()
+        except UnicodeDecodeError:
+            continue
+        if line == 'Ready.':
+            print('ESP32 booted and sent "Ready."')
+            break
+    else:
+        raise TimeoutError('Timeout waiting for device to restart!')
+
+    # Immediately check checksum after ready
     send('core.startup_checksum()')
-    deadline = time.time() + 1.0
+    deadline = time.time() + 3.0
     while time.time() < deadline:
         try:
             line = port.read_until(b'\r\n').decode().rstrip()
         except UnicodeDecodeError:
             continue
         if line.startswith('checksum: '):
-            if int(line.split()[1].split("@")[0], 16) == checksum:
+            if int(line.split()[1].split('@')[0], 16) == checksum:
                 print('Checksum matches.')
                 break
             else:

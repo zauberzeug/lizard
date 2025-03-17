@@ -26,7 +26,7 @@ do
             docker build --tag $name . || exit ;;
         r | run)
             docker run -it $args $name || exit ;;
-        s | shell)                     
+        s | shell)
             docker run -it $args $name /bin/bash || exit ;;
         l | log | logs)
             docker logs -f --tail 100 $name || exit ;;

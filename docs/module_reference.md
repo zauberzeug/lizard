@@ -58,7 +58,10 @@ Simply create a Bluetooth module with a device name of your choice.
 | Constructor                          | Description                                        | Arguments |
 | ------------------------------------ | -------------------------------------------------- | --------- |
 | `bluetooth = Bluetooth(device_name)` | initialize bluetooth with advertised `device_name` | `str`     |
-| `bluetooth.send(data)`               | send `data` via notification                       | `str`     |
+
+| Methods                | Description                  | Arguments |
+| ---------------------- | ---------------------------- | --------- |
+| `bluetooth.send(data)` | send `data` via notification | `str`     |
 
 Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0 that allows writing Lizard statements like on the command line. On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
 
@@ -283,6 +286,7 @@ The `version` parameter is an optional integer indicating the patch number of th
 | Properties          | Description                               | Data type |
 | ------------------- | ----------------------------------------- | --------- |
 | `motor.position`    | Motor position (meters)                   | `float`   |
+| `motor.speed`       | Motor speed (m/s)                         | `float`   |
 | `motor.tick_offset` | Encoder tick offset                       | `float`   |
 | `motor.m_per_tick`  | Meters per encoder tick                   | `float`   |
 | `motor.reversed`    | Reverse motor direction                   | `bool`    |
@@ -683,13 +687,15 @@ The expander module allows communication with another microcontroller connected 
 | --------------------------------------------- | ---------------------------------- | ----------------------- |
 | `expander = Expander(serial[, boot, enable])` | Serial module and boot/enable pins | Serial module, 2x `int` |
 
-| Methods                 | Description                                      | Arguments |
-| ----------------------- | ------------------------------------------------ | --------- |
-| `expander.run(command)` | Run any `command` on the other microcontroller   | `string`  |
-| `expander.disconnect()` | Disconnect serial connection and pins            |           |
-| `expander.flash()`      | Flash other microcontroller with own binary data |           |
+| Methods                   | Description                                      | Arguments |
+| ------------------------- | ------------------------------------------------ | --------- |
+| `expander.run(command)`   | Run any `command` on the other microcontroller   | `string`  |
+| `expander.disconnect()`   | Disconnect serial connection and pins            |           |
+| `expander.flash([force])` | Flash other microcontroller with own binary data | `bool`    |
+| `expander.restart()`      | Restart other microcontroller                    |           |
 
 The `flash()` method requires the `boot` and `enable` pins to be defined.
+The optional `force` argument skips the default check whether certain strapping pins are set correctly.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
 
@@ -697,6 +703,10 @@ Note that the expander forwards all other method calls to the remote core module
 
 | Properties         | Description                                             | Data type |
 | ------------------ | ------------------------------------------------------- | --------- |
+| `boot_timeout`     | Time to wait for other microcontroller to boot (s)      | `float`   |
+| `ping_interval`    | Time between pings (s)                                  | `float`   |
+| `ping_timeout`     | Time before timing out (s)                              | `float`   |
+| `is_ready`         | Whether the remote module has booted and is ready       | `bool`    |
 | `last_message_age` | Time since last message from other microcontroller (ms) | `int`     |
 
 ## Proxy
@@ -713,3 +723,7 @@ Note that the remote module has to have turned on broadcasting: `x.broadcast()`.
 | `module = Proxy()` |
 
 Note that the proxy module forwards all method calls to the remote module.
+
+| Properties | Description                                       | Data type |
+| ---------- | ------------------------------------------------- | --------- |
+| `is_ready` | Whether the remote module has booted and is ready | `bool`    |

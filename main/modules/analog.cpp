@@ -6,8 +6,19 @@
 #include "freertos/task.h"
 #include "uart.h"
 
+REGISTER_MODULE_DEFAULTS(Analog)
+
+const std::map<std::string, Variable_ptr> Analog::get_defaults() {
+    return {
+        {"raw", std::make_shared<IntegerVariable>()},
+        {"voltage", std::make_shared<NumberVariable>()},
+    };
+}
+
 Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level)
     : Module(analog, name), unit(unit), channel(channel) {
+    this->properties = Analog::get_defaults();
+
     if (unit < 1 || unit > 2) {
         echo("error: invalid unit, using default 1");
         unit = 1;
@@ -61,9 +72,6 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
         .default_vref = 1100,
     };
     ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali_handle));
-
-    this->properties["raw"] = std::make_shared<IntegerVariable>();
-    this->properties["voltage"] = std::make_shared<NumberVariable>();
 }
 
 void Analog::step() {

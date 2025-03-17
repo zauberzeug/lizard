@@ -1,20 +1,33 @@
 #include "serial.h"
 #include "utils/string_utils.h"
+#include "utils/timing.h"
 #include "utils/uart.h"
 #include <cstring>
 #include <stdexcept>
 
 #define RX_BUF_SIZE 2048
 #define TX_BUF_SIZE 2048
-#define UART_PATTERN_QUEUE_SIZE 20
+#define UART_PATTERN_QUEUE_SIZE 100
+
+REGISTER_MODULE_DEFAULTS(Serial)
+
+const std::map<std::string, Variable_ptr> Serial::get_defaults() {
+    return {};
+}
 
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
     : Module(serial, name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
+    this->properties = Serial::get_defaults();
+
     if (uart_is_driver_installed(uart_num)) {
         throw std::runtime_error("serial interface is already in use");
     }
 
+    this->initialize_uart();
+}
+
+void Serial::initialize_uart() const {
     const uart_config_t uart_config = {
         .baud_rate = baud_rate,
         .data_bits = UART_DATA_8_BITS,
@@ -36,7 +49,9 @@ void Serial::enable_line_detection() const {
 }
 
 void Serial::deinstall() const {
-    uart_driver_delete(this->uart_num);
+    if (uart_is_driver_installed(this->uart_num)) {
+        uart_driver_delete(this->uart_num);
+    }
     gpio_reset_pin(this->rx_pin);
     gpio_reset_pin(this->tx_pin);
     gpio_set_direction(this->rx_pin, GPIO_MODE_INPUT);
@@ -45,10 +60,21 @@ void Serial::deinstall() const {
     gpio_set_pull_mode(this->tx_pin, GPIO_FLOATING);
 }
 
+void Serial::reinitialize_after_flash() const {
+    this->deinstall();
+    delay(50);
+    this->initialize_uart();
+    this->enable_line_detection();
+}
+
 size_t Serial::write(const uint8_t byte) const {
     const char send = byte;
     uart_write_bytes(this->uart_num, &send, 1);
     return 1;
+}
+
+void Serial::write_checked_line(const char *message) const {
+    this->write_checked_line(message, std::strlen(message));
 }
 
 void Serial::write_checked_line(const char *message, const int length) const {
@@ -93,7 +119,7 @@ int Serial::read(uint32_t timeout) const {
 
 int Serial::read_line(char *buffer, size_t buffer_len) const {
     int pos = uart_pattern_pop_pos(this->uart_num);
-    if (pos >= buffer_len) {
+    if (pos >= static_cast<int>(buffer_len)) {
         if (this->available() < pos) {
             uart_flush_input(this->uart_num);
             while (uart_pattern_pop_pos(this->uart_num) > 0)

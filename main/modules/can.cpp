@@ -4,6 +4,24 @@
 #include "driver/twai.h"
 #include "esp_log.h"
 #include <stdexcept>
+
+REGISTER_MODULE_DEFAULTS(Can)
+
+const std::map<std::string, Variable_ptr> Can::get_defaults() {
+    return {
+        {"state", std::make_shared<StringVariable>()},
+        {"tx_error_counter", std::make_shared<IntegerVariable>()},
+        {"rx_error_counter", std::make_shared<IntegerVariable>()},
+        {"msgs_to_tx", std::make_shared<IntegerVariable>()},
+        {"msgs_to_rx", std::make_shared<IntegerVariable>()},
+        {"tx_failed_count", std::make_shared<IntegerVariable>()},
+        {"rx_missed_count", std::make_shared<IntegerVariable>()},
+        {"rx_overrun_count", std::make_shared<IntegerVariable>()},
+        {"arb_lost_count", std::make_shared<IntegerVariable>()},
+        {"bus_error_count", std::make_shared<IntegerVariable>()},
+    };
+}
+
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(can, name) {
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
@@ -42,16 +60,7 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
     g_config.rx_queue_len = 20;
     g_config.tx_queue_len = 20;
 
-    this->properties["state"] = std::make_shared<StringVariable>();
-    this->properties["tx_error_counter"] = std::make_shared<IntegerVariable>();
-    this->properties["rx_error_counter"] = std::make_shared<IntegerVariable>();
-    this->properties["msgs_to_tx"] = std::make_shared<IntegerVariable>();
-    this->properties["msgs_to_rx"] = std::make_shared<IntegerVariable>();
-    this->properties["tx_failed_count"] = std::make_shared<IntegerVariable>();
-    this->properties["rx_missed_count"] = std::make_shared<IntegerVariable>();
-    this->properties["rx_overrun_count"] = std::make_shared<IntegerVariable>();
-    this->properties["arb_lost_count"] = std::make_shared<IntegerVariable>();
-    this->properties["bus_error_count"] = std::make_shared<IntegerVariable>();
+    this->properties = Can::get_defaults();
 
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());
@@ -121,8 +130,24 @@ void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t
         message.data[i] = data[i];
     }
     if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
-        if (twai_stop() != ESP_OK || twai_start() != ESP_OK) {
-            throw std::runtime_error("could not send CAN message and could not restart twai driver");
+        twai_status_info_t status_info;
+
+        if (twai_get_status_info(&status_info) != ESP_OK) {
+            throw std::runtime_error("could not get twai status");
+        }
+        if (status_info.state == TWAI_STATE_BUS_OFF) {
+            if (twai_initiate_recovery() != ESP_OK) {
+                throw std::runtime_error("could not initiate recovery");
+            }
+            vTaskDelay(pdMS_TO_TICKS(100)); // Wait for recovery to start
+        }
+        if (status_info.state != TWAI_STATE_STOPPED) {
+            if (twai_stop() != ESP_OK) {
+                throw std::runtime_error("could not stop twai driver");
+            }
+        }
+        if (twai_start() != ESP_OK) {
+            throw std::runtime_error("could not restart twai driver");
         }
         throw std::runtime_error("could not send CAN message");
     }
@@ -148,7 +173,7 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
                    arguments[6]->evaluate_integer(),
                    arguments[7]->evaluate_integer(),
                    arguments[8]->evaluate_integer());
-    } else if (method_name == "status") {
+    } else if (method_name == "get_status") {
         Module::expect(arguments, 0);
         echo("state:            %s", this->properties.at("state")->string_value.c_str());
         echo("msgs_to_tx:       %d", (int)this->properties.at("msgs_to_tx")->integer_value);
