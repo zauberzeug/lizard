@@ -31,6 +31,7 @@
 #include "serial.h"
 #include "stepper_motor.h"
 #include "uu_motor.h"
+#include "uu_wheels.h"
 #include <stdarg.h>
 
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
@@ -358,6 +359,21 @@ Module_ptr Module::create(const std::string type,
             throw std::runtime_error("invalid motor type");
         }
         return motor;
+    } else if (type == "UUWheels") {
+        Module::expect(arguments, 2, identifier, identifier);
+        std::string left_name = arguments[0]->evaluate_identifier();
+        std::string right_name = arguments[1]->evaluate_identifier();
+        Module_ptr left_module = Global::get_module(left_name);
+        Module_ptr right_module = Global::get_module(right_name);
+        if (left_module->type != uu_motor) {
+            throw std::runtime_error("module \"" + left_name + "\" is no UU motor");
+        }
+        if (right_module->type != uu_motor) {
+            throw std::runtime_error("module \"" + right_name + "\" is no UU motor");
+        }
+        const UUMotor_ptr left_motor = std::static_pointer_cast<UUMotor>(left_module);
+        const UUMotor_ptr right_motor = std::static_pointer_cast<UUMotor>(right_module);
+        return std::make_shared<UUWheels>(name, left_motor, right_motor);
     } else if (type == "Analog") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");

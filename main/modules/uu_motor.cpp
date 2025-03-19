@@ -2,6 +2,14 @@
 #include <cstring>
 #include <memory>
 
+REGISTER_MODULE_DEFAULTS(UUMotor)
+
+const std::map<std::string, Variable_ptr> UUMotor::get_defaults() {
+    return {
+        {"error_flag", std::make_shared<BooleanVariable>(false)},
+    };
+}
+
 UUMotor::UUMotor(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type)
     : Module(uu_motor, name),
       can(can),
@@ -76,6 +84,14 @@ void UUMotor::subscribe_to_can() {
 }
 
 void UUMotor::reset_motor_error() {
+    // this is a pure virtual function
+}
+
+void UUMotor::off() {
+    // this is a pure virtual function
+}
+
+void UUMotor::set_speed(const double speed) {
     // this is a pure virtual function
 }
 

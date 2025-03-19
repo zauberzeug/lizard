@@ -2,17 +2,26 @@
 #include <cstring>
 #include <memory>
 
+REGISTER_MODULE_DEFAULTS(UUMotor_combined)
+
+const std::map<std::string, Variable_ptr> UUMotor_combined::get_defaults() {
+    return {
+        {"control_mode1", std::make_shared<IntegerVariable>()},
+        {"control_mode2", std::make_shared<IntegerVariable>()},
+        {"speed1", std::make_shared<IntegerVariable>()},
+        {"speed2", std::make_shared<IntegerVariable>()},
+        {"error_code1", std::make_shared<IntegerVariable>()},
+        {"error_code2", std::make_shared<IntegerVariable>()},
+        {"motor_running_status1", std::make_shared<IntegerVariable>()},
+        {"motor_running_status2", std::make_shared<IntegerVariable>()},
+        {"error_flag", std::make_shared<BooleanVariable>()},
+        {"m_per_tick", std::make_shared<NumberVariable>(1.0)},
+        {"reversed", std::make_shared<BooleanVariable>()},
+    };
+}
 UUMotor_combined::UUMotor_combined(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type)
     : UUMotor(name, can, can_id, uu_registers::MotorType::COMBINED) {
-    this->properties["control_mode1"] = std::make_shared<IntegerVariable>();
-    this->properties["control_mode2"] = std::make_shared<IntegerVariable>();
-    this->properties["speed1"] = std::make_shared<IntegerVariable>();
-    this->properties["speed2"] = std::make_shared<IntegerVariable>();
-    this->properties["error_code1"] = std::make_shared<IntegerVariable>();
-    this->properties["error_code2"] = std::make_shared<IntegerVariable>();
-    this->properties["motor_running_status1"] = std::make_shared<IntegerVariable>();
-    this->properties["motor_running_status2"] = std::make_shared<IntegerVariable>();
-    this->properties["error_flag"] = std::make_shared<BooleanVariable>();
+    this->properties = UUMotor_combined::get_defaults();
 
     this->setup_pdo_motor1();
     this->setup_pdo_motor2();
@@ -84,10 +93,14 @@ void UUMotor_combined::handle_can_msg(const uint32_t id, const int count, const 
     const auto &reg = this->registers;
     if (reg_addr == reg.MOTOR_SPEED_RPM) {
         uint16_t speed1 = data[1] | (data[0] << 8);
-        this->properties.at("speed1")->integer_value = speed1;
+        this->properties.at("speed1")->integer_value = (speed1 * this->properties.at("m_per_tick")->number_value *
+                                                        (this->properties.at("reversed")->boolean_value ? -1 : 1)) /
+                                                       48;
     } else if (reg_addr == reg.MOTOR_SPEED_RPM + 1) {
         uint16_t speed2 = data[1] | (data[0] << 8);
-        this->properties.at("speed2")->integer_value = speed2;
+        this->properties.at("speed2")->integer_value = (speed2 * this->properties.at("m_per_tick")->number_value *
+                                                        (this->properties.at("reversed")->boolean_value ? -1 : 1)) /
+                                                       48;
     } else if (reg_addr == reg.ERROR_CODE) {
         uint32_t error_code1 = (uint32_t)data[0] << 24 |
                                (uint32_t)data[1] << 16 |
@@ -126,7 +139,11 @@ void UUMotor_combined::can_write_combined(const uint16_t reg_addr, const uint16_
     this->can_write(reg_addr, 4, combined_value);
 }
 
-void UUMotor_combined::set_speed(const int16_t speed) {
+void UUMotor_combined::set_speed(const double speed) {
+    if (this->properties.at("error_flag")->boolean_value and this->properties.at("error_code1")->integer_value == 0 and this->properties.at("error_code2")->integer_value == 0) {
+        this->reset_motor_error();
+    }
+
     if (this->properties.at("motor_running_status1")->integer_value != uu_registers::MOTOR_RUNNING_STATUS_RUNNING ||
         this->properties.at("motor_running_status2")->integer_value != uu_registers::MOTOR_RUNNING_STATUS_RUNNING) {
         this->start();
@@ -136,7 +153,10 @@ void UUMotor_combined::set_speed(const int16_t speed) {
         this->properties.at("control_mode2")->integer_value != uu_registers::CONTROL_MODE_SPEED) {
         this->set_mode(uu_registers::CONTROL_MODE_SPEED);
     }
-    this->can_write_combined(this->registers.MOTOR_SET_SPEED, speed);
+    int actual_speed = (speed / this->properties.at("m_per_tick")->number_value /
+                        (this->properties.at("reversed")->boolean_value ? -1 : 1)) *
+                       48;
+    this->can_write_combined(this->registers.MOTOR_SET_SPEED, actual_speed);
 }
 
 void UUMotor_combined::set_mode(const uint16_t control_mode) {

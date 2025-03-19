@@ -1,14 +1,22 @@
 #include "uu_motor.h"
 #include <memory>
 
+REGISTER_MODULE_DEFAULTS(UUMotor_single)
+
+const std::map<std::string, Variable_ptr> UUMotor_single::get_defaults() {
+    return {
+        {"control_mode", std::make_shared<IntegerVariable>()},
+        {"error_code", std::make_shared<IntegerVariable>()},
+        {"motor_running_status", std::make_shared<IntegerVariable>()},
+        {"speed", std::make_shared<IntegerVariable>()},
+        {"error_flag", std::make_shared<BooleanVariable>()},
+        {"m_per_tick", std::make_shared<NumberVariable>(1.0)},
+        {"reversed", std::make_shared<BooleanVariable>()},
+    };
+}
 UUMotor_single::UUMotor_single(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type)
     : UUMotor(name, can, can_id, type) {
-
-    this->properties["control_mode"] = std::make_shared<IntegerVariable>();
-    this->properties["error_code"] = std::make_shared<IntegerVariable>();
-    this->properties["motor_running_status"] = std::make_shared<IntegerVariable>();
-    this->properties["speed"] = std::make_shared<IntegerVariable>();
-    this->properties["error_flag"] = std::make_shared<BooleanVariable>();
+    this->properties = UUMotor_single::get_defaults();
 
     // Set the PDOs for the motor
     if (motor_type == uu_registers::MotorType::MOTOR1) {
@@ -47,7 +55,9 @@ void UUMotor_single::handle_can_msg(const uint32_t id, const int count, const ui
         this->properties.at("motor_running_status")->integer_value = motor_running_status;
     } else if (reg_addr == reg.MOTOR_SPEED_RPM) {
         uint16_t speed = data[1] | (data[0] << 8);
-        this->properties.at("speed")->integer_value = speed;
+        this->properties.at("speed")->integer_value = (speed * this->properties.at("m_per_tick")->number_value *
+                                                       (this->properties.at("reversed")->boolean_value ? -1 : 1)) /
+                                                      48;
     } else if (reg_addr == reg.ERROR_CODE) {
         uint32_t error_code = (uint32_t)data[0] << 24 |
                               (uint32_t)data[1] << 16 |
@@ -93,7 +103,10 @@ void UUMotor_single::call(const std::string method_name, const std::vector<Const
     }
 }
 
-void UUMotor_single::set_speed(const int16_t speed) {
+void UUMotor_single::set_speed(const double speed) {
+    if (this->properties.at("error_flag")->boolean_value and this->properties.at("error_code")->integer_value == 0) {
+        this->reset_motor_error();
+    }
 
     if (this->properties.at("motor_running_status")->integer_value != uu_registers::MOTOR_RUNNING_STATUS_RUNNING) {
         this->start();
@@ -102,7 +115,10 @@ void UUMotor_single::set_speed(const int16_t speed) {
     if (this->properties.at("control_mode")->integer_value != uu_registers::CONTROL_MODE_SPEED) {
         this->set_mode(uu_registers::CONTROL_MODE_SPEED);
     }
-    this->can_write(this->registers.MOTOR_SET_SPEED, uu_registers::DLC_U16, speed);
+    int actual_speed = (speed / this->properties.at("m_per_tick")->number_value /
+                        (this->properties.at("reversed")->boolean_value ? -1 : 1)) *
+                       48;
+    this->can_write(this->registers.MOTOR_SET_SPEED, uu_registers::DLC_U16, actual_speed);
 }
 
 void UUMotor_single::set_mode(const uint16_t control_mode) {

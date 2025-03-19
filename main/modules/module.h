@@ -46,6 +46,7 @@ enum ModuleType {
     uu_motor,
     uu_motor_single,
     uu_motor_combined,
+    uu_wheels,
     analog,
     proxy,
 };
