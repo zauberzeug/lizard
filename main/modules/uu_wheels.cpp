@@ -19,6 +19,12 @@ UUWheels::UUWheels(const std::string name, const UUMotor_ptr left_motor, const U
 }
 
 void UUWheels::step() {
+    const double left_speed = this->left_motor->get_property("speed")->number_value;
+    const double right_speed = this->right_motor->get_property("speed")->number_value;
+
+    this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
+    this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
+
     Module::step();
 }
 
@@ -31,7 +37,6 @@ void UUWheels::call(const std::string method_name, const std::vector<ConstExpres
             double width = this->properties.at("width")->number_value;
             this->left_motor->set_speed(linear - angular * width / 2.0);
             this->right_motor->set_speed(linear + angular * width / 2.0);
-            ESP_LOGI("UUWheels", "Speed: %f, %f", linear - angular * width / 2.0, linear + angular * width / 2.0);
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
