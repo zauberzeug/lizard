@@ -2,6 +2,7 @@
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "driver/twai.h"
+#include "esp_log.h"
 #include <stdexcept>
 
 REGISTER_MODULE_DEFAULTS(Can)
@@ -103,7 +104,6 @@ bool Can::receive() {
             message.data_length_code,
             message.data);
     }
-
     if (this->output_on) {
         static char buffer[256];
         int pos = csprintf(buffer, sizeof(buffer), "%s %03lx", this->name.c_str(), message.identifier);
@@ -118,10 +118,13 @@ bool Can::receive() {
     return true;
 }
 
-void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
+void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc, const bool extended) const {
     twai_message_t message;
     message.identifier = id;
-    message.flags = rtr ? TWAI_MSG_FLAG_RTR : TWAI_MSG_FLAG_NONE;
+    message.flags = extended ? TWAI_MSG_FLAG_EXTD : TWAI_MSG_FLAG_NONE;
+    if (rtr) {
+        message.flags |= TWAI_MSG_FLAG_RTR;
+    }
     message.data_length_code = dlc;
     for (int i = 0; i < dlc; ++i) {
         message.data[i] = data[i];
