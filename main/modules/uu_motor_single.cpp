@@ -5,13 +5,13 @@ REGISTER_MODULE_DEFAULTS(UUMotor_single)
 
 const std::map<std::string, Variable_ptr> UUMotor_single::get_defaults() {
     return {
+        {"error_flag", std::make_shared<BooleanVariable>(false)},
+        {"m_per_tick", std::make_shared<NumberVariable>(1.0)},
+        {"reversed", std::make_shared<BooleanVariable>()},
         {"control_mode", std::make_shared<IntegerVariable>()},
         {"error_code", std::make_shared<IntegerVariable>()},
         {"motor_running_status", std::make_shared<IntegerVariable>()},
         {"speed", std::make_shared<NumberVariable>()},
-        {"error_flag", std::make_shared<BooleanVariable>()},
-        {"m_per_tick", std::make_shared<NumberVariable>(1.0)},
-        {"reversed", std::make_shared<BooleanVariable>()},
     };
 }
 UUMotor_single::UUMotor_single(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type)
@@ -98,16 +98,15 @@ void UUMotor_single::call(const std::string method_name, const std::vector<Const
     } else if (method_name == "setup_motor") {
         Module::expect(arguments, 0);
         this->setup_motor();
+    } else if (method_name == "reset_estop") {
+        Module::expect(arguments, 0);
+        this->reset_estop();
     } else {
         Module::call(method_name, arguments);
     }
 }
 
 void UUMotor_single::set_speed(const double speed) {
-    if (this->properties.at("error_flag")->boolean_value and this->properties.at("error_code")->integer_value == 0) {
-        this->reset_motor_error();
-    }
-
     if (this->properties.at("motor_running_status")->integer_value != uu_registers::MOTOR_RUNNING_STATUS_RUNNING) {
         this->start();
     }
@@ -154,4 +153,10 @@ void UUMotor_single::start() {
 
 void UUMotor_single::stop() {
     this->set_speed(0);
+}
+
+void UUMotor_single::reset_estop() {
+    if (this->properties.at("error_code")->integer_value == 131072) {
+        this->reset_motor_error();
+    }
 }

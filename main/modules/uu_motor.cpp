@@ -5,9 +5,7 @@
 REGISTER_MODULE_DEFAULTS(UUMotor)
 
 const std::map<std::string, Variable_ptr> UUMotor::get_defaults() {
-    return {
-        {"error_flag", std::make_shared<BooleanVariable>(false)},
-    };
+    return {};
 }
 
 UUMotor::UUMotor(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type)
@@ -95,14 +93,6 @@ void UUMotor::set_speed(const double speed) {
     // this is a pure virtual function
 }
 
-void UUMotor::step() {
-    int64_t current_time = esp_timer_get_time();
-
-    // If more than 3 seconds have passed since the last CAN message
-    if (current_time - last_can_msg_time > uu_registers::CAN_WATCHDOG_TIME) {
-        this->properties.at("error_flag")->boolean_value = true;
-        ESP_LOGW("UUMotor", "CAN Watchdog triggered! No messages received for 1 second. Resetting...");
-        this->reset_motor_error();
-        last_can_msg_time = current_time;
-    }
+void UUMotor::reset_estop() {
+    // this is a pure virtual function
 }

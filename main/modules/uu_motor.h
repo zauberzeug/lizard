@@ -109,11 +109,11 @@ protected:
     void speed(const double speed, const double acceleration) override {}
 
 public:
+    virtual void reset_estop();
     virtual void off() = 0;
     virtual void set_speed(const double speed) = 0;
     virtual void subscribe_to_can() = 0; // Pure virtual function
     UUMotor(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type = uu_registers::MotorType::MOTOR2);
-    void step() override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };
 
@@ -127,6 +127,7 @@ private:
     void off() override;
     void start();
     void stop() override;
+    void reset_estop() override;
 
 public:
     UUMotor_single(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type = uu_registers::MotorType::MOTOR1);
@@ -146,6 +147,7 @@ private:
     void off() override;
     void start();
     void stop() override;
+    void reset_estop() override;
 
 public:
     UUMotor_combined(const std::string &name, const Can_ptr can, const uint32_t can_id, const uu_registers::MotorType type = uu_registers::MotorType::COMBINED);

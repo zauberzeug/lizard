@@ -42,6 +42,10 @@ void UUWheels::call(const std::string method_name, const std::vector<ConstExpres
         Module::expect(arguments, 0);
         this->left_motor->off();
         this->right_motor->off();
+    } else if (method_name == "reset_estop") {
+        Module::expect(arguments, 0);
+        this->left_motor->reset_estop();
+        this->right_motor->reset_estop();
     } else {
         Module::call(method_name, arguments);
     }

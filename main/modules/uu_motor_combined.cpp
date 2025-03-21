@@ -6,6 +6,9 @@ REGISTER_MODULE_DEFAULTS(UUMotor_combined)
 
 const std::map<std::string, Variable_ptr> UUMotor_combined::get_defaults() {
     return {
+        {"error_flag", std::make_shared<BooleanVariable>(false)},
+        {"m_per_tick", std::make_shared<NumberVariable>(1.0)},
+        {"reversed", std::make_shared<BooleanVariable>()},
         {"control_mode1", std::make_shared<IntegerVariable>()},
         {"control_mode2", std::make_shared<IntegerVariable>()},
         {"speed", std::make_shared<NumberVariable>()},
@@ -15,9 +18,7 @@ const std::map<std::string, Variable_ptr> UUMotor_combined::get_defaults() {
         {"error_code2", std::make_shared<IntegerVariable>()},
         {"motor_running_status1", std::make_shared<IntegerVariable>()},
         {"motor_running_status2", std::make_shared<IntegerVariable>()},
-        {"error_flag", std::make_shared<BooleanVariable>()},
-        {"m_per_tick", std::make_shared<NumberVariable>(1.0)},
-        {"reversed", std::make_shared<BooleanVariable>()},
+
     };
 }
 UUMotor_combined::UUMotor_combined(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type)
@@ -82,6 +83,9 @@ void UUMotor_combined::call(const std::string method_name, const std::vector<Con
     } else if (method_name == "setup_motor") {
         Module::expect(arguments, 0);
         this->setup_motor();
+    } else if (method_name == "reset_estop") {
+        Module::expect(arguments, 0);
+        this->reset_estop();
     } else {
         Module::call(method_name, arguments);
     }
@@ -102,7 +106,7 @@ void UUMotor_combined::handle_can_msg(const uint32_t id, const int count, const 
         this->properties.at("speed2")->number_value = (speed2 * this->properties.at("m_per_tick")->number_value *
                                                        (this->properties.at("reversed")->boolean_value ? -1 : 1)) /
                                                       60 / 10; // the uu_motor gives the speed in turn/m with the format xxx.x but we read xxxx for this reason we devide by 10 to move the decimal point
-        this->properties.at("speed")->number_value = (this->properties.at("speed1")->number_value + this->properties.at("speed2")->number_value) / 2;
+        this->properties.at("speed")->number_value = speed2;
     } else if (reg_addr == reg.ERROR_CODE) {
         uint32_t error_code1 = (uint32_t)data[0] << 24 |
                                (uint32_t)data[1] << 16 |
@@ -142,10 +146,6 @@ void UUMotor_combined::can_write_combined(const uint16_t reg_addr, const uint16_
 }
 
 void UUMotor_combined::set_speed(const double speed) {
-    if (this->properties.at("error_flag")->boolean_value and this->properties.at("error_code1")->integer_value == 0 and this->properties.at("error_code2")->integer_value == 0) {
-        this->reset_motor_error();
-    }
-
     if (this->properties.at("motor_running_status1")->integer_value != uu_registers::MOTOR_RUNNING_STATUS_RUNNING ||
         this->properties.at("motor_running_status2")->integer_value != uu_registers::MOTOR_RUNNING_STATUS_RUNNING) {
         this->start();
@@ -191,4 +191,10 @@ void UUMotor_combined::start() {
 
 void UUMotor_combined::stop() {
     this->set_speed(0);
+}
+
+void UUMotor_combined::reset_estop() {
+    if (this->properties.at("error_code1")->integer_value == 131072 and this->properties.at("error_code2")->integer_value == 131072) {
+        this->reset_motor_error();
+    }
 }
