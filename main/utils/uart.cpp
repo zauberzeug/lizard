@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
+
 void echo(const char *format, ...) {
     static char buffer[1024];
 
