@@ -329,6 +329,85 @@ When the wheels are not `enabled`, `power` and `speed` method calls are ignored.
 This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
 
+## UU Motor
+
+The UUMotor module controls the [multi-function RS485 CAN encoder hall sensors brushless dc dual control driver](https://www.uumotor.com/multi-function-rs485-can-encoder-hall-sensors-brushless-dc-dual-control-driver.html) via CAN.
+
+| Constructor                            | Description                                        | Arguments                |
+| -------------------------------------- | -------------------------------------------------- | ------------------------ |
+| `Motor = UUMotor(can, motor_id, motor_type)` | CAN module, motor CAN id and Motor Type | CAN module, `int`, `int` |
+
+The Motor Type can be in the range of 1,2,3. 1 Is a single motor on the motor 1 port of the UUMotor Controller. 2 is a single motor on the motor 2 port of the Controller.
+3 is the combined mode of operation, that controls motor 1 and motor 2 in a mirrored mode.
+
+### All UUMotor Types
+| Properties             | Description                      | Data type |
+| ---------------------- | -------------------------------- | --------- |
+| `motor.error_flag`         | motor is in error status               | `bool`   |
+| `motor.m_per_tick`  | m/turn              | `float`   |
+| `motor.reversed` | Reverse Motor direction            | `bool`   |
+
+### Single UUMotor
+
+| Properties          | Description                               | Data type |
+| ------------------- | ----------------------------------------- | --------- |
+| `motor.speed`       | Motor speed (m/s)                         | `float`   |
+| `motor.motor_running_status`  | State of the motor                   | `int`     |
+| `motor.error_code`  | Error code of the motor                    | `int`     |
+| `motor.control_mode` | Control mode of the motor | `int`     |
+
+
+### Combined UUMotor
+
+| Properties          | Description                               | Data type |
+| ------------------- | ----------------------------------------- | --------- |
+| `motor.speed`       | Motor speed average of both motors(m/s)                         | `float`   |
+| `motor.speed1`       | Motor speed of motor 1(m/s)                         | `float`   |
+| `motor.speed2`       | Motor speed of motor 2(m/s)                         | `float`   |
+| `motor.motor_running_status1`  | State of motor 1                  | `int`     |
+| `motor.motor_running_status2`  | State of motor 2                  | `int`     |
+| `motor.error_code1`  | Error code of motor 1                   | `int`     |
+| `motor.error_code2`  | Error code of motor 2                   | `int`     |
+| `motor.control_mode1` | Control mode of motor 1| `int`     |
+| `motor.control_mode2` | Control mode of motor 2| `int`     |
+
+| Methods                        | Description                            | Arguments        |
+| ------------------------------ | -------------------------------------- | ---------------- |
+| `motor.speed(speed)`           | Move with given `speed` (m/s)          | `float`          |
+| `motor.off()`                  | Turn motor off (idle state)            |                  |
+| `motor.reset_motor()`          | Resets the motor and clears errors     |                  |
+| `motor.start()`          | Start the motor     |                  |
+| `motor.stop()`          | Stop the motor     |                  |
+| `motor.setup_motor()`          | Start the calibration     |                  |
+| `motor.reset_estop()`          | Reenable the motor after estop     |                  |
+
+
+## UU Wheels
+
+The UUWheels module combines to UUMotors and provides odometry and steering for differential wheeled robots.
+
+| Constructor                                     | Description              | Arguments                |
+| ----------------------------------------------- | ------------------------ | ------------------------ |
+| `wheels = UUWheels(left_motor, left_motor)` | Two UUMotor motor modules | two UUMotor motor modules |
+
+| Properties             | Description                      | Data type |
+| ---------------------- | -------------------------------- | --------- |
+| `wheels.width`         | Wheel distance (m)               | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)              | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)            | `float`   |
+| `wheels.enabled`       | Whether motors react to commands | `bool`    |
+
+| Methods                         | Description                                     | Arguments        |
+| ------------------------------- | ----------------------------------------------- | ---------------- |
+| `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
+| `wheels.off()`                  | Turn both motors off (idle state)               |                  |
+| `wheels.reset_estop()`                  |Reenable the wheels after estop               |                  |
+
+When the wheels are not `enabled`, `power` and `speed` method calls are ignored.
+This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
+Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
+
+
 ## RMD Motor
 
 The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD motor via CAN.
