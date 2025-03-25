@@ -26,7 +26,12 @@ bool MotorAxis::can_move(const float speed) const {
 void MotorAxis::step() {
     float speed = this->motor->get_speed();
     if (!this->can_move(speed)) {
-        this->motor->stop();
+        try {
+            this->motor->stop();
+        } catch (const std::exception &e) {
+            echo("Error in motor_axis step when stopping motor: %s", e.what());
+            // Continue - we don't want to abort the step cycle due to stop errors
+        }
     }
     Module::step();
 }
@@ -57,7 +62,12 @@ void MotorAxis::call(const std::string method_name, const std::vector<ConstExpre
         }
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        this->motor->stop();
+        try {
+            this->motor->stop();
+        } catch (const std::exception &e) {
+            echo("Error in motor_axis stop: %s", e.what());
+            // No rethrow - we want to swallow the exception here to prevent stop errors from cascading
+        }
     } else {
         Module::call(method_name, arguments);
     }

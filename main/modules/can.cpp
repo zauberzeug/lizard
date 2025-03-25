@@ -93,7 +93,34 @@ void Can::step() {
 
 bool Can::receive() {
     twai_message_t message;
-    if (twai_receive(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
+    esp_err_t result = twai_receive(&message, pdMS_TO_TICKS(0));
+
+    if (result == ESP_ERR_TIMEOUT) {
+        // This is normal - no message available
+        return false;
+    } else if (result != ESP_OK) {
+        // Other errors indicate a problem with the CAN bus
+        twai_status_info_t status_info;
+        if (twai_get_status_info(&status_info) == ESP_OK) {
+            if (status_info.state == TWAI_STATE_BUS_OFF) {
+                echo("CAN bus error: Bus is in BUS_OFF state. Attempting recovery...");
+                try {
+                    // Attempt automatic recovery
+                    this->reset_can_bus();
+                } catch (const std::exception &e) {
+                    echo("CAN recovery failed: %s", e.what());
+                }
+            } else {
+                echo("CAN receive error: %d, state: %s",
+                     result,
+                     status_info.state == TWAI_STATE_STOPPED ? "STOPPED" : status_info.state == TWAI_STATE_RUNNING  ? "RUNNING"
+                                                                       : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+                                                                       : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                                                                                    : "UNKNOWN");
+            }
+        } else {
+            echo("CAN receive error: %d (could not get status info)", result);
+        }
         return false;
     }
 
@@ -197,6 +224,17 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
         if (twai_initiate_recovery() != ESP_OK) {
             throw std::runtime_error("could not initiate recovery");
         }
+    } else if (method_name == "reset") {
+        Module::expect(arguments, 0);
+        try {
+            this->reset_can_bus();
+        } catch (const std::exception &e) {
+            echo("Error during CAN reset: %s", e.what());
+            throw;
+        }
+    } else if (method_name == "diagnose") {
+        Module::expect(arguments, 0);
+        this->diagnose_can_bus();
     } else {
         Module::call(method_name, arguments);
     }
@@ -207,4 +245,132 @@ void Can::subscribe(const uint32_t id, const Module_ptr module) {
         throw std::runtime_error("there is already a subscriber for this CAN ID");
     }
     this->subscribers[id] = module;
+}
+
+void Can::reset_can_bus() {
+    twai_status_info_t status_info;
+
+    echo("Attempting CAN bus reset...");
+
+    // Get current status
+    if (twai_get_status_info(&status_info) != ESP_OK) {
+        echo("Failed to get TWAI status info");
+        throw std::runtime_error("could not get twai status");
+    }
+
+    echo("CAN bus state before reset: %s",
+         status_info.state == TWAI_STATE_STOPPED ? "STOPPED" : status_info.state == TWAI_STATE_RUNNING  ? "RUNNING"
+                                                           : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+                                                           : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                                                                        : "UNKNOWN");
+
+    // Try to stop the driver if it's not already stopped
+    if (status_info.state != TWAI_STATE_STOPPED) {
+        echo("Stopping TWAI driver...");
+        if (twai_stop() != ESP_OK) {
+            echo("Failed to stop TWAI driver");
+            throw std::runtime_error("could not stop twai driver");
+        }
+
+        // Verify it's stopped
+        if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_STOPPED) {
+            echo("TWAI driver didn't stop properly");
+            throw std::runtime_error("twai driver didn't stop properly");
+        }
+        echo("TWAI driver stopped successfully");
+    }
+
+    // If bus is off, initiate recovery
+    if (status_info.state == TWAI_STATE_BUS_OFF) {
+        echo("Initiating recovery...");
+        if (twai_initiate_recovery() != ESP_OK) {
+            echo("Failed to initiate recovery");
+            throw std::runtime_error("could not initiate recovery");
+        }
+        echo("Recovery initiated");
+
+        // Wait for recovery to complete (this could be improved with a proper wait mechanism)
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+
+    // Start the driver again
+    echo("Starting TWAI driver...");
+    if (twai_start() != ESP_OK) {
+        echo("Failed to start TWAI driver");
+        throw std::runtime_error("could not start twai driver");
+    }
+
+    // Verify it's running
+    if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
+        echo("TWAI driver didn't start properly");
+        throw std::runtime_error("twai driver didn't start properly");
+    }
+
+    echo("CAN bus reset successful, state: RUNNING");
+}
+
+void Can::diagnose_can_bus() {
+    twai_status_info_t status_info;
+
+    echo("CAN Bus Diagnostics:");
+
+    // Get current status
+    if (twai_get_status_info(&status_info) != ESP_OK) {
+        echo("  Failed to get TWAI status info");
+        return;
+    }
+
+    // Print detailed status information
+    echo("  State:            %s",
+         status_info.state == TWAI_STATE_STOPPED ? "STOPPED" : status_info.state == TWAI_STATE_RUNNING  ? "RUNNING"
+                                                           : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+                                                           : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                                                                        : "UNKNOWN");
+    echo("  TX Error Counter: %d", status_info.tx_error_counter);
+    echo("  RX Error Counter: %d", status_info.rx_error_counter);
+    echo("  Messages to TX:   %d", status_info.msgs_to_tx);
+    echo("  Messages to RX:   %d", status_info.msgs_to_rx);
+    echo("  TX Failed Count:  %d", status_info.tx_failed_count);
+    echo("  RX Missed Count:  %d", status_info.rx_missed_count);
+    echo("  RX Overrun Count: %d", status_info.rx_overrun_count);
+    echo("  Arb Lost Count:   %d", status_info.arb_lost_count);
+    echo("  Bus Error Count:  %d", status_info.bus_error_count);
+
+    // Analyze possible issues
+    if (status_info.state == TWAI_STATE_BUS_OFF) {
+        echo("  CRITICAL: CAN bus is in BUS_OFF state. This indicates a severe bus error condition.");
+        echo("  Recommendation: Check for physical bus issues (wiring, termination) and reset the CAN bus.");
+    }
+
+    if (status_info.tx_error_counter > 96 || status_info.rx_error_counter > 96) {
+        echo("  WARNING: Error counters are high. Bus may soon go to BUS_OFF state.");
+        echo("  Recommendation: Check for noise or improper termination on the CAN bus.");
+    }
+
+    if (status_info.tx_failed_count > 0) {
+        echo("  INFO: TX failures detected (%d). Possible issues with CAN arbitration or bus load.",
+             status_info.tx_failed_count);
+    }
+
+    if (status_info.rx_missed_count > 0 || status_info.rx_overrun_count > 0) {
+        echo("  WARNING: RX message losses detected (missed: %d, overrun: %d). Application may not be processing messages fast enough.",
+             status_info.rx_missed_count, status_info.rx_overrun_count);
+    }
+
+    if (status_info.bus_error_count > 0) {
+        echo("  WARNING: Bus errors detected (%d). Check for electrical issues on the CAN bus.",
+             status_info.bus_error_count);
+    }
+
+    // Suggest next steps
+    echo("  Next steps:");
+    if (status_info.state != TWAI_STATE_RUNNING) {
+        echo("  - Reset the CAN bus by calling can.reset()");
+    } else if (status_info.tx_error_counter > 96 || status_info.rx_error_counter > 96 ||
+               status_info.bus_error_count > 0) {
+        echo("  - Consider resetting the CAN bus with can.reset() if errors persist");
+        echo("  - Check physical CAN bus connections and termination");
+    } else {
+        echo("  - CAN bus appears to be functioning normally");
+    }
 }

@@ -1,4 +1,5 @@
 #include "uart.h"
+#include "driver/uart.h"
 #include <cstdarg>
 #include <stdexcept>
 #include <stdio.h>
@@ -26,6 +27,12 @@ void echo(const char *format, ...) {
         } else {
             checksum ^= buffer[i];
         }
+    }
+
+    // Keep this in for testing. It keeps the esp32 from crashing.
+    esp_err_t err = uart_wait_tx_done(UART_NUM_0, 500 / portTICK_PERIOD_MS);
+    if (err != ESP_OK) {
+        printf("uart_wait_tx_done failed: %s\n", esp_err_to_name(err));
     }
 }
 
