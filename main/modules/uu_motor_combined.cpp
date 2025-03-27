@@ -97,16 +97,16 @@ void UUMotor_combined::handle_can_msg(const uint32_t id, const int count, const 
 
     const auto &reg = this->registers;
     if (reg_addr == reg.MOTOR_SPEED_RPM) {
-        uint16_t speed1 = data[1] | (data[0] << 8);
+        int16_t speed1 = data[1] | (data[0] << 8);
         this->properties.at("speed1")->number_value = (speed1 * this->properties.at("m_per_tick")->number_value *
                                                        (this->properties.at("reversed")->boolean_value ? -1 : 1)) /
                                                       60 / 10; // the uu_motor gives the speed in turn/m with the format xxx.x but we read xxxx for this reason we devide by 10 to move the decimal point
     } else if (reg_addr == reg.MOTOR_SPEED_RPM + 1) {
-        uint16_t speed2 = data[1] | (data[0] << 8);
+        int16_t speed2 = data[1] | (data[0] << 8);
         this->properties.at("speed2")->number_value = (speed2 * this->properties.at("m_per_tick")->number_value *
                                                        (this->properties.at("reversed")->boolean_value ? -1 : 1)) /
                                                       60 / 10; // the uu_motor gives the speed in turn/m with the format xxx.x but we read xxxx for this reason we devide by 10 to move the decimal point
-        this->properties.at("speed")->number_value = speed2;
+        this->properties.at("speed")->number_value = (this->properties.at("speed1")->number_value + this->properties.at("speed2")->number_value) / 2;
     } else if (reg_addr == reg.ERROR_CODE) {
         uint32_t error_code1 = (uint32_t)data[0] << 24 |
                                (uint32_t)data[1] << 16 |
