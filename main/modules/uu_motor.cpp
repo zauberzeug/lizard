@@ -96,3 +96,13 @@ void UUMotor::set_speed(const double speed) {
 void UUMotor::reset_estop() {
     // this is a pure virtual function
 }
+
+void UUMotor::step() {
+    int64_t current_time = esp_timer_get_time();
+
+    // If more than 3 seconds have passed since the last CAN message
+    if (current_time - last_can_msg_time > uu_registers::CAN_WATCHDOG_TIME) {
+        this->properties.at("error_flag")->boolean_value = true;
+        this->off();
+        last_can_msg_time = current_time;
+    }

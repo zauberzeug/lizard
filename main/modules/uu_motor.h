@@ -110,6 +110,7 @@ protected:
 
 public:
     virtual void reset_estop();
+    void step() override;
     virtual void off() = 0;
     virtual void set_speed(const double speed) = 0;
     virtual void subscribe_to_can() = 0; // Pure virtual function
