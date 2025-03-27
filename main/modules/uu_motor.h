@@ -24,6 +24,7 @@ struct MotorRegisters {
     uint16_t MOTOR_SET_POSITION;
     uint16_t MOTOR_RUNNING_STATUS;
     uint16_t MOTOR_SPEED_RPM;
+    uint16_t CURRENT;
     uint16_t ERROR_CODE;
     uint16_t SET_HALL;
     uint16_t CALIBRATION;
@@ -36,9 +37,11 @@ constexpr MotorRegisters MOTOR1_REGISTERS = {
     .MOTOR_SET_POSITION = 0x530C,
     .MOTOR_RUNNING_STATUS = 0x5400,
     .MOTOR_SPEED_RPM = 0x5410,
+    .CURRENT = 0x5414,
     .ERROR_CODE = 0x5420,
     .SET_HALL = 0x502C,
-    .CALIBRATION = 0x5600};
+    .CALIBRATION = 0x5600,
+};
 
 // TODO: check if this is correct
 constexpr MotorRegisters MOTOR2_REGISTERS = {
@@ -48,9 +51,11 @@ constexpr MotorRegisters MOTOR2_REGISTERS = {
     .MOTOR_SET_POSITION = 0x530D,
     .MOTOR_RUNNING_STATUS = 0x5401,
     .MOTOR_SPEED_RPM = 0x5411,
+    .CURRENT = 0x5415,
     .ERROR_CODE = 0x5422,
     .SET_HALL = 0x502D,
-    .CALIBRATION = 0x5601};
+    .CALIBRATION = 0x5601,
+};
 
 // make register map
 static const std::map<MotorType, std::pair<const MotorRegisters &, uint8_t>> REGISTER_MAP = {
@@ -120,6 +125,8 @@ public:
 
 class UUMotor_single : public UUMotor {
 private:
+    double margin_time;
+    bool margin_flag;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
     void reset_motor_error();
     void setup_motor();
@@ -129,6 +136,7 @@ private:
     void start();
     void stop() override;
     void reset_estop() override;
+    void current_margin();
 
 public:
     UUMotor_single(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type = uu_registers::MotorType::MOTOR1);
@@ -139,6 +147,8 @@ public:
 
 class UUMotor_combined : public UUMotor {
 private:
+    double margin_time;
+    bool margin_flag;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
     void can_write_combined(const uint16_t index, const uint16_t value);
     void reset_motor_error();
@@ -149,6 +159,7 @@ private:
     void start();
     void stop() override;
     void reset_estop() override;
+    void current_margin();
 
 public:
     UUMotor_combined(const std::string &name, const Can_ptr can, const uint32_t can_id, const uu_registers::MotorType type = uu_registers::MotorType::COMBINED);

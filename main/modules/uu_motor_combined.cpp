@@ -18,7 +18,10 @@ const std::map<std::string, Variable_ptr> UUMotor_combined::get_defaults() {
         {"error_code2", std::make_shared<IntegerVariable>()},
         {"motor_running_status1", std::make_shared<IntegerVariable>()},
         {"motor_running_status2", std::make_shared<IntegerVariable>()},
-
+        {"current1", std::make_shared<NumberVariable>()},
+        {"current2", std::make_shared<NumberVariable>()},
+        {"max_current", std::make_shared<NumberVariable>(200)},
+        {"margin_time", std::make_shared<NumberVariable>(1000)},
     };
 }
 UUMotor_combined::UUMotor_combined(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type)
@@ -125,6 +128,14 @@ void UUMotor_combined::handle_can_msg(const uint32_t id, const int count, const 
         if (error_code2 != 0) {
             this->properties.at("error_flag")->boolean_value = true;
         }
+    } else if (reg_addr == reg.CURRENT) {
+        int16_t current1 = data[1] | (data[0] << 8);
+        this->properties.at("current1")->number_value = current1;
+        this->current_margin();
+    } else if (reg_addr == reg.CURRENT + 1) {
+        int16_t current2 = data[1] | (data[0] << 8);
+        this->properties.at("current2")->number_value = current2;
+        this->current_margin();
     } else if (reg_addr == reg.MOTOR_RUNNING_STATUS) {
         uint16_t motor_running_status1 = data[1] | (data[0] << 8);
         this->properties.at("motor_running_status1")->integer_value = motor_running_status1;
@@ -143,6 +154,22 @@ void UUMotor_combined::handle_can_msg(const uint32_t id, const int count, const 
 void UUMotor_combined::can_write_combined(const uint16_t reg_addr, const uint16_t value) {
     uint32_t combined_value = ((uint32_t)value << 16) | value;
     this->can_write(reg_addr, 4, combined_value);
+}
+void UUMotor_combined::current_margin() {
+    if (this->properties.at("current1")->number_value >= this->properties.at("max_current")->number_value ||
+        this->properties.at("current2")->number_value >= this->properties.at("max_current")->number_value) {
+        if (this->margin_flag == false) {
+            this->margin_time = esp_timer_get_time();
+            this->margin_flag = true;
+        }
+
+        else if (this->margin_flag == true && esp_timer_get_time() - this->margin_time > this->properties.at("margin_time")->number_value) {
+            this->margin_flag = false;
+            this->off();
+        }
+    } else {
+        this->margin_flag = false;
+    }
 }
 
 void UUMotor_combined::set_speed(const double speed) {

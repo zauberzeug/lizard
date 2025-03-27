@@ -28,6 +28,8 @@ void UUMotor::setup_pdo_motor1() {
     this->can_write(0x3208, uu_registers::DLC_U32, error_code1_value);
     uint32_t motor_running_status1_value = (uu_registers::MOTOR1_REGISTERS.MOTOR_RUNNING_STATUS << 16) | uu_registers::PDO_DELAY;
     this->can_write(0x320C, uu_registers::DLC_U32, motor_running_status1_value);
+    uint32_t current1_value = (uu_registers::MOTOR1_REGISTERS.CURRENT << 16) | uu_registers::PDO_DELAY;
+    this->can_write(0x3210, uu_registers::DLC_U32, current1_value);
 }
 
 void UUMotor::setup_pdo_motor2() {
@@ -39,6 +41,8 @@ void UUMotor::setup_pdo_motor2() {
     this->can_write(0x320A, uu_registers::DLC_U32, error_code2_value);
     uint32_t motor_running_status2_value = (uu_registers::MOTOR2_REGISTERS.MOTOR_RUNNING_STATUS << 16) | uu_registers::PDO_DELAY;
     this->can_write(0x320E, uu_registers::DLC_U32, motor_running_status2_value);
+    uint32_t current2_value = (uu_registers::MOTOR2_REGISTERS.CURRENT << 16) | uu_registers::PDO_DELAY;
+    this->can_write(0x3212, uu_registers::DLC_U32, current2_value);
 }
 
 void UUMotor::can_read(const uint16_t index) {
@@ -106,3 +110,4 @@ void UUMotor::step() {
         this->off();
         last_can_msg_time = current_time;
     }
+}

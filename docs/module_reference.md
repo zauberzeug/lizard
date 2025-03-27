@@ -355,6 +355,10 @@ The Motor Type can be in the range of 1,2,3. 1 Is a single motor on the motor 1 
 | `motor.motor_running_status`  | State of the motor                   | `int`     |
 | `motor.error_code`  | Error code of the motor                    | `int`     |
 | `motor.control_mode` | Control mode of the motor | `int`     |
+|`motor.current`|the current of the motor (0.1A)|`int`|
+|`motor.margin_time`|time the motor is allowed to operate over max current(ms)|`int`|
+|`motor.max_current`|max current the motor can use continuously|`int`|
+
 
 
 ### Combined UUMotor
@@ -370,6 +374,10 @@ The Motor Type can be in the range of 1,2,3. 1 Is a single motor on the motor 1 
 | `motor.error_code2`  | Error code of motor 2                   | `int`     |
 | `motor.control_mode1` | Control mode of motor 1| `int`     |
 | `motor.control_mode2` | Control mode of motor 2| `int`     |
+|`motor.current1`|the current of motor 1 (0.1A)|`int`|
+|`motor.current2`|the current of motor 2 (0.1A)|`int`|
+|`motor.margin_time`|time the motor is allowed to operate over max current(ms)|`int`|
+|`motor.max_current`|max current the motor can use continuously|`int`|
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |

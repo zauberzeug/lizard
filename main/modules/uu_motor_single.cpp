@@ -12,6 +12,9 @@ const std::map<std::string, Variable_ptr> UUMotor_single::get_defaults() {
         {"error_code", std::make_shared<IntegerVariable>()},
         {"motor_running_status", std::make_shared<IntegerVariable>()},
         {"speed", std::make_shared<NumberVariable>()},
+        {"current", std::make_shared<NumberVariable>()},
+        {"margin_time", std::make_shared<NumberVariable>(0)},
+        {"max_current", std::make_shared<NumberVariable>(200)},
     };
 }
 UUMotor_single::UUMotor_single(const std::string &name, const Can_ptr can, const uint32_t can_id, uu_registers::MotorType type)
@@ -70,6 +73,10 @@ void UUMotor_single::handle_can_msg(const uint32_t id, const int count, const ui
     } else if (reg_addr == reg.CONTROL_MODE) {
         uint16_t control_mode = data[1] | (data[0] << 8);
         this->properties.at("control_mode")->integer_value = control_mode;
+    } else if (reg_addr == reg.CURRENT) {
+        int16_t current = data[1] | (data[0] << 8);
+        this->properties.at("current")->number_value = current;
+        this->current_margin();
     }
 }
 void UUMotor_single::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -103,6 +110,22 @@ void UUMotor_single::call(const std::string method_name, const std::vector<Const
         this->reset_estop();
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+void UUMotor_single::current_margin() {
+    if (this->properties.at("current")->number_value >= this->properties.at("max_current")->number_value) {
+        if (this->margin_flag == false) {
+            this->margin_time = esp_timer_get_time();
+            this->margin_flag = true;
+        }
+
+        else if (this->margin_flag == true && esp_timer_get_time() - this->margin_time > this->properties.at("margin_time")->number_value) {
+            this->margin_flag = false;
+            this->off();
+        }
+    } else {
+        this->margin_flag = false;
     }
 }
 
