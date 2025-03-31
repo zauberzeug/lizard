@@ -98,7 +98,7 @@ void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
         }
     }
 
-    throw std::runtime_error("SDO write confirmation timeout");
+    throw std::runtime_error("SDO writes timed out. Aborting.");
 }
 
 void CanOpenMotor::enter_position_mode(int velocity) {
@@ -471,40 +471,19 @@ void CanOpenMotor::process_status_word_pv(const uint16_t status_word) {
 void CanOpenMotor::send_control_word(uint16_t value) {
     uint8_t data[2];
     marshal_unsigned(value, data);
-    try {
-        this->can->send(wrap_cob_id(COB_RPDO1, this->node_id), data, false, sizeof(data));
-    } catch (const std::exception &e) {
-        // Log the error
-        echo("Error sending control word: %s", e.what());
-        // Rethrow to let calling methods handle this
-        throw;
-    }
+    this->can->send(wrap_cob_id(COB_RPDO1, this->node_id), data, false, sizeof(data));
 }
 
 void CanOpenMotor::send_target_position(int32_t value) {
     uint8_t data[4];
     marshal_i32(value, data);
-    try {
-        this->can->send(wrap_cob_id(COB_RPDO2, this->node_id), data, false, sizeof(data));
-    } catch (const std::exception &e) {
-        // Log the error
-        echo("Error sending target position: %s", e.what());
-        // Rethrow to let calling methods handle this
-        throw;
-    }
+    this->can->send(wrap_cob_id(COB_RPDO2, this->node_id), data, false, sizeof(data));
 }
 
 void CanOpenMotor::send_target_velocity(int32_t value) {
     uint8_t data[4];
     marshal_i32(value, data);
-    try {
-        this->can->send(wrap_cob_id(COB_RPDO3, this->node_id), data, false, sizeof(data));
-    } catch (const std::exception &e) {
-        // Log the error
-        echo("Error sending target velocity: %s", e.what());
-        // Rethrow to let calling methods handle this
-        throw;
-    }
+    this->can->send(wrap_cob_id(COB_RPDO3, this->node_id), data, false, sizeof(data));
 }
 
 uint16_t CanOpenMotor::build_ctrl_word(bool new_set_point) {
@@ -542,21 +521,7 @@ void CanOpenMotor::handle_can_msg(const uint32_t id, const int count, const uint
 
 void CanOpenMotor::stop() {
     this->properties[PROP_CTRL_HALT]->boolean_value = true;
-    try {
-        this->send_control_word(build_ctrl_word(false));
-    } catch (const std::exception &e) {
-        // Log error but don't throw an exception from stop
-        echo("Error in stop operation: %s", e.what());
-
-        // Try to recover the CAN bus, but don't throw if this fails either
-        try {
-            // Reset the motor control word without sending immediate CAN message
-            this->properties[PROP_CTRL_ENA_OP]->boolean_value = false;
-        } catch (...) {
-            // Last resort - just log that we tried our best
-            echo("Failed to perform recovery during stop operation");
-        }
-    }
+    this->send_control_word(build_ctrl_word(false));
 }
 
 double CanOpenMotor::get_position() {
