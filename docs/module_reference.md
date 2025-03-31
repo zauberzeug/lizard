@@ -221,6 +221,7 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | `can.start()`                                       | Start the driver               |           |
 | `can.stop()`                                        | Stop the driver                |           |
 | `can.recover()`                                     | Recover the driver             |           |
+| `can.reset()`                                       | Reset the driver               |           |
 
 The method `get_status()` prints the following information:
 
