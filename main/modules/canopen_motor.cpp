@@ -83,48 +83,36 @@ void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
     const uint32_t ms_per_sleep = 10;
     uint32_t cycles = timeout_ms / ms_per_sleep;
     const int max_retries = 3;
-    static int retry_count = 0; // Make static to persist across calls
+    static int retry_count = 0;
 
     for (uint32_t i = 0; i < cycles; ++i) {
         try {
             while (this->can->receive())
                 ;
         } catch (const std::exception &e) {
-            // Log the error but continue, as receive() errors should not abort the whole operation
             echo("CAN receive error during SDO write wait: %s", e.what());
         }
 
         delay(ms_per_sleep);
 
         if (this->properties[PROP_PENDING_WRITES]->integer_value == 0) {
-            retry_count = 0; // Reset retry count on success
+            retry_count = 0;
             return;
         }
     }
 
-    // If we reach here, SDO writes have timed out
-    // Increment retry count and try to recover
     retry_count++;
     echo("SDO write timeout, retry %d of %d", retry_count, max_retries);
 
     if (retry_count < max_retries) {
-        // Try to recover the CAN bus
         try {
-            // Force reset pending writes count to avoid accumulation across retries
             this->properties[PROP_PENDING_WRITES]->integer_value = 0;
-
-            // Try to diagnose and reset the CAN bus
-            echo("Attempting CAN diagnostics and reset due to SDO timeout");
-            this->can->diagnose_can_bus();
             this->can->reset_can_bus();
-
-            // Return without throwing exception to allow the operation to continue
             return;
         } catch (const std::exception &e) {
             echo("CAN recovery failed: %s", e.what());
         }
     } else {
-        // Reset retry count for next time
         retry_count = 0;
     }
 
