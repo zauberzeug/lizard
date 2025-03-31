@@ -33,7 +33,3 @@ CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 CONFIG_ESP_COREDUMP_FLASH_SAVE=y
 CONFIG_ESP_COREDUMP_MAX_TASKS_NUM=16
 CONFIG_ESP_COREDUMP_FLASH_PARTITION="coredump"
-
-# This is a workaround for a bug in the ESP-IDF TWAI driver
-# See https://github.com/zauberzeug/lizard/issues/126 for more details.
-CONFIG_TWAI_ERRATA_FIX_TX_INTR_LOST=n
