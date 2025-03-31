@@ -82,8 +82,6 @@ CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id
 void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
     const uint32_t ms_per_sleep = 10;
     uint32_t cycles = timeout_ms / ms_per_sleep;
-    const int max_retries = 3;
-    static int retry_count = 0;
 
     for (uint32_t i = 0; i < cycles; ++i) {
         try {
@@ -96,27 +94,11 @@ void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
         delay(ms_per_sleep);
 
         if (this->properties[PROP_PENDING_WRITES]->integer_value == 0) {
-            retry_count = 0;
             return;
         }
     }
 
-    retry_count++;
-    echo("SDO write timeout, retry %d of %d", retry_count, max_retries);
-
-    if (retry_count < max_retries) {
-        try {
-            this->properties[PROP_PENDING_WRITES]->integer_value = 0;
-            this->can->reset_can_bus();
-            return;
-        } catch (const std::exception &e) {
-            echo("CAN recovery failed: %s", e.what());
-        }
-    } else {
-        retry_count = 0;
-    }
-
-    throw std::runtime_error("SDO writes timed out. Aborting.");
+    throw std::runtime_error("SDO write confirmation timeout");
 }
 
 void CanOpenMotor::enter_position_mode(int velocity) {
@@ -243,15 +225,46 @@ void CanOpenMotor::transition_operational() {
     this->can->send(0, data, false, sizeof(data));
 }
 
+bool CanOpenMotor::send_sdo_with_retry(uint32_t cob_id, const uint8_t *data) {
+    const int max_retries = 3;
+
+    for (int retry_count = 0; retry_count < max_retries; retry_count++) {
+        try {
+            this->can->send(cob_id, data);
+
+            this->properties[PROP_PENDING_WRITES]->integer_value++;
+
+            wait_for_sdo_writes(100);
+
+            return true;
+        } catch (const std::exception &e) {
+            // reduce the counter if the operation failed
+            if (this->properties[PROP_PENDING_WRITES]->integer_value > 0) {
+                this->properties[PROP_PENDING_WRITES]->integer_value--;
+            }
+            if (retry_count < max_retries - 1) {
+                try {
+                    this->can->reset_can_bus();
+                    delay(50);
+                } catch (const std::exception &e) {
+                    echo("CAN recovery failed: %s", e.what());
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
 void CanOpenMotor::write_od_u8(uint16_t index, uint8_t sub, uint8_t value) {
     uint8_t data[8];
     data[0] = sdo_write_u8_header;
     marshal_index(index, sub, &data[1]);
     marshal_unsigned(value, &data[4]);
 
-    can->send(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data);
-    this->properties[PROP_PENDING_WRITES]->integer_value++;
-    wait_for_sdo_writes(100);
+    if (!send_sdo_with_retry(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data)) {
+        throw std::runtime_error("Failed to send SDO write command after multiple retries");
+    }
 }
 
 void CanOpenMotor::write_od_u16(uint16_t index, uint8_t sub, uint16_t value) {
@@ -260,9 +273,9 @@ void CanOpenMotor::write_od_u16(uint16_t index, uint8_t sub, uint16_t value) {
     marshal_index(index, sub, &data[1]);
     marshal_unsigned(value, &data[4]);
 
-    can->send(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data);
-    this->properties[PROP_PENDING_WRITES]->integer_value++;
-    wait_for_sdo_writes(100);
+    if (!send_sdo_with_retry(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data)) {
+        throw std::runtime_error("Failed to send SDO write command after multiple retries");
+    }
 }
 
 void CanOpenMotor::write_od_u32(uint16_t index, uint8_t sub, uint32_t value) {
@@ -271,9 +284,9 @@ void CanOpenMotor::write_od_u32(uint16_t index, uint8_t sub, uint32_t value) {
     marshal_index(index, sub, &data[1]);
     marshal_unsigned(value, &data[4]);
 
-    can->send(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data);
-    this->properties[PROP_PENDING_WRITES]->integer_value++;
-    wait_for_sdo_writes(100);
+    if (!send_sdo_with_retry(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data)) {
+        throw std::runtime_error("Failed to send SDO write command after multiple retries");
+    }
 }
 
 void CanOpenMotor::write_od_i32(uint16_t index, uint8_t sub, int32_t value) {
@@ -282,9 +295,9 @@ void CanOpenMotor::write_od_i32(uint16_t index, uint8_t sub, int32_t value) {
     marshal_index(index, sub, &data[1]);
     marshal_i32(value, &data[4]);
 
-    can->send(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data);
-    this->properties[PROP_PENDING_WRITES]->integer_value++;
-    wait_for_sdo_writes(100);
+    if (!send_sdo_with_retry(wrap_cob_id(COB_SDO_CLIENT2SERVER, node_id), data)) {
+        throw std::runtime_error("Failed to send SDO write command after multiple retries");
+    }
 }
 
 void CanOpenMotor::sdo_read(uint16_t index, uint8_t sub) {
