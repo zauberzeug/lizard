@@ -215,9 +215,6 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
             echo("Error during CAN reset: %s", e.what());
             throw;
         }
-    } else if (method_name == "diagnose") {
-        Module::expect(arguments, 0);
-        this->diagnose_can_bus();
     } else {
         Module::call(method_name, arguments);
     }
@@ -292,66 +289,4 @@ void Can::reset_can_bus() {
     }
 
     echo("CAN bus reset successful, state: RUNNING");
-}
-
-void Can::diagnose_can_bus() {
-    twai_status_info_t status_info;
-
-    echo("CAN Bus Diagnostics:");
-
-    if (twai_get_status_info(&status_info) != ESP_OK) {
-        echo("  Failed to get TWAI status info");
-        return;
-    }
-
-    echo("  State:            %s",
-         status_info.state == TWAI_STATE_STOPPED ? "STOPPED" : status_info.state == TWAI_STATE_RUNNING  ? "RUNNING"
-                                                           : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
-                                                           : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
-                                                                                                        : "UNKNOWN");
-    echo("  TX Error Counter: %d", status_info.tx_error_counter);
-    echo("  RX Error Counter: %d", status_info.rx_error_counter);
-    echo("  Messages to TX:   %d", status_info.msgs_to_tx);
-    echo("  Messages to RX:   %d", status_info.msgs_to_rx);
-    echo("  TX Failed Count:  %d", status_info.tx_failed_count);
-    echo("  RX Missed Count:  %d", status_info.rx_missed_count);
-    echo("  RX Overrun Count: %d", status_info.rx_overrun_count);
-    echo("  Arb Lost Count:   %d", status_info.arb_lost_count);
-    echo("  Bus Error Count:  %d", status_info.bus_error_count);
-
-    if (status_info.state == TWAI_STATE_BUS_OFF) {
-        echo("  CRITICAL: CAN bus is in BUS_OFF state. This indicates a severe bus error condition.");
-        echo("  Recommendation: Check for physical bus issues (wiring, termination) and reset the CAN bus.");
-    }
-
-    if (status_info.tx_error_counter > 96 || status_info.rx_error_counter > 96) {
-        echo("  WARNING: Error counters are high. Bus may soon go to BUS_OFF state.");
-        echo("  Recommendation: Check for noise or improper termination on the CAN bus.");
-    }
-
-    if (status_info.tx_failed_count > 0) {
-        echo("  INFO: TX failures detected (%d). Possible issues with CAN arbitration or bus load.",
-             status_info.tx_failed_count);
-    }
-
-    if (status_info.rx_missed_count > 0 || status_info.rx_overrun_count > 0) {
-        echo("  WARNING: RX message losses detected (missed: %d, overrun: %d). Application may not be processing messages fast enough.",
-             status_info.rx_missed_count, status_info.rx_overrun_count);
-    }
-
-    if (status_info.bus_error_count > 0) {
-        echo("  WARNING: Bus errors detected (%d). Check for electrical issues on the CAN bus.",
-             status_info.bus_error_count);
-    }
-
-    echo("  Next steps:");
-    if (status_info.state != TWAI_STATE_RUNNING) {
-        echo("  - Reset the CAN bus by calling can.reset()");
-    } else if (status_info.tx_error_counter > 96 || status_info.rx_error_counter > 96 ||
-               status_info.bus_error_count > 0) {
-        echo("  - Consider resetting the CAN bus with can.reset() if errors persist");
-        echo("  - Check physical CAN bus connections and termination");
-    } else {
-        echo("  - CAN bus appears to be functioning normally");
-    }
 }

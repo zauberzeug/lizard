@@ -25,5 +25,4 @@ public:
               const bool rtr = false) const;
     void subscribe(const uint32_t id, const Module_ptr module);
     void reset_can_bus();
-    void diagnose_can_bus();
 };
