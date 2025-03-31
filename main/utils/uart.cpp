@@ -1,5 +1,4 @@
 #include "uart.h"
-#include "driver/uart.h"
 #include <cstdarg>
 #include <stdexcept>
 #include <stdio.h>
