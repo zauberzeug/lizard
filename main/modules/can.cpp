@@ -2,7 +2,14 @@
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "driver/twai.h"
+#include <cstring>
 #include <stdexcept>
+
+#define CAN_TX_QUEUE_SIZE 20
+#define CAN_OUTPUT_QUEUE_SIZE 20
+#define CAN_TASK_STACK_SIZE 4096
+#define CAN_RX_TASK_PRIORITY 10
+#define CAN_TX_TASK_PRIORITY 10
 
 REGISTER_MODULE_DEFAULTS(Can)
 
@@ -63,10 +70,172 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
 
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());
+
+    // Initialize tasks after driver is installed and started
+    initialize_tasks();
+}
+
+Can::~Can() {
+    cleanup_tasks();
+
+    // Try to stop and uninstall the TWAI driver
+    if (twai_stop() == ESP_OK) {
+        twai_driver_uninstall();
+    }
+}
+
+void Can::initialize_tasks() {
+    // Create message queue for sending CAN messages
+    tx_queue = xQueueCreate(CAN_TX_QUEUE_SIZE, sizeof(CanMessage));
+    if (tx_queue == nullptr) {
+        throw std::runtime_error("failed to create CAN TX queue");
+    }
+
+    // Create message queue for output messages
+    output_queue = xQueueCreate(CAN_OUTPUT_QUEUE_SIZE, sizeof(CanOutputMessage));
+    if (output_queue == nullptr) {
+        vQueueDelete(tx_queue);
+        tx_queue = nullptr;
+        throw std::runtime_error("failed to create CAN output queue");
+    }
+
+    // Set the tasks_running flag
+    tasks_running = true;
+
+    // Create receive task on Core 1
+    BaseType_t status = xTaskCreatePinnedToCore(
+        rx_task_function,
+        "can_rx_task",
+        CAN_TASK_STACK_SIZE,
+        this,
+        CAN_RX_TASK_PRIORITY,
+        &rx_task_handle,
+        1); // Pin to Core 1
+    if (status != pdPASS) {
+        cleanup_tasks();
+        throw std::runtime_error("failed to create CAN RX task");
+    }
+
+    // Create transmit task on Core 1
+    status = xTaskCreatePinnedToCore(
+        tx_task_function,
+        "can_tx_task",
+        CAN_TASK_STACK_SIZE,
+        this,
+        CAN_TX_TASK_PRIORITY,
+        &tx_task_handle,
+        1); // Pin to Core 1
+    if (status != pdPASS) {
+        cleanup_tasks();
+        throw std::runtime_error("failed to create CAN TX task");
+    }
+}
+
+void Can::cleanup_tasks() {
+    // Signal tasks to stop
+    tasks_running = false;
+
+    // Delete tasks if they exist
+    if (rx_task_handle != nullptr) {
+        vTaskDelete(rx_task_handle);
+        rx_task_handle = nullptr;
+    }
+
+    if (tx_task_handle != nullptr) {
+        vTaskDelete(tx_task_handle);
+        tx_task_handle = nullptr;
+    }
+
+    // Delete the queues if they exist
+    if (tx_queue != nullptr) {
+        vQueueDelete(tx_queue);
+        tx_queue = nullptr;
+    }
+
+    if (output_queue != nullptr) {
+        vQueueDelete(output_queue);
+        output_queue = nullptr;
+    }
+}
+
+void Can::rx_task_function(void *arg) {
+    Can *can_instance = static_cast<Can *>(arg);
+
+    while (can_instance->tasks_running) {
+        // Call the receive method which handles the message but doesn't output
+        // This no longer blocks the main thread or calls echo()
+        can_instance->receive_internal(true);
+
+        // Small delay to prevent CPU hogging
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    // Task will be deleted by the creator
+    vTaskDelete(NULL);
+}
+
+void Can::tx_task_function(void *arg) {
+    Can *can_instance = static_cast<Can *>(arg);
+    CanMessage msg;
+
+    while (can_instance->tasks_running) {
+        if (xQueueReceive(can_instance->tx_queue, &msg, pdMS_TO_TICKS(10)) == pdTRUE) {
+            // Prepare and send the CAN message
+            twai_message_t twai_msg;
+            twai_msg.identifier = msg.id;
+            twai_msg.flags = msg.rtr ? TWAI_MSG_FLAG_RTR : TWAI_MSG_FLAG_NONE;
+            twai_msg.data_length_code = msg.dlc;
+
+            for (int i = 0; i < msg.dlc; ++i) {
+                twai_msg.data[i] = msg.data[i];
+            }
+
+            // Try to send with retry mechanism
+            esp_err_t err = twai_transmit(&twai_msg, pdMS_TO_TICKS(100));
+            if (err != ESP_OK) {
+                // Try to recover from errors
+                twai_status_info_t status_info;
+                if (twai_get_status_info(&status_info) == ESP_OK) {
+                    if (status_info.state == TWAI_STATE_BUS_OFF) {
+                        twai_initiate_recovery();
+                        vTaskDelay(pdMS_TO_TICKS(100)); // Wait for recovery to start
+                    }
+
+                    if (status_info.state != TWAI_STATE_RUNNING) {
+                        twai_stop();
+                        vTaskDelay(pdMS_TO_TICKS(10));
+                        twai_start();
+                    }
+                }
+
+                // Try to resend once more
+                twai_transmit(&twai_msg, pdMS_TO_TICKS(100));
+            }
+        }
+    }
+
+    // Task will be deleted by the creator
+    vTaskDelete(NULL);
 }
 
 void Can::step() {
-    while (this->receive()) {
+    // We don't need to poll for receive messages anymore, as it's done in the RX task
+    // We still need to update the status info and process any output messages
+
+    // Process any pending output messages
+    if (output_queue != nullptr) {
+        CanOutputMessage output_msg;
+        while (xQueueReceive(output_queue, &output_msg, 0) == pdTRUE) {
+            // Format and echo the message
+            static char buffer[256];
+            int pos = csprintf(buffer, sizeof(buffer), "%s %03lx", output_msg.module_name, output_msg.id);
+            if (!output_msg.rtr) {
+                for (int i = 0; i < output_msg.dlc; ++i) {
+                    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ",%02x", output_msg.data[i]);
+                }
+            }
+            echo(buffer);
+        }
     }
 
     twai_status_info_t status_info;
@@ -91,7 +260,7 @@ void Can::step() {
     Module::step();
 }
 
-bool Can::receive() {
+bool Can::receive_internal(bool generate_output) {
     twai_message_t message;
     if (twai_receive(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
         return false;
@@ -104,49 +273,54 @@ bool Can::receive() {
             message.data);
     }
 
-    if (this->output_on) {
-        static char buffer[256];
-        int pos = csprintf(buffer, sizeof(buffer), "%s %03lx", this->name.c_str(), message.identifier);
-        if (!(message.flags & TWAI_MSG_FLAG_RTR)) {
-            for (int i = 0; i < message.data_length_code; ++i) {
-                pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ",%02x", message.data[i]);
-            }
+    // If output is enabled and we should generate output, queue it instead of echoing directly
+    if (this->output_on && generate_output && output_queue != nullptr) {
+        CanOutputMessage output_msg;
+        output_msg.id = message.identifier;
+        output_msg.dlc = message.data_length_code;
+        output_msg.rtr = (message.flags & TWAI_MSG_FLAG_RTR) != 0;
+
+        // Copy the module name
+        strncpy(output_msg.module_name, this->name.c_str(), sizeof(output_msg.module_name) - 1);
+        output_msg.module_name[sizeof(output_msg.module_name) - 1] = '\0';
+
+        // Copy data
+        for (int i = 0; i < message.data_length_code; ++i) {
+            output_msg.data[i] = message.data[i];
         }
-        echo(buffer);
+
+        // Send to queue, don't wait if queue is full
+        xQueueSend(output_queue, &output_msg, 0);
     }
 
     return true;
 }
 
-void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
-    twai_message_t message;
-    message.identifier = id;
-    message.flags = rtr ? TWAI_MSG_FLAG_RTR : TWAI_MSG_FLAG_NONE;
-    message.data_length_code = dlc;
-    for (int i = 0; i < dlc; ++i) {
-        message.data[i] = data[i];
-    }
-    if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
-        twai_status_info_t status_info;
+bool Can::receive() {
+    // This is now just a wrapper around receive_internal
+    // Used by the main task if it wants to manually check for messages
+    return receive_internal(false);
+}
 
-        if (twai_get_status_info(&status_info) != ESP_OK) {
-            throw std::runtime_error("could not get twai status");
-        }
-        if (status_info.state == TWAI_STATE_BUS_OFF) {
-            if (twai_initiate_recovery() != ESP_OK) {
-                throw std::runtime_error("could not initiate recovery");
-            }
-            vTaskDelay(pdMS_TO_TICKS(100)); // Wait for recovery to start
-        }
-        if (status_info.state != TWAI_STATE_STOPPED) {
-            if (twai_stop() != ESP_OK) {
-                throw std::runtime_error("could not stop twai driver");
-            }
-        }
-        if (twai_start() != ESP_OK) {
-            throw std::runtime_error("could not restart twai driver");
-        }
-        throw std::runtime_error("could not send CAN message");
+void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
+    if (tx_queue == nullptr) {
+        throw std::runtime_error("CAN TX queue not initialized");
+    }
+
+    // Create a CanMessage structure
+    CanMessage msg;
+    msg.id = id;
+    msg.dlc = dlc;
+    msg.rtr = rtr;
+
+    // Copy data
+    for (int i = 0; i < dlc; ++i) {
+        msg.data[i] = data[i];
+    }
+
+    // Send to queue with timeout
+    if (xQueueSend(tx_queue, &msg, pdMS_TO_TICKS(100)) != pdTRUE) {
+        throw std::runtime_error("failed to queue CAN message (queue full)");
     }
 }
 
