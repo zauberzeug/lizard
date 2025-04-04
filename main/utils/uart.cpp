@@ -50,7 +50,7 @@ int check(char *buffer, int len) {
         }
         const std::string hex_number(&buffer[len - 2], 2);
         if (std::stoi(hex_number, 0, 16) != checksum) {
-            throw std::runtime_error("checksum mismatch");
+            throw std::runtime_error("checksum mismatch: " + std::string(buffer));
         }
         len -= 3;
     }
