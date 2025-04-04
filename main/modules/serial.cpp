@@ -8,11 +8,6 @@
 #define RX_BUF_SIZE 2048
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
-#define SERIAL_TX_QUEUE_SIZE 20
-#define SERIAL_OUTPUT_QUEUE_SIZE 20
-#define SERIAL_TASK_STACK_SIZE 4096
-#define SERIAL_RX_TASK_PRIORITY 10
-#define SERIAL_TX_TASK_PRIORITY 10
 
 REGISTER_MODULE_DEFAULTS(Serial)
 
@@ -30,165 +25,93 @@ Serial::Serial(const std::string name,
     }
 
     this->initialize_uart();
-    this->initialize_tasks();
+
+    // Create receive task
+    xTaskCreate(rx_task,
+                ("serial_rx_" + name).c_str(),
+                4096, // Stack size
+                this, // Task parameter
+                5,    // Priority
+                &rx_task_handle);
+
+    // Create transmit task
+    xTaskCreate(tx_task,
+                ("serial_tx_" + name).c_str(),
+                4096, // Stack size
+                this, // Task parameter
+                5,    // Priority
+                &tx_task_handle);
 }
 
 Serial::~Serial() {
-    cleanup_tasks();
-    this->deinstall();
-}
-
-void Serial::initialize_tasks() {
-    // Create message queue for sending serial data
-    tx_queue = xQueueCreate(SERIAL_TX_QUEUE_SIZE, sizeof(SerialWriteData));
-    if (tx_queue == nullptr) {
-        throw std::runtime_error("failed to create Serial TX queue");
-    }
-
-    // Create message queue for output data
-    output_queue = xQueueCreate(SERIAL_OUTPUT_QUEUE_SIZE, sizeof(SerialOutputData));
-    if (output_queue == nullptr) {
-        vQueueDelete(tx_queue);
-        tx_queue = nullptr;
-        throw std::runtime_error("failed to create Serial output queue");
-    }
-
-    // Set the tasks_running flag
-    tasks_running = true;
-
-    // Create receive task on Core 1
-    BaseType_t status = xTaskCreatePinnedToCore(
-        rx_task_function,
-        "serial_rx_task",
-        SERIAL_TASK_STACK_SIZE,
-        this,
-        SERIAL_RX_TASK_PRIORITY,
-        &rx_task_handle,
-        1); // Pin to Core 1
-    if (status != pdPASS) {
-        cleanup_tasks();
-        throw std::runtime_error("failed to create Serial RX task");
-    }
-
-    // Create transmit task on Core 1
-    status = xTaskCreatePinnedToCore(
-        tx_task_function,
-        "serial_tx_task",
-        SERIAL_TASK_STACK_SIZE,
-        this,
-        SERIAL_TX_TASK_PRIORITY,
-        &tx_task_handle,
-        1); // Pin to Core 1
-    if (status != pdPASS) {
-        cleanup_tasks();
-        throw std::runtime_error("failed to create Serial TX task");
-    }
-}
-
-void Serial::cleanup_tasks() {
-    // Signal tasks to stop
-    tasks_running = false;
-
-    // Delete tasks if they exist
     if (rx_task_handle != nullptr) {
         vTaskDelete(rx_task_handle);
         rx_task_handle = nullptr;
     }
-
     if (tx_task_handle != nullptr) {
         vTaskDelete(tx_task_handle);
         tx_task_handle = nullptr;
     }
+    deinstall();
+}
 
-    // Delete the queues if they exist
-    if (tx_queue != nullptr) {
-        vQueueDelete(tx_queue);
-        tx_queue = nullptr;
-    }
+void Serial::rx_task(void *param) {
+    Serial *serial = static_cast<Serial *>(param);
+    serial->rx_task_function();
+}
 
-    if (output_queue != nullptr) {
-        vQueueDelete(output_queue);
-        output_queue = nullptr;
+void Serial::tx_task(void *param) {
+    Serial *serial = static_cast<Serial *>(param);
+    serial->tx_task_function();
+}
+
+void Serial::rx_task_function() {
+    uint8_t data;
+    while (true) {
+        size_t len = uart_read_bytes(uart_num, &data, 1, portMAX_DELAY);
+        if (len == 1) {
+            rx_buffer.write(data);
+        }
     }
 }
 
-void Serial::rx_task_function(void *arg) {
-    Serial *serial_instance = static_cast<Serial *>(arg);
-    uint8_t byte_data;
-
-    while (serial_instance->tasks_running) {
-        // Check if there's any data available
-        if (serial_instance->available() > 0) {
-            // Read one byte at a time with minimal timeout
-            int result = uart_read_bytes(serial_instance->uart_num, &byte_data, 1, 1);
-
-            if (result > 0) {
-                // If we're outputting data, queue it for the main task
-                if (serial_instance->output_on && serial_instance->output_queue != nullptr) {
-                    SerialOutputData output_data;
-                    output_data.data[0] = byte_data;
-                    output_data.length = 1;
-
-                    // Copy the module name
-                    strncpy(output_data.module_name, serial_instance->name.c_str(), sizeof(output_data.module_name) - 1);
-                    output_data.module_name[sizeof(output_data.module_name) - 1] = '\0';
-
-                    // Try to send to queue, don't block if full
-                    xQueueSend(serial_instance->output_queue, &output_data, 0);
+void Serial::tx_task_function() {
+    static uint8_t tx_data[128]; // Buffer for reading chunks of data
+    while (true) {
+        if (tx_buffer.available() > 0) {
+            size_t chunk_size = 0;
+            // Read up to 128 bytes at a time from tx_buffer
+            while (chunk_size < sizeof(tx_data) && tx_buffer.available() > 0) {
+                int byte = tx_buffer.read();
+                if (byte >= 0) {
+                    tx_data[chunk_size++] = static_cast<uint8_t>(byte);
                 }
             }
+            if (chunk_size > 0) {
+                uart_write_bytes(uart_num, reinterpret_cast<const char *>(tx_data), chunk_size);
+            }
         } else {
-            // No data available, sleep a little to avoid hogging CPU
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(1); // Small delay when no data to avoid busy waiting
         }
     }
-
-    // Task will be deleted by the creator
-    vTaskDelete(NULL);
 }
 
-void Serial::tx_task_function(void *arg) {
-    Serial *serial_instance = static_cast<Serial *>(arg);
-    SerialWriteData write_data;
+void Serial::write_to_buffer(const char *data, size_t len) const {
+    const uint8_t *bytes = reinterpret_cast<const uint8_t *>(data);
+    size_t written = 0;
 
-    while (serial_instance->tasks_running) {
-        if (xQueueReceive(serial_instance->tx_queue, &write_data, pdMS_TO_TICKS(10)) == pdTRUE) {
-            // Write the data to the UART
-            if (write_data.is_byte) {
-                // Single byte write
-                uart_write_bytes(serial_instance->uart_num, (const char *)&write_data.data[0], 1);
-            } else {
-                // Multiple bytes write
-                uart_write_bytes(serial_instance->uart_num, (const char *)write_data.data, write_data.length);
+    // Try writing with a timeout to handle buffer full condition
+    TickType_t start = xTaskGetTickCount();
+    while (written < len) {
+        if (tx_buffer.write(bytes[written])) {
+            written++;
+        } else {
+            if ((xTaskGetTickCount() - start) * portTICK_PERIOD_MS > 1000) { // 1 second timeout
+                throw std::runtime_error("transmit buffer full timeout");
             }
+            vTaskDelay(1);
         }
     }
-
-    // Task will be deleted by the creator
-    vTaskDelete(NULL);
-}
-
-void Serial::step() {
-    // Process any pending output messages
-    if (output_queue != nullptr) {
-        SerialOutputData output_data;
-        while (xQueueReceive(output_queue, &output_data, 0) == pdTRUE) {
-            // Format and echo the message
-            static char buffer[512];
-            int pos = 0;
-
-            // Format as "module_name byte1 byte2 byte3..."
-            pos += csprintf(buffer, sizeof(buffer), "%s", output_data.module_name);
-
-            for (size_t i = 0; i < output_data.length; ++i) {
-                pos += csprintf(&buffer[pos], sizeof(buffer) - pos, " %02x", output_data.data[i]);
-            }
-
-            echo(buffer);
-        }
-    }
-
-    Module::step();
 }
 
 void Serial::initialize_uart() const {
@@ -229,26 +152,12 @@ void Serial::reinitialize_after_flash() const {
     delay(50);
     this->initialize_uart();
     this->enable_line_detection();
-    // Tasks need to be reinitialized, but this is const method, so we can't do it here
-    // The caller should handle this
 }
 
 size_t Serial::write(const uint8_t byte) const {
-    if (tx_queue == nullptr) {
-        throw std::runtime_error("Serial TX queue not initialized");
+    if (!tx_buffer.write(byte)) {
+        throw std::runtime_error("transmit buffer full");
     }
-
-    // Create a write data structure
-    SerialWriteData write_data;
-    write_data.data[0] = byte;
-    write_data.length = 1;
-    write_data.is_byte = true;
-
-    // Send to queue with timeout
-    if (xQueueSend(tx_queue, &write_data, pdMS_TO_TICKS(100)) != pdTRUE) {
-        throw std::runtime_error("failed to queue Serial write data (queue full)");
-    }
-
     return 1;
 }
 
@@ -257,49 +166,14 @@ void Serial::write_checked_line(const char *message) const {
 }
 
 void Serial::write_checked_line(const char *message, const int length) const {
-    if (tx_queue == nullptr) {
-        throw std::runtime_error("Serial TX queue not initialized");
-    }
-
     static char checksum_buffer[16];
     uint8_t checksum = 0;
     int start = 0;
-
     for (unsigned int i = 0; i < length + 1; ++i) {
         if (i >= length || message[i] == '\n') {
-            // Create a write data structure for the message segment
-            SerialWriteData write_data;
-            write_data.is_byte = false;
-
-            // Copy the message segment
-            if (i - start > 0) {
-                size_t segment_len = i - start;
-                if (segment_len > sizeof(write_data.data) - 4) { // Leave room for checksum
-                    segment_len = sizeof(write_data.data) - 4;
-                }
-                memcpy(write_data.data, &message[start], segment_len);
-                write_data.length = segment_len;
-
-                // Send to queue with timeout
-                if (xQueueSend(tx_queue, &write_data, pdMS_TO_TICKS(100)) != pdTRUE) {
-                    throw std::runtime_error("failed to queue Serial write data (queue full)");
-                }
-            }
-
-            // Create a write data structure for the checksum
-            SerialWriteData checksum_data;
-            checksum_data.is_byte = false;
-
-            // Format and copy the checksum
             csprintf(checksum_buffer, sizeof(checksum_buffer), "@%02x\n", checksum);
-            memcpy(checksum_data.data, checksum_buffer, 4);
-            checksum_data.length = 4;
-
-            // Send to queue with timeout
-            if (xQueueSend(tx_queue, &checksum_data, pdMS_TO_TICKS(100)) != pdTRUE) {
-                throw std::runtime_error("failed to queue Serial write data (queue full)");
-            }
-
+            write_to_buffer(&message[start], i - start);
+            write_to_buffer(checksum_buffer, 4);
             start = i + 1;
             checksum = 0;
         } else {
@@ -309,62 +183,37 @@ void Serial::write_checked_line(const char *message, const int length) const {
 }
 
 int Serial::available() const {
-    if (!uart_is_driver_installed(this->uart_num)) {
-        return 0;
-    }
-    size_t available;
-    uart_get_buffered_data_len(this->uart_num, &available);
-    return available;
+    return rx_buffer.available();
 }
 
 bool Serial::has_buffered_lines() const {
-    return uart_pattern_get_pos(this->uart_num) != -1;
+    return rx_buffer.find_pattern('\n') != -1;
 }
 
 void Serial::flush() const {
     uart_flush(this->uart_num);
 }
 
-int Serial::read_internal(uint32_t timeout, bool generate_output) const {
-    uint8_t data = 0;
-    const int length = uart_read_bytes(this->uart_num, &data, 1, timeout);
-
-    if (length > 0 && generate_output && this->output_on && output_queue != nullptr) {
-        // Queue the data for output
-        SerialOutputData output_data;
-        output_data.data[0] = data;
-        output_data.length = 1;
-
-        // Copy the module name
-        strncpy(output_data.module_name, this->name.c_str(), sizeof(output_data.module_name) - 1);
-        output_data.module_name[sizeof(output_data.module_name) - 1] = '\0';
-
-        // Try to send to queue, don't block if full
-        xQueueSend(output_queue, &output_data, 0);
-    }
-
-    return length > 0 ? data : -1;
-}
-
 int Serial::read(uint32_t timeout) const {
-    return read_internal(timeout, false);
+    TickType_t start = xTaskGetTickCount();
+    while (rx_buffer.available() == 0) {
+        if (timeout == 0 || (xTaskGetTickCount() - start) * portTICK_PERIOD_MS >= timeout) {
+            return -1;
+        }
+        vTaskDelay(1);
+    }
+    return rx_buffer.read();
 }
 
 int Serial::read_line(char *buffer, size_t buffer_len) const {
-    int pos = uart_pattern_pop_pos(this->uart_num);
-    if (pos >= static_cast<int>(buffer_len)) {
-        if (this->available() < pos) {
-            uart_flush_input(this->uart_num);
-            while (uart_pattern_pop_pos(this->uart_num) > 0)
-                ;
-            throw std::runtime_error("buffer too small, but cannot discard line. flushed serial.");
-        }
-
-        for (int i = 0; i < pos; i++)
-            this->read();
-        throw std::runtime_error("buffer too small. discarded line.");
+    int newline_pos = rx_buffer.find_pattern('\n');
+    if (newline_pos < 0 || static_cast<size_t>(newline_pos) >= buffer_len) {
+        return 0;
     }
-    return pos >= 0 ? uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0) : 0;
+
+    size_t read_len = rx_buffer.read(reinterpret_cast<uint8_t *>(buffer), newline_pos + 1);
+    buffer[read_len] = '\0';
+    return read_len;
 }
 
 void Serial::clear() const {

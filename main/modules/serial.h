@@ -3,9 +3,9 @@
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
 #include "freertos/task.h"
 #include "module.h"
+#include "utils/ring_buffer.h"
 #include <memory>
 #include <string>
 
@@ -13,43 +13,18 @@ class Serial;
 using Serial_ptr = std::shared_ptr<Serial>;
 using ConstSerial_ptr = std::shared_ptr<const Serial>;
 
-// Structure for serial write data
-struct SerialWriteData {
-    uint8_t data[256]; // Buffer for data to write
-    size_t length;     // Length of data to write
-    bool is_byte;      // True if single byte, false if buffer
-};
-
-// Structure for serial output (for echoing)
-struct SerialOutputData {
-    char module_name[32]; // Buffer for module name
-    uint8_t data[256];    // Buffer for output data
-    size_t length;        // Length of output data
-};
-
 class Serial : public Module {
 private:
-    // Task handles
     TaskHandle_t rx_task_handle = nullptr;
     TaskHandle_t tx_task_handle = nullptr;
-
-    // Message queues
-    QueueHandle_t tx_queue = nullptr;
-    QueueHandle_t output_queue = nullptr;
-
-    // Flag to control task operation
-    volatile bool tasks_running = false;
-
-    // Static task functions
-    static void rx_task_function(void *arg);
-    static void tx_task_function(void *arg);
-
-    // Task initialization and cleanup
-    void initialize_tasks();
-    void cleanup_tasks();
-
-    // Internal read helper that doesn't generate output
-    int read_internal(uint32_t timeout, bool generate_output) const;
+    static constexpr size_t RING_BUFFER_SIZE = 2048;
+    mutable RingBuffer<RING_BUFFER_SIZE> rx_buffer;
+    mutable RingBuffer<RING_BUFFER_SIZE> tx_buffer;
+    static void rx_task(void *param);
+    static void tx_task(void *param);
+    void rx_task_function();
+    void tx_task_function();
+    void write_to_buffer(const char *data, size_t len) const;
 
 public:
     const gpio_num_t rx_pin;
@@ -60,7 +35,7 @@ public:
     Serial(const std::string name,
            const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num);
     ~Serial();
-    void step() override;
+
     void initialize_uart() const;
     void enable_line_detection() const;
     void deinstall() const;
