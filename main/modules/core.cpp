@@ -3,6 +3,7 @@
 #include "../storage.h"
 #include "../utils/ota.h"
 #include "../utils/string_utils.h"
+#include "../utils/task_watcher.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "driver/gpio.h"
@@ -163,6 +164,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             echo("Not a strapping pin");
             break;
         }
+    } else if (method_name == "tasks") {
+        Module::expect(arguments, 0);
+        TaskWatcher::print_tasks();
     } else {
         Module::call(method_name, arguments);
     }
