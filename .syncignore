@@ -5,7 +5,6 @@ __pycache__/
 .env
 .venv
 
-
 # Ignore everything in build except li*, bo* and pa*
 build/[c-kC-K]*
 build/[m-oM-O]*
