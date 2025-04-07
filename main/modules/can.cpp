@@ -94,13 +94,14 @@ void Can::step() {
 
 bool Can::receive() {
     twai_message_t message;
-    esp_err_t result = twai_receive(&message, pdMS_TO_TICKS(0));
-
+    const esp_err_t result = twai_receive(&message, pdMS_TO_TICKS(0));
     if (result == ESP_ERR_TIMEOUT) {
-        // This is normal - no message available
+        // no message available
         return false;
-    } else if (result != ESP_OK) {
-        // Recover if bus is off
+    }
+
+    if (result != ESP_OK) {
+        // reset if bus is off
         twai_status_info_t status_info;
         if (twai_get_status_info(&status_info) == ESP_OK) {
             if (status_info.state == TWAI_STATE_BUS_OFF) {
@@ -195,12 +196,12 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
     } else if (method_name == "start") {
         Module::expect(arguments, 0);
         if (twai_start() != ESP_OK) {
-            throw std::runtime_error("could not start twai driver");
+            throw std::runtime_error("could not start TWAI driver");
         }
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
         if (twai_stop() != ESP_OK) {
-            throw std::runtime_error("could not stop twai driver");
+            throw std::runtime_error("could not stop TWAI driver");
         }
     } else if (method_name == "recover") {
         Module::expect(arguments, 0);
@@ -231,22 +232,22 @@ void Can::reset_can_bus() {
     twai_status_info_t status_info;
 
     if (twai_get_status_info(&status_info) != ESP_OK) {
-        throw std::runtime_error("could not get twai status");
+        throw std::runtime_error("could not get TWAI status");
     }
 
     echo("CAN bus state before reset: %s",
-         status_info.state == TWAI_STATE_STOPPED ? "STOPPED" : status_info.state == TWAI_STATE_RUNNING  ? "RUNNING"
-                                                           : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
-                                                           : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
-                                                                                                        : "UNKNOWN");
+         status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
+         : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
+         : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+         : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                      : "UNKNOWN");
 
     if (status_info.state != TWAI_STATE_STOPPED) {
         if (twai_stop() != ESP_OK) {
-            throw std::runtime_error("could not stop twai driver");
+            throw std::runtime_error("could not stop TWAI driver");
         }
-
         if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_STOPPED) {
-            throw std::runtime_error("twai driver didn't stop properly");
+            throw std::runtime_error("TWAI driver didn't stop properly");
         }
     }
 
@@ -265,9 +266,10 @@ void Can::reset_can_bus() {
 
             if (status_info.state != TWAI_STATE_RECOVERING) {
                 echo("Recovery completed, state: %s",
-                     status_info.state == TWAI_STATE_STOPPED ? "STOPPED" : status_info.state == TWAI_STATE_RUNNING ? "RUNNING"
-                                                                       : status_info.state == TWAI_STATE_BUS_OFF   ? "BUS_OFF"
-                                                                                                                   : "UNKNOWN");
+                     status_info.state == TWAI_STATE_STOPPED   ? "STOPPED"
+                     : status_info.state == TWAI_STATE_RUNNING ? "RUNNING"
+                     : status_info.state == TWAI_STATE_BUS_OFF ? "BUS_OFF"
+                                                               : "UNKNOWN");
                 break;
             }
 
@@ -281,11 +283,11 @@ void Can::reset_can_bus() {
 
     echo("Starting TWAI driver...");
     if (twai_start() != ESP_OK) {
-        throw std::runtime_error("could not start twai driver");
+        throw std::runtime_error("could not start TWAI driver");
     }
 
     if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
-        throw std::runtime_error("twai driver didn't start properly");
+        throw std::runtime_error("TWAI driver didn't start properly");
     }
 
     echo("CAN bus reset successful, state: RUNNING");

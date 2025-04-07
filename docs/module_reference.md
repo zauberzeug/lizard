@@ -239,6 +239,9 @@ The method `get_status()` prints the following information:
 After creating a CAN module, the driver is started automatically.
 The `start()` and `stop()` methods are primarily for debugging purposes.
 
+The `recover()` method can be used to recover the driver from a "BUS_OFF" state.
+In contrast, the `reset()` method will stop the driver, try to recover it and then start it again.
+
 ## Serial interface
 
 The serial module allows communicating with peripherals via the specified connection.

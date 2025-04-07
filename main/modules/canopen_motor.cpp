@@ -226,23 +226,17 @@ void CanOpenMotor::transition_operational() {
 }
 
 bool CanOpenMotor::send_sdo_with_retry(uint32_t cob_id, const uint8_t *data) {
-    const int max_retries = 3;
+    const int max_attempts = 3;
 
-    for (int retry_count = 0; retry_count < max_retries; retry_count++) {
+    for (int attempt = 0; attempt < max_attempts; attempt++) {
         try {
-            this->can->send(cob_id, data);
-
             this->properties[PROP_PENDING_WRITES]->integer_value++;
-
+            this->can->send(cob_id, data);
             wait_for_sdo_writes(100);
-
             return true;
         } catch (const std::exception &e) {
-            // reduce the counter if the operation failed
-            if (this->properties[PROP_PENDING_WRITES]->integer_value > 0) {
-                this->properties[PROP_PENDING_WRITES]->integer_value--;
-            }
-            if (retry_count < max_retries - 1) {
+            this->properties[PROP_PENDING_WRITES]->integer_value--;
+            if (attempt < max_attempts - 1) {
                 try {
                     this->can->reset_can_bus();
                     delay(50);
