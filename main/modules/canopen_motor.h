@@ -46,6 +46,7 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
     uint16_t build_ctrl_word(bool new_set_point);
 
     void wait_for_sdo_writes(uint32_t timeout_ms);
+    bool send_sdo_with_retry(uint32_t cob_id, const uint8_t *data);
     void enter_position_mode(int velocity);
     void enter_velocity_mode(int velocity);
 
