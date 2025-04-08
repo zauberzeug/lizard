@@ -1,6 +1,7 @@
 #pragma once
 
 #include "module.h"
+#include <cstdio>
 #include <memory>
 #include <utility>
 
