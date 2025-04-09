@@ -4,3 +4,31 @@ __pycache__/
 *.tmp
 .env
 .venv
+
+# Ignore everything in build except li*, bo* and pa*
+build/[c-kC-K]*
+build/[m-oM-O]*
+build/[q-zQ-Z]*
+build/[0-9]*
+build/a*
+build/b[a-np-zA-NP-Z]*
+build/l[a-hj-zA-HJ-Z]*
+build/p[b-zB-Z]*
+build/.*
+
+# ignore some specific files that are not filtered by the above rules
+build/partition-table-flash_args
+build/lizard.map
+build/bootloader-flash_args
+build/bootloader-prefix
+
+# Ignore files in bootloader directory
+build/bootloader/[a-aA-A]*
+build/bootloader/b[a-np-zA-NP-Z]*
+build/bootloader/[c-zC-Z]*
+build/bootloader/[0-9]*
+build/bootloader/.*
+
+# ignore files that are not filtered by the above rules
+build/bootloader/*.map
+build/bootloader/*.elf

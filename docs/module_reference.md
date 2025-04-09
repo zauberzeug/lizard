@@ -270,6 +270,7 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | `can.start()`                                       | Start the driver               |           |
 | `can.stop()`                                        | Stop the driver                |           |
 | `can.recover()`                                     | Recover the driver             |           |
+| `can.reset()`                                       | Reset the driver               |           |
 
 The method `get_status()` prints the following information:
 
@@ -286,6 +287,9 @@ The method `get_status()` prints the following information:
 
 After creating a CAN module, the driver is started automatically.
 The `start()` and `stop()` methods are primarily for debugging purposes.
+
+The `recover()` method can be used to recover the driver from a "BUS_OFF" state.
+In contrast, the `reset()` method will stop the driver, try to recover it and then start it again.
 
 ## Serial interface
 
