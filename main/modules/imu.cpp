@@ -35,6 +35,7 @@ const std::map<std::string, Variable_ptr> Imu::get_defaults() {
         {"grav_y", std::make_shared<NumberVariable>()},
         {"grav_z", std::make_shared<NumberVariable>()},
         {"temp", std::make_shared<IntegerVariable>()},
+        {"data_select", std::make_shared<IntegerVariable>(0xffff)},
     };
 }
 
@@ -69,49 +70,61 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
 }
 
 void Imu::step() {
-    bno055_calibration_t c = this->bno->getCalibration();
-    this->properties.at("cal_sys")->integer_value = c.sys;
-    this->properties.at("cal_gyr")->integer_value = c.gyro;
-    this->properties.at("cal_acc")->integer_value = c.accel;
-    this->properties.at("cal_mag")->integer_value = c.mag;
+    uint16_t data_select = this->properties.at("data_select")->integer_value;
 
-    bno055_vector_t v = this->bno->getVectorAccelerometer();
-    this->properties.at("acc_x")->number_value = v.x;
-    this->properties.at("acc_y")->number_value = v.y;
-    this->properties.at("acc_z")->number_value = v.z;
-
-    v = this->bno->getVectorMagnetometer();
-    this->properties.at("mag_x")->number_value = v.x;
-    this->properties.at("mag_y")->number_value = v.y;
-    this->properties.at("mag_z")->number_value = v.z;
-
-    v = this->bno->getVectorGyroscope();
-    this->properties.at("gyr_x")->number_value = v.x;
-    this->properties.at("gyr_y")->number_value = v.y;
-    this->properties.at("gyr_z")->number_value = v.z;
-
-    v = this->bno->getVectorEuler();
-    this->properties.at("yaw")->number_value = v.x;
-    this->properties.at("roll")->number_value = v.y;
-    this->properties.at("pitch")->number_value = v.z;
-
-    bno055_quaternion_t q = this->bno->getQuaternion();
-    this->properties.at("quat_w")->number_value = q.w;
-    this->properties.at("quat_x")->number_value = q.x;
-    this->properties.at("quat_y")->number_value = q.y;
-    this->properties.at("quat_z")->number_value = q.z;
-
-    v = this->bno->getVectorLinearAccel();
-    this->properties.at("lin_x")->number_value = v.x;
-    this->properties.at("lin_y")->number_value = v.y;
-    this->properties.at("lin_z")->number_value = v.z;
-
-    bno055_vector_t g = this->bno->getVectorGravity();
-    this->properties.at("grav_x")->number_value = g.x;
-    this->properties.at("grav_y")->number_value = g.y;
-    this->properties.at("grav_z")->number_value = g.z;
-
-    this->properties.at("temp")->number_value = this->bno->getTemp();
+    if (data_select & 0x0001) {
+        bno055_calibration_t c = this->bno->getCalibration();
+        this->properties.at("cal_sys")->integer_value = c.sys;
+        this->properties.at("cal_gyr")->integer_value = c.gyro;
+        this->properties.at("cal_acc")->integer_value = c.accel;
+        this->properties.at("cal_mag")->integer_value = c.mag;
+    }
+    if (data_select & 0x0002) {
+        bno055_vector_t v = this->bno->getVectorAccelerometer();
+        this->properties.at("acc_x")->number_value = v.x;
+        this->properties.at("acc_y")->number_value = v.y;
+        this->properties.at("acc_z")->number_value = v.z;
+    }
+    if (data_select & 0x0004) {
+        bno055_vector_t v = this->bno->getVectorMagnetometer();
+        this->properties.at("mag_x")->number_value = v.x;
+        this->properties.at("mag_y")->number_value = v.y;
+        this->properties.at("mag_z")->number_value = v.z;
+    }
+    if (data_select & 0x0008) {
+        bno055_vector_t v = this->bno->getVectorGyroscope();
+        this->properties.at("gyr_x")->number_value = v.x;
+        this->properties.at("gyr_y")->number_value = v.y;
+        this->properties.at("gyr_z")->number_value = v.z;
+    }
+    if (data_select & 0x0010) {
+        bno055_vector_t v = this->bno->getVectorEuler();
+        this->properties.at("yaw")->number_value = v.x;
+        this->properties.at("roll")->number_value = v.y;
+        this->properties.at("pitch")->number_value = v.z;
+    }
+    if (data_select & 0x0020) {
+        bno055_quaternion_t q = this->bno->getQuaternion();
+        this->properties.at("quat_w")->number_value = q.w;
+        this->properties.at("quat_x")->number_value = q.x;
+        this->properties.at("quat_y")->number_value = q.y;
+        this->properties.at("quat_z")->number_value = q.z;
+    }
+    if (data_select & 0x0040) {
+        bno055_vector_t v = this->bno->getVectorLinearAccel();
+        this->properties.at("lin_x")->number_value = v.x;
+        this->properties.at("lin_y")->number_value = v.y;
+        this->properties.at("lin_z")->number_value = v.z;
+    }
+    if (data_select & 0x0080) {
+        bno055_vector_t g = this->bno->getVectorGravity();
+        this->properties.at("grav_x")->number_value = g.x;
+        this->properties.at("grav_y")->number_value = g.y;
+        this->properties.at("grav_z")->number_value = g.z;
+    }
+    if (data_select & 0x0100) {
+        this->properties.at("temp")->number_value = this->bno->getTemp();
+    }
 
     Module::step();
 }

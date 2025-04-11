@@ -189,35 +189,50 @@ The constructor expects up to five arguments:
 - `address`: client address of the MCP (0x28 or 0x29, default: 0x28)
 - `clk_speed`: I2C clock speed (default: 100000)
 
-| Properties    | Description                                     | Data type |
-| ------------- | ----------------------------------------------- | --------- |
-| `imu.cal_sys` | calibration: system (0 to 3)                    | `int`     |
-| `imu.cal_gyr` | calibration: gyroscope (0 to 3)                 | `int`     |
-| `imu.cal_acc` | calibration: accelerometer (0 to 3)             | `int`     |
-| `imu.cal_mag` | calibration: magnetometer (0 to 3)              | `int`     |
-| `imu.acc_x`   | acceleration incl. gravity: x direction (m/s^2) | `float`   |
-| `imu.acc_y`   | acceleration incl. gravity: y direction (m/s^2) | `float`   |
-| `imu.acc_z`   | acceleration incl. gravity: z direction (m/s^2) | `float`   |
-| `imu.mag_x`   | magnetic field strength: x direction (µT)       | `float`   |
-| `imu.mag_y`   | magnetic field strength: y direction (µT)       | `float`   |
-| `imu.mag_z`   | magnetic field strength: z direction (µT)       | `float`   |
-| `imu.gyr_x`   | gyroscope: x direction (degrees/s)              | `float`   |
-| `imu.gyr_y`   | gyroscope: y direction (degrees/s)              | `float`   |
-| `imu.gyr_z`   | gyroscope: z direction (degrees/s)              | `float`   |
-| `imu.yaw`     | orientation: Euler angle yaw (degrees)          | `float`   |
-| `imu.roll`    | orientation: Euler angle roll (degrees)         | `float`   |
-| `imu.pitch`   | orientation: Euler angle pitch (degrees)        | `float`   |
-| `imu.quat_w`  | orientation: quaternion component w             | `float`   |
-| `imu.quat_x`  | orientation: quaternion component x             | `float`   |
-| `imu.quat_y`  | orientation: quaternion component y             | `float`   |
-| `imu.quat_z`  | orientation: quaternion component z             | `float`   |
-| `imu.lin_x`   | acceleration excl. gravity: x direction (m/s^2) | `float`   |
-| `imu.lin_y`   | acceleration excl. gravity: y direction (m/s^2) | `float`   |
-| `imu.lin_z`   | acceleration excl. gravity: z direction (m/s^2) | `float`   |
-| `imu.grav_x`  | gravity: x direction (m/s^2)                    | `float`   |
-| `imu.grav_y`  | gravity: y direction (m/s^2)                    | `float`   |
-| `imu.grav_z`  | gravity: z direction (m/s^2)                    | `float`   |
-| `imu.temp`    | temperature (degrees Celsius)                   | `int`     |
+| Properties        | Description                                     | Data type |
+| ----------------- | ----------------------------------------------- | --------- |
+| `imu.cal_sys`     | calibration: system (0 to 3)                    | `int`     |
+| `imu.cal_gyr`     | calibration: gyroscope (0 to 3)                 | `int`     |
+| `imu.cal_acc`     | calibration: accelerometer (0 to 3)             | `int`     |
+| `imu.cal_mag`     | calibration: magnetometer (0 to 3)              | `int`     |
+| `imu.acc_x`       | acceleration incl. gravity: x direction (m/s^2) | `float`   |
+| `imu.acc_y`       | acceleration incl. gravity: y direction (m/s^2) | `float`   |
+| `imu.acc_z`       | acceleration incl. gravity: z direction (m/s^2) | `float`   |
+| `imu.mag_x`       | magnetic field strength: x direction (µT)       | `float`   |
+| `imu.mag_y`       | magnetic field strength: y direction (µT)       | `float`   |
+| `imu.mag_z`       | magnetic field strength: z direction (µT)       | `float`   |
+| `imu.gyr_x`       | gyroscope: x direction (degrees/s)              | `float`   |
+| `imu.gyr_y`       | gyroscope: y direction (degrees/s)              | `float`   |
+| `imu.gyr_z`       | gyroscope: z direction (degrees/s)              | `float`   |
+| `imu.yaw`         | orientation: Euler angle yaw (degrees)          | `float`   |
+| `imu.roll`        | orientation: Euler angle roll (degrees)         | `float`   |
+| `imu.pitch`       | orientation: Euler angle pitch (degrees)        | `float`   |
+| `imu.quat_w`      | orientation: quaternion component w             | `float`   |
+| `imu.quat_x`      | orientation: quaternion component x             | `float`   |
+| `imu.quat_y`      | orientation: quaternion component y             | `float`   |
+| `imu.quat_z`      | orientation: quaternion component z             | `float`   |
+| `imu.lin_x`       | acceleration excl. gravity: x direction (m/s^2) | `float`   |
+| `imu.lin_y`       | acceleration excl. gravity: y direction (m/s^2) | `float`   |
+| `imu.lin_z`       | acceleration excl. gravity: z direction (m/s^2) | `float`   |
+| `imu.grav_x`      | gravity: x direction (m/s^2)                    | `float`   |
+| `imu.grav_y`      | gravity: y direction (m/s^2)                    | `float`   |
+| `imu.grav_z`      | gravity: z direction (m/s^2)                    | `float`   |
+| `imu.temp`        | temperature (degrees Celsius)                   | `int`     |
+| `imu.data_select` | data selection                                  | `int`     |
+
+The `data_select` property can be used to select which data is read from the IMU.
+The default value is 0xffff, which means all data is read.
+The following bits are available:
+
+- 0x0001: calibration status
+- 0x0002: accelerometer data
+- 0x0004: magnetometer data
+- 0x0008: gyroscope data
+- 0x0010: Euler angles
+- 0x0020: quaternion
+- 0x0040: linear acceleration
+- 0x0080: gravity
+- 0x0100: temperature
 
 | Methods              | Description                   | Arguments |
 | -------------------- | ----------------------------- | --------- |
