@@ -10,6 +10,7 @@ class RoboClawMotor : public Module {
 private:
     const unsigned int motor_number;
     const RoboClaw_ptr roboclaw;
+    bool enabled = true;
 
 public:
     RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number);
@@ -17,6 +18,8 @@ public:
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 
+    void enable();
+    void disable();
     int64_t get_position() const;
     void power(double value);
     void speed(int value);

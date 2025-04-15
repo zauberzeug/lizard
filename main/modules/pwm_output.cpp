@@ -7,6 +7,7 @@ const std::map<std::string, Variable_ptr> PwmOutput::get_defaults() {
     return {
         {"frequency", std::make_shared<IntegerVariable>(1000)},
         {"duty", std::make_shared<IntegerVariable>(128)},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -48,17 +49,45 @@ void PwmOutput::step() {
     uint32_t duty = this->properties.at("duty")->integer_value;
     ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
+    if (this->enabled != this->properties.at("enabled")->boolean_value) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
     Module::step();
 }
 
 void PwmOutput::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "on") {
         Module::expect(arguments, 0);
-        this->is_on = true;
+        if (this->enabled) {
+            this->is_on = true;
+        }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
-        this->is_on = false;
+        if (this->enabled) {
+            this->is_on = false;
+        }
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void PwmOutput::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+}
+
+void PwmOutput::disable() {
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
+    this->is_on = false;
 }

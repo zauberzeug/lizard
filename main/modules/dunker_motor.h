@@ -14,6 +14,7 @@ private:
     const uint8_t node_id;
     int waiting_nmt_writes = 0;
     int waiting_sdo_writes = 0;
+    bool enabled = true;
 
     void sdo_read(const uint16_t index, const uint8_t sub);
     void nmt_write(const uint8_t cs);
@@ -28,4 +29,7 @@ public:
     static const std::map<std::string, Variable_ptr> get_defaults();
     void speed(const double speed);
     double get_speed();
+    void enable();
+    void disable();
+    void step() override;
 };

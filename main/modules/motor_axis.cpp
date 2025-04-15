@@ -5,7 +5,9 @@
 REGISTER_MODULE_DEFAULTS(MotorAxis)
 
 const std::map<std::string, Variable_ptr> MotorAxis::get_defaults() {
-    return {};
+    return {
+        {"enabled", std::make_shared<BooleanVariable>(false)},
+    };
 }
 
 MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2)
@@ -14,6 +16,9 @@ MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_
 }
 
 bool MotorAxis::can_move(const float speed) const {
+    if (!this->properties.at("enabled")->boolean_value) {
+        return false;
+    }
     if (speed < 0 && this->input1->get_property("active")->boolean_value) {
         return false;
     }
@@ -24,6 +29,15 @@ bool MotorAxis::can_move(const float speed) const {
 }
 
 void MotorAxis::step() {
+    // Check if the enabled property has changed
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+
     float speed = this->motor->get_speed();
     if (!this->can_move(speed)) {
         this->motor->stop();
@@ -58,7 +72,32 @@ void MotorAxis::call(const std::string method_name, const std::vector<ConstExpre
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
         this->motor->stop();
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+void MotorAxis::enable() {
+    this->properties.at("enabled")->boolean_value = true;
+    this->enabled = true;
+    try {
+        this->motor->enable();
+    } catch (const std::exception &e) {
+    }
+}
+
+void MotorAxis::disable() {
+    this->motor->stop();
+    this->properties.at("enabled")->boolean_value = false;
+    this->enabled = false;
+    try {
+        this->motor->disable();
+    } catch (const std::exception &e) {
     }
 }

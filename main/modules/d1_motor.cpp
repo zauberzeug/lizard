@@ -18,6 +18,7 @@ const std::map<std::string, Variable_ptr> D1Motor::get_defaults() {
         {"velocity", std::make_shared<IntegerVariable>()},
         {"status_word", std::make_shared<IntegerVariable>(-1)},
         {"status_flags", std::make_shared<IntegerVariable>()},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -120,6 +121,12 @@ void D1Motor::call(const std::string method_name, const std::vector<ConstExpress
     } else if (method_name == "nmt_write") {
         Module::expect(arguments, 1, integer);
         this->nmt_write(arguments[0]->evaluate_integer());
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         throw std::runtime_error("Method " + method_name + " not found");
     }
@@ -130,6 +137,13 @@ void D1Motor::step() {
     this->sdo_read(0x2014, 0);
     this->sdo_read(0x6064, 0);
     this->sdo_read(0x606C, 0);
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
     Module::step();
 }
 
@@ -154,12 +168,16 @@ void D1Motor::handle_can_msg(const uint32_t id, const int count, const uint8_t *
 }
 
 void D1Motor::setup() {
+    if (!this->enabled)
+        return;
     this->sdo_write(0x6040, 0, 16, 6);
     this->sdo_write(0x6040, 0, 16, 7);
     this->sdo_write(0x6040, 0, 16, 15);
 }
 
 void D1Motor::home() {
+    if (!this->enabled)
+        return;
     this->sdo_write(0x6060, 0, 8, 6);
     // set specific homing parameters
     this->sdo_write(0x6099, 1, 32, this->properties["switch_search_speed"]->integer_value);
@@ -170,6 +188,8 @@ void D1Motor::home() {
 }
 
 void D1Motor::profile_position(const int32_t position) {
+    if (!this->enabled)
+        return;
     // set mode to profile position mode
     this->sdo_write(0x6060, 0, 8, 1);
     // commit target position
@@ -185,6 +205,8 @@ void D1Motor::profile_position(const int32_t position) {
 }
 
 void D1Motor::profile_velocity(const int32_t velocity) {
+    if (!this->enabled)
+        return;
     // set mode to profile velocity mode
     this->sdo_write(0x6060, 0, 8, 3);
     // commit target velocity
@@ -198,4 +220,15 @@ void D1Motor::profile_velocity(const int32_t velocity) {
 
 void D1Motor::stop() {
     this->sdo_write(0x6040, 0, 16, 7);
+}
+
+void D1Motor::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+}
+
+void D1Motor::disable() {
+    this->stop();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }
