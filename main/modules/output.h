@@ -10,11 +10,17 @@ private:
     double pulse_interval = 0.0;
     double pulse_duty_cycle = 0.5;
     virtual void set_level(bool level) const = 0;
+    bool enabled = true;
+    bool active = false;
 
 protected:
     Output(const std::string name);
 
 public:
+    void enable();
+    void disable();
+    void activate();
+    void deactivate();
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();

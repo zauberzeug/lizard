@@ -9,6 +9,7 @@ REGISTER_MODULE_DEFAULTS(RoboClawMotor)
 const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
     return {
         {"position", std::make_shared<IntegerVariable>()},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -21,6 +22,14 @@ RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw
 }
 
 void RoboClawMotor::step() {
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+
     uint8_t status;
     bool valid;
     int64_t position = this->motor_number == 1 ? this->roboclaw->ReadEncM1(&status, &valid) : this->roboclaw->ReadEncM2(&status, &valid);
@@ -43,6 +52,12 @@ void RoboClawMotor::call(const std::string method_name, const std::vector<ConstE
         if (!success) {
             throw std::runtime_error("could not reset position");
         }
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
     }
@@ -53,6 +68,9 @@ int64_t RoboClawMotor::get_position() const {
 }
 
 void RoboClawMotor::power(double value) {
+    if (!this->enabled) {
+        return;
+    }
     unsigned short int duty = (short int)(constrain(value, -1, 1) * 32767);
 
     const int max_retries = 4;
@@ -66,6 +84,9 @@ void RoboClawMotor::power(double value) {
 }
 
 void RoboClawMotor::speed(int value) {
+    if (!this->enabled) {
+        return;
+    }
     unsigned int counts_per_second = constrain(value, -2147483647, 2147483647);
 
     const int max_retries = 4;
@@ -76,4 +97,15 @@ void RoboClawMotor::speed(int value) {
         }
     }
     throw std::runtime_error("could not set speed after " + std::to_string(max_retries) + " retries");
+}
+
+void RoboClawMotor::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+}
+
+void RoboClawMotor::disable() {
+    this->speed(0); // Stop the motor when disabling
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }

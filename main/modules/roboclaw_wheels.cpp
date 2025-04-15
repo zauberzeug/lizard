@@ -50,6 +50,15 @@ void RoboClawWheels::step() {
     last_right_position = right_position;
     initialized = true;
 
+    // Check if the enabled property has changed
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+
     Module::step();
 }
 
@@ -74,7 +83,27 @@ void RoboClawWheels::call(const std::string method_name, const std::vector<Const
         Module::expect(arguments, 0);
         this->left_motor->power(0);
         this->right_motor->power(0);
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void RoboClawWheels::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+    this->left_motor->enable();
+    this->right_motor->enable();
+}
+
+void RoboClawWheels::disable() {
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
+    this->left_motor->disable();
+    this->right_motor->disable();
 }

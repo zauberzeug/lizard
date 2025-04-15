@@ -11,6 +11,7 @@ const std::map<std::string, Variable_ptr> DunkerMotor::get_defaults() {
         {"speed", std::make_shared<NumberVariable>()},
         {"m_per_turn", std::make_shared<NumberVariable>(1.0)},
         {"reversed", std::make_shared<BooleanVariable>()},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -108,10 +109,10 @@ void DunkerMotor::call(const std::string method_name, const std::vector<ConstExp
         this->sdo_write(index, sub, bits, value);
     } else if (method_name == "enable") {
         Module::expect(arguments, 0);
-        this->sdo_write(0x4004, 1, 8, 1);
+        this->enable();
     } else if (method_name == "disable") {
         Module::expect(arguments, 0);
-        this->sdo_write(0x4004, 1, 8, 0);
+        this->disable();
     } else if (method_name == "speed") {
         Module::expect(arguments, 1, numbery);
         this->speed(arguments[0]->evaluate_number());
@@ -137,6 +138,8 @@ void DunkerMotor::handle_can_msg(const uint32_t id, const int count, const uint8
 }
 
 void DunkerMotor::speed(const double speed) {
+    if (!this->enabled)
+        return;
     const int32_t motor_speed = speed /
                                 this->properties.at("m_per_turn")->number_value /
                                 (this->properties.at("reversed")->boolean_value ? -1 : 1) *
@@ -146,4 +149,27 @@ void DunkerMotor::speed(const double speed) {
 
 double DunkerMotor::get_speed() {
     return this->properties.at("speed")->number_value;
+}
+
+void DunkerMotor::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+    this->sdo_write(0x4004, 1, 8, 1);
+}
+
+void DunkerMotor::disable() {
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
+    this->sdo_write(0x4004, 1, 8, 0);
+}
+
+void DunkerMotor::step() {
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+    Module::step();
 }

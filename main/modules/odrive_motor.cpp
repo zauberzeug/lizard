@@ -14,6 +14,7 @@ const std::map<std::string, Variable_ptr> ODriveMotor::get_defaults() {
         {"axis_state", std::make_shared<IntegerVariable>()},
         {"axis_error", std::make_shared<IntegerVariable>()},
         {"motor_error_flag", std::make_shared<IntegerVariable>()},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -74,6 +75,12 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "reset_motor") {
         Module::expect(arguments, 0);
         this->reset_motor_error();
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
     }
@@ -115,6 +122,9 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
 }
 
 void ODriveMotor::power(const float torque) {
+    if (!this->enabled) {
+        return;
+    }
     this->set_mode(8, 1, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_TORQUE_CONTROL, INPUT_MODE_PASSTHROUGH
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
@@ -124,6 +134,9 @@ void ODriveMotor::power(const float torque) {
 }
 
 void ODriveMotor::speed(const float speed) {
+    if (!this->enabled) {
+        return;
+    }
     this->set_mode(8, 2, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_VELOCITY_CONTROL, INPUT_MODE_PASSTHROUGH
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     const float motor_speed = speed /
@@ -134,6 +147,9 @@ void ODriveMotor::speed(const float speed) {
 }
 
 void ODriveMotor::position(const float position) {
+    if (!this->enabled) {
+        return;
+    }
     this->set_mode(8, 3, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_POSITION_CONTROL, INPUT_MODE_PASSTHROUGH
     uint8_t pos_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     const float motor_position = position /
@@ -160,6 +176,30 @@ void ODriveMotor::reset_motor_error() {
     uint8_t empty_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     this->can->send(this->can_id + 0x018, empty_data); // "Clear Errors"
 }
+
+void ODriveMotor::step() {
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+
+    Module::step();
+}
+
+void ODriveMotor::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+}
+
+void ODriveMotor::disable() {
+    this->stop();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
+}
+
 void ODriveMotor::stop() {
     this->speed(0);
 }

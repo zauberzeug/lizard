@@ -69,6 +69,7 @@ const std::map<std::string, Variable_ptr> CanOpenMotor::get_defaults() {
         {PROP_PV_IS_MOVING, std::make_shared<BooleanVariable>(false)},
         {PROP_CTRL_ENA_OP, std::make_shared<BooleanVariable>(false)},
         {PROP_CTRL_HALT, std::make_shared<BooleanVariable>(true)},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -523,6 +524,9 @@ double CanOpenMotor::get_position() {
 }
 
 void CanOpenMotor::position(const double position, const double speed, const double acceleration) {
+    if (!this->enabled) {
+        return;
+    }
     this->enter_position_mode(static_cast<int32_t>(speed));
     this->send_target_position(static_cast<int32_t>(position) + this->properties[PROP_OFFSET]->integer_value);
     send_control_word(build_ctrl_word(true));
@@ -533,7 +537,42 @@ double CanOpenMotor::get_speed() {
 }
 
 void CanOpenMotor::speed(const double speed, const double acceleration) {
+    if (!this->enabled) {
+        return;
+    }
     this->enter_velocity_mode(speed);
     this->properties[PROP_CTRL_HALT]->boolean_value = false;
+    send_control_word(build_ctrl_word(false));
+}
+
+void CanOpenMotor::step() {
+    if (!this->properties[PROP_INITIALIZED]->boolean_value) {
+        return;
+    }
+
+    // Check if enabled state has changed
+    if (this->properties["enabled"]->boolean_value != this->enabled) {
+        if (this->properties["enabled"]->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+
+    // ... rest of existing step() code ...
+}
+
+void CanOpenMotor::enable() {
+    this->enabled = true;
+    this->properties["enabled"]->boolean_value = true;
+    this->properties[PROP_CTRL_ENA_OP]->boolean_value = true;
+    send_control_word(build_ctrl_word(false));
+}
+
+void CanOpenMotor::disable() {
+    this->stop();
+    this->enabled = false;
+    this->properties["enabled"]->boolean_value = false;
+    this->properties[PROP_CTRL_ENA_OP]->boolean_value = false;
     send_control_word(build_ctrl_word(false));
 }

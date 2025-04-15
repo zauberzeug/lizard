@@ -15,6 +15,7 @@ const std::map<std::string, Variable_ptr> RmdMotor::get_defaults() {
         {"speed", std::make_shared<NumberVariable>()},
         {"temperature", std::make_shared<NumberVariable>()},
         {"can_age", std::make_shared<NumberVariable>()},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -54,10 +55,22 @@ void RmdMotor::step() {
         this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
     }
     this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
+
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+
     Module::step();
 }
 
 bool RmdMotor::power(double target_power) {
+    if (!this->enabled) {
+        return false;
+    }
     int16_t power = target_power * 100;
     return this->send(0xa1, 0,
                       0,
@@ -69,6 +82,9 @@ bool RmdMotor::power(double target_power) {
 }
 
 bool RmdMotor::speed(double target_speed) {
+    if (!this->enabled) {
+        return false;
+    }
     int32_t speed = target_speed * 100;
     return this->send(0xa2, 0,
                       0,
@@ -80,6 +96,9 @@ bool RmdMotor::speed(double target_speed) {
 }
 
 bool RmdMotor::position(double target_position, double target_speed) {
+    if (!this->enabled) {
+        return false;
+    }
     int32_t position = target_position * 100;
     uint16_t speed = target_speed;
     return this->send(0xa4, 0,
@@ -160,9 +179,26 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     } else if (method_name == "clear_errors") {
         Module::expect(arguments, 0);
         this->clear_errors();
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void RmdMotor::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+}
+
+void RmdMotor::disable() {
+    this->stop();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }
 
 double modulo_encoder_range(double position, double range) {
