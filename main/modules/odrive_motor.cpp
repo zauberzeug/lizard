@@ -192,6 +192,7 @@ void ODriveMotor::step() {
 void ODriveMotor::enable() {
     this->enabled = true;
     this->properties.at("enabled")->boolean_value = true;
+    this->reset_motor_error();
 }
 
 void ODriveMotor::disable() {
