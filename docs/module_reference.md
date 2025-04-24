@@ -698,11 +698,15 @@ This module controls [dunkermotoren](https://www.dunkermotoren.de/) motor via CA
 | ----------------------------------- | ------------------------------- | ----------------- |
 | `motor = DunkerMotor(can, node_id)` | CAN module and node ID (1..127) | CAN module, `int` |
 
-| Properties         | Description                     | Data type |
-| ------------------ | ------------------------------- | --------- |
-| `motor.speed`      | Motor speed (meters per second) | `float`   |
-| `motor.m_per_turn` | Meters per turn                 | `float`   |
-| `motor.reversed`   | Reverse motor direction         | `bool`    |
+| Properties            | Description                     | Data type |
+| --------------------- | ------------------------------- | --------- |
+| `motor.speed`         | Motor speed (meters per second) | `float`   |
+| `motor.voltage_logic` | Voltage logic (V)               | `float`   |
+| `motor.voltage_power` | Voltage power (V)               | `float`   |
+| `motor.m_per_turn`    | Meters per turn                 | `float`   |
+| `motor.reversed`      | Reverse motor direction         | `bool`    |
+
+Note: To reduce bandwidth, voltages are only queried when explicitly requested by calling `update_voltages()`.
 
 | Methods                                         | Description                   | Arguments |
 | ----------------------------------------------- | ----------------------------- | --------- |
@@ -711,6 +715,7 @@ This module controls [dunkermotoren](https://www.dunkermotoren.de/) motor via CA
 | `motor.disable()`                               | Disable motor                 |           |
 | `motor.sdo_read(index[, subindex])`             | Read SDO                      | 2x `int`  |
 | `motor.sdo_write(index, subindex, bits, value)` | Write SDO                     | 4x `int`  |
+| `motor.update_voltages()`                       | Update voltages               |           |
 
 ## DunkerWheels
 
