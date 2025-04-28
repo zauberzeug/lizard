@@ -1,7 +1,7 @@
 #include "dunker_motor.h"
 #include "canopen.h"
-#include "uart.h"
 #include "utils/timing.h"
+#include "utils/uart.h"
 #include <cinttypes>
 
 REGISTER_MODULE_DEFAULTS(DunkerMotor)
@@ -9,6 +9,8 @@ REGISTER_MODULE_DEFAULTS(DunkerMotor)
 const std::map<std::string, Variable_ptr> DunkerMotor::get_defaults() {
     return {
         {"speed", std::make_shared<NumberVariable>()},
+        {"voltage_logic", std::make_shared<NumberVariable>()},
+        {"voltage_power", std::make_shared<NumberVariable>()},
         {"m_per_turn", std::make_shared<NumberVariable>(1.0)},
         {"reversed", std::make_shared<BooleanVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
@@ -116,6 +118,10 @@ void DunkerMotor::call(const std::string method_name, const std::vector<ConstExp
     } else if (method_name == "speed") {
         Module::expect(arguments, 1, numbery);
         this->speed(arguments[0]->evaluate_number());
+    } else if (method_name == "update_voltages") {
+        Module::expect(arguments, 0);
+        this->sdo_read(0x4110, 1);
+        this->sdo_read(0x4111, 1);
     } else {
         Module::call(method_name, arguments);
     }
@@ -127,6 +133,12 @@ void DunkerMotor::handle_can_msg(const uint32_t id, const int count, const uint8
     }
     if (id == 0x580 + this->node_id) {
         this->waiting_sdo_writes--;
+        if (data[0] == 0x43 && data[1] == 0x10 && data[2] == 0x41 && data[3] == 0x01) {
+            this->properties["voltage_logic"]->number_value = ((data[5] << 8) | data[4]) / 1000.0;
+        }
+        if (data[0] == 0x43 && data[1] == 0x11 && data[2] == 0x41 && data[3] == 0x01) {
+            this->properties["voltage_power"]->number_value = ((data[5] << 8) | data[4]) / 1000.0;
+        }
     }
     if (id == 0x180 + this->node_id) {
         const int32_t motor_speed = demarshal_i32(data);

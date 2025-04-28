@@ -203,22 +203,86 @@ The constructor expects up to five arguments:
 - `address`: client address of the MCP (0x28 or 0x29, default: 0x28)
 - `clk_speed`: I2C clock speed (default: 100000)
 
-| Properties    | Description                           | Data type |
-| ------------- | ------------------------------------- | --------- |
-| `imu.acc_x`   | acceleration in x direction (m/s^2)   | `float`   |
-| `imu.acc_y`   | acceleration in y direction (m/s^2)   | `float`   |
-| `imu.acc_z`   | acceleration in z direction (m/s^2)   | `float`   |
-| `imu.roll`    | roll (degrees, see datasheet)         | `float`   |
-| `imu.pitch`   | pitch (degrees, see datasheet)        | `float`   |
-| `imu.yaw`     | yaw (degrees, see datasheet)          | `float`   |
-| `imu.quat_w`  | quaternion component w                | `float`   |
-| `imu.quat_x`  | quaternion component x                | `float`   |
-| `imu.quat_y`  | quaternion component y                | `float`   |
-| `imu.quat_z`  | quaternion component z                | `float`   |
-| `imu.cal_sys` | calibration of system (0 to 3)        | `float`   |
-| `imu.cal_gyr` | calibration of gyroscope (0 to 3)     | `float`   |
-| `imu.cal_acc` | calibration of accelerometer (0 to 3) | `float`   |
-| `imu.cal_mag` | calibration of magnetometer (0 to 3)  | `float`   |
+| Properties        | Description                                     | Data type |
+| ----------------- | ----------------------------------------------- | --------- |
+| `imu.cal_sys`     | calibration: system (0 to 3)                    | `int`     |
+| `imu.cal_gyr`     | calibration: gyroscope (0 to 3)                 | `int`     |
+| `imu.cal_acc`     | calibration: accelerometer (0 to 3)             | `int`     |
+| `imu.cal_mag`     | calibration: magnetometer (0 to 3)              | `int`     |
+| `imu.acc_x`       | acceleration incl. gravity: x direction (m/s^2) | `float`   |
+| `imu.acc_y`       | acceleration incl. gravity: y direction (m/s^2) | `float`   |
+| `imu.acc_z`       | acceleration incl. gravity: z direction (m/s^2) | `float`   |
+| `imu.mag_x`       | magnetic field strength: x direction (µT)       | `float`   |
+| `imu.mag_y`       | magnetic field strength: y direction (µT)       | `float`   |
+| `imu.mag_z`       | magnetic field strength: z direction (µT)       | `float`   |
+| `imu.gyr_x`       | gyroscope: x direction (degrees/s)              | `float`   |
+| `imu.gyr_y`       | gyroscope: y direction (degrees/s)              | `float`   |
+| `imu.gyr_z`       | gyroscope: z direction (degrees/s)              | `float`   |
+| `imu.yaw`         | orientation: Euler angle yaw (degrees)          | `float`   |
+| `imu.roll`        | orientation: Euler angle roll (degrees)         | `float`   |
+| `imu.pitch`       | orientation: Euler angle pitch (degrees)        | `float`   |
+| `imu.quat_w`      | orientation: quaternion component w             | `float`   |
+| `imu.quat_x`      | orientation: quaternion component x             | `float`   |
+| `imu.quat_y`      | orientation: quaternion component y             | `float`   |
+| `imu.quat_z`      | orientation: quaternion component z             | `float`   |
+| `imu.lin_x`       | acceleration excl. gravity: x direction (m/s^2) | `float`   |
+| `imu.lin_y`       | acceleration excl. gravity: y direction (m/s^2) | `float`   |
+| `imu.lin_z`       | acceleration excl. gravity: z direction (m/s^2) | `float`   |
+| `imu.grav_x`      | gravity: x direction (m/s^2)                    | `float`   |
+| `imu.grav_y`      | gravity: y direction (m/s^2)                    | `float`   |
+| `imu.grav_z`      | gravity: z direction (m/s^2)                    | `float`   |
+| `imu.temp`        | temperature (degrees Celsius)                   | `int`     |
+| `imu.data_select` | data selection                                  | `int`     |
+
+The `data_select` property can be used to select which data is read from the IMU.
+The default value is 0xffff, which means all data is read.
+The following bits are available:
+
+- 0x0001: calibration status
+- 0x0002: accelerometer data
+- 0x0004: magnetometer data
+- 0x0008: gyroscope data
+- 0x0010: Euler angles
+- 0x0020: quaternion
+- 0x0040: linear acceleration
+- 0x0080: gravity
+- 0x0100: temperature
+
+| Methods              | Description                   | Arguments |
+| -------------------- | ----------------------------- | --------- |
+| `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
+
+The `mode` parameter can be one of the following:
+
+| Mode           | Accel | Mag | Gyro | Relative Orientation | Absolute Orientation |
+| -------------- | ----- | --- | ---- | -------------------- | -------------------- |
+| `configmode`   | -     | -   | -    | -                    | -                    |
+| `acconly`      | X     | -   | -    | -                    | -                    |
+| `magonly`      | -     | X   | -    | -                    | -                    |
+| `gyroonly`     | -     | -   | X    | -                    | -                    |
+| `accmag`       | X     | X   | -    | -                    | -                    |
+| `accgyro`      | X     | -   | X    | -                    | -                    |
+| `maggyro`      | -     | X   | X    | -                    | -                    |
+| `amg`          | X     | X   | X    | -                    | -                    |
+| `imu`          | X     | -   | X    | X                    | -                    |
+| `compass`      | X     | X   | -    | -                    | X                    |
+| `m4g`          | X     | X   |      | X                    | -                    |
+| `ndof_fmc_off` | X     | X   | X    | -                    | X                    |
+| `ndof`         | X     | X   | X    | -                    | X                    |
+
+In non-fusion modes (`acconly`, `magonly`, `gyroonly`, `accmag`, `accgyro`, `maggyro`, `amg`),
+the sensor signals (Accel, Mag, Gyro) are uncompensated and fusion data (Relative and Absolute Orientation) is not available.
+
+In fusion modes (`imu`, `compass`, `m4g`, `ndof_fmc_off`, `ndof`),
+the sensor signals (Accel, Mag, Gyro) are compensated and fusion data (Relative and Absolute Orientation) is available.
+
+Note that the individual sensors need to be calibrated before the compensated and fused data is accurate.
+
+| Sensor        | Calibration                                            |
+| ------------- | ------------------------------------------------------ |
+| Accelerometer | Position the sensor in 6 different stable orientations |
+| Magnetometer  | Move the sensor in a figure-8 pattern in space         |
+| Gyroscope     | Keep the sensor still for a few seconds                |
 
 ## CAN interface
 
@@ -692,12 +756,16 @@ This module controls [dunkermotoren](https://www.dunkermotoren.de/) motor via CA
 | ----------------------------------- | ------------------------------- | ----------------- |
 | `motor = DunkerMotor(can, node_id)` | CAN module and node ID (1..127) | CAN module, `int` |
 
-| Properties         | Description                     | Data type |
-| ------------------ | ------------------------------- | --------- |
-| `motor.speed`      | Motor speed (meters per second) | `float`   |
-| `motor.m_per_turn` | Meters per turn                 | `float`   |
-| `motor.reversed`   | Reverse motor direction         | `bool`    |
-| `motor.enabled`    | enabled state of the motor      | `bool`    |
+| Properties            | Description                     | Data type |
+| --------------------- | ------------------------------- | --------- |
+| `motor.speed`         | Motor speed (meters per second) | `float`   |
+| `motor.voltage_logic` | Voltage logic (V)               | `float`   |
+| `motor.voltage_power` | Voltage power (V)               | `float`   |
+| `motor.m_per_turn`    | Meters per turn                 | `float`   |
+| `motor.reversed`      | Reverse motor direction         | `bool`    |
+| `motor.enabled`       | enabled state of the motor      | `bool`    |
+
+Note: To reduce bandwidth, voltages are only queried when explicitly requested by calling `update_voltages()`.
 
 | Methods                                         | Description                   | Arguments |
 | ----------------------------------------------- | ----------------------------- | --------- |
@@ -706,6 +774,7 @@ This module controls [dunkermotoren](https://www.dunkermotoren.de/) motor via CA
 | `motor.disable()`                               | Disable motor                 |           |
 | `motor.sdo_read(index[, subindex])`             | Read SDO                      | 2x `int`  |
 | `motor.sdo_write(index, subindex, bits, value)` | Write SDO                     | 4x `int`  |
+| `motor.update_voltages()`                       | Update voltages               |           |
 | `motor.enable()`                                | Enable the Motor              |           |
 | `motor.disable()`                               | Disable the Motor             |           |
 
