@@ -550,7 +550,6 @@ void CanOpenMotor::step() {
         return;
     }
 
-    // Check if enabled state has changed
     if (this->properties["enabled"]->boolean_value != this->enabled) {
         if (this->properties["enabled"]->boolean_value) {
             this->enable();
@@ -558,8 +557,6 @@ void CanOpenMotor::step() {
             this->disable();
         }
     }
-
-    // ... rest of existing step() code ...
 }
 
 void CanOpenMotor::enable() {
