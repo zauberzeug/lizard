@@ -95,13 +95,13 @@ The output module is associated with a digital output pin that is connected to a
 | ---------------------- | -------------------------------------- | --------- |
 | `output = Output(pin)` | `pin` is the corresponding GPIO number | `int`     |
 
-| Properties       | Description                           | Data type |
-| ---------------  | ------------------------------------- | --------- |
-| `output.level`   | Current signal level (0 or 1)         | `int`     |
-| `output.change`  | Level change since last cycle (-1..1) | `int`     |
-| `output.enabled` | Whether the output is enabled         | `bool`    |
-| `output.inverted`| Whether the output is inverted        | `bool`    |
-| `output.active`  | Whether the output is active          | `bool`    |
+| Properties        | Description                           | Data type |
+| ----------------- | ------------------------------------- | --------- |
+| `output.level`    | Current signal level (0 or 1)         | `int`     |
+| `output.change`   | Level change since last cycle (-1..1) | `int`     |
+| `output.enabled`  | Whether the output is enabled         | `bool`    |
+| `output.inverted` | Whether the output is inverted        | `bool`    |
+| `output.active`   | Whether the output is active          | `bool`    |
 
 | Methods                                | Description                               | Arguments |
 | -------------------------------------- | ----------------------------------------- | --------- |
@@ -133,12 +133,12 @@ The PWM output module is associated with a digital output pin that is connected 
 | `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
 | `output.enabled`   | Whether the output is enabled            | `bool`    |
 
-| Methods        | Description             | Arguments |
-| -------------- | ----------------------- | --------- |
-| `output.on()`  | Turn on the PWM signal  |           |
-| `output.off()` | Turn off the PWM signal |           |
-| `output.enable()` | Enable the PWM output  |           |
-| `output.disable()` | Disable the PWM output |           |
+| Methods            | Description             | Arguments |
+| ------------------ | ----------------------- | --------- |
+| `output.on()`      | Turn on the PWM signal  |           |
+| `output.off()`     | Turn off the PWM signal |           |
+| `output.enable()`  | Enable the PWM output   |           |
+| `output.disable()` | Disable the PWM output  |           |
 
 When the output is disabled, it will turn off the PWM signal and not respond to on/off commands.
 
@@ -350,13 +350,13 @@ This module controls a linear actuator via two output pins (move in, move out) a
 | `motor.out`     | Motor is in "out" position | `bool`    |
 | `motor.enabled` | Enabled state of the motor | `bool`    |
 
-| Methods           | Description                |
-| ---------------- | -------------------------- |
-| `motor.in()`     | Move in                    |
-| `motor.out()`    | Move out                   |
-| `motor.stop()`   | Stop motor                 |
-| `motor.enable()` | Enable the motor           |
-| `motor.disable()`| Disable the motor          |
+| Methods           | Description       |
+| ----------------- | ----------------- |
+| `motor.in()`      | Move in           |
+| `motor.out()`     | Move out          |
+| `motor.stop()`    | Stop motor        |
+| `motor.enable()`  | Enable the motor  |
+| `motor.disable()` | Disable the motor |
 
 When the motor is disabled, it will be stopped and won't respond to in/out commands.
 
@@ -479,11 +479,11 @@ The RMD motor pair module allows to synchronize two RMD motors.
 | --------------------------- | --------------------- | ------------------- |
 | `rmd = RmdPair(rmd1, rmd2)` | Two RMD motor modules | 2x RMD Motor module |
 
-| Properties  | Description                                   | Data type |
-| ----------- | --------------------------------------------- | --------- |
-| `rmd.v_max` | Maximum speed (deg/s, default: 360)           | `float`   |
-| `rmd.a_max` | Maximum acceleration (deg/s² (default: 10000) | `float`   |
-| `rmd.enabled` | Whether the motor pair is enabled          | `bool`    |
+| Properties    | Description                                   | Data type |
+| ------------- | --------------------------------------------- | --------- |
+| `rmd.v_max`   | Maximum speed (deg/s, default: 360)           | `float`   |
+| `rmd.a_max`   | Maximum acceleration (deg/s² (default: 10000) | `float`   |
+| `rmd.enabled` | Whether the motor pair is enabled             | `bool`    |
 
 | Methods              | Description                             | Arguments  |
 | -------------------- | --------------------------------------- | ---------- |
@@ -603,17 +603,17 @@ Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.
 | ----------------------------------------- | ----------------------- | --------- |
 | `axis = MotorAxis(motor, limit1, limit2)` | motor and input modules | 3 modules |
 
-| Properties      | Description                           | Data type |
-| --------------- | ------------------------------------- | --------- |
-| `axis.enabled`  | Whether the motor axis is enabled     | `bool`    |
+| Properties     | Description                       | Data type |
+| -------------- | --------------------------------- | --------- |
+| `axis.enabled` | Whether the motor axis is enabled | `bool`    |
 
-| Methods                                           | Description              | Arguments  |
-| ------------------------------------------------- | ------------------------ | ---------- |
-| `axis.speed(speed[, acceleration])`               | Move with given `speed`  | 2x `float` |
-| `axis.position(position, speed[, acceleration])`  | Move to given `position` | 3x `float` |
-| `axis.stop()`                                     | Stop                     |            |
-| `axis.enable()`                                   | Enable the motor axis    |            |
-| `axis.disable()`                                  | Disable the motor axis   |            |
+| Methods                                          | Description              | Arguments  |
+| ------------------------------------------------ | ------------------------ | ---------- |
+| `axis.speed(speed[, acceleration])`              | Move with given `speed`  | 2x `float` |
+| `axis.position(position, speed[, acceleration])` | Move to given `position` | 3x `float` |
+| `axis.stop()`                                    | Stop                     |            |
+| `axis.enable()`                                  | Enable the motor axis    |            |
+| `axis.disable()`                                 | Disable the motor axis   |            |
 
 When the motor axis is disabled, it will not respond to movement commands and will stop the motor if it's moving.
 
@@ -788,11 +788,11 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | ------------------------------------------------ | --------------------- | ----------------------- |
 | `wheels = DunkerWheels(left_motor, right_motor)` | left and right motors | two DunkerMotor modules |
 
-| Properties             | Description           | Data type |
-| ---------------------- | --------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)    | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)   | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s) | `float`   |
+| Properties             | Description                 | Data type |
+| ---------------------- | --------------------------- | --------- |
+| `wheels.width`         | Wheel distance (m)          | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)         | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)       | `float`   |
 | `wheels.enabled`       | Enabled state of the wheels | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
