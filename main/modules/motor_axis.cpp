@@ -6,7 +6,7 @@ REGISTER_MODULE_DEFAULTS(MotorAxis)
 
 const std::map<std::string, Variable_ptr> MotorAxis::get_defaults() {
     return {
-        {"enabled", std::make_shared<BooleanVariable>(false)},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
