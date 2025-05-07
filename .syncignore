@@ -4,6 +4,7 @@ __pycache__/
 *.tmp
 .env
 .venv
+.mypy_cache
 
 # Ignore everything in build except li*, bo* and pa*
 build/[c-kC-K]*
