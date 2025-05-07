@@ -83,7 +83,5 @@ class Esp:
 
     def disable(self) -> None:
         print('Disabling microcontroller...')
-        self.write(f'{self.gpio_g0}/value', self.on)
-        sleep(0.5)
         self.write(f'{self.gpio_en}/value', self.on)
         print('disable complete')
