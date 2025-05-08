@@ -115,7 +115,6 @@ void StepperMotor::step() {
     double dt = micros_since(this->last_micros) * 1e-6;
     this->last_micros = micros();
 
-    // Check if the enabled property has changed
     if (this->properties.at("enabled")->boolean_value != this->enabled) {
         if (this->properties.at("enabled")->boolean_value) {
             this->enable();

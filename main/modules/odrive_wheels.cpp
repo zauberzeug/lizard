@@ -35,7 +35,6 @@ void ODriveWheels::step() {
     this->last_right_position = right_position;
     this->initialized = true;
 
-    // Check if the enabled property has changed
     if (this->properties.at("enabled")->boolean_value != this->enabled) {
         if (this->properties.at("enabled")->boolean_value) {
             this->enable();

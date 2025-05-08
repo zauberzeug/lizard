@@ -29,7 +29,6 @@ bool MotorAxis::can_move(const float speed) const {
 }
 
 void MotorAxis::step() {
-    // Check if the enabled property has changed
     if (this->properties.at("enabled")->boolean_value != this->enabled) {
         if (this->properties.at("enabled")->boolean_value) {
             this->enable();

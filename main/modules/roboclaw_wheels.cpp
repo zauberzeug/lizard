@@ -50,7 +50,6 @@ void RoboClawWheels::step() {
     last_right_position = right_position;
     initialized = true;
 
-    // Check if the enabled property has changed
     if (this->properties.at("enabled")->boolean_value != this->enabled) {
         if (this->properties.at("enabled")->boolean_value) {
             this->enable();
