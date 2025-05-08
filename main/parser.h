@@ -8499,4 +8499,3 @@ static void left_right_operand_slots_lookup(uint32_t rule, uint32_t *left, uint3
     }
 }
 #endif
-
