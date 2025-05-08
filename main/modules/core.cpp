@@ -6,6 +6,8 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "driver/gpio.h"
+#include "esp_flash.h"
+#include "esp_loader.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -15,6 +17,10 @@
 #include <memory>
 #include <stdexcept>
 #include <stdlib.h>
+
+#ifndef MIN
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#endif
 
 Core::Core(const std::string name) : Module(core, name) {
     this->properties["debug"] = std::make_shared<BooleanVariable>(false);
@@ -162,6 +168,95 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         default:
             echo("Not a strapping pin");
             break;
+        }
+    } else if (method_name == "verify") {
+        Module::expect(arguments, 0);
+
+        // Get the current running partition
+        const esp_partition_t *running = esp_ota_get_running_partition();
+        if (!running) {
+            throw std::runtime_error("Failed to get running partition");
+        }
+
+        // Get flash size
+        uint32_t flash_size;
+        esp_err_t err = esp_flash_get_size(NULL, &flash_size);
+        if (err != ESP_OK) {
+            echo("Failed to get flash size");
+            return;
+        }
+        echo("Flash size: %d bytes", flash_size);
+
+        // Read and verify partition
+        uint8_t *buffer = (uint8_t *)malloc(4096);
+        if (!buffer) {
+            echo("Failed to allocate memory for verification");
+            return;
+        }
+
+        bool verification_ok = true;
+        for (size_t offset = 0; offset < running->size; offset += 4096) {
+            size_t read_size = MIN(4096, running->size - offset);
+            err = esp_partition_read(running, offset, buffer, read_size);
+            if (err != ESP_OK) {
+                echo("Failed to read flash at offset %d", offset);
+                verification_ok = false;
+                break;
+            }
+        }
+
+        free(buffer);
+
+        if (verification_ok) {
+            echo("Flash verification successful - All sectors readable");
+        } else {
+            echo("Flash verification failed - Read errors detected");
+        }
+
+        // RAM verification
+        echo("Starting RAM verification...");
+        const size_t test_size = 1024; // Test 1KB of RAM
+        uint32_t *ram_test = (uint32_t *)malloc(test_size);
+        if (!ram_test) {
+            echo("Failed to allocate memory for RAM test");
+            return;
+        }
+
+        // Test pattern 1: Alternating 0x55555555 and 0xAAAAAAAA
+        for (size_t i = 0; i < test_size / 4; i++) {
+            ram_test[i] = (i % 2) ? 0xAAAAAAAA : 0x55555555;
+        }
+
+        // Verify pattern 1
+        bool ram_ok = true;
+        for (size_t i = 0; i < test_size / 4; i++) {
+            if (ram_test[i] != ((i % 2) ? 0xAAAAAAAA : 0x55555555)) {
+                echo("RAM verification failed at offset %d", i * 4);
+                ram_ok = false;
+                break;
+            }
+        }
+
+        // Test pattern 2: Walking 1
+        for (size_t i = 0; i < test_size / 4; i++) {
+            ram_test[i] = 1 << (i % 32);
+        }
+
+        // Verify pattern 2
+        for (size_t i = 0; i < test_size / 4; i++) {
+            if (ram_test[i] != (1 << (i % 32))) {
+                echo("RAM verification failed at offset %d", i * 4);
+                ram_ok = false;
+                break;
+            }
+        }
+
+        free(ram_test);
+
+        if (ram_ok) {
+            echo("RAM verification successful - All patterns verified");
+        } else {
+            echo("RAM verification failed - Pattern mismatch detected");
         }
     } else {
         Module::call(method_name, arguments);
