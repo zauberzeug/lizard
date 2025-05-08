@@ -172,10 +172,11 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "verify") {
         Module::expect(arguments, 0);
 
-        // Get the current running partition
+        // Get both partitions
         const esp_partition_t *running = esp_ota_get_running_partition();
-        if (!running) {
-            throw std::runtime_error("Failed to get running partition");
+        const esp_partition_t *other = esp_ota_get_next_update_partition(NULL);
+        if (!running || !other) {
+            throw std::runtime_error("Failed to get partitions");
         }
 
         // Get flash size
@@ -187,7 +188,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
         echo("Flash size: %d bytes", flash_size);
 
-        // Read and verify partition
+        // Read and verify both partitions
         uint8_t *buffer = (uint8_t *)malloc(4096);
         if (!buffer) {
             echo("Failed to allocate memory for verification");
@@ -195,20 +196,28 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
 
         bool verification_ok = true;
-        for (size_t offset = 0; offset < running->size; offset += 4096) {
-            size_t read_size = MIN(4096, running->size - offset);
-            err = esp_partition_read(running, offset, buffer, read_size);
-            if (err != ESP_OK) {
-                echo("Failed to read flash at offset %d", offset);
-                verification_ok = false;
-                break;
+        const esp_partition_t *partitions[] = {running, other};
+        const char *names[] = {"running", "other"};
+
+        for (int p = 0; p < 2; p++) {
+            echo("Verifying %s partition...", names[p]);
+            for (size_t offset = 0; offset < partitions[p]->size; offset += 4096) {
+                size_t read_size = MIN(4096, partitions[p]->size - offset);
+                err = esp_partition_read(partitions[p], offset, buffer, read_size);
+                if (err != ESP_OK) {
+                    echo("Failed to read %s partition at offset %d", names[p], offset);
+                    verification_ok = false;
+                    break;
+                }
             }
+            if (!verification_ok)
+                break;
         }
 
         free(buffer);
 
         if (verification_ok) {
-            echo("Flash verification successful - All sectors readable");
+            echo("Flash verification successful - All sectors readable in both partitions");
         } else {
             echo("Flash verification failed - Read errors detected");
         }
