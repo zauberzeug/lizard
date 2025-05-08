@@ -126,7 +126,7 @@ Use `activate()` and `deactivate()` instead to change its value.
 The `pulse()` method allows pulsing an output with a given interval in seconds and an optional duty cycle between 0 and 1 (0.5 by default).
 Note that the pulsing frequency is limited by the main loop to around 20 Hz.
 
-When the output is disabled, it will not respond to level changes and will deactivate.
+When the output is disabled, it will deactivate and ignore on/off or level commands.
 
 ## PWM Output
 
@@ -149,7 +149,7 @@ The PWM output module is associated with a digital output pin that is connected 
 | `output.enable()`  | Enable the PWM output   |           |
 | `output.disable()` | Disable the PWM output  |           |
 
-When the output is disabled, it will turn off the PWM signal and not respond to on/off commands.
+When the output is disabled, it will turn off the PWM signal and ignore on/off commands.
 
 ## MCP23017 Port Expander
 
@@ -353,21 +353,21 @@ This module controls a linear actuator via two output pins (move in, move out) a
 | --------------------------------------------------------- | ------------------------------------- | --------- |
 | `motor = LinearMotor(move_in, move_out, end_in, end_out)` | motor control pins and limit switches | 4x `int`  |
 
-| Properties      | Description                | Data type |
-| --------------- | -------------------------- | --------- |
-| `motor.in`      | Motor is in "in" position  | `bool`    |
-| `motor.out`     | Motor is in "out" position | `bool`    |
-| `motor.enabled` | Enabled state of the motor | `bool`    |
+| Properties      | Description                  | Data type |
+| --------------- | ---------------------------- | --------- |
+| `motor.in`      | Motor is in "in" position    | `bool`    |
+| `motor.out`     | Motor is in "out" position   | `bool`    |
+| `motor.enabled` | Whether the motor is enabled | `bool`    |
 
 | Methods           | Description       |
 | ----------------- | ----------------- |
 | `motor.in()`      | Move in           |
 | `motor.out()`     | Move out          |
-| `motor.stop()`    | Stop motor        |
+| `motor.stop()`    | Stop the motor    |
 | `motor.enable()`  | Enable the motor  |
 | `motor.disable()` | Disable the motor |
 
-When the motor is disabled, it will be stopped and won't respond to in/out commands.
+When the motor is disabled, it will stop and ignore in/out commands.
 
 ## ODrive Motor
 
@@ -404,7 +404,7 @@ The `version` parameter is an optional integer indicating the patch number of th
 | `motor.disable()`              | Disable the motor                      |                  |
 | `motor.stop()`                 | Stop the motor                         |                  |
 
-When the motor is disabled, it will not respond to movement commands and will stop if it's moving.
+When the motor is disabled, it will stop and ignore movement commands.
 
 ## ODrive Wheels
 
@@ -414,12 +414,12 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | ----------------------------------------------- | ------------------------ | ------------------------ |
 | `wheels = ODriveWheels(left_motor, left_motor)` | Two ODrive motor modules | two ODrive motor modules |
 
-| Properties             | Description                      | Data type |
-| ---------------------- | -------------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)               | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)              | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)            | `float`   |
-| `wheels.enabled`       | Whether motors react to commands | `bool`    |
+| Properties             | Description                    | Data type |
+| ---------------------- | ------------------------------ | --------- |
+| `wheels.width`         | Wheel distance (m)             | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
+| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -429,7 +429,7 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | `wheels.enable()`               | Enable both motors                              |                  |
 | `wheels.disable()`              | Disable both motors                             |                  |
 
-When the wheels are not `enabled`, `power` and `speed` method calls are ignored.
+When the wheels are disabled, they will stop and ignore movement commands.
 This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
 
@@ -468,6 +468,8 @@ The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD mo
 | `rmd.enable()`              | Enable the motor                                                  |                  |
 | `rmd.disable()`             | Disable the motor                                                 |                  |
 
+When the motor is disabled, it will stop and ignore movement commands.
+
 **Set acceleration**
 
 Although `get_acceleration()` prints only one acceleration per motor, `set_acceleration` distinguishes the following four parameters:
@@ -478,7 +480,6 @@ Although `get_acceleration()` prints only one acceleration per motor, `set_accel
 4. deceleration for speed mode
 
 You can pass `0` to skip parameters, i.e. to keep individual acceleration values unchanged.
-When the motor is disabled, it will be stopped and won't respond to movement commands.
 
 ## RMD Motor Pair
 
@@ -504,7 +505,7 @@ The RMD motor pair module allows to synchronize two RMD motors.
 | `rmd.enable()`       | Enable both motors                      |            |
 | `rmd.disable()`      | Disable both motors                     |            |
 
-When the motor pair is disabled, it will not respond to movement commands and will disable both motors.
+When the motor pair is disabled, it will stop both motors and ignore movement commands.
 
 ## RoboClaw
 
@@ -542,7 +543,7 @@ The RoboClaw motor module controls a motor using a RoboClaw module.
 | `motor.enable()`      | Enable the motor                        |           |
 | `motor.disable()`     | Disable the motor                       |           |
 
-When the motor is disabled, it will not respond to power and speed commands and will stop if it's moving.
+When the motor is disabled, it will stop and ignore movement commands.
 
 ## RoboClaw Wheels
 
@@ -568,7 +569,7 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | `wheels.enable()`               | Enable both motors                              |                  |
 | `wheels.disable()`              | Disable both motors                             |                  |
 
-When the wheels are not `enabled`, `power` and `speed` method calls are ignored and both motors will be disabled.
+When the wheels are disabled, they will stop and ignore movement commands.
 
 ## Stepper Motor
 
@@ -599,7 +600,7 @@ When using multiple stepper motors, they can be set to different values to avoid
 
 The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.
 
-When the motor is disabled, it will not respond to speed and position commands and will stop if it's moving.
+When the motor is disabled, it will stop and ignore movement commands.
 
 ## Motor Axis
 
@@ -616,6 +617,8 @@ Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.
 | -------------- | --------------------------------- | --------- |
 | `axis.enabled` | Whether the motor axis is enabled | `bool`    |
 
+To get the current position or speed, access the motor module instead.
+
 | Methods                                          | Description              | Arguments  |
 | ------------------------------------------------ | ------------------------ | ---------- |
 | `axis.speed(speed[, acceleration])`              | Move with given `speed`  | 2x `float` |
@@ -624,7 +627,7 @@ Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.
 | `axis.enable()`                                  | Enable the motor axis    |            |
 | `axis.disable()`                                 | Disable the motor axis   |            |
 
-When the motor axis is disabled, it will not respond to movement commands and will stop the motor if it's moving.
+When the motor axis is disabled, it will stop the motor and ignore movement commands.
 
 ## CanOpenMaster
 
@@ -735,7 +738,7 @@ This module controls an [igus D1 motor controller](https://www.igus.eu/product/D
 | `motor.velocity`             | Current velocity                        | `int`     |
 | `motor.status_word`          | Status word                             | `int`     |
 | `motor.status_flags`         | Status flags                            | `int`     |
-| `motor.enabled`              | enabled state of the motor              | `bool`    |
+| `motor.enabled`              | Whether the motor is enabled            | `bool`    |
 
 Bit 0 of the status flags indicates the motor is referenced (1) or not (0).
 
@@ -752,10 +755,10 @@ The status word (also called "Statusword") is a 16 bit integer with several flag
 | `motor.sdo_read(index[, subindex])`             | Read SDO                 | 2x `int`  |
 | `motor.sdo_write(index, subindex, bits, value)` | Write SDO                | 4x `int`  |
 | `motor.nmt_write()`                             | Write NMT                | `int`     |
-| `motor.enable()`                                | Enable the Motor         |           |
-| `motor.disable()`                               | Disable the Motor        |           |
+| `motor.enable()`                                | Enable the motor         |           |
+| `motor.disable()`                               | Disable the motor        |           |
 
-When the motor is disabled, it will be stopped and wont sent setup, home, profile_position and profile_velocity commands to the motor.
+When the motor is disabled, it will stop and ignore movement commands.
 
 ## DunkerMotor
 
@@ -772,7 +775,7 @@ This module controls [dunkermotoren](https://www.dunkermotoren.de/) motor via CA
 | `motor.voltage_power` | Voltage power (V)               | `float`   |
 | `motor.m_per_turn`    | Meters per turn                 | `float`   |
 | `motor.reversed`      | Reverse motor direction         | `bool`    |
-| `motor.enabled`       | enabled state of the motor      | `bool`    |
+| `motor.enabled`       | Whether the motor is enabled    | `bool`    |
 
 Note: To reduce bandwidth, voltages are only queried when explicitly requested by calling `update_voltages()`.
 
@@ -787,7 +790,7 @@ Note: To reduce bandwidth, voltages are only queried when explicitly requested b
 | `motor.enable()`                                | Enable the Motor              |           |
 | `motor.disable()`                               | Disable the Motor             |           |
 
-When the motor is disabled, it will not respond to speed commands.
+When the motor is disabled, it will freewheel and ignore movement commands.
 
 ## DunkerWheels
 
@@ -797,12 +800,12 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | ------------------------------------------------ | --------------------- | ----------------------- |
 | `wheels = DunkerWheels(left_motor, right_motor)` | left and right motors | two DunkerMotor modules |
 
-| Properties             | Description                 | Data type |
-| ---------------------- | --------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)          | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)         | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)       | `float`   |
-| `wheels.enabled`       | Enabled state of the wheels | `bool`    |
+| Properties             | Description                    | Data type |
+| ---------------------- | ------------------------------ | --------- |
+| `wheels.width`         | Wheel distance (m)             | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
+| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -810,7 +813,7 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | `wheels.enable()`               | Enable both motors                              |                  |
 | `wheels.disable()`              | Disable both motors                             |                  |
 
-When the wheels are disabled, they will not respond to speed commands.
+When the wheels are disabled, they will freewheel and ignore movement commands.
 
 ## Analog Input
 
