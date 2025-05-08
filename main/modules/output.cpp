@@ -123,30 +123,18 @@ void Output::activate() {
     if (this->enabled) {
         this->active = true;
         this->properties.at("active")->boolean_value = true;
-        if (this->properties.at("inverted")->boolean_value) {
-            this->target_level = 0;
-            this->pulse_interval = 0;
-            this->step();
-        } else {
-            this->target_level = 1;
-            this->pulse_interval = 0;
-            this->step();
-        }
+        this->target_level = this->properties.at("inverted")->boolean_value ? 0 : 1;
+        this->pulse_interval = 0;
+        this->step();
     }
 }
 
 void Output::deactivate() {
-    this->active = false;
-    this->properties.at("active")->boolean_value = false;
     if (this->enabled) {
-        if (this->properties.at("inverted")->boolean_value) {
-            this->target_level = 1;
-            this->pulse_interval = 0;
-            this->step();
-        } else {
-            this->target_level = 0;
-            this->pulse_interval = 0;
-            this->step();
-        }
+        this->active = false;
+        this->properties.at("active")->boolean_value = false;
+        this->target_level = this->properties.at("inverted")->boolean_value ? 1 : 0;
+        this->pulse_interval = 0;
+        this->step();
     }
 }
