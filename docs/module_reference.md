@@ -80,6 +80,9 @@ The input module is associated with a digital input pin that is be connected to 
 | `input.inverted` | Inverts the active property if true   | `bool`    |
 | `input.active`   | Current active state of the input     | `bool`    |
 
+Usually, an input is considered active if and only if its level is high.
+If the `inverted` property is set to `true`, the input is considered active if and only if its level is low.
+
 | Methods            | Description                        |
 | ------------------ | ---------------------------------- |
 | `input.get()`      | Output the current level           |
@@ -102,6 +105,12 @@ The output module is associated with a digital output pin that is connected to a
 | `output.enabled`  | Whether the output is enabled         | `bool`    |
 | `output.inverted` | Whether the output is inverted        | `bool`    |
 | `output.active`   | Whether the output is active          | `bool`    |
+
+Usually, an output is considered active if and only if its level is high.
+If the `inverted` property is set to `true`, the output is considered active if and only if its level is low.
+
+Note that the `active` property is not meant to be written to.
+Use `activate()` and `deactivate()` instead to change its value.
 
 | Methods                                | Description                               | Arguments |
 | -------------------------------------- | ----------------------------------------- | --------- |
