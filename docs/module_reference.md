@@ -109,9 +109,6 @@ The output module is associated with a digital output pin that is connected to a
 Usually, an output is considered active if and only if its level is high.
 If the `inverted` property is set to `true`, the output is considered active if and only if its level is low.
 
-Note that the `active` property is not meant to be written to.
-Use `activate()` and `deactivate()` instead to change its value.
-
 | Methods                                | Description                               | Arguments |
 | -------------------------------------- | ----------------------------------------- | --------- |
 | `output.on()`                          | Set the output pin high                   |           |

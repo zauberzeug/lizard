@@ -16,7 +16,7 @@ MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_
 }
 
 bool MotorAxis::can_move(const float speed) const {
-    if (!this->properties.at("enabled")->boolean_value) {
+    if (!this->enabled) {
         return false;
     }
     if (speed < 0 && this->input1->get_property("active")->boolean_value) {
@@ -85,18 +85,12 @@ void MotorAxis::call(const std::string method_name, const std::vector<ConstExpre
 void MotorAxis::enable() {
     this->properties.at("enabled")->boolean_value = true;
     this->enabled = true;
-    try {
-        this->motor->enable();
-    } catch (const std::exception &e) {
-    }
+    this->motor->enable();
 }
 
 void MotorAxis::disable() {
     this->motor->stop();
-    try {
-        this->motor->disable();
-    } catch (const std::exception &e) {
-    }
+    this->motor->disable();
     this->properties.at("enabled")->boolean_value = false;
     this->enabled = false;
 }

@@ -49,7 +49,7 @@ void PwmOutput::step() {
     uint32_t duty = this->properties.at("duty")->integer_value;
     ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
-    if (this->enabled != this->properties.at("enabled")->boolean_value) {
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
         if (this->properties.at("enabled")->boolean_value) {
             this->enable();
         } else {
