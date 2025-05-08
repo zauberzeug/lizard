@@ -70,8 +70,10 @@ void Output::call(const std::string method_name, const std::vector<ConstExpressi
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, numbery, numbery);
-        this->pulse_interval = arguments[0]->evaluate_number();
-        this->pulse_duty_cycle = arguments.size() > 1 ? arguments[1]->evaluate_number() : 0.5;
+        if (this->enabled) {
+            this->pulse_interval = arguments[0]->evaluate_number();
+            this->pulse_duty_cycle = arguments.size() > 1 ? arguments[1]->evaluate_number() : 0.5;
+        }
     } else if (method_name == "enable") {
         Module::expect(arguments, 0);
         this->enable();
