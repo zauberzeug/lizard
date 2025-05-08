@@ -168,8 +168,6 @@ void D1Motor::handle_can_msg(const uint32_t id, const int count, const uint8_t *
 }
 
 void D1Motor::setup() {
-    if (!this->enabled)
-        return;
     this->sdo_write(0x6040, 0, 16, 6);
     this->sdo_write(0x6040, 0, 16, 7);
     this->sdo_write(0x6040, 0, 16, 15);
