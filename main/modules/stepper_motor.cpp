@@ -66,7 +66,8 @@ StepperMotor::StepperMotor(const std::string name,
         .timer_num = this->ledc_timer,
         .freq_hz = 1000,
         .clk_cfg = LEDC_AUTO_CLK,
-        .deconfigure = false};
+        .deconfigure = false,
+    };
     ledc_timer_config(&timer_config);
 
     ledc_channel_config_t channel_config = {

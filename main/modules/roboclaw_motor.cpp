@@ -105,7 +105,7 @@ void RoboClawMotor::enable() {
 }
 
 void RoboClawMotor::disable() {
-    this->speed(0); // Stop the motor when disabling
+    this->speed(0);
     this->enabled = false;
     this->properties.at("enabled")->boolean_value = false;
 }

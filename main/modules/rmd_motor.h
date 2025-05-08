@@ -19,6 +19,7 @@ private:
     bool has_last_encoder_position = false;
     unsigned long int last_msg_millis = 0;
     bool enabled = true;
+
     bool send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
               const unsigned long int timeout_ms = 3);
