@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.11">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.4af4bdda.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.2afb09e1.min.css">
       
       
 
@@ -1064,7 +1064,7 @@ It is automatically created right after the boot sequence.</p>
 </table>
 <p>The output <code>format</code> is a string with multiple space-separated elements of the pattern <code>&lt;module&gt;.&lt;property&gt;[:&lt;precision&gt;]</code> or <code>&lt;variable&gt;[:&lt;precision&gt;]</code>.
 The <code>precision</code> is an optional integer specifying the number of decimal places for a floating point number.
-For example, the format <code>"core.millis input.level motor.position:3"</code> might yield an output like <code>"92456 1 12.789</code>.</p>
+For example, the format <code>"core.millis input.level motor.position:3"</code> might yield an output like <code>"92456 1 12.789"</code>.</p>
 <p>The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
 After initializing the WiFi connection, it will attempt an OTA update from the given URL.
 Upon successful updating, the ESP will restart and attempt to verify the OTA update.
@@ -1157,6 +1157,8 @@ Simply create a Bluetooth module with a device name of your choice.</p>
 </tr>
 </tbody>
 </table>
+<p>Usually, an input is considered active if and only if its level is high.
+If the <code>inverted</code> property is set to <code>true</code>, the input is considered active if and only if its level is low.</p>
 <table>
 <thead>
 <tr>
@@ -1220,8 +1222,25 @@ Simply create a Bluetooth module with a device name of your choice.</p>
 <td>Level change since last cycle (-1..1)</td>
 <td><code>int</code></td>
 </tr>
+<tr>
+<td><code>output.enabled</code></td>
+<td>Whether the output is enabled</td>
+<td><code>bool</code></td>
+</tr>
+<tr>
+<td><code>output.inverted</code></td>
+<td>Whether the output is inverted</td>
+<td><code>bool</code></td>
+</tr>
+<tr>
+<td><code>output.active</code></td>
+<td>Whether the output is active</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
+<p>Usually, an output is considered active if and only if its level is high.
+If the <code>inverted</code> property is set to <code>true</code>, the output is considered active if and only if its level is low.</p>
 <table>
 <thead>
 <tr>
@@ -1251,10 +1270,31 @@ Simply create a Bluetooth module with a device name of your choice.</p>
 <td>Switch output on and off</td>
 <td><code>float</code>s</td>
 </tr>
+<tr>
+<td><code>output.enable()</code></td>
+<td>Enable the output</td>
+<td></td>
+</tr>
+<tr>
+<td><code>output.disable()</code></td>
+<td>Disable the output</td>
+<td></td>
+</tr>
+<tr>
+<td><code>output.activate()</code></td>
+<td>Activate the output</td>
+<td></td>
+</tr>
+<tr>
+<td><code>output.deactivate()</code></td>
+<td>Deactivate the output</td>
+<td></td>
+</tr>
 </tbody>
 </table>
 <p>The <code>pulse()</code> method allows pulsing an output with a given interval in seconds and an optional duty cycle between 0 and 1 (0.5 by default).
 Note that the pulsing frequency is limited by the main loop to around 20 Hz.</p>
+<p>When the output is disabled, it will deactivate and ignore on/off or level commands.</p>
 <h2 id="pwm-output">PWM Output<a class="headerlink" href="#pwm-output" title="Permanent link">&para;</a></h2>
 <p>The PWM output module is associated with a digital output pin that is connected to an LED, actuator or other output signal.</p>
 <table>
@@ -1292,6 +1332,11 @@ Note that the pulsing frequency is limited by the main loop to around 20 Hz.</p>
 <td>Frequency (Hz, default: 1000)</td>
 <td><code>int</code></td>
 </tr>
+<tr>
+<td><code>output.enabled</code></td>
+<td>Whether the output is enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -1313,8 +1358,19 @@ Note that the pulsing frequency is limited by the main loop to around 20 Hz.</p>
 <td>Turn off the PWM signal</td>
 <td></td>
 </tr>
+<tr>
+<td><code>output.enable()</code></td>
+<td>Enable the PWM output</td>
+<td></td>
+</tr>
+<tr>
+<td><code>output.disable()</code></td>
+<td>Disable the PWM output</td>
+<td></td>
+</tr>
 </tbody>
 </table>
+<p>When the output is disabled, it will turn off the PWM signal and ignore on/off commands.</p>
 <h2 id="mcp23017-port-expander">MCP23017 Port Expander<a class="headerlink" href="#mcp23017-port-expander" title="Permanent link">&para;</a></h2>
 <p>The MCP23017 allows controlling up to 16 general purpose input or output pins via I2C.</p>
 <table>
@@ -1442,74 +1498,320 @@ Currently, only reading the accelerometer is implemented.</p>
 </thead>
 <tbody>
 <tr>
+<td><code>imu.cal_sys</code></td>
+<td>calibration: system (0 to 3)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>imu.cal_gyr</code></td>
+<td>calibration: gyroscope (0 to 3)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>imu.cal_acc</code></td>
+<td>calibration: accelerometer (0 to 3)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>imu.cal_mag</code></td>
+<td>calibration: magnetometer (0 to 3)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
 <td><code>imu.acc_x</code></td>
-<td>acceleration in x direction (m/s^2)</td>
+<td>acceleration incl. gravity: x direction (m/s^2)</td>
 <td><code>float</code></td>
 </tr>
 <tr>
 <td><code>imu.acc_y</code></td>
-<td>acceleration in y direction (m/s^2)</td>
+<td>acceleration incl. gravity: y direction (m/s^2)</td>
 <td><code>float</code></td>
 </tr>
 <tr>
 <td><code>imu.acc_z</code></td>
-<td>acceleration in z direction (m/s^2)</td>
+<td>acceleration incl. gravity: z direction (m/s^2)</td>
 <td><code>float</code></td>
 </tr>
 <tr>
-<td><code>imu.roll</code></td>
-<td>roll (degrees, see datasheet)</td>
+<td><code>imu.mag_x</code></td>
+<td>magnetic field strength: x direction (µT)</td>
 <td><code>float</code></td>
 </tr>
 <tr>
-<td><code>imu.pitch</code></td>
-<td>pitch (degrees, see datasheet)</td>
+<td><code>imu.mag_y</code></td>
+<td>magnetic field strength: y direction (µT)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.mag_z</code></td>
+<td>magnetic field strength: z direction (µT)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.gyr_x</code></td>
+<td>gyroscope: x direction (degrees/s)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.gyr_y</code></td>
+<td>gyroscope: y direction (degrees/s)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.gyr_z</code></td>
+<td>gyroscope: z direction (degrees/s)</td>
 <td><code>float</code></td>
 </tr>
 <tr>
 <td><code>imu.yaw</code></td>
-<td>yaw (degrees, see datasheet)</td>
+<td>orientation: Euler angle yaw (degrees)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.roll</code></td>
+<td>orientation: Euler angle roll (degrees)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.pitch</code></td>
+<td>orientation: Euler angle pitch (degrees)</td>
 <td><code>float</code></td>
 </tr>
 <tr>
 <td><code>imu.quat_w</code></td>
-<td>quaternion component w</td>
+<td>orientation: quaternion component w</td>
 <td><code>float</code></td>
 </tr>
 <tr>
 <td><code>imu.quat_x</code></td>
-<td>quaternion component x</td>
+<td>orientation: quaternion component x</td>
 <td><code>float</code></td>
 </tr>
 <tr>
 <td><code>imu.quat_y</code></td>
-<td>quaternion component y</td>
+<td>orientation: quaternion component y</td>
 <td><code>float</code></td>
 </tr>
 <tr>
 <td><code>imu.quat_z</code></td>
-<td>quaternion component z</td>
+<td>orientation: quaternion component z</td>
 <td><code>float</code></td>
 </tr>
 <tr>
-<td><code>imu.cal_sys</code></td>
-<td>calibration of system (0 to 3)</td>
+<td><code>imu.lin_x</code></td>
+<td>acceleration excl. gravity: x direction (m/s^2)</td>
 <td><code>float</code></td>
 </tr>
 <tr>
-<td><code>imu.cal_gyr</code></td>
-<td>calibration of gyroscope (0 to 3)</td>
+<td><code>imu.lin_y</code></td>
+<td>acceleration excl. gravity: y direction (m/s^2)</td>
 <td><code>float</code></td>
 </tr>
 <tr>
-<td><code>imu.cal_acc</code></td>
-<td>calibration of accelerometer (0 to 3)</td>
+<td><code>imu.lin_z</code></td>
+<td>acceleration excl. gravity: z direction (m/s^2)</td>
 <td><code>float</code></td>
 </tr>
 <tr>
-<td><code>imu.cal_mag</code></td>
-<td>calibration of magnetometer (0 to 3)</td>
+<td><code>imu.grav_x</code></td>
+<td>gravity: x direction (m/s^2)</td>
 <td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.grav_y</code></td>
+<td>gravity: y direction (m/s^2)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.grav_z</code></td>
+<td>gravity: z direction (m/s^2)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>imu.temp</code></td>
+<td>temperature (degrees Celsius)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>imu.data_select</code></td>
+<td>data selection</td>
+<td><code>int</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>data_select</code> property can be used to select which data is read from the IMU.
+The default value is 0xffff, which means all data is read.
+The following bits are available:</p>
+<ul>
+<li>0x0001: calibration status</li>
+<li>0x0002: accelerometer data</li>
+<li>0x0004: magnetometer data</li>
+<li>0x0008: gyroscope data</li>
+<li>0x0010: Euler angles</li>
+<li>0x0020: quaternion</li>
+<li>0x0040: linear acceleration</li>
+<li>0x0080: gravity</li>
+<li>0x0100: temperature</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Methods</th>
+<th>Description</th>
+<th>Arguments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>imu.set_mode(mode)</code></td>
+<td>Set operation mode of the IMU</td>
+<td><code>str</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>mode</code> parameter can be one of the following:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Accel</th>
+<th>Mag</th>
+<th>Gyro</th>
+<th>Relative Orientation</th>
+<th>Absolute Orientation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>configmode</code></td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>acconly</code></td>
+<td>X</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>magonly</code></td>
+<td>-</td>
+<td>X</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>gyroonly</code></td>
+<td>-</td>
+<td>-</td>
+<td>X</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>accmag</code></td>
+<td>X</td>
+<td>X</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>accgyro</code></td>
+<td>X</td>
+<td>-</td>
+<td>X</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>maggyro</code></td>
+<td>-</td>
+<td>X</td>
+<td>X</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>amg</code></td>
+<td>X</td>
+<td>X</td>
+<td>X</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>imu</code></td>
+<td>X</td>
+<td>-</td>
+<td>X</td>
+<td>X</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>compass</code></td>
+<td>X</td>
+<td>X</td>
+<td>-</td>
+<td>-</td>
+<td>X</td>
+</tr>
+<tr>
+<td><code>m4g</code></td>
+<td>X</td>
+<td>X</td>
+<td></td>
+<td>X</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>ndof_fmc_off</code></td>
+<td>X</td>
+<td>X</td>
+<td>X</td>
+<td>-</td>
+<td>X</td>
+</tr>
+<tr>
+<td><code>ndof</code></td>
+<td>X</td>
+<td>X</td>
+<td>X</td>
+<td>-</td>
+<td>X</td>
+</tr>
+</tbody>
+</table>
+<p>In non-fusion modes (<code>acconly</code>, <code>magonly</code>, <code>gyroonly</code>, <code>accmag</code>, <code>accgyro</code>, <code>maggyro</code>, <code>amg</code>),
+the sensor signals (Accel, Mag, Gyro) are uncompensated and fusion data (Relative and Absolute Orientation) is not available.</p>
+<p>In fusion modes (<code>imu</code>, <code>compass</code>, <code>m4g</code>, <code>ndof_fmc_off</code>, <code>ndof</code>),
+the sensor signals (Accel, Mag, Gyro) are compensated and fusion data (Relative and Absolute Orientation) is available.</p>
+<p>Note that the individual sensors need to be calibrated before the compensated and fused data is accurate.</p>
+<table>
+<thead>
+<tr>
+<th>Sensor</th>
+<th>Calibration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Accelerometer</td>
+<td>Position the sensor in 6 different stable orientations</td>
+</tr>
+<tr>
+<td>Magnetometer</td>
+<td>Move the sensor in a figure-8 pattern in space</td>
+</tr>
+<tr>
+<td>Gyroscope</td>
+<td>Keep the sensor still for a few seconds</td>
 </tr>
 </tbody>
 </table>
@@ -1667,6 +1969,11 @@ You can, however, unmute the serial module to have incoming messages printed to 
 <td>Motor is in "out" position</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>motor.enabled</code></td>
+<td>Whether the motor is enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -1687,10 +1994,19 @@ You can, however, unmute the serial module to have incoming messages printed to 
 </tr>
 <tr>
 <td><code>motor.stop()</code></td>
-<td>Stop motor</td>
+<td>Stop the motor</td>
+</tr>
+<tr>
+<td><code>motor.enable()</code></td>
+<td>Enable the motor</td>
+</tr>
+<tr>
+<td><code>motor.disable()</code></td>
+<td>Disable the motor</td>
 </tr>
 </tbody>
 </table>
+<p>When the motor is disabled, it will stop and ignore in/out commands.</p>
 <h2 id="odrive-motor">ODrive Motor<a class="headerlink" href="#odrive-motor" title="Permanent link">&para;</a></h2>
 <p>The ODrive motor module controls a motor using an <a href="https://odriverobotics.com/">ODrive motor controller</a>.</p>
 <table>
@@ -1759,6 +2075,11 @@ You can, however, unmute the serial module to have incoming messages printed to 
 <td>Motor error flat (requires version 0.5.6)</td>
 <td><code>int</code></td>
 </tr>
+<tr>
+<td><code>motor.enabled</code></td>
+<td>Whether the motor is enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -1805,10 +2126,26 @@ You can, however, unmute the serial module to have incoming messages printed to 
 <td>Resets the motor and clears errors</td>
 <td></td>
 </tr>
+<tr>
+<td><code>motor.enable()</code></td>
+<td>Enable the motor</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.disable()</code></td>
+<td>Disable the motor</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.stop()</code></td>
+<td>Stop the motor</td>
+<td></td>
+</tr>
 </tbody>
 </table>
+<p>When the motor is disabled, it will stop and ignore movement commands.</p>
 <h2 id="odrive-wheels">ODrive Wheels<a class="headerlink" href="#odrive-wheels" title="Permanent link">&para;</a></h2>
-<p>The ODrive wheels module combines to ODrive motors and provides odometry and steering for differential wheeled robots.</p>
+<p>The ODrive wheels module combines two ODrive motors and provides odometry and steering for differential wheeled robots.</p>
 <table>
 <thead>
 <tr>
@@ -1851,7 +2188,7 @@ You can, however, unmute the serial module to have incoming messages printed to 
 </tr>
 <tr>
 <td><code>wheels.enabled</code></td>
-<td>Whether motors react to commands</td>
+<td>Whether the wheels are enabled</td>
 <td><code>bool</code></td>
 </tr>
 </tbody>
@@ -1880,9 +2217,19 @@ You can, however, unmute the serial module to have incoming messages printed to 
 <td>Turn both motors off (idle state)</td>
 <td></td>
 </tr>
+<tr>
+<td><code>wheels.enable()</code></td>
+<td>Enable both motors</td>
+<td></td>
+</tr>
+<tr>
+<td><code>wheels.disable()</code></td>
+<td>Disable both motors</td>
+<td></td>
+</tr>
 </tbody>
 </table>
-<p>When the wheels are not <code>enabled</code>, <code>power</code> and <code>speed</code> method calls are ignored.
+<p>When the wheels are disabled, they will stop and ignore movement commands.
 This allows disabling the wheels permanently by setting <code>enabled = false</code> in conjunction with calling the <code>off()</code> method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.</p>
 <h2 id="rmd-motor">RMD Motor<a class="headerlink" href="#rmd-motor" title="Permanent link">&para;</a></h2>
@@ -1936,6 +2283,11 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 <td><code>rmd.can_age</code></td>
 <td>Time since last CAN message from motor (s)</td>
 <td><code>float</code></td>
+</tr>
+<tr>
+<td><code>rmd.enabled</code></td>
+<td>Whether the motor is enabled</td>
+<td><code>bool</code></td>
 </tr>
 </tbody>
 </table>
@@ -2013,8 +2365,19 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 <td>Clear motor error</td>
 <td></td>
 </tr>
+<tr>
+<td><code>rmd.enable()</code></td>
+<td>Enable the motor</td>
+<td></td>
+</tr>
+<tr>
+<td><code>rmd.disable()</code></td>
+<td>Disable the motor</td>
+<td></td>
+</tr>
 </tbody>
 </table>
+<p>When the motor is disabled, it will stop and ignore movement commands.</p>
 <p><strong>Set acceleration</strong></p>
 <p>Although <code>get_acceleration()</code> prints only one acceleration per motor, <code>set_acceleration</code> distinguishes the following four parameters:</p>
 <ol>
@@ -2061,6 +2424,11 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 <td>Maximum acceleration (deg/s² (default: 10000)</td>
 <td><code>float</code></td>
 </tr>
+<tr>
+<td><code>rmd.enabled</code></td>
+<td>Whether the motor pair is enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -2097,8 +2465,19 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 <td>Clear motor errors</td>
 <td></td>
 </tr>
+<tr>
+<td><code>rmd.enable()</code></td>
+<td>Enable both motors</td>
+<td></td>
+</tr>
+<tr>
+<td><code>rmd.disable()</code></td>
+<td>Disable both motors</td>
+<td></td>
+</tr>
 </tbody>
 </table>
+<p>When the motor pair is disabled, it will stop both motors and ignore movement commands.</p>
 <h2 id="roboclaw">RoboClaw<a class="headerlink" href="#roboclaw" title="Permanent link">&para;</a></h2>
 <p>The RoboClaw module serves as building block for more complex modules like RoboClaw motors.
 It communicates with a <a href="https://www.basicmicro.com/">Basicmicro</a> RoboClaw motor driver via serial.</p>
@@ -2167,6 +2546,11 @@ It communicates with a <a href="https://www.basicmicro.com/">Basicmicro</a> Robo
 <td>Multi-turn motor position (encoder ticks)</td>
 <td><code>int</code></td>
 </tr>
+<tr>
+<td><code>motor.enabled</code></td>
+<td>Whether the motor is enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -2193,8 +2577,19 @@ It communicates with a <a href="https://www.basicmicro.com/">Basicmicro</a> Robo
 <td>Store position as zero position</td>
 <td></td>
 </tr>
+<tr>
+<td><code>motor.enable()</code></td>
+<td>Enable the motor</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.disable()</code></td>
+<td>Disable the motor</td>
+<td></td>
+</tr>
 </tbody>
 </table>
+<p>When the motor is disabled, it will stop and ignore movement commands.</p>
 <h2 id="roboclaw-wheels">RoboClaw Wheels<a class="headerlink" href="#roboclaw-wheels" title="Permanent link">&para;</a></h2>
 <p>The RoboClaw wheels module combines two RoboClaw motors and provides odometry and steering for differential wheeled robots.</p>
 <table>
@@ -2273,9 +2668,19 @@ It communicates with a <a href="https://www.basicmicro.com/">Basicmicro</a> Robo
 <td>Turn both motors off (idle state)</td>
 <td></td>
 </tr>
+<tr>
+<td><code>wheels.enable()</code></td>
+<td>Enable both motors</td>
+<td></td>
+</tr>
+<tr>
+<td><code>wheels.disable()</code></td>
+<td>Disable both motors</td>
+<td></td>
+</tr>
 </tbody>
 </table>
-<p>When the wheels are not <code>enabled</code>, <code>power</code> and <code>speed</code> method calls are ignored.</p>
+<p>When the wheels are disabled, they will stop and ignore movement commands.</p>
 <h2 id="stepper-motor">Stepper Motor<a class="headerlink" href="#stepper-motor" title="Permanent link">&para;</a></h2>
 <p>The stepper motor module controls a stepper motor via "step" and "direction" pins.
 It uses the ESP LED Control API to generate pulses with sufficiently high frequencies and the Pulse Counter API to count steps.</p>
@@ -2321,6 +2726,11 @@ When using multiple stepper motors, they can be set to different values to avoid
 <td>Motor idle state</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>motor.enabled</code></td>
+<td>Whether the motor is enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -2347,9 +2757,20 @@ When using multiple stepper motors, they can be set to different values to avoid
 <td>Stop</td>
 <td></td>
 </tr>
+<tr>
+<td><code>motor.enable()</code></td>
+<td>Enable the motor</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.disable()</code></td>
+<td>Disable the motor</td>
+<td></td>
+</tr>
 </tbody>
 </table>
 <p>The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.</p>
+<p>When the motor is disabled, it will stop and ignore movement commands.</p>
 <h2 id="motor-axis">Motor Axis<a class="headerlink" href="#motor-axis" title="Permanent link">&para;</a></h2>
 <p>The motor axis module wraps a motor and two limit switches.
 It prevents the motor from moving past the limits.
@@ -2371,8 +2792,23 @@ Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.<
 </tr>
 </tbody>
 </table>
-<p>Currently the motor axis module has no properties.
-To get the current position or speed, access the motor module instead.</p>
+<table>
+<thead>
+<tr>
+<th>Properties</th>
+<th>Description</th>
+<th>Data type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>axis.enabled</code></td>
+<td>Whether the motor axis is enabled</td>
+<td><code>bool</code></td>
+</tr>
+</tbody>
+</table>
+<p>To get the current position or speed, access the motor module instead.</p>
 <table>
 <thead>
 <tr>
@@ -2383,22 +2819,33 @@ To get the current position or speed, access the motor module instead.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>motor.speed(speed[, acceleration])</code></td>
+<td><code>axis.speed(speed[, acceleration])</code></td>
 <td>Move with given <code>speed</code></td>
 <td>2x <code>float</code></td>
 </tr>
 <tr>
-<td><code>motor.position(position, speed[, acceleration])</code></td>
+<td><code>axis.position(position, speed[, acceleration])</code></td>
 <td>Move to given <code>position</code></td>
 <td>3x <code>float</code></td>
 </tr>
 <tr>
-<td><code>motor.stop()</code></td>
+<td><code>axis.stop()</code></td>
 <td>Stop</td>
+<td></td>
+</tr>
+<tr>
+<td><code>axis.enable()</code></td>
+<td>Enable the motor axis</td>
+<td></td>
+</tr>
+<tr>
+<td><code>axis.disable()</code></td>
+<td>Disable the motor axis</td>
 <td></td>
 </tr>
 </tbody>
 </table>
+<p>When the motor axis is disabled, it will stop the motor and ignore movement commands.</p>
 <h2 id="canopenmaster">CanOpenMaster<a class="headerlink" href="#canopenmaster" title="Permanent link">&para;</a></h2>
 <p>The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until <code>sync_interval</code> is set to a value greater than 0.</p>
 <table>
@@ -2703,6 +3150,11 @@ motor.set_ctrl_halt(true)
 <td>Status flags</td>
 <td><code>int</code></td>
 </tr>
+<tr>
+<td><code>motor.enabled</code></td>
+<td>Whether the motor is enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <p>Bit 0 of the status flags indicates the motor is referenced (1) or not (0).</p>
@@ -2761,8 +3213,19 @@ motor.set_ctrl_halt(true)
 <td>Write NMT</td>
 <td><code>int</code></td>
 </tr>
+<tr>
+<td><code>motor.enable()</code></td>
+<td>Enable the motor</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.disable()</code></td>
+<td>Disable the motor</td>
+<td></td>
+</tr>
 </tbody>
 </table>
+<p>When the motor is disabled, it will stop and ignore movement commands.</p>
 <h2 id="dunkermotor">DunkerMotor<a class="headerlink" href="#dunkermotor" title="Permanent link">&para;</a></h2>
 <p>This module controls <a href="https://www.dunkermotoren.de/">dunkermotoren</a> motor via CANOpen.</p>
 <table>
@@ -2796,6 +3259,16 @@ motor.set_ctrl_halt(true)
 <td><code>float</code></td>
 </tr>
 <tr>
+<td><code>motor.voltage_logic</code></td>
+<td>Voltage logic (V)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>motor.voltage_power</code></td>
+<td>Voltage power (V)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
 <td><code>motor.m_per_turn</code></td>
 <td>Meters per turn</td>
 <td><code>float</code></td>
@@ -2805,8 +3278,14 @@ motor.set_ctrl_halt(true)
 <td>Reverse motor direction</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>motor.enabled</code></td>
+<td>Whether the motor is enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
+<p>Note: To reduce bandwidth, voltages are only queried when explicitly requested by calling <code>update_voltages()</code>.</p>
 <table>
 <thead>
 <tr>
@@ -2841,8 +3320,24 @@ motor.set_ctrl_halt(true)
 <td>Write SDO</td>
 <td>4x <code>int</code></td>
 </tr>
+<tr>
+<td><code>motor.update_voltages()</code></td>
+<td>Update voltages</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.enable()</code></td>
+<td>Enable the Motor</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.disable()</code></td>
+<td>Disable the Motor</td>
+<td></td>
+</tr>
 </tbody>
 </table>
+<p>When the motor is disabled, it will freewheel and ignore movement commands.</p>
 <h2 id="dunkerwheels">DunkerWheels<a class="headerlink" href="#dunkerwheels" title="Permanent link">&para;</a></h2>
 <p>The DunkerWheels module combines two DunkerMotor modules and provides odometry and steering for differential wheeled robots.</p>
 <table>
@@ -2885,6 +3380,11 @@ motor.set_ctrl_halt(true)
 <td>Turning speed (rad/s)</td>
 <td><code>float</code></td>
 </tr>
+<tr>
+<td><code>wheels.enabled</code></td>
+<td>Whether the wheels are enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -2901,8 +3401,19 @@ motor.set_ctrl_halt(true)
 <td>Move with <code>linear</code>/<code>angular</code> speed (m/s, rad/s)</td>
 <td><code>float</code>, <code>float</code></td>
 </tr>
+<tr>
+<td><code>wheels.enable()</code></td>
+<td>Enable both motors</td>
+<td></td>
+</tr>
+<tr>
+<td><code>wheels.disable()</code></td>
+<td>Disable both motors</td>
+<td></td>
+</tr>
 </tbody>
 </table>
+<p>When the wheels are disabled, they will freewheel and ignore movement commands.</p>
 <h2 id="analog-input">Analog Input<a class="headerlink" href="#analog-input" title="Permanent link">&para;</a></h2>
 <p>This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
 For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.</p>
