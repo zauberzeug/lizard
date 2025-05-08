@@ -64,10 +64,10 @@ void LinearMotor::enable() {
 }
 
 void LinearMotor::disable() {
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
     this->set_in(0);
     this->set_out(0);
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }
 
 GpioLinearMotor::GpioLinearMotor(const std::string name,

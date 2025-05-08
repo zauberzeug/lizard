@@ -170,9 +170,9 @@ void DunkerMotor::enable() {
 }
 
 void DunkerMotor::disable() {
+    this->sdo_write(0x4004, 1, 8, 0);
     this->enabled = false;
     this->properties.at("enabled")->boolean_value = false;
-    this->sdo_write(0x4004, 1, 8, 0);
 }
 
 void DunkerMotor::step() {

@@ -568,8 +568,8 @@ void CanOpenMotor::enable() {
 
 void CanOpenMotor::disable() {
     this->stop();
-    this->enabled = false;
-    this->properties["enabled"]->boolean_value = false;
     this->properties[PROP_CTRL_ENA_OP]->boolean_value = false;
     send_control_word(build_ctrl_word(false));
+    this->enabled = false;
+    this->properties["enabled"]->boolean_value = false;
 }

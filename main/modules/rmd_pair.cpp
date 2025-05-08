@@ -143,8 +143,8 @@ void RmdPair::enable() {
 }
 
 void RmdPair::disable() {
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
     this->rmd1->disable();
     this->rmd2->disable();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }

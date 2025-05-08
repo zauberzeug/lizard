@@ -87,7 +87,7 @@ void PwmOutput::enable() {
 }
 
 void PwmOutput::disable() {
+    this->is_on = false;
     this->enabled = false;
     this->properties.at("enabled")->boolean_value = false;
-    this->is_on = false;
 }

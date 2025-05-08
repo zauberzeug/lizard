@@ -85,8 +85,8 @@ void ODriveWheels::enable() {
 }
 
 void ODriveWheels::disable() {
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
     this->left_motor->disable();
     this->right_motor->disable();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }

@@ -93,10 +93,10 @@ void MotorAxis::enable() {
 
 void MotorAxis::disable() {
     this->motor->stop();
-    this->properties.at("enabled")->boolean_value = false;
-    this->enabled = false;
     try {
         this->motor->disable();
     } catch (const std::exception &e) {
     }
+    this->properties.at("enabled")->boolean_value = false;
+    this->enabled = false;
 }
