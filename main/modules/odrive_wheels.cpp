@@ -35,6 +35,14 @@ void ODriveWheels::step() {
     this->last_right_position = right_position;
     this->initialized = true;
 
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+
     Module::step();
 }
 
@@ -58,7 +66,27 @@ void ODriveWheels::call(const std::string method_name, const std::vector<ConstEx
         Module::expect(arguments, 0);
         this->left_motor->off();
         this->right_motor->off();
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void ODriveWheels::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+    this->left_motor->enable();
+    this->right_motor->enable();
+}
+
+void ODriveWheels::disable() {
+    this->left_motor->disable();
+    this->right_motor->disable();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }

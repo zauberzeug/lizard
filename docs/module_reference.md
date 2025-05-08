@@ -39,7 +39,7 @@ It is automatically created right after the boot sequence.
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
-For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789`.
+For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
 
 The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
 After initializing the WiFi connection, it will attempt an OTA update from the given URL.
@@ -80,6 +80,9 @@ The input module is associated with a digital input pin that is be connected to 
 | `input.inverted` | Inverts the active property if true   | `bool`    |
 | `input.active`   | Current active state of the input     | `bool`    |
 
+Usually, an input is considered active if and only if its level is high.
+If the `inverted` property is set to `true`, the input is considered active if and only if its level is low.
+
 | Methods            | Description                        |
 | ------------------ | ---------------------------------- |
 | `input.get()`      | Output the current level           |
@@ -95,10 +98,16 @@ The output module is associated with a digital output pin that is connected to a
 | ---------------------- | -------------------------------------- | --------- |
 | `output = Output(pin)` | `pin` is the corresponding GPIO number | `int`     |
 
-| Properties      | Description                           | Data type |
-| --------------- | ------------------------------------- | --------- |
-| `output.level`  | Current signal level (0 or 1)         | `int`     |
-| `output.change` | Level change since last cycle (-1..1) | `int`     |
+| Properties        | Description                           | Data type |
+| ----------------- | ------------------------------------- | --------- |
+| `output.level`    | Current signal level (0 or 1)         | `int`     |
+| `output.change`   | Level change since last cycle (-1..1) | `int`     |
+| `output.enabled`  | Whether the output is enabled         | `bool`    |
+| `output.inverted` | Whether the output is inverted        | `bool`    |
+| `output.active`   | Whether the output is active          | `bool`    |
+
+Usually, an output is considered active if and only if its level is high.
+If the `inverted` property is set to `true`, the output is considered active if and only if its level is low.
 
 | Methods                                | Description                               | Arguments |
 | -------------------------------------- | ----------------------------------------- | --------- |
@@ -106,9 +115,15 @@ The output module is associated with a digital output pin that is connected to a
 | `output.off()`                         | Set the output pin low                    |           |
 | `output.level(value)`                  | Set the output level to the given `value` | `bool`    |
 | `output.pulse(interval[, duty_cycle])` | Switch output on and off                  | `float`s  |
+| `output.enable()`                      | Enable the output                         |           |
+| `output.disable()`                     | Disable the output                        |           |
+| `output.activate()`                    | Activate the output                       |           |
+| `output.deactivate()`                  | Deactivate the output                     |           |
 
 The `pulse()` method allows pulsing an output with a given interval in seconds and an optional duty cycle between 0 and 1 (0.5 by default).
 Note that the pulsing frequency is limited by the main loop to around 20 Hz.
+
+When the output is disabled, it will deactivate and ignore on/off or level commands.
 
 ## PWM Output
 
@@ -122,11 +137,16 @@ The PWM output module is associated with a digital output pin that is connected 
 | ------------------ | ---------------------------------------- | --------- |
 | `output.duty`      | Duty cycle (8 bit: 0..256, default: 128) | `int`     |
 | `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
+| `output.enabled`   | Whether the output is enabled            | `bool`    |
 
-| Methods        | Description             | Arguments |
-| -------------- | ----------------------- | --------- |
-| `output.on()`  | Turn on the PWM signal  |           |
-| `output.off()` | Turn off the PWM signal |           |
+| Methods            | Description             | Arguments |
+| ------------------ | ----------------------- | --------- |
+| `output.on()`      | Turn on the PWM signal  |           |
+| `output.off()`     | Turn off the PWM signal |           |
+| `output.enable()`  | Enable the PWM output   |           |
+| `output.disable()` | Disable the PWM output  |           |
+
+When the output is disabled, it will turn off the PWM signal and ignore on/off commands.
 
 ## MCP23017 Port Expander
 
@@ -330,16 +350,21 @@ This module controls a linear actuator via two output pins (move in, move out) a
 | --------------------------------------------------------- | ------------------------------------- | --------- |
 | `motor = LinearMotor(move_in, move_out, end_in, end_out)` | motor control pins and limit switches | 4x `int`  |
 
-| Properties  | Description                | Data type |
-| ----------- | -------------------------- | --------- |
-| `motor.in`  | Motor is in "in" position  | `bool`    |
-| `motor.out` | Motor is in "out" position | `bool`    |
+| Properties      | Description                  | Data type |
+| --------------- | ---------------------------- | --------- |
+| `motor.in`      | Motor is in "in" position    | `bool`    |
+| `motor.out`     | Motor is in "out" position   | `bool`    |
+| `motor.enabled` | Whether the motor is enabled | `bool`    |
 
-| Methods        | Description |
-| -------------- | ----------- |
-| `motor.in()`   | Move in     |
-| `motor.out()`  | Move out    |
-| `motor.stop()` | Stop motor  |
+| Methods           | Description       |
+| ----------------- | ----------------- |
+| `motor.in()`      | Move in           |
+| `motor.out()`     | Move out          |
+| `motor.stop()`    | Stop the motor    |
+| `motor.enable()`  | Enable the motor  |
+| `motor.disable()` | Disable the motor |
+
+When the motor is disabled, it will stop and ignore in/out commands.
 
 ## ODrive Motor
 
@@ -361,6 +386,7 @@ The `version` parameter is an optional integer indicating the patch number of th
 | `motor.axis_state`  | State of the motor axis                   | `int`     |
 | `motor.axis_error`  | Error code of the axis                    | `int`     |
 | `motor.motor_error` | Motor error flat (requires version 0.5.6) | `int`     |
+| `motor.enabled`     | Whether the motor is enabled              | `bool`    |
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |
@@ -371,29 +397,36 @@ The `version` parameter is an optional integer indicating the patch number of th
 | `motor.limits(speed, current)` | Set speed (m/s) and current (A) limits | `float`, `float` |
 | `motor.off()`                  | Turn motor off (idle state)            |                  |
 | `motor.reset_motor()`          | Resets the motor and clears errors     |                  |
+| `motor.enable()`               | Enable the motor                       |                  |
+| `motor.disable()`              | Disable the motor                      |                  |
+| `motor.stop()`                 | Stop the motor                         |                  |
+
+When the motor is disabled, it will stop and ignore movement commands.
 
 ## ODrive Wheels
 
-The ODrive wheels module combines to ODrive motors and provides odometry and steering for differential wheeled robots.
+The ODrive wheels module combines two ODrive motors and provides odometry and steering for differential wheeled robots.
 
 | Constructor                                     | Description              | Arguments                |
 | ----------------------------------------------- | ------------------------ | ------------------------ |
 | `wheels = ODriveWheels(left_motor, left_motor)` | Two ODrive motor modules | two ODrive motor modules |
 
-| Properties             | Description                      | Data type |
-| ---------------------- | -------------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)               | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)              | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)            | `float`   |
-| `wheels.enabled`       | Whether motors react to commands | `bool`    |
+| Properties             | Description                    | Data type |
+| ---------------------- | ------------------------------ | --------- |
+| `wheels.width`         | Wheel distance (m)             | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
+| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
 | `wheels.power(left, right)`     | Move with torque per wheel                      | `float`, `float` |
 | `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
 | `wheels.off()`                  | Turn both motors off (idle state)               |                  |
+| `wheels.enable()`               | Enable both motors                              |                  |
+| `wheels.disable()`              | Disable both motors                             |                  |
 
-When the wheels are not `enabled`, `power` and `speed` method calls are ignored.
+When the wheels are disabled, they will stop and ignore movement commands.
 This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
 
@@ -412,6 +445,7 @@ The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD mo
 | `rmd.speed`       | Current speed (deg/s)                      | `float`   |
 | `rmd.temperature` | Current temperature (˚C)                   | `float`   |
 | `rmd.can_age`     | Time since last CAN message from motor (s) | `float`   |
+| `rmd.enabled`     | Whether the motor is enabled               | `bool`    |
 
 | Methods                     | Description                                                       | Arguments        |
 | --------------------------- | ----------------------------------------------------------------- | ---------------- |
@@ -428,6 +462,10 @@ The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD mo
 | `rmd.set_acceleration(...)` | Set accelerations/decelerations for position/speed loop (deg/s^2) | 4x `int`         |
 | `rmd.get_status()`          | Print temperature [˚C], voltage [V] and motor error code          |                  |
 | `rmd.clear_errors()`        | Clear motor error                                                 |                  |
+| `rmd.enable()`              | Enable the motor                                                  |                  |
+| `rmd.disable()`             | Disable the motor                                                 |                  |
+
+When the motor is disabled, it will stop and ignore movement commands.
 
 **Set acceleration**
 
@@ -448,10 +486,11 @@ The RMD motor pair module allows to synchronize two RMD motors.
 | --------------------------- | --------------------- | ------------------- |
 | `rmd = RmdPair(rmd1, rmd2)` | Two RMD motor modules | 2x RMD Motor module |
 
-| Properties  | Description                                   | Data type |
-| ----------- | --------------------------------------------- | --------- |
-| `rmd.v_max` | Maximum speed (deg/s, default: 360)           | `float`   |
-| `rmd.a_max` | Maximum acceleration (deg/s² (default: 10000) | `float`   |
+| Properties    | Description                                   | Data type |
+| ------------- | --------------------------------------------- | --------- |
+| `rmd.v_max`   | Maximum speed (deg/s, default: 360)           | `float`   |
+| `rmd.a_max`   | Maximum acceleration (deg/s² (default: 10000) | `float`   |
+| `rmd.enabled` | Whether the motor pair is enabled             | `bool`    |
 
 | Methods              | Description                             | Arguments  |
 | -------------------- | --------------------------------------- | ---------- |
@@ -460,6 +499,10 @@ The RMD motor pair module allows to synchronize two RMD motors.
 | `rmd.off()`          | Turn motors off (clear operating state) |            |
 | `rmd.hold()`         | Hold current positions                  |            |
 | `rmd.clear_errors()` | Clear motor errors                      |            |
+| `rmd.enable()`       | Enable both motors                      |            |
+| `rmd.disable()`      | Disable both motors                     |            |
+
+When the motor pair is disabled, it will stop both motors and ignore movement commands.
 
 ## RoboClaw
 
@@ -487,12 +530,17 @@ The RoboClaw motor module controls a motor using a RoboClaw module.
 | Properties       | Description                               | Data type |
 | ---------------- | ----------------------------------------- | --------- |
 | `motor.position` | Multi-turn motor position (encoder ticks) | `int`     |
+| `motor.enabled`  | Whether the motor is enabled              | `bool`    |
 
 | Methods               | Description                             | Arguments |
 | --------------------- | --------------------------------------- | --------- |
 | `motor.power(torque)` | Move with given `torque` (-1..1)        | `float`   |
 | `motor.speed(speed)`  | Move with given `speed` (-32767..32767) | `float`   |
 | `motor.zero()`        | Store position as zero position         |           |
+| `motor.enable()`      | Enable the motor                        |           |
+| `motor.disable()`     | Disable the motor                       |           |
+
+When the motor is disabled, it will stop and ignore movement commands.
 
 ## RoboClaw Wheels
 
@@ -515,8 +563,10 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | `wheels.power(left, right)`     | Move with torque per wheel (-1..1)              | `float`, `float` |
 | `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
 | `wheels.off()`                  | Turn both motors off (idle state)               |                  |
+| `wheels.enable()`               | Enable both motors                              |                  |
+| `wheels.disable()`              | Disable both motors                             |                  |
 
-When the wheels are not `enabled`, `power` and `speed` method calls are ignored.
+When the wheels are disabled, they will stop and ignore movement commands.
 
 ## Stepper Motor
 
@@ -535,14 +585,19 @@ When using multiple stepper motors, they can be set to different values to avoid
 | `motor.position` | Motor position (steps)         | `int`     |
 | `motor.speed`    | Motor speed (steps per second) | `int`     |
 | `motor.idle`     | Motor idle state               | `bool`    |
+| `motor.enabled`  | Whether the motor is enabled   | `bool`    |
 
 | Methods                                           | Description              | Arguments  |
 | ------------------------------------------------- | ------------------------ | ---------- |
 | `motor.speed(speed[, acceleration])`              | Move with given `speed`  | 2x `float` |
 | `motor.position(position, speed[, acceleration])` | Move to given `position` | 3x `float` |
 | `motor.stop()`                                    | Stop                     |            |
+| `motor.enable()`                                  | Enable the motor         |            |
+| `motor.disable()`                                 | Disable the motor        |            |
 
 The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.
+
+When the motor is disabled, it will stop and ignore movement commands.
 
 ## Motor Axis
 
@@ -555,14 +610,21 @@ Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.
 | ----------------------------------------- | ----------------------- | --------- |
 | `axis = MotorAxis(motor, limit1, limit2)` | motor and input modules | 3 modules |
 
-Currently the motor axis module has no properties.
+| Properties     | Description                       | Data type |
+| -------------- | --------------------------------- | --------- |
+| `axis.enabled` | Whether the motor axis is enabled | `bool`    |
+
 To get the current position or speed, access the motor module instead.
 
-| Methods                                           | Description              | Arguments  |
-| ------------------------------------------------- | ------------------------ | ---------- |
-| `motor.speed(speed[, acceleration])`              | Move with given `speed`  | 2x `float` |
-| `motor.position(position, speed[, acceleration])` | Move to given `position` | 3x `float` |
-| `motor.stop()`                                    | Stop                     |            |
+| Methods                                          | Description              | Arguments  |
+| ------------------------------------------------ | ------------------------ | ---------- |
+| `axis.speed(speed[, acceleration])`              | Move with given `speed`  | 2x `float` |
+| `axis.position(position, speed[, acceleration])` | Move to given `position` | 3x `float` |
+| `axis.stop()`                                    | Stop                     |            |
+| `axis.enable()`                                  | Enable the motor axis    |            |
+| `axis.disable()`                                 | Disable the motor axis   |            |
+
+When the motor axis is disabled, it will stop the motor and ignore movement commands.
 
 ## CanOpenMaster
 
@@ -673,6 +735,7 @@ This module controls an [igus D1 motor controller](https://www.igus.eu/product/D
 | `motor.velocity`             | Current velocity                        | `int`     |
 | `motor.status_word`          | Status word                             | `int`     |
 | `motor.status_flags`         | Status flags                            | `int`     |
+| `motor.enabled`              | Whether the motor is enabled            | `bool`    |
 
 Bit 0 of the status flags indicates the motor is referenced (1) or not (0).
 
@@ -689,6 +752,10 @@ The status word (also called "Statusword") is a 16 bit integer with several flag
 | `motor.sdo_read(index[, subindex])`             | Read SDO                 | 2x `int`  |
 | `motor.sdo_write(index, subindex, bits, value)` | Write SDO                | 4x `int`  |
 | `motor.nmt_write()`                             | Write NMT                | `int`     |
+| `motor.enable()`                                | Enable the motor         |           |
+| `motor.disable()`                               | Disable the motor        |           |
+
+When the motor is disabled, it will stop and ignore movement commands.
 
 ## DunkerMotor
 
@@ -705,6 +772,7 @@ This module controls [dunkermotoren](https://www.dunkermotoren.de/) motor via CA
 | `motor.voltage_power` | Voltage power (V)               | `float`   |
 | `motor.m_per_turn`    | Meters per turn                 | `float`   |
 | `motor.reversed`      | Reverse motor direction         | `bool`    |
+| `motor.enabled`       | Whether the motor is enabled    | `bool`    |
 
 Note: To reduce bandwidth, voltages are only queried when explicitly requested by calling `update_voltages()`.
 
@@ -716,6 +784,10 @@ Note: To reduce bandwidth, voltages are only queried when explicitly requested b
 | `motor.sdo_read(index[, subindex])`             | Read SDO                      | 2x `int`  |
 | `motor.sdo_write(index, subindex, bits, value)` | Write SDO                     | 4x `int`  |
 | `motor.update_voltages()`                       | Update voltages               |           |
+| `motor.enable()`                                | Enable the Motor              |           |
+| `motor.disable()`                               | Disable the Motor             |           |
+
+When the motor is disabled, it will freewheel and ignore movement commands.
 
 ## DunkerWheels
 
@@ -725,15 +797,20 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | ------------------------------------------------ | --------------------- | ----------------------- |
 | `wheels = DunkerWheels(left_motor, right_motor)` | left and right motors | two DunkerMotor modules |
 
-| Properties             | Description           | Data type |
-| ---------------------- | --------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)    | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)   | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s) | `float`   |
+| Properties             | Description                    | Data type |
+| ---------------------- | ------------------------------ | --------- |
+| `wheels.width`         | Wheel distance (m)             | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
+| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
 | `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
+| `wheels.enable()`               | Enable both motors                              |                  |
+| `wheels.disable()`              | Disable both motors                             |                  |
+
+When the wheels are disabled, they will freewheel and ignore movement commands.
 
 ## Analog Input
 

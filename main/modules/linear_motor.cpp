@@ -7,6 +7,7 @@ const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
     return {
         {"in", std::make_shared<BooleanVariable>()},
         {"out", std::make_shared<BooleanVariable>()},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -17,25 +18,56 @@ LinearMotor::LinearMotor(const std::string name) : Module(output, name) {
 void LinearMotor::step() {
     this->properties.at("in")->boolean_value = this->get_in();
     this->properties.at("out")->boolean_value = this->get_out();
+
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+
     Module::step();
 }
 
 void LinearMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "in") {
         Module::expect(arguments, 0);
+        if (!this->enabled)
+            return;
         this->set_in(1);
         this->set_out(0);
     } else if (method_name == "out") {
         Module::expect(arguments, 0);
+        if (!this->enabled)
+            return;
         this->set_in(0);
         this->set_out(1);
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
         this->set_in(0);
         this->set_out(0);
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void LinearMotor::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+}
+
+void LinearMotor::disable() {
+    this->set_in(0);
+    this->set_out(0);
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }
 
 GpioLinearMotor::GpioLinearMotor(const std::string name,

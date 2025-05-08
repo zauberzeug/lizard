@@ -9,6 +9,7 @@ const std::map<std::string, Variable_ptr> RmdPair::get_defaults() {
     return {
         {"v_max", std::make_shared<NumberVariable>(360)},
         {"a_max", std::make_shared<NumberVariable>(10000)},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -64,7 +65,21 @@ void RmdPair::throttle(TrajectoryPart &part, double factor) const {
     part.dt *= factor;
 }
 
+void RmdPair::step() {
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+    Module::step();
+}
+
 void RmdPair::move(double x, double y) {
+    if (!this->enabled) {
+        return;
+    }
     TrajectoryTriple t1 = this->compute_trajectory(rmd1->get_position(), x, 0, 0);
     TrajectoryTriple t2 = this->compute_trajectory(rmd2->get_position(), y, 0, 0);
     double duration1 = t1.part_a.dt + t1.part_b.dt + t1.part_c.dt;
@@ -109,7 +124,27 @@ void RmdPair::call(const std::string method_name, const std::vector<ConstExpress
         Module::expect(arguments, 0);
         this->rmd1->clear_errors();
         this->rmd2->clear_errors();
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void RmdPair::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+    this->rmd1->enable();
+    this->rmd2->enable();
+}
+
+void RmdPair::disable() {
+    this->rmd1->disable();
+    this->rmd2->disable();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }

@@ -20,6 +20,7 @@ const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
         {"position", std::make_shared<IntegerVariable>()},
         {"speed", std::make_shared<IntegerVariable>()},
         {"idle", std::make_shared<BooleanVariable>(true)},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -65,6 +66,7 @@ StepperMotor::StepperMotor(const std::string name,
         .timer_num = this->ledc_timer,
         .freq_hz = 1000,
         .clk_cfg = LEDC_AUTO_CLK,
+        .deconfigure = false,
     };
     ledc_timer_config(&timer_config);
 
@@ -114,7 +116,15 @@ void StepperMotor::step() {
     double dt = micros_since(this->last_micros) * 1e-6;
     this->last_micros = micros();
 
-    if (this->state != Idle) {
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+
+    if (this->state != Idle && this->enabled) {
         // current state
         int32_t position = this->properties.at("position")->integer_value;
         int32_t speed = this->properties.at("speed")->integer_value;
@@ -178,19 +188,29 @@ void StepperMotor::call(const std::string method_name, const std::vector<ConstEx
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, numbery, numbery, numbery);
-        this->position(arguments[0]->evaluate_number(),
-                       arguments[1]->evaluate_number(),
-                       arguments.size() > 2 ? std::abs(arguments[2]->evaluate_number()) : 0);
+        if (this->enabled) {
+            this->position(arguments[0]->evaluate_number(),
+                           arguments[1]->evaluate_number(),
+                           arguments.size() > 2 ? std::abs(arguments[2]->evaluate_number()) : 0);
+        }
     } else if (method_name == "speed") {
         if (arguments.size() < 1 || arguments.size() > 2) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, numbery, numbery);
-        this->speed(arguments[0]->evaluate_number(),
-                    arguments.size() > 1 ? std::abs(arguments[1]->evaluate_number()) : 0);
+        if (this->enabled) {
+            this->speed(arguments[0]->evaluate_number(),
+                        arguments.size() > 1 ? std::abs(arguments[1]->evaluate_number()) : 0);
+        }
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
         this->stop();
+    } else if (method_name == "enable") {
+        Module::expect(arguments, 0);
+        this->enable();
+    } else if (method_name == "disable") {
+        Module::expect(arguments, 0);
+        this->disable();
     } else {
         Module::call(method_name, arguments);
     }
@@ -220,4 +240,15 @@ void StepperMotor::speed(const double speed, const double acceleration) {
     this->target_speed = static_cast<int32_t>(speed);
     this->target_acceleration = static_cast<uint32_t>(acceleration);
     set_state(this->target_speed == 0 ? Idle : Speeding);
+}
+
+void StepperMotor::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+}
+
+void StepperMotor::disable() {
+    this->stop();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }
