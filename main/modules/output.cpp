@@ -27,14 +27,14 @@ void Output::step() {
     this->set_level(this->target_level);
     this->properties.at("change")->integer_value = this->target_level - this->properties.at("level")->integer_value;
     this->properties.at("level")->integer_value = this->target_level;
-    if (this->enabled != this->properties.at("enabled")->boolean_value) {
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
         if (this->properties.at("enabled")->boolean_value) {
-            this->activate();
+            this->enable();
         } else {
-            this->deactivate();
+            this->disable();
         }
     }
-    if (this->active != this->properties.at("active")->boolean_value) {
+    if (this->properties.at("active")->boolean_value != this->active) {
         if (this->properties.at("active")->boolean_value) {
             this->activate();
         } else {
