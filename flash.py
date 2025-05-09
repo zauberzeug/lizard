@@ -37,8 +37,6 @@ esp = Esp(
     device=device,
 )
 
-
-# Check if the device should be enabled
 if 'enable' in sys.argv:
     with esp.pin_config():
         print('Enabling ESP...')
