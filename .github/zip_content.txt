@@ -6,6 +6,7 @@ backtrace.sh
 configure.py
 core_dumper.py
 esp.py
+espresso.py
 flash.py
 monitor.py
 README.md

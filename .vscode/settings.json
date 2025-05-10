@@ -4,6 +4,7 @@
   "editor.formatOnSave": true,
   "prettier.printWidth": 120,
   "pylint.args": [
+    "--disable=C0103", // Invalid name
     "--disable=C0114", // Missing module docstring
     "--disable=C0115", // Missing class docstring
     "--disable=C0116", // Missing function or method docstring

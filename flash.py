@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import warnings
 import subprocess
 import sys
 
@@ -6,7 +7,7 @@ from esp import Esp
 
 
 def show_help() -> None:
-    print(f'{sys.argv[0]} [nano | xavier | orin] [nand | v05] [usb | /dev/<name>] [enable] [-e | --erase] [reset]')
+    print(f'{sys.argv[0]} [nano | xavier | orin] [nand | v05] [usb | /dev/<name>] [enable] [disable] [-e | --erase] [reset]')
     print('   -e, --erase   erase the flash before flashing the new firmware')
     print('   nano          flashing Jetson Nano (default)')
     print('   xavier        flashing Jetson Xavier')
@@ -16,26 +17,35 @@ def show_help() -> None:
     print('   usb           use /dev/tty.SLAB_USBtoUART as serial device')
     print('   /dev/<name>   use /dev/<name> as serial device')
     print('   enable        enable the ESP32 microcontroller')
+    print('   disable       disable the ESP32 microcontroller')
     print('   reset         reset the ESP32 microcontroller')
 
+
+warnings.warn(
+    "\033[93m\033[1m"
+    "This script will be deprecated in version 1.0.0."
+    "Please consider using the new 'espresso.py' script instead."
+    "\033[0m",
+    DeprecationWarning,
+)
 
 if any(h in sys.argv for h in ['--help', '-help', 'help', '-h']):
     show_help()
     sys.exit()
 
 erase_flash = any(e in sys.argv for e in ['-e', '--erase'])
-device = None
-if 'usb' in sys.argv:
-    device = '/dev/tty.SLAB_USBtoUART'
+device = '/dev/tty.SLAB_USBtoUART' if 'usb' in sys.argv else None
 for p in sys.argv:
     if p.startswith('/dev/'):
         device = p
 
-esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv,
-          orin='orin' in sys.argv, v05='v05' in sys.argv, device=device)
+esp = Esp(
+    jetson='xavier' if 'xavier' in sys.argv else 'orin' if 'orin' in sys.argv else 'nano',
+    nand='nand' in sys.argv,
+    v05='v05' in sys.argv,
+    device=device,
+)
 
-
-# Check if the device should be enabled
 if 'enable' in sys.argv:
     with esp.pin_config():
         print('Enabling ESP...')
