@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import warnings
 import subprocess
 import sys
 
@@ -21,12 +20,11 @@ def show_help() -> None:
     print('   reset         reset the ESP32 microcontroller')
 
 
-warnings.warn(
-    "\033[93m\033[1m"
-    "This script will be deprecated in version 1.0.0."
-    "Please consider using the new 'espresso.py' script instead."
-    "\033[0m",
-    DeprecationWarning,
+print(
+    '\033[93m\033[1m'
+    'This script will be deprecated in version 1.0.0. '
+    'Please consider using the new espresso.py script instead.'
+    '\033[0m',
 )
 
 if any(h in sys.argv for h in ['--help', '-help', 'help', '-h']):
