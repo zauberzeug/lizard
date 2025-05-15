@@ -1,44 +1,50 @@
 from contextlib import contextmanager
 from time import sleep
-from typing import Optional, Union
+from typing import Optional, Union, Literal, Generator
+from pathlib import Path
 
 
 class Esp:
 
     def __init__(self,
+                 *,
+                 jetson: Literal['nano', 'xavier', 'orin'] = 'nano',
                  nand: bool = False,
-                 xavier: bool = False,
-                 orin: bool = False,
                  v05: bool = False,
                  device: Optional[str] = None,
                  ) -> None:
         print('Initializing ESP...')
-        self.en = 436 if xavier else 492 if orin else 216
-        self.g0 = 428 if xavier else 460 if orin else 50
-        self.gpio_en = f'gpio{self.en}' if not orin else 'PAC.06'
-        self.gpio_g0 = f'gpio{self.g0}' if not orin else 'PR.04'
+        self.en = {
+            'nano': 216,
+            'xavier': 436,
+            'orin': 492,
+        }[jetson]
+        self.g0 = {
+            'nano': 50,
+            'xavier': 428,
+            'orin': 460,
+        }[jetson]
+        self.gpio_en = 'PAC.06' if jetson == 'orin' else f'gpio{self.en}'
+        self.gpio_g0 = 'PR.04' if jetson == 'orin' else f'gpio{self.g0}'
 
-        if orin and v05:
+        if jetson == 'orin' and v05:
             self.en, self.g0 = self.g0, self.en
             self.gpio_en, self.gpio_g0 = self.gpio_g0, self.gpio_en
 
-        if device is None:
-            self.device = '/dev/ttyTHS' + ('0' if xavier else '0' if orin else '1')
-        else:
-            self.device = device
+        self.device = device or {
+            'nano': '/dev/ttyTHS1',
+            'xavier': '/dev/ttyTHS0',
+            'orin': '/dev/ttyTHS0',
+        }[jetson]
         self.on = 1 if nand else 0
         self.off = 0 if nand else 1
 
     def write(self, path: str, value: Union[str, int]) -> None:
-        try:
-            print(f'echo {value:3} > /sys/class/gpio/{path}')
-            with open(f'/sys/class/gpio/{path}', 'w') as f:
-                f.write(f'{value}\n')
-        except Exception:
-            print(f'could not write {value} to {path}')
+        print(f'echo {value:3} > /sys/class/gpio/{path}')
+        Path(f'/sys/class/gpio/{path}').write_text(f'{value}\n', encoding='utf-8')
 
     @contextmanager
-    def pin_config(self) -> None:
+    def pin_config(self) -> Generator[None, None, None]:
         print('Configuring pins...')
         self.write('export', self.en)
         sleep(0.5)

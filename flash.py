@@ -19,33 +19,34 @@ def show_help() -> None:
     print('   reset         reset the ESP32 microcontroller')
 
 
+print(
+    '\033[93m\033[1m'
+    'This script will be deprecated in version 1.0.0. '
+    'Please consider using the new espresso.py script instead.'
+    '\033[0m',
+)
+
 if any(h in sys.argv for h in ['--help', '-help', 'help', '-h']):
     show_help()
     sys.exit()
 
 erase_flash = any(e in sys.argv for e in ['-e', '--erase'])
-device = None
-if 'usb' in sys.argv:
-    device = '/dev/tty.SLAB_USBtoUART'
+device = '/dev/tty.SLAB_USBtoUART' if 'usb' in sys.argv else None
 for p in sys.argv:
     if p.startswith('/dev/'):
         device = p
 
-esp = Esp(nand='nand' in sys.argv, xavier='xavier' in sys.argv,
-          orin='orin' in sys.argv, v05='v05' in sys.argv, device=device)
+esp = Esp(
+    jetson='xavier' if 'xavier' in sys.argv else 'orin' if 'orin' in sys.argv else 'nano',
+    nand='nand' in sys.argv,
+    v05='v05' in sys.argv,
+    device=device,
+)
 
-
-# Check if the device should be enabled
 if 'enable' in sys.argv:
     with esp.pin_config():
         print('Enabling ESP...')
         esp.enable()
-    sys.exit()
-
-if 'disable' in sys.argv:
-    with esp.pin_config():
-        print('Disabling ESP...')
-        esp.disable()
     sys.exit()
 
 if 'reset' in sys.argv:

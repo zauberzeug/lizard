@@ -7,7 +7,7 @@
 To install Lizard on your ESP32 run
 
 ```bash
-sudo ./flash.py [<device_path>]
+sudo ./espresso.py flash -d <device_path>
 ```
 
 Note that flashing may require root access (hence the sudo).
@@ -15,7 +15,8 @@ The command also does not work while the serial interface is busy communicating 
 
 ### Robot Brain
 
-The `flash.py` script can also upload firmware on a [Robot Brain](https://www.zauberzeug.com/product-robot-brain.html) where the microcontroller is connected to the pin header of an NVIDIA Jetson computer.
+The `espresso.py` script can also upload firmware on a [Robot Brain](https://www.zauberzeug.com/product-robot-brain.html)
+where the microcontroller is connected to the pin header of an NVIDIA Jetson computer.
 
 ## Interaction
 
@@ -71,7 +72,7 @@ After making changes to the Lizard language definition or its C++ implementation
 ./compile.sh
 ```
 
-To upload the compiled firmware you can use the `./flash.py` command described above.
+To upload the compiled firmware you can use the `./espresso.py` command described above.
 
 ### Backtrace
 
