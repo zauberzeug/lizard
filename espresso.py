@@ -43,7 +43,7 @@ DRY_RUN = args.dry_run
 
 
 @contextmanager
-def pin_config() -> Generator[None, None, None]:
+def _pin_config() -> Generator[None, None, None]:
     """Configure the EN and G0 pins to control the microcontroller."""
     if not args.jetson:
         yield
@@ -64,7 +64,7 @@ def pin_config() -> Generator[None, None, None]:
 
 
 @contextmanager
-def flash_mode() -> Generator[None, None, None]:
+def _flash_mode() -> Generator[None, None, None]:
     """Bring the microcontroller into flash mode."""
     if not args.jetson:
         yield
@@ -77,13 +77,13 @@ def flash_mode() -> Generator[None, None, None]:
     write_gpio(f'{GPIO_EN}/value', OFF)
     time.sleep(0.5)
     yield
-    reset()
+    _reset()
 
 
 def enable() -> None:
     """Enable the microcontroller."""
     print_bold('Enabling the microcontroller...')
-    with pin_config():
+    with _pin_config():
         write_gpio(f'{GPIO_G0}/value', OFF)
         time.sleep(0.5)
         write_gpio(f'{GPIO_EN}/value', OFF)
@@ -92,26 +92,31 @@ def enable() -> None:
 def disable() -> None:
     """Disable the microcontroller."""
     print_bold('Disabling the microcontroller...')
-    with pin_config():
+    with _pin_config():
         write_gpio(f'{GPIO_EN}/value', ON)
 
 
 def reset() -> None:
     """Reset the microcontroller."""
     print_bold('Resetting the microcontroller...')
-    with pin_config():
-        write_gpio(f'{GPIO_G0}/value', OFF)
-        time.sleep(0.5)
-        write_gpio(f'{GPIO_EN}/value', ON)
-        time.sleep(0.5)
-        write_gpio(f'{GPIO_EN}/value', OFF)
+    with _pin_config():
+        _reset()
+
+
+def _reset() -> None:
+    """Set pins to reset the microcontroller."""
+    write_gpio(f'{GPIO_G0}/value', OFF)
+    time.sleep(0.5)
+    write_gpio(f'{GPIO_EN}/value', ON)
+    time.sleep(0.5)
+    write_gpio(f'{GPIO_EN}/value', OFF)
 
 
 def erase() -> None:
     """Erase the microcontroller."""
     print_bold('Erasing the microcontroller...')
-    with pin_config():
-        with flash_mode():
+    with _pin_config():
+        with _flash_mode():
             success = run(
                 'esptool.py',
                 '--chip', 'esp32',
@@ -129,8 +134,8 @@ def erase() -> None:
 def flash() -> None:
     """Flash the microcontroller."""
     print_bold('Flashing...')
-    with pin_config():
-        with flash_mode():
+    with _pin_config():
+        with _flash_mode():
             success = run(
                 'esptool.py',
                 '--chip', 'esp32',
