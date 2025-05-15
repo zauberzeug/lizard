@@ -20,7 +20,8 @@ parser.add_argument('--partition-table', default='build/partition_table/partitio
                     help='Path to partition table')
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
-parser.add_argument('device', default='/dev/tty.SLAB_USBtoUART', help='Serial device path (overwritten by --jetson)')
+parser.add_argument('device', nargs='?', default='/dev/tty.SLAB_USBtoUART',
+                    help='Serial device path (overwritten by --jetson)')
 
 args = parser.parse_args()
 
