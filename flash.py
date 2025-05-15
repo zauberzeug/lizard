@@ -50,12 +50,6 @@ if 'enable' in sys.argv:
         esp.enable()
     sys.exit()
 
-if 'disable' in sys.argv:
-    with esp.pin_config():
-        print('Disabling ESP...')
-        esp.disable()
-    sys.exit()
-
 if 'reset' in sys.argv:
     with esp.pin_config():
         print('Resetting ESP...')
