@@ -397,7 +397,7 @@ void app_main() {
     };
     uart_param_config(UART_NUM_0, &uart_config);
     QueueHandle_t uart_queue;
-    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, BUFFER_SIZE * 2, 20, &uart_queue, 0);
+    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
 
