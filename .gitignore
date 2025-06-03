@@ -9,3 +9,4 @@ owl_executable
 config.txt
 *.lock
 .venv
+managed_components/
