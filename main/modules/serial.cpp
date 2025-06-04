@@ -1,4 +1,5 @@
 #include "serial.h"
+#include "utils/addressing.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -168,4 +169,20 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void Serial::activate_external_mode() const {
+    echo("Activating external mode");
+
+    static const char *command = "$$1\n";
+    uart_write_bytes(this->uart_num, (uint8_t *)command, std::strlen(command));
+    activate_uart_external_mode();
+}
+
+void Serial::deactivate_external_mode() const {
+    echo("Deactivating external mode");
+
+    static const char *command = "$$0\n";
+    uart_write_bytes(this->uart_num, (uint8_t *)command, std::strlen(command));
+    deactivate_uart_external_mode();
 }
