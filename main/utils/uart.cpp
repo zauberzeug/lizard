@@ -1,4 +1,5 @@
 #include "uart.h"
+#include "addressing.h"
 #include <cstdarg>
 #include <stdexcept>
 #include <stdio.h>
@@ -20,7 +21,14 @@ void echo(const char *format, ...) {
     for (unsigned int i = 0; i < pos; ++i) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
-            printf("%s@%02x\n", &buffer[start], checksum);
+
+            if (get_uart_external_mode()) {
+                checksum ^= ID_TAG;
+                checksum ^= get_uart_expander_id();
+                printf("%c%c%s@%02x\n", ID_TAG, get_uart_expander_id(), &buffer[start], checksum);
+            } else {
+                printf("%s@%02x\n", &buffer[start], checksum);
+            }
             start = i + 1;
             checksum = 0;
         } else {
