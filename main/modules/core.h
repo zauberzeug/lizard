@@ -26,4 +26,5 @@ public:
     void set(std::string property_name, double value);
     std::string get_output() const override;
     void keep_alive();
+    void run_step();
 };
