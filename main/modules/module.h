@@ -22,6 +22,7 @@ enum ModuleType {
     bluetooth,
     core,
     expander,
+    plexus_expander,
     input,
     output,
     pwm_output,
