@@ -1,6 +1,7 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
+#include "../utils/addressing.h"
 #include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -163,6 +164,25 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             echo("Not a strapping pin");
             break;
         }
+    } else if (method_name == "run_step") {
+        Module::expect(arguments, 0);
+        run_step();
+    } else if (method_name == "pe") {
+        echo("Debug: external status: %d", get_uart_external_mode());
+    } else if (method_name == "set_device_id") {
+        Module::expect(arguments, 1, integer);
+        uint8_t id = arguments[0]->evaluate_integer();
+        if (id > 9) {
+            throw std::runtime_error("expander id must be between 0 and 99");
+        }
+        char id_str = static_cast<char>('0' + id);
+        set_uart_expander_id(id_str);
+        Storage::put_device_id(id_str);
+        echo("Device ID set to %c", id_str);
+    } else if (method_name == "get_device_id") {
+        Module::expect(arguments, 0);
+        char id = get_uart_expander_id();
+        echo("Device ID: %c", id);
     } else {
         Module::call(method_name, arguments);
     }
@@ -199,4 +219,31 @@ std::string Core::get_output() const {
 
 void Core::keep_alive() {
     this->last_message_millis = millis();
+}
+
+void Core::run_step() {
+    if (!get_uart_external_mode()) {
+        echo("Debug: Not in external mode, skipping step");
+        return;
+    }
+
+    // Run one step of all modules
+    for (auto const &[module_name, module] : Global::modules) {
+        if (module->name != "core") {
+            try {
+                module->step();
+            } catch (const std::runtime_error &e) {
+                echo("error in module \"%s\": %s", module->name.c_str(), e.what());
+            }
+        }
+    }
+
+    // Run core module last
+    try {
+        Module::step();
+    } catch (const std::runtime_error &e) {
+        echo("error in core module: %s", e.what());
+    }
+
+    echo("__step_done__");
 }
