@@ -22,6 +22,7 @@
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
 #include "output.h"
+#include "plexus_expander.h"
 #include "pwm_output.h"
 #include "rmd_motor.h"
 #include "rmd_pair.h"
@@ -89,6 +90,25 @@ Module_ptr Module::create(const std::string type,
         const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_NC;
         const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_NC;
         return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
+    } else if (type == "PlexusExpander") {
+        Module::expect(arguments, 2, identifier, integer);
+        std::string serial_name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(serial_name);
+        if (module->type != serial) {
+            throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
+        }
+        const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
+
+        // Validate and convert ID here
+        int id = arguments[1]->evaluate_integer();
+        if (id < 0 || id > 9) {
+            throw std::runtime_error("expander id must be between 0 and 9");
+        }
+        char expander_id[2] = {
+            static_cast<char>('0' + (id / 10)),
+            static_cast<char>('0' + (id % 10))};
+
+        return std::make_shared<PlexusExpander>(name, serial, expander_id, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();
