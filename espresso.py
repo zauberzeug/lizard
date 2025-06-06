@@ -19,6 +19,7 @@ parser.add_argument('--bootloader', default='build/bootloader/bootloader.bin', h
 parser.add_argument('--partition-table', default='build/partition_table/partition-table.bin',
                     help='Path to partition table')
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
+parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
 parser.add_argument('device', nargs='?', default='/dev/tty.SLAB_USBtoUART',
                     help='Serial device path (overwritten by --jetson)')
@@ -40,6 +41,8 @@ DEVICE = {
 ON = 1 if args.nand else 0
 OFF = 0 if args.nand else 1
 DRY_RUN = args.dry_run
+FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}.get(args.chip, '40m')
+BOOTLOADER_OFFSET = {'esp32': '0x1000', 'esp32s3': '0x0'}.get(args.chip, '0x1000')
 
 
 @contextmanager
@@ -119,7 +122,7 @@ def erase() -> None:
         with _flash_mode():
             success = run(
                 'esptool.py',
-                '--chip', 'esp32',
+                '--chip', args.chip,
                 '--port', DEVICE,
                 '--baud', '921600',
                 '--before', 'default_reset',
@@ -138,7 +141,7 @@ def flash() -> None:
         with _flash_mode():
             success = run(
                 'esptool.py',
-                '--chip', 'esp32',
+                '--chip', args.chip,
                 '--port', DEVICE,
                 '--baud', '921600',
                 '--before', 'default_reset',
@@ -146,9 +149,9 @@ def flash() -> None:
                 'write_flash',
                 '-z',
                 '--flash_mode', 'dio',
-                '--flash_freq', '40m',
+                '--flash_freq', FLASH_FREQ,
                 '--flash_size', 'detect',
-                '0x1000', args.bootloader,
+                BOOTLOADER_OFFSET, args.bootloader,
                 '0x8000', args.partition_table,
                 '0x20000', args.firmware,
             )
