@@ -70,9 +70,14 @@ void Storage::put(const std::string value) {
 
 std::string Storage::get() {
     std::string result = "";
-    const int num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
-    for (int i = 0; i < num_chunks; i++) {
-        result += read(NAMESPACE, "chunk" + std::to_string(i));
+    try {
+        const int num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
+        for (int i = 0; i < num_chunks; i++) {
+            result += read(NAMESPACE, "chunk" + std::to_string(i));
+        }
+    } catch (const std::runtime_error &e) {
+        // NVS is empty or corrupted, return empty string
+        result = "";
     }
     return result;
 }
@@ -139,7 +144,8 @@ void Storage::load_device_id() {
     uint8_t value;
     if ((err = nvs_get_u8(handle, "device_id", &value)) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not read device ID from storage");
+        // Device ID not found in storage, use default (no error)
+        return;
     }
 
     set_uart_expander_id(value);
