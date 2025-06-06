@@ -222,7 +222,7 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                     expandable = std::static_pointer_cast<PlexusExpander>(expander_module);
                 }
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expandable, arguments);
                 Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
