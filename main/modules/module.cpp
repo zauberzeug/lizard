@@ -104,9 +104,7 @@ Module_ptr Module::create(const std::string type,
         if (id < 0 || id > 9) {
             throw std::runtime_error("expander id must be between 0 and 9");
         }
-        char expander_id[2] = {
-            static_cast<char>('0' + (id / 10)),
-            static_cast<char>('0' + (id % 10))};
+        char expander_id = static_cast<char>('0' + id);
 
         return std::make_shared<PlexusExpander>(name, serial, expander_id, message_handler);
     } else if (type == "Bluetooth") {
