@@ -239,3 +239,7 @@ void Expander::send_call(const std::string proxy_name, const std::string method_
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
     this->serial->write_checked_line(buffer, pos);
 }
+
+bool Expander::is_ready() const {
+    return this->properties.at("is_ready")->boolean_value;
+}
