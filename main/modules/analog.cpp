@@ -68,6 +68,12 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
     };
     ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_handle));
 #else
+    adc_cali_line_fitting_efuse_val_t cali_val;
+    esp_err_t cali_check = adc_cali_scheme_line_fitting_check_efuse(&cali_val);
+    if (cali_check != ESP_OK || cali_val == ADC_CALI_LINE_FITTING_EFUSE_VAL_DEFAULT_VREF) {
+        echo("warning: eFuse calibration data not available, using default reference voltage.");
+    }
+
     adc_cali_line_fitting_config_t cali_config = {
         .unit_id = static_cast<adc_unit_t>(unit - 1),
         .atten = attenuation,
