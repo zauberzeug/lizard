@@ -1,4 +1,3 @@
----
 name: Release
 on:
   workflow_dispatch:
@@ -6,64 +5,104 @@ on:
     tags:
       - v**
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [esp32, esp32s3]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: "recursive"
           token: ${{ secrets.ACCESS_TOKEN }}
       - name: Determine version
         id: version_id
-        run: echo "::set-output name=value::$(git describe --always --tags --dirty)"
+        run: echo "value=$(git describe --always --tags --dirty)" >> $GITHUB_OUTPUT
       - name: Generate parser
         run: "./gen_parser.sh"
-      - name: Build firmware
+      - name: Build firmware for ${{ matrix.target }}
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.1
-          target: esp32
-      - name: Create release
-        uses: actions/create-release@v1
-        id: create_release
-        with:
-          draft: false
-          prerelease: false
-          release_name: lizard_${{ steps.version_id.outputs.value }}
-          tag_name: ${{ steps.version_id.outputs.value }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - name: Zip bins and tools
-        run: "zip lizard.zip -@ < .github/zip_content.txt"
+          target: ${{ matrix.target }}
+          command: python3 build.py ${{ matrix.target }}
+      - name: Zip bins and tools for ${{ matrix.target }}
+        run: "zip lizard_${{ matrix.target }}.zip -@ < .github/zip_content.txt"
       - name: Upload artifacts
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build/lizard.bin
-          asset_name: lizard_${{ steps.version_id.outputs.value }}.bin
-          asset_content_type: application/octet-stream
-      - name: Upload devtools
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+          name: lizard_${{ matrix.target }}_artifacts
+          path: |
+            build/lizard.bin
+            lizard_${{ matrix.target }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Determine version
+        id: version_id
+        run: echo "value=$(git describe --always --tags --dirty)" >> $GITHUB_OUTPUT
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: lizard.zip
-          asset_name: lizard_firmware_and_devtools_${{ steps.version_id.outputs.value }}.zip
-          asset_content_type: application/zip
+          path: artifacts
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Debug: Show what artifacts were downloaded
+          echo "=== Downloaded artifacts ==="
+          find artifacts -type f -name "*.bin" -o -name "*.zip" | head -20
+
+          # Create release
+          gh release create ${{ steps.version_id.outputs.value }} \
+            --title "lizard_${{ steps.version_id.outputs.value }}" \
+            --generate-notes
+
+          # Prepare and upload assets for each target
+          for target in esp32 esp32s3; do
+            echo "=== Processing target: $target ==="
+
+            # Check and upload .bin file
+            bin_file="artifacts/lizard_${target}_artifacts/build/lizard.bin"
+            if [ -f "$bin_file" ]; then
+              bin_name="lizard_${{ steps.version_id.outputs.value }}_${target}.bin"
+              cp "$bin_file" "$bin_name"
+              echo "Uploading $bin_name"
+              gh release upload ${{ steps.version_id.outputs.value }} "$bin_name"
+            else
+              echo "Binary file not found: $bin_file"
+            fi
+
+            # Check and upload .zip file
+            zip_file="artifacts/lizard_${target}_artifacts/lizard_${target}.zip"
+            if [ -f "$zip_file" ]; then
+              zip_name="lizard_firmware_and_devtools_${{ steps.version_id.outputs.value }}_${target}.zip"
+              cp "$zip_file" "$zip_name"
+              echo "Uploading $zip_name"
+              gh release upload ${{ steps.version_id.outputs.value }} "$zip_name"
+            else
+              echo "Zip file not found: $zip_file"
+            fi
+          done
 
   docs:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: "3.x"
       - name: Install dependencies

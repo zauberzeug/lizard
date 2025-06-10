@@ -13,6 +13,14 @@
 
 #define MIN_SPEED 490
 
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#define SPEED_MODE LEDC_LOW_SPEED_MODE
+#define SPEED_OUT_IDX LEDC_LS_SIG_OUT0_IDX
+#else
+#define SPEED_MODE LEDC_HIGH_SPEED_MODE
+#define SPEED_OUT_IDX LEDC_HS_SIG_OUT0_IDX
+#endif
+
 REGISTER_MODULE_DEFAULTS(StepperMotor)
 
 const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
@@ -61,7 +69,7 @@ StepperMotor::StepperMotor(const std::string name,
     pcnt_counter_resume(this->pcnt_unit);
 
     ledc_timer_config_t timer_config = {
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = SPEED_MODE,
         .duty_resolution = LEDC_TIMER_1_BIT,
         .timer_num = this->ledc_timer,
         .freq_hz = 1000,
@@ -72,7 +80,7 @@ StepperMotor::StepperMotor(const std::string name,
 
     ledc_channel_config_t channel_config = {
         .gpio_num = step_pin,
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = SPEED_MODE,
         .channel = this->ledc_channel,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = this->ledc_timer,
@@ -104,9 +112,9 @@ void StepperMotor::set_state(StepperState new_state) {
     this->state = new_state;
     this->properties.at("idle")->boolean_value = (new_state == Idle);
 
-    gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : LEDC_HS_SIG_OUT0_IDX + this->ledc_channel, 0, 0);
-    ledc_set_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
-    ledc_update_duty(LEDC_HIGH_SPEED_MODE, this->ledc_channel);
+    gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : SPEED_OUT_IDX + this->ledc_channel, 0, 0);
+    ledc_set_duty(SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
+    ledc_update_duty(SPEED_MODE, this->ledc_channel);
 }
 
 void StepperMotor::step() {
@@ -162,10 +170,10 @@ void StepperMotor::step() {
         // set frequency and pause/resume LED controller
         int32_t abs_speed = std::abs(speed);
         if (abs_speed < MIN_SPEED) {
-            ledc_timer_pause(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+            ledc_timer_pause(SPEED_MODE, this->ledc_timer);
         } else {
-            ledc_set_freq(LEDC_HIGH_SPEED_MODE, this->ledc_timer, abs_speed);
-            ledc_timer_resume(LEDC_HIGH_SPEED_MODE, this->ledc_timer);
+            ledc_set_freq(SPEED_MODE, this->ledc_timer, abs_speed);
+            ledc_timer_resume(SPEED_MODE, this->ledc_timer);
         }
         gpio_set_level(this->dir_pin, speed > 0 ? 1 : 0);
 

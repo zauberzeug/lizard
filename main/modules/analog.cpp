@@ -59,6 +59,15 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, static_cast<adc_channel_t>(channel), &config));
 
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    adc_cali_curve_fitting_config_t cali_config = {
+        .unit_id = static_cast<adc_unit_t>(unit - 1),
+        .chan = static_cast<adc_channel_t>(channel),
+        .atten = attenuation,
+        .bitwidth = ADC_BITWIDTH_12,
+    };
+    ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_handle));
+#else
     adc_cali_line_fitting_efuse_val_t cali_val;
     esp_err_t cali_check = adc_cali_scheme_line_fitting_check_efuse(&cali_val);
     if (cali_check != ESP_OK || cali_val == ADC_CALI_LINE_FITTING_EFUSE_VAL_DEFAULT_VREF) {
@@ -72,6 +81,7 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
         .default_vref = 1100,
     };
     ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali_handle));
+#endif
 }
 
 void Analog::step() {

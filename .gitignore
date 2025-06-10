@@ -1,4 +1,5 @@
 build/
+managed_components/
 owl/
 site/
 __pycache__/
