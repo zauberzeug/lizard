@@ -1,4 +1,5 @@
 build/
+managed_components/
 owl/
 site/
 __pycache__/
@@ -9,4 +10,3 @@ owl_executable
 config.txt
 *.lock
 .venv
-managed_components/

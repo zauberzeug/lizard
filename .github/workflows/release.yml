@@ -65,13 +65,13 @@ jobs:
 
           # Create release
           gh release create ${{ steps.version_id.outputs.value }} \
-            --title "lizard ${{ steps.version_id.outputs.value }}" \
+            --title "lizard_${{ steps.version_id.outputs.value }}" \
             --generate-notes
 
           # Prepare and upload assets for each target
           for target in esp32 esp32s3; do
             echo "=== Processing target: $target ==="
-            
+
             # Check and upload .bin file
             bin_file="artifacts/lizard_${target}_artifacts/build/lizard.bin"
             if [ -f "$bin_file" ]; then
@@ -82,8 +82,8 @@ jobs:
             else
               echo "Binary file not found: $bin_file"
             fi
-            
-            # Check and upload .zip file  
+
+            # Check and upload .zip file
             zip_file="artifacts/lizard_${target}_artifacts/lizard_${target}.zip"
             if [ -f "$zip_file" ]; then
               zip_name="lizard_firmware_and_devtools_${{ steps.version_id.outputs.value }}_${target}.zip"
