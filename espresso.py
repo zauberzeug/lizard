@@ -155,7 +155,7 @@ def flash() -> None:
                 '0x20000', args.firmware,
             )
             if not success:
-                raise RuntimeError('Flashing failed. Maybe you need different parameters? Or you forgot "sudo"?')
+                raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
 
 
 def run(*run_args: str) -> bool:
