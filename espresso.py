@@ -130,8 +130,7 @@ def erase() -> None:
                 'erase_flash',
             )
             if not success:
-                print('Failed to erase flash.')
-                sys.exit(1)
+                raise RuntimeError('Failed to erase flash.')
 
 
 def flash() -> None:
@@ -156,8 +155,7 @@ def flash() -> None:
                 '0x20000', args.firmware,
             )
             if not success:
-                print_fail('Flashing failed. Maybe you need different parameters? Or you forgot "sudo"?\n')
-                sys.exit(1)
+                raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
 
 
 def run(*run_args: str) -> bool:
@@ -202,10 +200,13 @@ def main(command: str) -> None:
     elif command == 'flash':
         flash()
     else:
-        print(f'Invalid command "{command}".')
-        sys.exit(1)
+        raise RuntimeError(f'Invalid command "{command}".')
     print_ok('Finished. ☕️')
 
 
 if __name__ == '__main__':
-    main(args.command)
+    try:
+        main(args.command)
+    except RuntimeError as e:
+        print_fail(f'Error: {e}')
+        sys.exit(1)
