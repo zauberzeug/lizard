@@ -169,6 +169,12 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         run_step();
     } else if (method_name == "pe") {
         echo("Debug: external status: %d", get_uart_external_mode());
+    } else if (method_name == "ee_on") { // Debug function remove later
+        Module::expect(arguments, 0);
+        activate_uart_external_mode();
+    } else if (method_name == "ee_off") { // Debug function remove later
+        Module::expect(arguments, 0);
+        deactivate_uart_external_mode();
     } else if (method_name == "set_device_id") {
         Module::expect(arguments, 1, integer);
         uint8_t id = arguments[0]->evaluate_integer();
