@@ -380,9 +380,11 @@ void process_uart() {
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
         if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '1') { // hardcoded activation: $$1\n
+            echo("Activating external mode");
             activate_uart_external_mode();
             return;
         } else if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '0') { // hardcoded deactivation: $$0\n
+            echo("Deactivating external mode");
             deactivate_uart_external_mode();
             return;
         }
@@ -435,6 +437,9 @@ void app_main() {
     };
     uart_param_config(UART_NUM_0, &uart_config);
     QueueHandle_t uart_queue;
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    uart_set_pin(UART_NUM_0, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE); // s3 pins for connection
+#endif
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
