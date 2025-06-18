@@ -210,16 +210,16 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                // Check if the module is either an Expander or Plexus Expander
-                if (expander_module->type != expander && expander_module->type != plexus_expander) {
-                    throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
+                if (expander_module->type != expander && expander_module->type != plexus_expander && expander_module->type != proxy) {
+                    throw std::runtime_error("module \"" + expander_name + "\" is not an expander or proxy");
                 }
-                // Use static_cast based on the module type
                 std::shared_ptr<Expandable> expandable;
                 if (expander_module->type == expander) {
                     expandable = std::static_pointer_cast<Expander>(expander_module);
-                } else { // must be plexus_expander
+                } else if (expander_module->type == plexus_expander) {
                     expandable = std::static_pointer_cast<PlexusExpander>(expander_module);
+                } else {
+                    expandable = std::static_pointer_cast<Proxy>(expander_module);
                 }
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expandable, arguments);
