@@ -1,4 +1,5 @@
 #include "proxy.h"
+#include "../compilation/expressions.h"
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "driver/uart.h"
@@ -34,4 +35,24 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
         this->expandable->send_property(this->name, property_name, expression);
     }
     Module::get_property(property_name)->assign(expression);
+}
+
+void Proxy::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
+    // For proxy chaining, we always need to preserve the expander reference in the module type
+    // The command should be: module_name = proxy_name.original_module_type(args)
+    // This ensures the module gets created on the correct target, not the intermediate ESP32 (this proxy)
+    std::string chained_module_type = this->name + "." + module_type;
+    this->expandable->send_proxy(module_name, chained_module_type, arguments);
+}
+
+void Proxy::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
+    this->expandable->send_property(proxy_name, property_name, expression);
+}
+
+void Proxy::send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+    this->expandable->send_call(proxy_name, method_name, arguments);
+}
+
+bool Proxy::is_ready() const {
+    return this->expandable->is_ready();
 }
