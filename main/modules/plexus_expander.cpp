@@ -127,8 +127,6 @@ void PlexusExpander::handle_messages() {
         }
 
         this->last_message_millis = millis();
-        this->ping_pending = false;
-
         if (buffer[0] == '!' && buffer[1] == '!') {
             this->message_handler(&buffer[2], false, true);
         } else if (strstr(buffer, "__step_done__") != nullptr) {
@@ -149,7 +147,7 @@ void PlexusExpander::call(const std::string method_name, const std::vector<Const
         buffer_message(command.c_str());
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
-        echo("restarting not supported for external expander right now");
+        this->restart();
     } else if (method_name == "ee_on") { // Debug function remove later
         Module::expect(arguments, 0);
         this->serial->activate_external_mode();
@@ -191,4 +189,68 @@ void PlexusExpander::send_call(const std::string proxy_name, const std::string m
 
 bool PlexusExpander::is_ready() const {
     return this->properties.at("is_ready")->boolean_value;
+}
+
+void PlexusExpander::restart() {
+    char buffer[256];
+    int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.restart()", ID_TAG, expander_id);
+    this->serial->write_checked_line(buffer, pos);
+    this->properties.at("is_ready")->boolean_value = false;
+
+    // Wait for "Ready." message like in regular expander
+    static char read_buffer[1024];
+    const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
+    const unsigned long start_time = millis();
+
+    while (!this->properties.at("is_ready")->boolean_value) {
+        if (boot_timeout > 0 && millis_since(start_time) > boot_timeout) {
+            echo("warning: plexus expander %c restart timed out", expander_id);
+            break;
+        }
+
+        // Check for Ready message
+        while (this->serial->has_buffered_lines()) {
+            int len = this->serial->read_line(read_buffer, sizeof(read_buffer));
+            check(read_buffer, len);
+
+            // Handle tag and id
+            if (read_buffer[0] == ID_TAG && read_buffer[1] == expander_id) {
+                strcpy(read_buffer, read_buffer + 2);
+            }
+
+            echo("%s: %s", this->name.c_str(), read_buffer);
+            if (strcmp("Ready.", read_buffer) == 0) {
+                echo("plexus expander %c ready after restart", expander_id);
+                break;
+            }
+        }
+
+        if (strcmp("Ready.", read_buffer) == 0) {
+            break;
+        }
+
+        delay(30);
+    }
+
+    // Reinitialize like in constructor
+    this->serial->enable_line_detection();
+    this->serial->activate_external_mode();
+
+    // Send ready check and wait for response like in constructor
+    buffer_pos = 0;
+    pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%c_READY__')", ID_TAG, expander_id, expander_id);
+    this->serial->write_checked_line(buffer, pos);
+
+    const int max_retries = 10;
+    for (int i = 0; i < max_retries; i++) {
+        echo("Debug: Waiting for READY response after restart (attempt %d/%d)", i + 1, max_retries);
+        this->handle_messages();
+        delay(200);
+        this->serial->write_checked_line(buffer, pos);
+        if (this->properties.at("is_ready")->boolean_value) {
+            echo("Debug: Got READY response after restart");
+            return;
+        }
+    }
+    echo("Warning: No READY response received after restart");
 }

@@ -13,7 +13,6 @@ using PlexusExpander_ptr = std::shared_ptr<PlexusExpander>;
 class PlexusExpander : public Module, public Expandable {
 private:
     unsigned long int last_message_millis = 0;
-    bool ping_pending = false;
     unsigned long boot_start_time;
 
     static const size_t MSG_BUFFER_SIZE = 1024;
