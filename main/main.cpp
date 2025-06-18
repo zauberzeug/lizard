@@ -475,14 +475,14 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
-        for (auto const &[module_name, module] : Global::modules) {
-            if (module != core_module) {
-                run_step(module);
+        if (!get_uart_external_mode()) { // only loop in external mode by core.run_step()
+            for (auto const &[module_name, module] : Global::modules) {
+                if (module != core_module) {
+                    run_step(module);
+                }
             }
-        }
-        run_step(core_module);
+            run_step(core_module);
 
-        if (!get_uart_external_mode()) { // only run rules and routines if not in external mode
             for (auto const &rule : Global::rules) {
                 try {
                     if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {

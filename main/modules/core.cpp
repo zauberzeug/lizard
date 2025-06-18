@@ -246,7 +246,7 @@ void Core::run_step() {
 
     // Run core module last
     try {
-        Module::step();
+        this->step();
     } catch (const std::runtime_error &e) {
         echo("error in core module: %s", e.what());
     }
