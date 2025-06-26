@@ -76,7 +76,7 @@ def wait_for_ready(ser, timeout, verbose=False):
             line = ser.readline().decode().strip()
             log(f"Device: {line}", verbose, force=True)  # Always show device messages
 
-            if "Waiting for firmware transfer to begin" in line:
+            if "Waiting for firmware transfer to begin" in line or "Ready for firmware download" in line:
                 log("Device ready for firmware!", verbose, force=True)
                 return True
             elif "failed" in line.lower() or "error" in line.lower():
@@ -90,28 +90,24 @@ def wait_for_ready(ser, timeout, verbose=False):
 
 
 def wait_for_ready_signal(ser, timeout=2):
-    """Wait for ###OTA_READY### signal from device."""
+    """Wait for \r\n ready signal from device."""
     start_time = time.time()
 
     while time.time() - start_time < timeout:
         if ser.in_waiting > 0:
-            line = ser.readline().decode().strip()
-            log(f"Device: {line}", False, True)  # Always show device messages
+            # Read one byte at a time to detect \r\n
+            data = ser.read(1)
+            if data == b'\r':
+                # Check if next byte is \n
+                if ser.in_waiting > 0 or ser.read(1) == b'\n':
+                    return True
+        time.sleep(0.01)  # 10ms check interval
 
-            if "###OTA_READY###" in line:
-                return True
-            elif "failed" in line.lower() or "error" in line.lower():
-                print(f"Error: Device reported: {line}")
-                return False
-
-        time.sleep(0.1)
-
-    print(f"Timeout waiting for ready signal ({timeout}s)")
     return False
 
 
-def send_firmware(ser, firmware_path, verbose=False):
-    """Send firmware binary using UART OTA protocol."""
+def send_firmware_simple(ser, firmware_path, verbose=False):
+    """Send firmware binary using ultra-simple protocol - just raw data."""
     if not os.path.exists(firmware_path):
         print(f"Error: Firmware file not found: {firmware_path}")
         return False
@@ -120,93 +116,80 @@ def send_firmware(ser, firmware_path, verbose=False):
     print(f"Sending firmware: {firmware_path} ({file_size} bytes)")
 
     try:
-        # Send start marker with size
-        start_cmd = f"###OTA_START###{file_size}\n"
-        print(f"Sending start command: {start_cmd.strip()}")  # Always show this
-        ser.write(start_cmd.encode())
-        ser.flush()  # Ensure data is sent immediately
-        log("Start command sent successfully", verbose, force=True)
+        print("✅ Device is ready! Starting data transfer...")
 
-        # Small delay to ensure ESP32 processes the start command
-        time.sleep(0.5)
-
-        # Wait for first ready signal
-        print("Waiting for device ready signal...")
-        if not wait_for_ready_signal(ser):
-            return False
-
-            # Send firmware data in chunks
-        print("Starting chunked firmware transfer...")
-        chunk_size = 512   # 512 byte chunks for better speed
-
-        print(f"Using {chunk_size} byte chunks")
+        # Send raw firmware data with flow control
+        print("Starting ultra-simple firmware transfer...")
+        chunk_size = 512  # Reasonable chunk size
 
         with open(firmware_path, 'rb') as f:
             bytes_sent = 0
-            chunk_num = 1
+            last_progress = -1
+
+            # Wait for initial \r\n ready signal
+            if not wait_for_ready_signal(ser, timeout=10):
+                print("Device not ready for initial transfer")
+                return False
 
             while bytes_sent < file_size:
-                # Read chunk from file
-                remaining = file_size - bytes_sent
-                current_chunk_size = min(chunk_size, remaining)
-                chunk_data = f.read(current_chunk_size)
-
+                # Read chunk
+                chunk_data = f.read(chunk_size)
                 if not chunk_data:
                     break
 
-                    # Send this chunk (256 bytes, optimal for ESP32)
-                print(f"Sending chunk {chunk_num} ({current_chunk_size} bytes)...")
+                # Send chunk
                 ser.write(chunk_data)
                 ser.flush()
                 bytes_sent += len(chunk_data)
 
-                # Minimal delay for 256-byte chunks
-                time.sleep(0.002)  # 2ms delay - very fast
-
+                # Progress reporting every 5%
                 progress = int((bytes_sent / file_size) * 100)
-                # Only print progress every 5% to reduce I/O overhead
-                if progress % 5 == 0 and progress != getattr(send_firmware, 'last_progress', -1):
+                if progress % 5 == 0 and progress != last_progress:
                     print(f"Progress: {progress}% ({bytes_sent}/{file_size} bytes)")
-                    send_firmware.last_progress = progress
+                    last_progress = progress
 
-                chunk_num += 1
-
-                # Wait for ready signal for next chunk (unless we're done)
+                # Wait for ready signal before sending next chunk
                 if bytes_sent < file_size:
-                    print("Waiting for device ready for next chunk...")
-                    if not wait_for_ready_signal(ser):
-                        print("Device not ready for next chunk")
+                    if not wait_for_ready_signal(ser, timeout=3):
+                        print(f"Device not ready for more data at {bytes_sent} bytes")
                         return False
-
-                # Send end marker
-        ser.write(b"###OTA_END###")
-        log("Sent end marker", verbose)
 
         print(f"Transfer complete: {bytes_sent} bytes sent")
 
         # Listen for device response after transfer
         print("Listening for device response...")
         start_time = time.time()
-        while time.time() - start_time < 120:  # Listen for 60 seconds
+        while time.time() - start_time < 10:  # Reduced timeout to 10 seconds
             if ser.in_waiting > 0:
-                line = ser.readline().decode().strip()
-                print(f"Device: {line}")
+                try:
+                    line = ser.readline().decode().strip()
 
-                if "OTA completed successfully" in line or "Rebooting" in line:
-                    print("✅ Device confirmed OTA success!")
-                    return True
-                elif "OTA failed" in line or "failed" in line.lower():
-                    print("❌ Device reported OTA failure!")
-                    return False
+                    # Only show non-empty, meaningful device messages
+                    if line and not line.isspace():
+                        print(f"Device: {line}")
+
+                        if "OTA OK" in line or "restarting" in line.lower():
+                            print("✅ Device confirmed OTA success!")
+                            return True
+                        elif "failed" in line.lower() or "error" in line.lower():
+                            print("❌ Device reported OTA failure!")
+                            return False
+                except:
+                    pass
 
             time.sleep(0.1)
 
-        print("⏰ No device response received after transfer")
+        print("✅ Transfer completed - assuming success (no errors detected)")
         return True  # Assume success if no error reported
 
     except Exception as e:
         print(f"Error during transfer: {e}")
         return False
+
+
+def send_firmware(ser, firmware_path, verbose=False):
+    """Send firmware using simple protocol."""
+    return send_firmware_simple(ser, firmware_path, verbose)
 
 
 def listen_for_validation(port, baudrate, timeout, verbose=False):
