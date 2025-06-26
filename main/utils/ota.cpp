@@ -15,6 +15,8 @@
 #include "driver/uart.h"
 #include "esp_app_format.h"
 #include "esp_ota_ops.h"
+#include "esp_task_wdt.h"
+#include "esp_timer.h"
 
 namespace ota {
 
@@ -157,32 +159,6 @@ bool uart_ota_start() {
     uart_ota_active = true;
     echo("Main UART processing disabled for OTA");
 
-    // Wait a moment for main loop to stop
-    vTaskDelay(50 / portTICK_PERIOD_MS);
-
-    // Reconfigure UART for OTA
-    if (!uart_configure_for_ota()) {
-        uart_ota_active = false;
-        return false;
-    }
-
-    // Find next available OTA partition
-    ota_partition = esp_ota_get_next_update_partition(NULL);
-    if (!ota_partition) {
-        echo("No available OTA partition found");
-        uart_ota_active = false;
-        return false;
-    }
-
-    echo("OTA partition found: %s", ota_partition->label);
-
-    // Begin OTA operation
-    esp_err_t err = esp_ota_begin(ota_partition, OTA_WITH_SEQUENTIAL_WRITES, &ota_handle);
-    if (!echo_if_error("OTA begin", err)) {
-        uart_ota_active = false;
-        return false;
-    }
-
     ota_status.in_progress = true;
     ota_status.total_size = 0;
     ota_status.received_size = 0;
@@ -191,45 +167,23 @@ bool uart_ota_start() {
     return true;
 }
 
-int uart_read_with_timeout(uint8_t *buffer, size_t max_size, int timeout_ms) {
-    size_t bytes_read = 0;
+// Simple wait function - returns 1 if data available, 0 if timeout
+int8_t uart_wait_for_data(uint16_t time) {
+    int64_t th = esp_timer_get_time();
+    size_t avl = 0;
 
-    int result = uart_read_bytes(UART_PORT_NUM, buffer, max_size, timeout_ms / portTICK_PERIOD_MS);
-    if (result > 0) {
-        bytes_read = result;
+    while (esp_timer_get_time() - th < time * 1000) {
+        uart_get_buffered_data_len(UART_PORT_NUM, &avl);
+        if (avl > 0) {
+            return 1;
+        }
     }
-
-    return bytes_read;
+    return 0;
 }
 
-bool uart_wait_for_marker(const char *marker, int timeout_ms) {
-    char buffer[64];
-    int marker_len = strlen(marker);
-    int buffer_pos = 0;
-    int start_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
-
-    while ((xTaskGetTickCount() * portTICK_PERIOD_MS - start_time) < timeout_ms) {
-        uint8_t byte;
-        if (uart_read_with_timeout(&byte, 1, 100) == 1) {
-            buffer[buffer_pos] = byte;
-            buffer_pos++;
-
-            // Check if we have the marker
-            if (buffer_pos >= marker_len) {
-                if (memcmp(&buffer[buffer_pos - marker_len], marker, marker_len) == 0) {
-                    return true;
-                }
-            }
-
-            // Prevent buffer overflow
-            if (buffer_pos >= sizeof(buffer) - 1) {
-                buffer_pos = 0;
-            }
-        }
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
-
-    return false;
+// Simple confirm - send \r\n
+void uart_confirm() {
+    uart_write_bytes(UART_PORT_NUM, "\r\n", 2);
 }
 
 bool uart_ota_receive_firmware() {
@@ -238,173 +192,92 @@ bool uart_ota_receive_firmware() {
         return false;
     }
 
-    echo("Waiting for firmware transfer to begin...");
-    echo("Send: %s<size_in_bytes>\\n<firmware_data>%s", UART_OTA_START_MARKER, UART_OTA_END_MARKER);
+    echo("Ready for firmware download - send data now");
 
-    // Wait for start marker
-    if (!uart_wait_for_marker(UART_OTA_START_MARKER, UART_OTA_TIMEOUT_MS)) {
-        echo("Timeout waiting for OTA start marker");
-        uart_ota_abort();
+    // Ultra-simple download - exactly like the fast implementation
+    esp_err_t err;
+    int64_t t1 = 0, t2 = 0;
+    uint32_t total = 0;
+    esp_ota_handle_t ota_handle = 0;
+    const esp_partition_t *ota_partition = NULL;
+
+    ota_partition = esp_ota_get_next_update_partition(NULL);
+    if (!ota_partition) {
+        echo("No available OTA partition found");
         return false;
     }
 
-    echo("Received OTA start marker");
+    err = esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle);
+    if (err != ESP_OK) {
+        echo("OTA begin fail [0x%x]", err);
+        return false;
+    }
 
-    // Read firmware size (transmitted as text after start marker)
-    char size_buffer[32];
-    int size_pos = 0;
-    int timeout_count = 0;
+    t1 = esp_timer_get_time() / 1000;
 
-    while (size_pos < sizeof(size_buffer) - 1 && timeout_count < 100) {
-        uint8_t byte;
-        if (uart_read_with_timeout(&byte, 1, 100) == 1) {
-            if (byte == '\n') {
-                break;
-            }
-            size_buffer[size_pos++] = byte;
-            timeout_count = 0;
-        } else {
-            timeout_count++;
+    // Main download loop - send initial ready signal first
+    uart_confirm(); // Send initial \r\n to confirm ready for first chunk
+
+    while (uart_wait_for_data(2000)) {
+        size_t avl = 0;
+        uart_get_buffered_data_len(UART_PORT_NUM, &avl);
+
+        if (avl > 1024) {
+            avl = 1024; // Limit to max chunk size
         }
-    }
 
-    size_buffer[size_pos] = '\0';
-    ota_status.total_size = atoi(size_buffer);
+        total += avl;
+        uint8_t data[1024] = {0};
+        uart_read_bytes(UART_PORT_NUM, data, avl, 0);
 
-    if (ota_status.total_size == 0) {
-        echo("Invalid firmware size received: %s", size_buffer);
-        uart_ota_abort();
-        return false;
-    }
-
-    echo("Firmware size: %d bytes", ota_status.total_size);
-
-    // Use fixed chunk size for reliability
-    size_t chunk_bytes = UART_OTA_CHUNK_BYTES;
-    echo("Using chunk size: %d bytes", chunk_bytes);
-
-    // Send ready signal to start receiving first chunk
-    echo(UART_OTA_READY_MARKER);
-
-    // Receive firmware data in chunks - use dynamic allocation for large buffer
-    uint8_t *buffer = (uint8_t *)malloc(UART_OTA_CHUNK_SIZE);
-    if (!buffer) {
-        echo("Failed to allocate %d byte buffer for OTA", UART_OTA_CHUNK_SIZE);
-        uart_ota_abort();
-        return false;
-    }
-    size_t remaining = ota_status.total_size;
-
-    while (remaining > 0) {
-        size_t bytes_to_read = (remaining > chunk_bytes) ? chunk_bytes : remaining;
-        size_t bytes_received = 0;
-
-        // Read this chunk in one piece (256 bytes max, safe for ESP32 UART)
-        while (bytes_received < bytes_to_read) {
-            size_t read_size = (bytes_to_read - bytes_received > UART_OTA_CHUNK_SIZE) ? UART_OTA_CHUNK_SIZE : (bytes_to_read - bytes_received);
-
-            // Read the entire piece at once since it's only 256 bytes
-            int bytes_read = uart_read_with_timeout(buffer, read_size, UART_READ_TIMEOUT_MS * 2);
-
-            if (bytes_read <= 0) {
-                echo("Timeout reading %d bytes (received %d/%d in chunk)", read_size, bytes_received, bytes_to_read);
-                free(buffer);
-                uart_ota_abort();
+        if (avl > 0) {
+            err = esp_ota_write(ota_handle, data, avl);
+            if (err != ESP_OK) {
+                echo("OTA write fail [%x]", err);
+                esp_ota_abort(ota_handle);
                 return false;
             }
 
-            // Write to OTA partition immediately
-            esp_err_t err = esp_ota_write(ota_handle, buffer, bytes_read);
-            if (!echo_if_error("OTA write", err)) {
-                free(buffer);
-                uart_ota_abort();
-                return false;
+            // Reduce progress spam - only show every 200KB
+            if (total % 204800 <= 500) {
+                echo("Downloaded %dB", total);
             }
 
-            bytes_received += bytes_read;
-            ota_status.received_size += bytes_read;
-            remaining -= bytes_read;
-
-            // Small progress indicator for large chunks
-            if (bytes_to_read > 10000 && (bytes_received % 10000) == 0) {
-                echo("Chunk progress: %d/%d bytes", bytes_received, bytes_to_read);
-            }
+            // Send ready signal for next chunk after processing current one
+            uart_confirm();
         }
-
-        // Progress update
-        if (ota_status.total_size > 0) {
-            float progress = (float)ota_status.received_size / ota_status.total_size * 100.0f;
-            echo("Progress: %.1f%% (%d/%d bytes)", progress, ota_status.received_size, ota_status.total_size);
-        }
-
-        // Send ready signal for next chunk (if not done)
-        if (remaining > 0) {
-            echo(UART_OTA_READY_MARKER);
-        }
-
-        // No delay needed - let UART buffer handle the flow
     }
 
-    // Wait for end marker
-    if (!uart_wait_for_marker(UART_OTA_END_MARKER, 5000)) {
-        echo("Warning: End marker not received, but firmware transfer complete");
-    } else {
-        echo("Received OTA end marker");
-    }
+    t2 = (esp_timer_get_time() / 1000) - 2000;
+    echo("Downloaded %dB in %dms", total, (int32_t)(t2 - t1));
 
     // Finalize OTA
-    esp_err_t err = esp_ota_end(ota_handle);
-    if (!echo_if_error("OTA end", err)) {
-        uart_ota_abort();
-        return false;
-    }
+    err = esp_ota_end(ota_handle);
+    if (err == ESP_OK) {
+        err = esp_ota_set_boot_partition(ota_partition);
+        if (err == ESP_OK) {
+            echo("OTA OK, restarting...");
+            ota_status.in_progress = false;
+            ota_status.received_size = total;
 
-    ota_handle = 0;
-
-    // Validate the downloaded image
-    echo("Validating firmware image...");
-    esp_app_desc_t new_app_info;
-    err = esp_ota_get_partition_description(ota_partition, &new_app_info);
-    if (!echo_if_error("get partition description", err)) {
-        echo("Failed to get new firmware info - this indicates the image may be corrupted");
-        // Don't abort here, let the bootloader decide
+            // Brief delay to ensure message is sent before restart
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+            esp_restart();
+        } else {
+            echo("OTA set boot partition fail [0x%x]", err);
+            return false;
+        }
     } else {
-        echo("New firmware validation successful!");
-        echo("Project: %s, Version: %s", new_app_info.project_name, new_app_info.version);
-        echo("Compiled: %s %s", new_app_info.date, new_app_info.time);
-        echo("IDF Version: %s", new_app_info.idf_ver);
-    }
-
-    // Set boot partition
-    err = esp_ota_set_boot_partition(ota_partition);
-    if (!echo_if_error("set boot partition", err)) {
+        echo("OTA end fail [0x%x]", err);
         return false;
     }
-
-    ota_status.in_progress = false;
-    check_version_ = true;
-
-    // Free the allocated buffer
-    free(buffer);
-
-    echo("UART OTA completed successfully. Rebooting...");
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    esp_restart();
 
     return true;
 }
 
 void verify() {
-    esp_reset_reason_t reason = esp_reset_reason();
-    if (reason != ESP_RST_DEEPSLEEP && reason != ESP_RST_SW) {
-        check_version_ = false;
-    } else {
-        if (check_version_) {
-            echo("Detected OTA update - validation disabled for debugging");
-            echo("OTA update successful - no validation performed");
-            check_version_ = false;
-        }
-    }
+    // Simplified verify - no complex validation
+    echo("OTA verify complete");
 }
 
 bool version_checker() {
