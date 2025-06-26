@@ -17,11 +17,6 @@ namespace ota {
 
 #define UART_PORT_NUM UART_NUM_0
 
-// check_version_ variable removed - was only used by rollback_and_reboot()
-static uart_ota_status_t ota_status = {0, 0, false};
-static esp_ota_handle_t ota_handle = 0;
-static const esp_partition_t *ota_partition = nullptr;
-
 bool echo_if_error(const char *message, esp_err_t err) {
     if (err != ESP_OK) {
         const char *error_name = esp_err_to_name(err);
@@ -33,29 +28,8 @@ bool echo_if_error(const char *message, esp_err_t err) {
 
 // rollback_and_reboot() function removed - unused
 
-uart_ota_status_t uart_ota_get_status() {
-    return ota_status;
-}
-
-void uart_ota_abort() {
-    if (ota_status.in_progress) {
-        echo("Aborting UART OTA");
-        if (ota_handle) {
-            esp_ota_abort(ota_handle);
-            ota_handle = 0;
-        }
-        ota_status.in_progress = false;
-        ota_status.total_size = 0;
-        ota_status.received_size = 0;
-    }
-}
-
 bool uart_ota_start() {
     echo("Starting UART OTA process");
-
-    ota_status.in_progress = true;
-    ota_status.total_size = 0;
-    ota_status.received_size = 0;
 
     echo("UART OTA started successfully");
     return true;
@@ -80,11 +54,6 @@ void uart_confirm() {
 }
 
 bool uart_ota_receive_firmware() {
-    if (!ota_status.in_progress) {
-        echo("OTA not started");
-        return false;
-    }
-
     echo("Ready for firmware download - send data now");
 
     // Ultra-simple download - exactly like the fast implementation
@@ -92,9 +61,8 @@ bool uart_ota_receive_firmware() {
     int64_t t1 = 0, t2 = 0;
     uint32_t total = 0;
     esp_ota_handle_t ota_handle = 0;
-    const esp_partition_t *ota_partition = NULL;
 
-    ota_partition = esp_ota_get_next_update_partition(NULL);
+    const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
     if (!ota_partition) {
         echo("No available OTA partition found");
         return false;
@@ -148,8 +116,6 @@ bool uart_ota_receive_firmware() {
         err = esp_ota_set_boot_partition(ota_partition);
         if (err == ESP_OK) {
             echo("OTA OK, restarting...");
-            ota_status.in_progress = false;
-            ota_status.received_size = total;
 
             // Brief delay to ensure message is sent before restart
             vTaskDelay(500 / portTICK_PERIOD_MS);
