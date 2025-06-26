@@ -460,11 +460,7 @@ void app_main() {
 
     Storage::load_device_id();
 
-    try {
-        xTaskCreate(&ota::verify_task, "ota_verify_task", 8192, NULL, 5, NULL);
-    } catch (const std::runtime_error &e) {
-        echo("error while verifying OTA: %s", e.what());
-    }
+    // Removed WiFi/WAN OTA verify task - not needed for UART OTA
 
     printf("\nReady.\n");
 
