@@ -86,11 +86,6 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         echo("Starting UART OTA...");
 
         // Run OTA directly in main thread for better performance
-        if (!ota::uart_ota_start()) {
-            echo("Failed to start UART OTA");
-            return;
-        }
-
         if (!ota::uart_ota_receive_firmware()) {
             echo("UART OTA failed");
         }

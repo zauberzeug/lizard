@@ -28,20 +28,13 @@ bool echo_if_error(const char *message, esp_err_t err) {
 
 // rollback_and_reboot() function removed - unused
 
-bool uart_ota_start() {
-    echo("Starting UART OTA process");
+int8_t uart_wait_for_data(uint16_t timeout_ms) {
+    int64_t start_time = esp_timer_get_time();
+    size_t available_bytes = 0;
 
-    echo("UART OTA started successfully");
-    return true;
-}
-
-int8_t uart_wait_for_data(uint16_t time) {
-    int64_t th = esp_timer_get_time();
-    size_t avl = 0;
-
-    while (esp_timer_get_time() - th < time * 1000) {
-        uart_get_buffered_data_len(UART_PORT_NUM, &avl);
-        if (avl > 0) {
+    while (esp_timer_get_time() - start_time < timeout_ms * 1000) {
+        uart_get_buffered_data_len(UART_PORT_NUM, &available_bytes);
+        if (available_bytes > 0) {
             return 1;
         }
     }
@@ -54,12 +47,13 @@ void uart_confirm() {
 }
 
 bool uart_ota_receive_firmware() {
-    echo("Ready for firmware download - send data now");
+    echo("Starting UART OTA process");
+    echo("Ready for firmware download");
 
     // Ultra-simple download - exactly like the fast implementation
-    esp_err_t err;
-    int64_t t1 = 0, t2 = 0;
-    uint32_t total = 0;
+    esp_err_t result;
+    int64_t transfer_start_ms = 0, transfer_end_ms = 0;
+    uint32_t total_bytes_received = 0;
     esp_ota_handle_t ota_handle = 0;
 
     const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
@@ -68,64 +62,64 @@ bool uart_ota_receive_firmware() {
         return false;
     }
 
-    err = esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle);
-    if (err != ESP_OK) {
-        echo("OTA begin fail [0x%x]", err);
+    result = esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle);
+    if (result != ESP_OK) {
+        echo("OTA begin fail [0x%x]", result);
         return false;
     }
 
-    t1 = esp_timer_get_time() / 1000;
+    transfer_start_ms = esp_timer_get_time() / 1000;
 
     uart_confirm();
 
     while (uart_wait_for_data(2000)) {
-        size_t avl = 0;
-        uart_get_buffered_data_len(UART_PORT_NUM, &avl);
+        size_t available_bytes = 0;
+        uart_get_buffered_data_len(UART_PORT_NUM, &available_bytes);
 
-        if (avl > 1024) {
-            avl = 1024; // Limit to max chunk size
+        if (available_bytes > 1024) {
+            available_bytes = 1024; // Limit to max chunk size
         }
 
-        total += avl;
-        uint8_t data[1024] = {0};
-        uart_read_bytes(UART_PORT_NUM, data, avl, 0);
+        total_bytes_received += available_bytes;
+        uint8_t chunk_data[1024] = {0};
+        uart_read_bytes(UART_PORT_NUM, chunk_data, available_bytes, 0);
 
-        if (avl > 0) {
-            err = esp_ota_write(ota_handle, data, avl);
-            if (err != ESP_OK) {
-                echo("OTA write fail [%x]", err);
+        if (available_bytes > 0) {
+            result = esp_ota_write(ota_handle, chunk_data, available_bytes);
+            if (result != ESP_OK) {
+                echo("OTA write fail [%x]", result);
                 esp_ota_abort(ota_handle);
                 return false;
             }
 
             // Reduce progress spam - only show every 200KB
-            if (total % 204800 <= 500) {
-                echo("Downloaded %dB", total);
+            if (total_bytes_received % 204800 <= 500) {
+                echo("Downloaded %dB", total_bytes_received);
             }
 
             uart_confirm();
         }
     }
 
-    t2 = (esp_timer_get_time() / 1000) - 2000;
-    echo("Downloaded %dB in %dms", total, (int32_t)(t2 - t1));
+    transfer_end_ms = (esp_timer_get_time() / 1000) - 2000;
+    echo("Downloaded %dB in %dms", total_bytes_received, (int32_t)(transfer_end_ms - transfer_start_ms));
 
     // Finalize OTA
-    err = esp_ota_end(ota_handle);
-    if (err == ESP_OK) {
-        err = esp_ota_set_boot_partition(ota_partition);
-        if (err == ESP_OK) {
+    result = esp_ota_end(ota_handle);
+    if (result == ESP_OK) {
+        result = esp_ota_set_boot_partition(ota_partition);
+        if (result == ESP_OK) {
             echo("OTA OK, restarting...");
 
             // Brief delay to ensure message is sent before restart
             vTaskDelay(500 / portTICK_PERIOD_MS);
             esp_restart();
         } else {
-            echo("OTA set boot partition fail [0x%x]", err);
+            echo("OTA set boot partition fail [0x%x]", result);
             return false;
         }
     } else {
-        echo("OTA end fail [0x%x]", err);
+        echo("OTA end fail [0x%x]", result);
         return false;
     }
 

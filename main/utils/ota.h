@@ -3,7 +3,6 @@
 
 namespace ota {
 
-bool uart_ota_start();
 bool uart_ota_receive_firmware();
 
 } // namespace ota
