@@ -29,6 +29,8 @@ def parse_args():
                         help=f'OTA timeout in seconds (default: {DEFAULT_TIMEOUT})')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Verbose output')
+    parser.add_argument('--target', choices=['core', 'p0'], default='core',
+                        help='OTA target (core or p0, default: core)')
 
     return parser.parse_args()
 
@@ -50,11 +52,12 @@ def connect_serial(port, baudrate, verbose=False):
         return None
 
 
-def send_ota_command(device, verbose=False):
+# Send OTA command string
+def send_ota_command(device, command, verbose=False):
     """Send core.ota() command and wait for response."""
     try:
-        log("Sending core.ota() command...", verbose, force=True)
-        device.write(b"core.ota()\n")
+        log(f"Sending {command.strip()} command...", verbose, force=True)
+        device.write(command.encode())
 
         start_time = time.time()
         while time.time() - start_time < OTA_COMMAND_TIMEOUT:
@@ -110,11 +113,13 @@ def wait_for_ready_signal(device, timeout=READY_SIGNAL_TIMEOUT):
                 if device.in_waiting > 0:
                     next_byte = device.read(1)
                     if next_byte == b'\n':
+                        print(" \r\n ready signal received")
                         return True
                 else:
                     # Try to read next byte with a small timeout
                     next_byte = device.read(1)
                     if next_byte == b'\n':
+                        print(" \r\n ready signal received 2")
                         return True
         time.sleep(0.01)
 
@@ -195,7 +200,8 @@ def send_firmware(device, firmware_path, verbose=False):
         return False
 
 
-def perform_ota(port, baudrate, firmware_path, timeout, verbose=False):
+# target parameter indicates which device (core or p0)
+def perform_ota(port, baudrate, firmware_path, timeout, target, verbose=False):
     """Perform complete OTA update."""
     print("🦎 Starting Lizard UART OTA...")
 
@@ -204,8 +210,11 @@ def perform_ota(port, baudrate, firmware_path, timeout, verbose=False):
         return False
 
     try:
+        # Determine which OTA command to send based on target
+        ota_cmd = "core.ota_p0()\n" if target == "p0" else "core.ota()\n"
+
         # Send OTA command
-        if not send_ota_command(device, verbose):
+        if not send_ota_command(device, ota_cmd, verbose):
             return False
 
         # Wait for device ready
@@ -234,6 +243,7 @@ def main():
             args.baudrate,
             args.firmware,
             args.timeout,
+            args.target,
             args.verbose
         )
         sys.exit(0 if success else 1)

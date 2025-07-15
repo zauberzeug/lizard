@@ -89,6 +89,10 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         if (!ota::uart_ota_receive_firmware()) {
             echo("UART OTA failed");
         }
+    } else if (method_name == "ota_p0") {
+        Module::expect(arguments, 0);
+        echo("Starting UART OTA bridge to p0...");
+        ota::uart_ota_bridge();
     } else if (method_name == "get_pin_status") {
         Module::expect(arguments, 1, integer);
         const int gpio_num = arguments[0]->evaluate_integer();
