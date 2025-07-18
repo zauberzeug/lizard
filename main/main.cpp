@@ -465,13 +465,15 @@ void app_main() {
     printf("\nReady.\n");
 
     while (true) {
-        try {
-            process_uart();
-        } catch (const std::runtime_error &e) {
-            echo("error processing uart0: %s", e.what());
+        if (!ota::is_ota_bridge_running()) {
+            try {
+                process_uart();
+            } catch (const std::runtime_error &e) {
+                echo("error processing uart0: %s", e.what());
+            }
         }
 
-        if (!get_uart_external_mode()) { // only loop in external mode by core.run_step()
+        if (!get_uart_external_mode() && !ota::is_ota_bridge_running()) { // only loop in external mode by core.run_step() or when OTA bridge is active
             for (auto const &[module_name, module] : Global::modules) {
                 if (module != core_module) {
                     run_step(module);

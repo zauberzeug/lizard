@@ -102,25 +102,32 @@ def wait_for_ready(device, timeout, verbose=False):
 
 
 def wait_for_ready_signal(device, timeout=READY_SIGNAL_TIMEOUT):
-    """Wait for \\r\\n ready signal from device."""
+    """Wait for index\\r\\n ready signal from device."""
     start_time = time.time()
+    buffer = b""
 
     while time.time() - start_time < timeout:
         if device.in_waiting > 0:
-            data = device.read(1)
-            if data == b'\r':
-                # Check if next byte is \n (or if there's more data available)
-                if device.in_waiting > 0:
-                    next_byte = device.read(1)
-                    if next_byte == b'\n':
-                        print(" \r\n ready signal received")
+            data = device.read(device.in_waiting)
+            buffer += data
+
+            # Look for complete messages ending with \r\n
+            while b'\r\n' in buffer:
+                line_end = buffer.find(b'\r\n')
+                line = buffer[:line_end]
+                buffer = buffer[line_end + 2:]  # Remove processed line including \r\n
+
+                try:
+                    # Try to decode as index number
+                    index_str = line.decode('utf-8').strip()
+                    if index_str.isdigit():
+                        print(f"Ready signal received: {index_str}")
                         return True
-                else:
-                    # Try to read next byte with a small timeout
-                    next_byte = device.read(1)
-                    if next_byte == b'\n':
-                        print(" \r\n ready signal received 2")
-                        return True
+                    else:
+                        print(f"Non-index data: {line}")
+                except UnicodeDecodeError:
+                    print(f"Binary data received: {line}")
+
         time.sleep(0.01)
 
     return False
