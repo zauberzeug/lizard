@@ -85,25 +85,13 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 0);
         echo("Starting UART OTA...");
 
-        // Run OTA directly in main thread for better performance
-        if (!ota::uart_ota_receive_firmware()) {
+        if (!ota::receive_firmware_via_uart()) {
             echo("UART OTA failed");
         }
-    } else if (method_name == "ota_p0") {
+    } else if (method_name == "ota_bridge_start") {
         Module::expect(arguments, 0);
-        echo("Starting UART OTA bridge to p0...");
+        echo("Starting UART OTA bridge...");
         ota::start_ota_bridge_task();
-    } else if (method_name == "ota_p0_stop") {
-        Module::expect(arguments, 0);
-        echo("Stopping UART OTA bridge...");
-        ota::stop_ota_bridge_task();
-    } else if (method_name == "ota_p0_status") {
-        Module::expect(arguments, 0);
-        if (ota::is_ota_bridge_running()) {
-            echo("OTA bridge is running");
-        } else {
-            echo("OTA bridge is not running");
-        }
     } else if (method_name == "get_pin_status") {
         Module::expect(arguments, 1, integer);
         const int gpio_num = arguments[0]->evaluate_integer();
