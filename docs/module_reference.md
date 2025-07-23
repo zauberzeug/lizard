@@ -33,9 +33,13 @@ It is automatically created right after the boot sequence.
 | `core.output(format)`            | Define the output format                           | `str`        |
 | `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
 | `core.ota(ssid, password, url)`  | Starts OTA update on a URL with given WiFi         | 3x `str`     |
+| `core.ota()`                     | **TODO: UPDATE** Starts UART OTA update (new)      |              |
+| `core.ota_bridge()`              | **TODO: UPDATE** Bridge OTA to device (new)        |              |
 | `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
 | `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
 | `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
+
+<!-- TODO: Update OTA methods documentation with new UART-based OTA functions and bridge capabilities -->
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
