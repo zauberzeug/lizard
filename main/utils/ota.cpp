@@ -97,8 +97,12 @@ bool uart_ota_receive_firmware() {
     uint32_t loop_count = 0;
     uint32_t wait_cycles = 0;
     const uint32_t MAX_WAIT_CYCLES = 100; // ~200ms at 2ms per cycle
+    uint32_t consecutive_timeouts = 0;
+    const uint32_t MAX_CONSECUTIVE_TIMEOUTS = 3; // Allow 3 consecutive timeouts before ending
 
     while (uart_wait_for_data(2000)) {
+        consecutive_timeouts = 0; // Reset timeout counter when data is available
+
         size_t available_bytes = 0;
         uart_get_buffered_data_len(UART_PORT_NUM, &available_bytes);
 
@@ -135,21 +139,27 @@ bool uart_ota_receive_firmware() {
         }
 
         uint8_t chunk_data[1024] = {0};
-        uart_read_bytes(UART_PORT_NUM, chunk_data, available_bytes, 0);
+        int actual_read = uart_read_bytes(UART_PORT_NUM, chunk_data, available_bytes, 0);
 
-        if (available_bytes > 0) {
-            result = esp_ota_write(ota_handle, chunk_data, available_bytes);
+        if (actual_read > 0) {
+            // Use the actual number of bytes read (might be less than available_bytes)
+            size_t bytes_to_process = (size_t)actual_read;
+
+            result = esp_ota_write(ota_handle, chunk_data, bytes_to_process);
             if (result != ESP_OK) {
                 echo("OTA write fail [%x]", result);
                 esp_ota_abort(ota_handle);
                 return false;
             }
 
-            total_bytes_received += available_bytes;
+            total_bytes_received += bytes_to_process;
 
-            // Reduce progress spam - only show every 200KB
-            if (total_bytes_received % 204800 <= 500) {
+            // Reduce progress spam - only show every 200KB (check if we just crossed a 200KB boundary)
+            static uint32_t last_reported_kb = 0;
+            uint32_t current_kb = total_bytes_received / 204800;
+            if (current_kb > last_reported_kb) {
                 echo("Downloaded %dB", total_bytes_received);
+                last_reported_kb = current_kb;
             }
             uart_confirm();
 
@@ -158,8 +168,64 @@ bool uart_ota_receive_firmware() {
         }
     }
 
+    // Check for any remaining data after main loop timeout
+    consecutive_timeouts++;
+    while (consecutive_timeouts < MAX_CONSECUTIVE_TIMEOUTS) {
+        size_t remaining_bytes = 0;
+        uart_get_buffered_data_len(UART_PORT_NUM, &remaining_bytes);
+
+        if (remaining_bytes > 0) {
+            echo("Found %d remaining bytes after main loop", remaining_bytes);
+
+            if (remaining_bytes > 1024) {
+                remaining_bytes = 1024;
+            }
+
+            uint8_t final_chunk[1024] = {0};
+            int actual_final_read = uart_read_bytes(UART_PORT_NUM, final_chunk, remaining_bytes, 0);
+
+            if (actual_final_read > 0) {
+                size_t final_bytes_to_process = (size_t)actual_final_read;
+
+                result = esp_ota_write(ota_handle, final_chunk, final_bytes_to_process);
+                if (result != ESP_OK) {
+                    echo("Final OTA write fail [%x]", result);
+                    esp_ota_abort(ota_handle);
+                    return false;
+                }
+
+                total_bytes_received += final_bytes_to_process;
+                uart_confirm();
+                consecutive_timeouts = 0; // Reset if we found data
+            }
+        } else {
+            consecutive_timeouts++;
+            delay(250); // Wait longer for any final straggler bytes
+        }
+    }
+
+    // One final check for any last bytes
+    size_t final_check = 0;
+    uart_get_buffered_data_len(UART_PORT_NUM, &final_check);
+    if (final_check > 0) {
+        echo("Found %d bytes in final check", final_check);
+        uint8_t final_data[256] = {0};
+        int final_read = uart_read_bytes(UART_PORT_NUM, final_data, final_check > 256 ? 256 : final_check, 0);
+        if (final_read > 0) {
+            result = esp_ota_write(ota_handle, final_data, final_read);
+            if (result == ESP_OK) {
+                total_bytes_received += final_read;
+                echo("Processed %d final bytes", final_read);
+            }
+        }
+    }
+
     transfer_end_ms = (esp_timer_get_time() / 1000) - 2000;
     echo("Downloaded %dB in %dms", total_bytes_received, (int32_t)(transfer_end_ms - transfer_start_ms));
+
+    // Add delay before finalizing to ensure all flash operations are complete
+    echo("Waiting for flash operations to complete...");
+    vTaskDelay(1000 / portTICK_PERIOD_MS); // 1 second delay
 
     // Finalize OTA
     result = esp_ota_end(ota_handle);
@@ -285,7 +351,7 @@ void start_ota_bridge_task() {
         "ota_bridge",            // Task name
         8192,                    // Stack size (8KB for safety)
         NULL,                    // Parameters
-        2,                       // Priority (low priority)
+        5,                       // Priority (higher priority - was 2)
         &ota_bridge_task_handle, // Task handle
         1                        // Core 1
     );
