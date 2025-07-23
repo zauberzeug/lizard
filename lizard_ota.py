@@ -134,13 +134,20 @@ def wait_for_ready_signal(device, timeout=READY_SIGNAL_TIMEOUT):
 
 
 def send_firmware(device, firmware_path, verbose=False):
-    """Send firmware binary using ultra-simple protocol."""
+    """Send firmware binary using checksum-validated chunks."""
     if not os.path.exists(firmware_path):
         print(f"Error: Firmware file not found: {firmware_path}")
         return False
 
     file_size = os.path.getsize(firmware_path)
     print(f"Sending firmware: {firmware_path} ({file_size:,} bytes)")
+
+    def calculate_checksum(data):
+        """Calculate XOR checksum for data, same as Lizard UART protocol."""
+        checksum = 0
+        for byte in data:
+            checksum ^= byte
+        return checksum
 
     try:
         print("✅ Device is ready! Starting data transfer...")
@@ -149,6 +156,7 @@ def send_firmware(device, firmware_path, verbose=False):
         with open(firmware_path, 'rb') as firmware_file:
             bytes_sent = 0
             last_progress = -1
+            chunk_count = 0
 
             # Wait for initial ready signal
             if not wait_for_ready_signal(device, timeout=10):
@@ -160,14 +168,28 @@ def send_firmware(device, firmware_path, verbose=False):
                 if not chunk_data:
                     break
 
+                chunk_count += 1
+
+                # Calculate checksum for this chunk
+                checksum = calculate_checksum(chunk_data)
+
+                # Debug: print first chunk info
+                if chunk_count == 1:
+                    print(f"DEBUG: First chunk {len(chunk_data)} bytes, checksum: {checksum:02x}")
+                    print(f"DEBUG: First few bytes: {chunk_data[:16].hex()}")
+
+                # Send chunk followed by @checksum
                 device.write(chunk_data)
+                checksum_suffix = f"\r\n@{checksum:02x}\r\n".encode('ascii')
+                device.write(checksum_suffix)
                 device.flush()
+
                 bytes_sent += len(chunk_data)
 
-                # Progress reporting
+                # Progress reporting (based on data bytes, not including checksum overhead)
                 progress = int((bytes_sent / file_size) * 100)
                 if progress % PROGRESS_REPORT_INTERVAL == 0 and progress != last_progress:
-                    print(f"Progress: {progress}% ({bytes_sent:,}/{file_size:,} bytes)")
+                    print(f"Progress: {progress}% ({bytes_sent:,}/{file_size:,} bytes, {chunk_count} chunks)")
                     last_progress = progress
 
                 # Wait for ready signal before sending next chunk
@@ -176,7 +198,7 @@ def send_firmware(device, firmware_path, verbose=False):
                         print(f"Device not ready for more data at {bytes_sent:,} bytes")
                         return False
 
-        print(f"Transfer complete: {bytes_sent:,} bytes sent")
+        print(f"Transfer complete: {bytes_sent:,} bytes sent in {chunk_count} chunks")
 
         # Listen for device response
         print("Listening for device response...")

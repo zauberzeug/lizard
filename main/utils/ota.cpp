@@ -94,134 +94,140 @@ bool uart_ota_receive_firmware() {
 
     uart_confirm();
 
-    uint32_t loop_count = 0;
-    uint32_t wait_cycles = 0;
-    const uint32_t MAX_WAIT_CYCLES = 100; // ~200ms at 2ms per cycle
-    uint32_t consecutive_timeouts = 0;
-    const uint32_t MAX_CONSECUTIVE_TIMEOUTS = 3; // Allow 3 consecutive timeouts before ending
+    uint8_t chunk_buffer[2048] = {0}; // Larger buffer for dynamic chunks
+    uint32_t buffer_pos = 0;
+    uint32_t chunk_count = 0;
 
-    while (uart_wait_for_data(2000)) {
-        consecutive_timeouts = 0; // Reset timeout counter when data is available
+    // Helper function to calculate XOR checksum
+    auto calculate_checksum = [](const uint8_t *data, size_t len) -> uint8_t {
+        uint8_t checksum = 0;
+        for (size_t i = 0; i < len; i++) {
+            checksum ^= data[i];
+        }
+        return checksum;
+    };
 
-        size_t available_bytes = 0;
-        uart_get_buffered_data_len(UART_PORT_NUM, &available_bytes);
-
-        // Process data if we have enough OR if we've been waiting too long for more data
-        bool should_process = false;
-        if (available_bytes >= 512) {
-            should_process = true;
-            wait_cycles = 0; // Reset wait counter
-        } else if (available_bytes > 0 && total_bytes_received + available_bytes < ota_partition->size) {
-            wait_cycles++;
-            if (wait_cycles >= MAX_WAIT_CYCLES) {
-                should_process = true;
-                wait_cycles = 0;
-            } else {
-                delay(2);
-                // Yield to other tasks periodically
-                loop_count++;
-                if (loop_count % 50 == 0) {
-                    vTaskDelay(1);
-                }
-                continue;
-            }
-        } else if (available_bytes > 0) {
-            // Last chunk of data
-            should_process = true;
+    while (true) {
+        // Wait for data with timeout
+        if (!uart_wait_for_data(5000)) {
+            echo("Timeout waiting for data, finishing transfer");
+            break;
         }
 
-        if (!should_process) {
+        // Read available bytes
+        size_t available = 0;
+        uart_get_buffered_data_len(UART_PORT_NUM, &available);
+
+        if (available == 0) {
             continue;
         }
 
-        if (available_bytes > 1024) {
-            available_bytes = 1024; // Limit to max chunk size
+        // Read into our buffer, but don't overflow
+        size_t can_read = sizeof(chunk_buffer) - buffer_pos - 1; // Leave space for null terminator
+        if (can_read > available) {
+            can_read = available;
         }
 
-        uint8_t chunk_data[1024] = {0};
-        int actual_read = uart_read_bytes(UART_PORT_NUM, chunk_data, available_bytes, 0);
-
-        if (actual_read > 0) {
-            // Use the actual number of bytes read (might be less than available_bytes)
-            size_t bytes_to_process = (size_t)actual_read;
-
-            result = esp_ota_write(ota_handle, chunk_data, bytes_to_process);
-            if (result != ESP_OK) {
-                echo("OTA write fail [%x]", result);
-                esp_ota_abort(ota_handle);
-                return false;
-            }
-
-            total_bytes_received += bytes_to_process;
-
-            // Reduce progress spam - only show every 200KB (check if we just crossed a 200KB boundary)
-            static uint32_t last_reported_kb = 0;
-            uint32_t current_kb = total_bytes_received / 204800;
-            if (current_kb > last_reported_kb) {
-                echo("Downloaded %dB", total_bytes_received);
-                last_reported_kb = current_kb;
-            }
-            uart_confirm();
-
-            // Yield to other tasks after processing data
-            taskYIELD();
+        if (can_read == 0) {
+            echo("Buffer full without finding checksum delimiter, aborting");
+            esp_ota_abort(ota_handle);
+            return false;
         }
-    }
 
-    // Check for any remaining data after main loop timeout
-    consecutive_timeouts++;
-    while (consecutive_timeouts < MAX_CONSECUTIVE_TIMEOUTS) {
-        size_t remaining_bytes = 0;
-        uart_get_buffered_data_len(UART_PORT_NUM, &remaining_bytes);
+        int bytes_read = uart_read_bytes(UART_PORT_NUM, chunk_buffer + buffer_pos, can_read, 0);
+        if (bytes_read <= 0) {
+            continue;
+        }
 
-        if (remaining_bytes > 0) {
-            echo("Found %d remaining bytes after main loop", remaining_bytes);
+        buffer_pos += bytes_read;
+        chunk_buffer[buffer_pos] = 0; // Null terminate for string operations
 
-            if (remaining_bytes > 1024) {
-                remaining_bytes = 1024;
+        // Look for checksum delimiter pattern '\r\n@'
+        char *delimiter_start = nullptr;
+        for (size_t i = 0; i <= buffer_pos - 3; i++) {
+            if (chunk_buffer[i] == '\r' && chunk_buffer[i + 1] == '\n' && chunk_buffer[i + 2] == '@') {
+                delimiter_start = (char *)&chunk_buffer[i];
+                break;
             }
+        }
 
-            uint8_t final_chunk[1024] = {0};
-            int actual_final_read = uart_read_bytes(UART_PORT_NUM, final_chunk, remaining_bytes, 0);
+        while (delimiter_start != nullptr) {
+            size_t chunk_data_len = delimiter_start - (char *)chunk_buffer;
 
-            if (actual_final_read > 0) {
-                size_t final_bytes_to_process = (size_t)actual_final_read;
+            // Need: data + '\r\n@' + 2 hex digits + '\r\n' = data + 7 bytes total
+            size_t total_needed = chunk_data_len + 7;
 
-                result = esp_ota_write(ota_handle, final_chunk, final_bytes_to_process);
-                if (result != ESP_OK) {
-                    echo("Final OTA write fail [%x]", result);
+            if (buffer_pos >= total_needed) {
+                // Extract checksum from hex string (skip \r\n@)
+                char checksum_str[3] = {delimiter_start[3], delimiter_start[4], 0};
+                uint8_t expected_checksum = (uint8_t)strtol(checksum_str, nullptr, 16);
+
+                // Calculate actual checksum
+                uint8_t actual_checksum = calculate_checksum(chunk_buffer, chunk_data_len);
+
+                // Debug: print first chunk info
+                if (chunk_count == 0) {
+                    echo("DEBUG: First chunk %d bytes, expected: %02x, actual: %02x",
+                         chunk_data_len, expected_checksum, actual_checksum);
+                    echo("DEBUG: Checksum string: '%s'", checksum_str);
+                    echo("DEBUG: First few bytes: %02x %02x %02x %02x",
+                         chunk_buffer[0], chunk_buffer[1], chunk_buffer[2], chunk_buffer[3]);
+                }
+
+                if (actual_checksum == expected_checksum) {
+                    // Checksum valid - write chunk to flash
+                    result = esp_ota_write(ota_handle, chunk_buffer, chunk_data_len);
+                    if (result != ESP_OK) {
+                        echo("OTA write fail [%x]", result);
+                        esp_ota_abort(ota_handle);
+                        return false;
+                    }
+
+                    total_bytes_received += chunk_data_len;
+                    chunk_count++;
+
+                    // Progress reporting every 200KB
+                    static uint32_t last_reported_kb = 0;
+                    uint32_t current_kb = total_bytes_received / 204800;
+                    if (current_kb > last_reported_kb) {
+                        echo("Downloaded %dB (%d chunks)", total_bytes_received, chunk_count);
+                        last_reported_kb = current_kb;
+                    }
+
+                    uart_confirm();
+                } else {
+                    echo("Checksum mismatch: expected %02x, got %02x", expected_checksum, actual_checksum);
                     esp_ota_abort(ota_handle);
                     return false;
                 }
 
-                total_bytes_received += final_bytes_to_process;
-                uart_confirm();
-                consecutive_timeouts = 0; // Reset if we found data
+                // Remove processed chunk from buffer
+                size_t remaining = buffer_pos - total_needed;
+                if (remaining > 0) {
+                    memmove(chunk_buffer, chunk_buffer + total_needed, remaining);
+                }
+                buffer_pos = remaining;
+                chunk_buffer[buffer_pos] = 0;
+
+                // Look for next delimiter in remaining data
+                delimiter_start = nullptr;
+                for (size_t i = 0; i <= buffer_pos - 3; i++) {
+                    if (chunk_buffer[i] == '\r' && chunk_buffer[i + 1] == '\n' && chunk_buffer[i + 2] == '@') {
+                        delimiter_start = (char *)&chunk_buffer[i];
+                        break;
+                    }
+                }
+
+                taskYIELD(); // Allow other tasks to run
+            } else {
+                // Need more data for complete checksum
+                break;
             }
-        } else {
-            consecutive_timeouts++;
-            delay(250); // Wait longer for any final straggler bytes
         }
     }
 
-    // One final check for any last bytes
-    size_t final_check = 0;
-    uart_get_buffered_data_len(UART_PORT_NUM, &final_check);
-    if (final_check > 0) {
-        echo("Found %d bytes in final check", final_check);
-        uint8_t final_data[256] = {0};
-        int final_read = uart_read_bytes(UART_PORT_NUM, final_data, final_check > 256 ? 256 : final_check, 0);
-        if (final_read > 0) {
-            result = esp_ota_write(ota_handle, final_data, final_read);
-            if (result == ESP_OK) {
-                total_bytes_received += final_read;
-                echo("Processed %d final bytes", final_read);
-            }
-        }
-    }
-
-    transfer_end_ms = (esp_timer_get_time() / 1000) - 2000;
-    echo("Downloaded %dB in %dms", total_bytes_received, (int32_t)(transfer_end_ms - transfer_start_ms));
+    transfer_end_ms = (esp_timer_get_time() / 1000) - 5000;
+    echo("Downloaded %dB in %dms (%d chunks)", total_bytes_received, (int32_t)(transfer_end_ms - transfer_start_ms), chunk_count);
 
     // Add delay before finalizing to ensure all flash operations are complete
     echo("Waiting for flash operations to complete...");
