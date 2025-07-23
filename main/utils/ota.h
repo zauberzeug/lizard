@@ -1,16 +1,15 @@
 #pragma once
-#include <string>
+#include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <string>
 
 namespace ota {
 
-bool uart_ota_receive_firmware();
-bool uart_ota_bridge();
+bool receive_firmware_via_uart();
+bool run_uart_bridge_for_device_ota(uart_port_t upstream_port = UART_NUM_0, uart_port_t downstream_port = UART_NUM_1);
 
-// New task-based functions
-void start_ota_bridge_task();
-void stop_ota_bridge_task();
-bool is_ota_bridge_running();
+void start_ota_bridge_task(uart_port_t upstream_port = UART_NUM_0, uart_port_t downstream_port = UART_NUM_1);
+bool is_uart_bridge_running();
 
 } // namespace ota
