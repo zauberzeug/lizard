@@ -16,6 +16,8 @@
 #include "timing.h"
 #include <algorithm>
 
+#include "addressing.h"
+
 namespace ota {
 
 #define UART_PORT_NUM UART_NUM_0
@@ -68,6 +70,11 @@ bool receive_firmware_via_uart() {
     uint32_t total_bytes_received = 0;
     esp_ota_handle_t ota_handle = 0;
 
+    if (get_uart_external_mode()) {
+        echo("External mode detected, skipping OTA");
+        deactivate_uart_external_mode(); // just deactivate it, this is a single plexus solution only
+    }
+
     const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
     if (!ota_partition) {
         echo("No available OTA partition found");
@@ -97,7 +104,7 @@ bool receive_firmware_via_uart() {
     };
 
     while (true) {
-        if (!wait_for_uart_data(5000)) {
+        if (!wait_for_uart_data(10000)) {
             echo("Timeout waiting for data, finishing transfer");
             break;
         }
@@ -276,8 +283,6 @@ bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downs
 }
 
 static void ota_bridge_task_wrapper(void *parameter) {
-    echo("OTA bridge task started on core %d", xPortGetCoreID());
-
     esp_task_wdt_add(NULL);
     run_uart_bridge_for_device_ota(bridge_upstream_port, bridge_downstream_port);
     echo("OTA bridge task completed");
