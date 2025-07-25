@@ -72,6 +72,9 @@ def send_ota_command(device, command, verbose=False):
                 if "Starting UART OTA" in response:
                     log("OTA started successfully!", verbose, force=True)
                     return True
+                elif "Starting UART bridge" in response:
+                    log("Bridge started successfully!", verbose, force=True)
+                    return True
             time.sleep(0.1)
 
         print("Error: No response to OTA command")
@@ -246,11 +249,6 @@ def perform_ota(port: str, baudrate: int, firmware_path: str, timeout: int, targ
         return False
 
     try:
-        ota_cmd = f'{target}.ota()\n'
-        log(f'Sending OTA command: {ota_cmd.strip()}', verbose, force=True)
-        if not send_ota_command(device, ota_cmd, verbose):
-            return False
-
         if bridge:
             for bridge_name in bridge.split(','):
                 bridge_name = bridge_name.strip()
@@ -260,6 +258,11 @@ def perform_ota(port: str, baudrate: int, firmware_path: str, timeout: int, targ
                     if not send_ota_command(device, bridge_cmd, verbose):
                         print(f'Error: Bridge {bridge_name} did not respond')
                         return False
+
+        ota_cmd = f'{target}.ota()\n'
+        log(f'Sending OTA command: {ota_cmd.strip()}', verbose, force=True)
+        if not send_ota_command(device, ota_cmd, verbose):
+            return False
 
         if not wait_for_ready(device, timeout, verbose):
             return False

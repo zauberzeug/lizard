@@ -90,7 +90,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
     } else if (method_name == "ota_bridge_start") {
         Module::expect(arguments, 0);
-        echo("Starting UART OTA bridge...");
+        echo("Starting UART bridge...");
         ota::start_ota_bridge_task();
     } else if (method_name == "get_pin_status") {
         Module::expect(arguments, 1, integer);
