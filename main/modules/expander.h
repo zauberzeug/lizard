@@ -39,4 +39,5 @@ public:
     void send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
     bool is_ready() const override;
+    std::string get_name() const override;
 };

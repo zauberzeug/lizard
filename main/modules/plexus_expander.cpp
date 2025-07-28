@@ -1,5 +1,6 @@
 #include "plexus_expander.h"
 #include "utils/addressing.h"
+#include "utils/ota.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -25,7 +26,7 @@ PlexusExpander::PlexusExpander(const std::string name,
                                const char id,
                                MessageHandler message_handler)
     : Module(plexus_expander, name),
-      // Cast away const-ness to allow calling non-const methods
+
       serial(std::const_pointer_cast<Serial>(const_serial)),
       expander_id(id),
       message_handler(message_handler) {
@@ -35,7 +36,6 @@ PlexusExpander::PlexusExpander(const std::string name,
     this->serial->enable_line_detection();
     this->serial->activate_external_mode();
 
-    // check if external expander is answering
     char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%c_READY__')", ID_TAG, expander_id, expander_id);
     this->serial->write_checked_line(buffer, pos);
@@ -78,24 +78,20 @@ void PlexusExpander::buffer_message(const char *message) {
 
 void PlexusExpander::step() {
     if (this->properties.at("is_ready")->boolean_value) {
-        // First process any buffered messages
         if (buffer_pos > 0) {
             this->serial->write_checked_line(message_buffer, buffer_pos);
             buffer_pos = 0;
         }
 
-        // Send run_step command
         char buffer[256];
         int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.run_step()", ID_TAG, expander_id);
         this->serial->write_checked_line(buffer, pos);
         this->properties.at("step_in_progress")->boolean_value = true;
 
-        // Wait for step_done message
         const unsigned long start_time = millis();
         const unsigned long timeout = 1000; // 1 second timeout
 
         while (this->properties.at("step_in_progress")->boolean_value && (millis() - start_time < timeout)) {
-            // Process messages
             this->handle_messages();
             delay(1);
         }
@@ -117,10 +113,8 @@ void PlexusExpander::handle_messages() {
 
         // tag handling: msg looks like this: $9XXXXXXX
         if (buffer[0] == ID_TAG && buffer[1] == expander_id) {
-            // tag found, remove it
             strcpy(buffer, buffer + 2);
         } else {
-            // tag not found, echo the message
             echo("Debug: msg received. Tag and Id did not match");
             echo("Debug: buffer: %s", buffer);
             continue;
@@ -148,6 +142,14 @@ void PlexusExpander::call(const std::string method_name, const std::vector<Const
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
         this->restart();
+    } else if (method_name == "ota") {
+        Module::expect(arguments, 0);
+        echo("Starting automatic UART OTA for plexus expander %s...", this->name.c_str());
+        this->serial->write_checked_line("core.ota()");
+
+        // start ota bridge task
+        ota::start_ota_bridge_task();
+
     } else if (method_name == "ee_on") { // Debug function remove later
         Module::expect(arguments, 0);
         this->serial->activate_external_mode();
@@ -191,13 +193,16 @@ bool PlexusExpander::is_ready() const {
     return this->properties.at("is_ready")->boolean_value;
 }
 
+std::string PlexusExpander::get_name() const {
+    return this->name;
+}
+
 void PlexusExpander::restart() {
     char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.restart()", ID_TAG, expander_id);
     this->serial->write_checked_line(buffer, pos);
     this->properties.at("is_ready")->boolean_value = false;
 
-    // Wait for "Ready." message like in regular expander
     static char read_buffer[1024];
     const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
     const unsigned long start_time = millis();
@@ -208,12 +213,10 @@ void PlexusExpander::restart() {
             break;
         }
 
-        // Check for Ready message
         while (this->serial->has_buffered_lines()) {
             int len = this->serial->read_line(read_buffer, sizeof(read_buffer));
             check(read_buffer, len);
 
-            // Handle tag and id
             if (read_buffer[0] == ID_TAG && read_buffer[1] == expander_id) {
                 strcpy(read_buffer, read_buffer + 2);
             }
@@ -232,11 +235,9 @@ void PlexusExpander::restart() {
         delay(30);
     }
 
-    // Reinitialize like in constructor
     this->serial->enable_line_detection();
     this->serial->activate_external_mode();
 
-    // Send ready check and wait for response like in constructor
     buffer_pos = 0;
     pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%c_READY__')", ID_TAG, expander_id, expander_id);
     this->serial->write_checked_line(buffer, pos);

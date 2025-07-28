@@ -16,6 +16,8 @@
 #include "timing.h"
 #include <algorithm>
 
+#include "../global.h"
+#include "../modules/proxy.h"
 #include "addressing.h"
 
 namespace ota {
@@ -71,7 +73,7 @@ bool receive_firmware_via_uart() {
     esp_ota_handle_t ota_handle = 0;
 
     if (get_uart_external_mode()) {
-        echo("External mode detected, skipping OTA");
+        echo("External mode detected, deactivating");
         deactivate_uart_external_mode(); // just deactivate it, this is a single plexus solution only
     }
 
@@ -316,6 +318,115 @@ void start_ota_bridge_task(uart_port_t upstream_port, uart_port_t downstream_por
 
 bool is_uart_bridge_running() {
     return ota_bridge_task_handle != nullptr;
+}
+
+std::vector<std::string> build_bridge_path(const std::string &target_name) {
+    std::vector<std::string> bridge_path;
+    std::string current_target = target_name;
+
+    echo("Building bridge path for target: %s", target_name.c_str());
+
+    // Keep following the parent chain until we reach core
+    while (current_target != "core") {
+        try {
+            Module_ptr module = Global::get_module(current_target);
+
+            if (module->type == proxy) {
+                // It's a proxy, get its parent
+                Proxy *proxy_module = static_cast<Proxy *>(module.get());
+                std::string parent = proxy_module->get_parent_expander_name();
+
+                echo("Found proxy %s -> parent: %s", current_target.c_str(), parent.c_str());
+
+                // Add parent to bridge path
+                bridge_path.push_back(parent);
+                current_target = parent;
+            } else if (module->type == expander || module->type == plexus_expander) {
+                // It's an expander/plexus_expander, it must be on core
+                echo("Found expander %s -> must be on core", current_target.c_str());
+
+                // Add core to bridge path
+                bridge_path.push_back("core");
+                break;
+            } else {
+                // Unknown module type, assume it's on core
+                echo("Unknown module type %s, assuming on core", current_target.c_str());
+                break;
+            }
+        } catch (const std::runtime_error &e) {
+            echo("Error accessing module %s: %s", current_target.c_str(), e.what());
+            return {}; // Return empty vector on error
+        }
+    }
+
+    echo("Bridge path built: %d bridges needed", (int)bridge_path.size());
+    for (const auto &bridge : bridge_path) {
+        echo("  Bridge: %s", bridge.c_str());
+    }
+
+    return bridge_path;
+}
+
+bool activate_bridges(const std::vector<std::string> &bridge_path) {
+    echo("Activating %d bridges", (int)bridge_path.size());
+
+    for (auto it = bridge_path.rbegin(); it != bridge_path.rend(); ++it) {
+        const std::string &bridge_name = *it;
+        try {
+            Module_ptr bridge_module = Global::get_module(bridge_name);
+
+            echo("Activating bridge on %s", bridge_name.c_str());
+
+            std::vector<ConstExpression_ptr> empty_args;
+            bridge_module->call("ota_bridge_start", empty_args);
+
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+
+        } catch (const std::runtime_error &e) {
+            echo("Failed to activate bridge %s: %s", bridge_name.c_str(), e.what());
+            return false;
+        }
+    }
+
+    echo("All bridges activated successfully");
+    return true;
+}
+
+std::vector<std::string> detect_required_bridges(const std::string &target_name) {
+    if (target_name == "core") {
+        echo("Target is core, no bridges needed");
+        return {};
+    }
+
+    // Check if target module exists
+    try {
+        Module_ptr target_module = Global::get_module(target_name);
+        echo("Target module %s found, type: %d", target_name.c_str(), target_module->type);
+    } catch (const std::runtime_error &e) {
+        echo("Target module %s not found: %s", target_name.c_str(), e.what());
+        return {}; // Return empty vector if target doesn't exist
+    }
+
+    return build_bridge_path(target_name);
+}
+
+bool perform_automatic_ota(const std::string &target_name) {
+    echo("Starting automatic OTA for target: %s", target_name.c_str());
+
+    // Detect required bridges
+    std::vector<std::string> bridge_path = detect_required_bridges(target_name);
+
+    // Activate bridges if needed
+    if (!bridge_path.empty()) {
+        if (!activate_bridges(bridge_path)) {
+            echo("Bridge activation failed, aborting OTA");
+            return false;
+        }
+    }
+
+    // Proceed with OTA
+    echo("Bridges ready, starting OTA process");
+    return receive_firmware_via_uart();
 }
 
 } // namespace ota

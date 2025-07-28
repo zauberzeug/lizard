@@ -42,4 +42,5 @@ public:
 
     // Expandable interface
     bool is_ready() const override;
+    std::string get_name() const override;
 };

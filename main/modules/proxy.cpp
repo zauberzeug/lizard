@@ -1,5 +1,6 @@
 #include "proxy.h"
 #include "../compilation/expressions.h"
+#include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "driver/uart.h"
@@ -23,7 +24,27 @@ Proxy::Proxy(const std::string name,
 }
 
 void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    this->expandable->send_call(this->name, method_name, arguments);
+    if (method_name == "ota") {
+        Module::expect(arguments, 0);
+        echo("Starting automatic UART OTA for proxy %s...", this->name.c_str());
+
+        // 1. Detect bridge path (from core to target)
+        std::vector<std::string> bridge_path = ota::detect_required_bridges(this->name);
+
+        // 2. Activate bridges (in correct order: from target outward)
+        if (!bridge_path.empty()) {
+            if (!ota::activate_bridges(bridge_path)) {
+                echo("Bridge activation failed, aborting OTA");
+                return;
+            }
+        }
+
+        // 3. Now send the OTA command to the target device, always as 'core.ota()'
+        echo("Bridges ready, sending OTA command to target device as core.ota()");
+        this->expandable->send_call("core", method_name, arguments);
+    } else {
+        this->expandable->send_call(this->name, method_name, arguments);
+    }
 }
 
 void Proxy::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
@@ -55,4 +76,12 @@ void Proxy::send_call(const std::string proxy_name, const std::string method_nam
 
 bool Proxy::is_ready() const {
     return this->expandable->is_ready();
+}
+
+std::string Proxy::get_name() const {
+    return this->name;
+}
+
+std::string Proxy::get_parent_expander_name() const {
+    return this->expandable->get_name();
 }

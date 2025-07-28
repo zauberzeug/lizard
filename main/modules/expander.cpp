@@ -1,6 +1,7 @@
 #include "expander.h"
 
 #include "storage.h"
+#include "utils/ota.h"
 #include "utils/serial-replicator.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
@@ -175,6 +176,17 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         } else {
             this->restart();
         }
+    } else if (method_name == "ota") {
+        Module::expect(arguments, 0);
+        echo("Starting automatic UART OTA for expander %s...", this->name.c_str());
+        echo("Bridge ready, sending OTA command to target device");
+        this->serial->write_checked_line("core.ota()");
+        ota::start_ota_bridge_task();
+
+    } else if (method_name == "ota_bridge_start") {
+        Module::expect(arguments, 0);
+        echo("Starting UART bridge on expander %s...", this->name.c_str());
+        this->serial->write_checked_line("core.ota_bridge_start()");
     } else {
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "core.%s(", method_name.c_str());
@@ -242,4 +254,8 @@ void Expander::send_call(const std::string proxy_name, const std::string method_
 
 bool Expander::is_ready() const {
     return this->properties.at("is_ready")->boolean_value;
+}
+
+std::string Expander::get_name() const {
+    return this->name;
 }
