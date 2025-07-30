@@ -26,9 +26,10 @@ namespace ota {
 
 static TaskHandle_t ota_bridge_task_handle = nullptr;
 static volatile bool ota_bridge_should_stop = false;
-static uint32_t confirm_index = 0;
+static uint32_t confirm_index = 0; // number of confirmations, not chunks received
 static uart_port_t bridge_upstream_port = UART_NUM_0;
 static uart_port_t bridge_downstream_port = UART_NUM_1;
+static uint32_t transfer_timeout_ms = 8000;
 
 bool echo_if_error(const char *message, esp_err_t err) {
     if (err != ESP_OK) {
@@ -106,7 +107,7 @@ bool receive_firmware_via_uart() {
     };
 
     while (true) {
-        if (!wait_for_uart_data(10000)) {
+        if (!wait_for_uart_data(transfer_timeout_ms)) {
             echo("Timeout waiting for data, finishing transfer");
             break;
         }
@@ -165,13 +166,6 @@ bool receive_firmware_via_uart() {
                     total_bytes_received += chunk_data_len;
                     chunk_count++;
 
-                    static uint32_t last_reported_kb = 0;
-                    uint32_t current_kb = total_bytes_received / 204800;
-                    if (current_kb > last_reported_kb) {
-                        echo("Downloaded %dB (%d chunks)", total_bytes_received, chunk_count);
-                        last_reported_kb = current_kb;
-                    }
-
                     send_uart_confirmation();
                 } else {
                     echo("Checksum mismatch: expected %02x, got %02x", expected_checksum, actual_checksum);
@@ -201,7 +195,7 @@ bool receive_firmware_via_uart() {
         }
     }
 
-    transfer_end_ms = (esp_timer_get_time() / 1000) - 5000;
+    transfer_end_ms = (esp_timer_get_time() / 1000) - transfer_timeout_ms;
     echo("Downloaded %dB in %dms (%d chunks)", total_bytes_received, (int32_t)(transfer_end_ms - transfer_start_ms), chunk_count);
 
     echo("Waiting for flash operations to complete...");
@@ -231,6 +225,10 @@ bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downs
 
     echo("Starting device OTA bridge (upstream: %d, downstream: %d)", upstream_port, downstream_port);
     // No longer send core.ota() to downstream device here
+
+    // flush any old data from the buffers
+    uart_flush_input(upstream_port);
+    uart_flush_input(downstream_port);
 
     unsigned long last_data = millis();
     uint32_t loop_count = 0;
