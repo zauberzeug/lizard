@@ -25,31 +25,30 @@ def parse_args():
                         help=f'Serial port (default: {DEFAULT_PORT})')
     parser.add_argument('-b', '--baudrate', type=int, default=DEFAULT_BAUDRATE,
                         help=f'Baud rate (default: {DEFAULT_BAUDRATE})')
-    parser.add_argument('-t', '--timeout', type=int, default=DEFAULT_TIMEOUT,
-                        help=f'OTA timeout in seconds (default: {DEFAULT_TIMEOUT})')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Verbose output')
     parser.add_argument('-d', '--debug', action='store_true',
                         help='Debug output (shows ready signals and protocol details)')
     parser.add_argument('--target', default='core',
                         help='OTA target (e.g. core, p0, plexus, etc.; default: core)')
-    parser.add_argument('--bridge', default='',
-                        help='Comma-separated list of bridge modules to activate before OTA (e.g. p0,p1)')
 
     return parser.parse_args()
 
 
-def log(message, verbose=False, force=False):
-    """Log message if verbose or force is True."""
-    if verbose or force:
-        print(f"[OTA] {message}")
+def log(message):
+    """Log message with OTA prefix."""
+    print(f"[OTA] {message}", flush=True)
 
 
-def connect_serial(port, baudrate, verbose=False):
+def connect_serial(port, baudrate):
     """Connect to serial port."""
     try:
         device = serial.Serial(port=port, baudrate=baudrate, timeout=SERIAL_TIMEOUT)
-        log(f"Connected to {port} at {baudrate} baud", verbose, force=True)
+        log(f"Connected to {port} at {baudrate} baud")
+
+        # Flush any old messages from the buffer
+        device.reset_input_buffer()
+        device.reset_output_buffer()
+        time.sleep(0.1)  # Give time for buffers to clear
+
         return device
     except Exception as e:
         print(f"Error: Failed to connect to {port}: {e}")
@@ -57,23 +56,24 @@ def connect_serial(port, baudrate, verbose=False):
 
 
 # Send OTA command string
-def send_ota_command(device, command, verbose=False):
+def send_ota_command(device, command, debug=False):
     """Send core.ota() command and wait for response."""
     try:
-        log(f"Sending {command.strip()} command...", verbose, force=True)
+        log(f"Sending {command.strip()} command...")
         device.write(command.encode())
 
         start_time = time.time()
         while time.time() - start_time < OTA_COMMAND_TIMEOUT:
             if device.in_waiting > 0:
                 response = device.readline().decode().strip()
-                log(f"Device: {response}", verbose)
+                if debug:
+                    log(f"Device: {response}")
 
                 if "Starting UART OTA" in response:
-                    log("OTA started successfully!", verbose, force=True)
+                    log("OTA started successfully!")
                     return True
                 elif "Starting UART bridge" in response:
-                    log("Bridge started successfully!", verbose, force=True)
+                    log("Bridge started successfully!")
                     return True
             time.sleep(0.1)
 
@@ -85,18 +85,19 @@ def send_ota_command(device, command, verbose=False):
         return False
 
 
-def wait_for_ready(device, timeout, verbose=False):
+def wait_for_ready(device, timeout, debug=False):
     """Wait for device to be ready for firmware transfer."""
-    log("Waiting for device to be ready...", verbose, force=True)
+    log("Waiting for device to be ready...")
     start_time = time.time()
 
     while time.time() - start_time < timeout:
         if device.in_waiting > 0:
             line = device.readline().decode().strip()
-            log(f"Device: {line}", verbose, force=True)
+            if debug:
+                log(f"Device: {line}")
 
             if "Ready for firmware download" in line:
-                log("Device ready for firmware!", verbose, force=True)
+                log("Device ready for firmware!")
                 return True
             elif "failed" in line.lower() or "error" in line.lower():
                 print(f"Error: Device reported: {line}")
@@ -128,16 +129,14 @@ def wait_for_ready_signal(device, timeout=READY_SIGNAL_TIMEOUT, debug=False):
                     # Try to decode as index number
                     index_str = line.decode('utf-8').strip()
                     if index_str.isdigit():
-                        if debug:
-                            print(f'Ready signal received: {index_str}')
                         return True
                     else:
                         # Only show non-index data in debug mode
                         if debug:
-                            print(f'Non-index data: {line}')
+                            print(f'DEBUG: Non-index data: {line}')
                 except UnicodeDecodeError:
                     if debug:
-                        print(f'Binary data received: {line}')
+                        print(f'DEBUG: Binary data received: {line}')
 
         time.sleep(0.01)
 
@@ -210,73 +209,87 @@ def send_firmware(device, firmware_path: str, debug: bool = False) -> bool:
                         print(f'\nDevice not ready for more data at {bytes_sent:,} bytes')
                         return False
 
-        print(f'\n✅ Transfer complete: {bytes_sent:,} bytes sent in {chunk_count} chunks')
+            # Wait for final confirmation from device
+            if not wait_for_ready_signal(device, timeout=3, debug=debug):
+                print(f'\nDevice not ready for final confirmation after {bytes_sent:,} bytes')
+                return False
 
-        print('Listening for device response...')
-        start_time = time.time()
-        while time.time() - start_time < DEVICE_RESPONSE_TIMEOUT:
-            if device.in_waiting > 0:
-                try:
-                    line = device.readline().decode().strip()
-                    if line and not line.isspace():
-                        print(f'Device: {line}')
+            print(f'\n✅ Transfer complete: {bytes_sent:,} bytes sent in {chunk_count} chunks')
 
-                        if 'OTA OK' in line or 'restarting' in line.lower():
-                            print('✅ Device confirmed OTA success!')
-                            return True
-                        elif 'failed' in line.lower() or 'error' in line.lower():
-                            print('❌ Device reported OTA failure!')
-                            return False
-                except UnicodeDecodeError:
-                    continue
+            print('Listening for device OTA confirmation...')
+            start_time = time.time()
+            response_status = 'unknown'  # 'success', 'failure', or 'unknown'
+            status_message = None
 
-            time.sleep(0.1)
+            while time.time() - start_time < DEVICE_RESPONSE_TIMEOUT+3:
+                if device.in_waiting > 0:
+                    try:
+                        line = device.readline().decode(errors='replace').strip()
+                        if line and not line.isspace():
+                            # Always show in debug mode
+                            if debug:
+                                print(f'DEBUG: {line}')
 
-        print('✅ Transfer completed - assuming success (no errors detected)')
-        return True
+                            # Check for success conditions
+                            lcline = line.lower()
+                            if 'ota ok' in lcline or 'restarting' in lcline:
+                                response_status = 'success'
+                                status_message = line
+                                print('✅ Device confirmed OTA success!')
+                                return True
+
+                            # Check for failure conditions
+                            if 'uart ota failed' in lcline:
+                                response_status = 'failure'
+                                status_message = line
+                                print(f'❌ OTA Failed: {line}')
+                                return False
+
+                    except UnicodeDecodeError:
+                        continue
+
+                time.sleep(0.1)
+
+            # Handle timeout cases
+            if response_status == 'success':
+                print('✅ Transfer completed successfully!')
+                return True
+            elif response_status == 'failure':
+                print(f'❌ OTA Failed: {status_message}')
+                return False
+            else:
+                print('⚠️  Transfer completed - status unknown (no clear success/failure detected)')
+                return True
 
     except Exception as e:
         print(f'Error during transfer: {e}')
         return False
 
 
-def perform_ota(port: str, baudrate: int, firmware_path: str, timeout: int, target: str, bridge: str, verbose: bool = False, debug: bool = False) -> bool:
+def perform_ota(port: str, baudrate: int, firmware_path: str, target: str, debug: bool = False) -> bool:
     '''Perform complete OTA update.'''
     print('🦎 Starting Lizard UART OTA...')
 
-    device = connect_serial(port, baudrate, verbose)
+    device = connect_serial(port, baudrate)
     if not device:
         return False
 
     try:
-        if bridge:
-            for bridge_name in bridge.split(','):
-                bridge_name = bridge_name.strip()
-                if bridge_name:
-                    bridge_cmd = f'{bridge_name}.ota_bridge_start()\n'
-                    log(f'Sending bridge command: {bridge_cmd.strip()}', verbose, force=True)
-                    if not send_ota_command(device, bridge_cmd, verbose):
-                        print(f'Error: Bridge {bridge_name} did not respond')
-                        return False
-
         ota_cmd = f'{target}.ota()\n'
-        log(f'Sending OTA command: {ota_cmd.strip()}', verbose, force=True)
-        if not send_ota_command(device, ota_cmd, verbose):
+        if not send_ota_command(device, ota_cmd, debug):
             return False
 
-        if not wait_for_ready(device, timeout, verbose):
+        if not wait_for_ready(device, DEFAULT_TIMEOUT, debug):
             return False
 
         if not send_firmware(device, firmware_path, debug):
             return False
 
-        print('✅ OTA completed successfully!')
-        print('Device should reboot with new firmware.')
         return True
 
     finally:
         device.close()
-        log('Disconnected', verbose)
+        log('Disconnected')
 
 
 def main() -> None:
@@ -287,10 +300,7 @@ def main() -> None:
             args.port,
             args.baudrate,
             args.firmware,
-            args.timeout,
             args.target,
-            args.bridge,
-            args.verbose,
             args.debug
         )
         sys.exit(0 if success else 1)
