@@ -191,10 +191,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         if (id > 9) {
             throw std::runtime_error("expander id must be between 0 and 9");
         }
-        char id_str = static_cast<char>('0' + id);
-        set_uart_expander_id(id_str);
-        Storage::put_device_id(id_str);
-        echo("Device ID set to %c", id_str);
+        set_uart_expander_id(static_cast<char>('0' + id));
+        Storage::put_device_id(id);
+        echo("Device ID set to %d", id);
     } else if (method_name == "get_device_id") {
         Module::expect(arguments, 0);
         char id = get_uart_expander_id();

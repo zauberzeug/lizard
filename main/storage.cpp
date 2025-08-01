@@ -115,7 +115,7 @@ void Storage::clear_nvs() {
     Storage::put("");
 }
 
-void Storage::put_device_id(const char id) {
+void Storage::put_device_id(const uint8_t id) {
     esp_err_t err;
     nvs_handle handle;
     if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
@@ -147,7 +147,7 @@ void Storage::load_device_id() {
         // Device ID not found in storage, use default (no error)
         return;
     }
-
-    set_uart_expander_id(value);
+    // Convert uint8_t to char for UART system
+    set_uart_expander_id(static_cast<char>(value));
     nvs_close(handle);
 }
