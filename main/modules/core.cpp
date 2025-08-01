@@ -82,9 +82,27 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
         echo("checksum: %04x", checksum);
     } else if (method_name == "ota") {
-        Module::expect(arguments, 0);
-        echo("Starting automatic UART OTA...");
-        ota::perform_automatic_ota("core");
+        Module::expect(arguments, -1, string);
+        if (arguments.size() == 1) {
+            std::string target = arguments[0]->evaluate_string();
+            std::vector<std::string> bridge_path = ota::detect_required_bridges(target);
+            echo("Bridge path: %d bridges needed", (int)bridge_path.size());
+            for (const auto &bridge : bridge_path) {
+                echo("  Bridge: %s", bridge.c_str());
+            }
+        } else if (arguments.size() == 0) {
+            echo("Starting UART OTA receive mode...");
+            bool success = ota::receive_firmware_via_uart();
+            if (success) {
+                echo("OTA successful, restarting...");
+                esp_restart();
+            } else {
+                echo("OTA failed, not restarting");
+            }
+        } else {
+            echo("Error: ota() expects 0 or 1 arguments");
+            throw std::runtime_error("ota() expects 0 or 1 arguments");
+        }
     } else if (method_name == "ota_bridge_start") {
         Module::expect(arguments, 0);
         echo("Starting UART bridge...");
@@ -167,19 +185,11 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "run_step") {
         Module::expect(arguments, 0);
         run_step();
-    } else if (method_name == "pe") {
-        echo("Debug: external status: %d", get_uart_external_mode());
-    } else if (method_name == "ee_on") { // Debug function remove later
-        Module::expect(arguments, 0);
-        activate_uart_external_mode();
-    } else if (method_name == "ee_off") { // Debug function remove later
-        Module::expect(arguments, 0);
-        deactivate_uart_external_mode();
     } else if (method_name == "set_device_id") {
         Module::expect(arguments, 1, integer);
         uint8_t id = arguments[0]->evaluate_integer();
         if (id > 9) {
-            throw std::runtime_error("expander id must be between 0 and 99");
+            throw std::runtime_error("expander id must be between 0 and 9");
         }
         char id_str = static_cast<char>('0' + id);
         set_uart_expander_id(id_str);
@@ -233,7 +243,6 @@ void Core::run_step() {
         return;
     }
 
-    // Run one step of all modules
     for (auto const &[module_name, module] : Global::modules) {
         if (module->name != "core") {
             try {
@@ -244,7 +253,6 @@ void Core::run_step() {
         }
     }
 
-    // Run core module last
     try {
         this->step();
     } catch (const std::runtime_error &e) {

@@ -382,31 +382,6 @@ std::vector<std::string> build_bridge_path(const std::string &target_name) {
     return bridge_path;
 }
 
-bool activate_bridges(const std::vector<std::string> &bridge_path) {
-    echo("Activating %d bridges", (int)bridge_path.size());
-
-    for (auto it = bridge_path.rbegin(); it != bridge_path.rend(); ++it) {
-        const std::string &bridge_name = *it;
-        try {
-            Module_ptr bridge_module = Global::get_module(bridge_name);
-
-            echo("Activating bridge on %s", bridge_name.c_str());
-
-            std::vector<ConstExpression_ptr> empty_args;
-            bridge_module->call("ota_bridge_start", empty_args);
-
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-
-        } catch (const std::runtime_error &e) {
-            echo("Failed to activate bridge %s: %s", bridge_name.c_str(), e.what());
-            return false;
-        }
-    }
-
-    echo("All bridges activated successfully");
-    return true;
-}
-
 std::vector<std::string> detect_required_bridges(const std::string &target_name) {
     if (target_name == "core") {
         echo("Target is core, no bridges needed");
@@ -423,35 +398,6 @@ std::vector<std::string> detect_required_bridges(const std::string &target_name)
     }
 
     return build_bridge_path(target_name);
-}
-
-void perform_automatic_ota(const std::string &target_name) {
-    echo("Starting automatic OTA for target: %s", target_name.c_str());
-
-    // Detect required bridges
-    std::vector<std::string> bridge_path = detect_required_bridges(target_name);
-
-    // Activate bridges if needed
-    if (!bridge_path.empty()) {
-        if (!activate_bridges(bridge_path)) {
-            echo("Bridge activation failed, aborting OTA");
-            return;
-        }
-    }
-
-    // Proceed with OTA
-    echo("Bridges ready, starting OTA process");
-
-    bool ota_success = receive_firmware_via_uart();
-    activate_uart_external_mode(); // temporary, to ensure esp is back to normal mode - for testing. TODO: Implement adressing to OTA device
-
-    if (ota_success) {
-        echo("OTA successful, restarting...");
-        esp_restart();
-    } else {
-        echo("OTA failed, not restarting");
-    }
-    return;
 }
 
 } // namespace ota

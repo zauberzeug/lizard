@@ -142,20 +142,6 @@ void PlexusExpander::call(const std::string method_name, const std::vector<Const
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
         this->restart();
-    } else if (method_name == "ota") {
-        Module::expect(arguments, 0);
-        echo("Starting automatic UART OTA for plexus expander %s...", this->name.c_str());
-        this->serial->write_checked_line("core.ota()");
-
-        // start ota bridge task
-        ota::start_ota_bridge_task();
-
-    } else if (method_name == "ee_on") { // Debug function remove later
-        Module::expect(arguments, 0);
-        this->serial->activate_external_mode();
-    } else if (method_name == "ee_off") { // Debug function remove later
-        Module::expect(arguments, 0);
-        this->serial->deactivate_external_mode();
     } else {
         char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "core.%s(", method_name.c_str());

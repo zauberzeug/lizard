@@ -32,7 +32,8 @@ class OTAProtocol:
 
     # Protocol format
     CHECKSUM_SUFFIX_FORMAT = '\r\n@{:02x}\r\n'
-    COMMAND_FORMAT = '{}.ota()\n'
+    COMMAND_FORMAT = 'core.ota("{}")\n'
+    START_OTA_COMMAND = 'core.ota()\n'
 
 
 class OTALogger:
@@ -160,6 +161,104 @@ class LizardOTA:
         except Exception as e:
             self.logger.error(f'Error sending OTA command: {e}')
             return False
+
+    def get_bridge_path(self, target: str) -> list[str]:
+        '''Get bridge path for target from core.'''
+        if not self.device:
+            self.logger.error('No device connected')
+            return []
+
+        try:
+            self.logger.info(f'Getting bridge path for target: {target}')
+            ota_cmd = OTAProtocol.COMMAND_FORMAT.format(target)
+            self.device.write(ota_cmd.encode())
+
+            bridge_path = []
+            start_time = time.time()
+
+            while time.time() - start_time < self.config.ota_command_timeout:
+                if self.device.in_waiting > 0:
+                    response = self.device.readline().decode().strip()
+                    if self.debug:
+                        self.logger.debug(f'Device: {response}')
+
+                        # Look for bridge path information
+                    if 'Bridge:' in response and '@' in response:
+                        # Extract bridge name from "Bridge: bridge_name@checksum"
+                        parts = response.split('Bridge:')
+                        if len(parts) > 1:
+                            bridge_part = parts[1].strip()
+                            # Remove checksum (everything after @)
+                            if '@' in bridge_part:
+                                bridge_name = bridge_part.split('@')[0].strip()
+                                bridge_path.append(bridge_name)
+
+                    # Check if we've received all bridges
+                    if 'bridges needed' in response and '@' in response:
+                        # Parse the number of bridges from "Bridge path: X bridges needed@checksum"
+                        try:
+                            parts = response.split('bridges needed')
+                            if len(parts) > 0:
+                                num_part = parts[0].split()[-1]
+                                num_bridges = int(num_part)
+                                if len(bridge_path) >= num_bridges:
+                                    self.logger.info(f'Received bridge path: {bridge_path}')
+                                    return bridge_path
+                        except (ValueError, IndexError):
+                            pass
+
+                time.sleep(0.1)
+
+            self.logger.warning('Timeout getting bridge path')
+            return bridge_path
+
+        except Exception as e:
+            self.logger.error(f'Error getting bridge path: {e}')
+            return []
+
+    def activate_bridges(self, bridge_path: list[str]) -> bool:
+        '''Activate bridges in order (furthest to nearest).'''
+        if not self.device:
+            self.logger.error('No device connected')
+            return False
+
+        if not bridge_path:
+            self.logger.info('No bridges needed')
+            return True
+
+        self.logger.info(f'Activating {len(bridge_path)} bridges: {bridge_path}')
+
+        for bridge in bridge_path:
+            try:
+                self.logger.info(f'Activating bridge: {bridge}')
+                bridge_cmd = f'{bridge}.ota_bridge_start()\n'
+                self.device.write(bridge_cmd.encode())
+
+                # Wait for bridge activation response
+                start_time = time.time()
+                while time.time() - start_time < 5.0:  # 5 second timeout
+                    if self.device.in_waiting > 0:
+                        response = self.device.readline().decode().strip()
+                        if self.debug:
+                            self.logger.debug(f'Bridge response: {response}')
+
+                        if 'UART bridge' in response:
+                            self.logger.success(f'Bridge {bridge} activated')
+                            break
+
+                    time.sleep(0.1)
+                else:
+                    self.logger.error(f'Timeout activating bridge {bridge}')
+                    return False
+
+                time.sleep(0.5)  # Give bridge time to stabilize
+
+            except Exception as e:
+                self.logger.error(f'Error activating bridge {bridge}: {e}')
+                return False
+
+        self.logger.success('All bridges activated')
+        return True
 
     def wait_for_ready(self, timeout: Optional[float] = None) -> bool:
         '''Wait for device to be ready for firmware transfer.'''
@@ -355,8 +454,18 @@ class LizardOTA:
             return False
 
         try:
-            ota_cmd = OTAProtocol.COMMAND_FORMAT.format(target)
-            if not self.send_command(ota_cmd):
+            # Step 1: Get bridge path from core
+            bridge_path = self.get_bridge_path(target)
+            if bridge_path is None:
+                return False
+
+            # Step 2: Activate bridges in order (furthest to nearest)
+            if not self.activate_bridges(bridge_path):
+                return False
+
+            # Step 3: Start actual OTA process
+            start_cmd = OTAProtocol.START_OTA_COMMAND
+            if not self.send_command(start_cmd):
                 return False
 
             if not self.wait_for_ready():
