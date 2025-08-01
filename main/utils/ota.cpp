@@ -29,7 +29,8 @@ static volatile bool ota_bridge_should_stop = false;
 static uint32_t confirm_index = 0; // number of confirmations, not chunks received
 static uart_port_t bridge_upstream_port = UART_NUM_0;
 static uart_port_t bridge_downstream_port = UART_NUM_1;
-static uint32_t transfer_timeout_ms = 8000;
+static uint32_t transfer_timeout_ms = 7000;
+static uint32_t ota_bridge_timeout_ms = 10000;
 
 bool echo_if_error(const char *message, esp_err_t err) {
     if (err != ESP_OK) {
@@ -60,6 +61,11 @@ void send_uart_confirmation() {
     char confirm_msg[16];
     int len = snprintf(confirm_msg, sizeof(confirm_msg), "%lu\r\n", confirm_index);
     uart_write_bytes(UART_PORT_NUM, confirm_msg, len);
+}
+
+void send_bridge_shutdown_signal() {
+    const char *shutdown_msg = "!END\r\n";
+    uart_write_bytes(UART_PORT_NUM, shutdown_msg, strlen(shutdown_msg));
 }
 
 bool receive_firmware_via_uart() {
@@ -165,7 +171,6 @@ bool receive_firmware_via_uart() {
 
                     total_bytes_received += chunk_data_len;
                     chunk_count++;
-
                     send_uart_confirmation();
                 } else {
                     echo("Checksum mismatch: expected %02x, got %02x", expected_checksum, actual_checksum);
@@ -202,29 +207,28 @@ bool receive_firmware_via_uart() {
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     result = esp_ota_end(ota_handle);
+    bool ota_success = false;
+
     if (result == ESP_OK) {
         result = esp_ota_set_boot_partition(ota_partition);
         if (result == ESP_OK) {
             echo("OTA OK, restarting...");
-            vTaskDelay(500 / portTICK_PERIOD_MS);
-            esp_restart();
+            ota_success = true;
         } else {
             echo("OTA set boot partition fail [0x%x]", result);
-            return false;
         }
     } else {
         echo("OTA end fail [0x%x]", result);
-        return false;
     }
 
-    return true;
+    send_bridge_shutdown_signal();
+    return ota_success;
 }
 
 bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downstream_port) {
     constexpr int64_t IDLE_TIMEOUT_MS = 10000;
 
     echo("Starting device OTA bridge (upstream: %d, downstream: %d)", upstream_port, downstream_port);
-    // No longer send core.ota() to downstream device here
 
     // flush any old data from the buffers
     uart_flush_input(upstream_port);
@@ -232,8 +236,9 @@ bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downs
 
     unsigned long last_data = millis();
     uint32_t loop_count = 0;
+    bool bridge_shutdown_received = false;
 
-    while (true) {
+    while (!bridge_shutdown_received) {
         if (ota_bridge_should_stop) {
             echo("Bridge stop requested");
             break;
@@ -247,6 +252,12 @@ bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downs
             uint8_t buf[1024];
             int n = uart_read_bytes(upstream_port, buf, std::min<size_t>(avail, sizeof buf), 0);
             if (n > 0) {
+                // Check for bridge shutdown signal
+                if (strstr((char *)buf, "!END") != nullptr) {
+                    echo("Received bridge shutdown signal");
+                    bridge_shutdown_received = true;
+                }
+
                 uart_write_bytes(downstream_port, buf, n);
                 last_data = millis();
                 data_transferred = true;
@@ -258,6 +269,12 @@ bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downs
             uint8_t buf[1024];
             int n = uart_read_bytes(downstream_port, buf, std::min<size_t>(avail, sizeof buf), 0);
             if (n > 0) {
+                // Check for bridge shutdown signal
+                if (strstr((char *)buf, "!END") != nullptr) {
+                    echo("Received bridge shutdown signal");
+                    bridge_shutdown_received = true;
+                }
+
                 uart_write_bytes(upstream_port, buf, n);
                 last_data = millis();
                 data_transferred = true;
@@ -408,7 +425,7 @@ std::vector<std::string> detect_required_bridges(const std::string &target_name)
     return build_bridge_path(target_name);
 }
 
-bool perform_automatic_ota(const std::string &target_name) {
+void perform_automatic_ota(const std::string &target_name) {
     echo("Starting automatic OTA for target: %s", target_name.c_str());
 
     // Detect required bridges
@@ -418,13 +435,23 @@ bool perform_automatic_ota(const std::string &target_name) {
     if (!bridge_path.empty()) {
         if (!activate_bridges(bridge_path)) {
             echo("Bridge activation failed, aborting OTA");
-            return false;
+            return;
         }
     }
 
     // Proceed with OTA
     echo("Bridges ready, starting OTA process");
-    return receive_firmware_via_uart();
+
+    bool ota_success = receive_firmware_via_uart();
+    activate_uart_external_mode(); // temporary, to ensure esp is back to normal mode - for testing. TODO: Implement adressing to OTA device
+
+    if (ota_success) {
+        echo("OTA successful, restarting...");
+        esp_restart();
+    } else {
+        echo("OTA failed, not restarting");
+    }
+    return;
 }
 
 } // namespace ota

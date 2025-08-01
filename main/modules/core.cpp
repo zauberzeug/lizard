@@ -84,10 +84,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "ota") {
         Module::expect(arguments, 0);
         echo("Starting automatic UART OTA...");
-
-        if (!ota::perform_automatic_ota("core")) {
-            echo("UART OTA failed");
-        }
+        ota::perform_automatic_ota("core");
     } else if (method_name == "ota_bridge_start") {
         Module::expect(arguments, 0);
         echo("Starting UART bridge...");
