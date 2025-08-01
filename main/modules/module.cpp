@@ -99,12 +99,12 @@ Module_ptr Module::create(const std::string type,
         }
         const ConstSerial_ptr serial = std::static_pointer_cast<const Serial>(module);
 
-        // Validate and convert ID here
+        // Validate expander ID
         int id = arguments[1]->evaluate_integer();
         if (id < 0 || id > 9) {
             throw std::runtime_error("expander id must be between 0 and 9");
         }
-        char expander_id = static_cast<char>('0' + id);
+        uint8_t expander_id = static_cast<uint8_t>(id);
 
         return std::make_shared<PlexusExpander>(name, serial, expander_id, message_handler);
     } else if (type == "Bluetooth") {

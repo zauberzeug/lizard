@@ -26,12 +26,12 @@ private:
 
 public:
     Serial_ptr serial;
-    char expander_id;
+    uint8_t expander_id;
     MessageHandler message_handler;
 
     PlexusExpander(const std::string name,
                    ConstSerial_ptr const_serial,
-                   const char expander_id,
+                   const uint8_t expander_id,
                    MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

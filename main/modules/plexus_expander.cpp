@@ -23,7 +23,7 @@ const std::map<std::string, Variable_ptr> PlexusExpander::get_defaults() {
 
 PlexusExpander::PlexusExpander(const std::string name,
                                ConstSerial_ptr const_serial,
-                               const char id,
+                               const uint8_t id,
                                MessageHandler message_handler)
     : Module(plexus_expander, name),
 
@@ -37,7 +37,7 @@ PlexusExpander::PlexusExpander(const std::string name,
     this->serial->activate_external_mode();
 
     char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%c_READY__')", ID_TAG, expander_id, expander_id);
+    int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%c_READY__')", ID_TAG, '0' + expander_id, '0' + expander_id);
     this->serial->write_checked_line(buffer, pos);
 
     const int max_retries = 10;
@@ -60,7 +60,7 @@ void PlexusExpander::buffer_message(const char *message) {
     // If buffer is empty, add the ID tag and expander ID
     if (buffer_pos == 0) {
         message_buffer[0] = ID_TAG;
-        message_buffer[1] = expander_id;
+        message_buffer[1] = '0' + expander_id;
         buffer_pos = 2;
     } else {
         // Add semicolon separator if not the first command
@@ -84,7 +84,7 @@ void PlexusExpander::step() {
         }
 
         char buffer[256];
-        int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.run_step()", ID_TAG, expander_id);
+        int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.run_step()", ID_TAG, '0' + expander_id);
         this->serial->write_checked_line(buffer, pos);
         this->properties.at("step_in_progress")->boolean_value = true;
 
@@ -112,7 +112,7 @@ void PlexusExpander::handle_messages() {
         check(buffer, len);
 
         // tag handling: msg looks like this: $9XXXXXXX
-        if (buffer[0] == ID_TAG && buffer[1] == expander_id) {
+        if (buffer[0] == ID_TAG && buffer[1] == '0' + expander_id) {
             strcpy(buffer, buffer + 2);
         } else {
             echo("Debug: msg received. Tag and Id did not match");
@@ -126,7 +126,7 @@ void PlexusExpander::handle_messages() {
         } else if (strstr(buffer, "__step_done__") != nullptr) {
             this->properties.at("step_in_progress")->boolean_value = false;
         } else if (strstr(buffer, "_READY__") != nullptr) {
-            echo("plexus expander %c is ready", expander_id);
+            echo("plexus expander %c is ready", '0' + expander_id);
             this->properties.at("is_ready")->boolean_value = true;
         } else {
             echo("%s: %s", this->name.c_str(), buffer);
@@ -185,7 +185,7 @@ std::string PlexusExpander::get_name() const {
 
 void PlexusExpander::restart() {
     char buffer[256];
-    int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.restart()", ID_TAG, expander_id);
+    int pos = csprintf(buffer, sizeof(buffer), "%c%ccore.restart()", ID_TAG, '0' + expander_id);
     this->serial->write_checked_line(buffer, pos);
     this->properties.at("is_ready")->boolean_value = false;
 
@@ -195,7 +195,7 @@ void PlexusExpander::restart() {
 
     while (!this->properties.at("is_ready")->boolean_value) {
         if (boot_timeout > 0 && millis_since(start_time) > boot_timeout) {
-            echo("warning: plexus expander %c restart timed out", expander_id);
+            echo("warning: plexus expander %c restart timed out", '0' + expander_id);
             break;
         }
 
@@ -203,13 +203,13 @@ void PlexusExpander::restart() {
             int len = this->serial->read_line(read_buffer, sizeof(read_buffer));
             check(read_buffer, len);
 
-            if (read_buffer[0] == ID_TAG && read_buffer[1] == expander_id) {
+            if (read_buffer[0] == ID_TAG && read_buffer[1] == '0' + expander_id) {
                 strcpy(read_buffer, read_buffer + 2);
             }
 
             echo("%s: %s", this->name.c_str(), read_buffer);
             if (strcmp("Ready.", read_buffer) == 0) {
-                echo("plexus expander %c ready after restart", expander_id);
+                echo("plexus expander %c ready after restart", '0' + expander_id);
                 break;
             }
         }
@@ -225,7 +225,7 @@ void PlexusExpander::restart() {
     this->serial->activate_external_mode();
 
     buffer_pos = 0;
-    pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%c_READY__')", ID_TAG, expander_id, expander_id);
+    pos = csprintf(buffer, sizeof(buffer), "%c%ccore.print('__%c_READY__')", ID_TAG, '0' + expander_id, '0' + expander_id);
     this->serial->write_checked_line(buffer, pos);
 
     const int max_retries = 10;
