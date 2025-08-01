@@ -20,7 +20,7 @@ parser.add_argument('--partition-table', default='build/partition_table/partitio
                     help='Path to partition table')
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
-parser.add_argument('--resetota', action='store_true', help='Reset OTA partition to OTA 0 after flashing')
+parser.add_argument('--reset-ota', action='store_true', help='Reset OTA partition to OTA 0 after flashing')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
 parser.add_argument('device', nargs='?', default='/dev/tty.SLAB_USBtoUART',
                     help='Serial device path (overwritten by --jetson)')
@@ -158,13 +158,13 @@ def flash() -> None:
             if not success:
                 raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
 
-    if args.resetota:
-        set_ota0()
+    if args.reset_ota:
+        reset_ota()
 
 
-def set_ota0() -> None:
-    """Set the OTA partition to boot from OTA 0."""
-    print_bold('Setting OTA partition to OTA 0...')
+def reset_ota() -> None:
+    """Reset the OTA partition to the default state."""
+    print_bold('Resetting OTA partition to OTA 0...')
     success = run(
         'esptool.py',
         '--chip', args.chip,
