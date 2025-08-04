@@ -18,41 +18,48 @@ The `broadcast` method is used internally with [port expanders](#expander).
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
 It is automatically created right after the boot sequence.
 
-| Properties    | Description                                             | Data type |
-| ------------- | ------------------------------------------------------- | --------- |
-| `core.debug`  | Whether to output debug information to the command line | `bool`    |
-| `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
-| `core.heap`   | Free heap memory (bytes)                                | `int`     |
+| Properties              | Description                                             | Data type |
+| ----------------------- | ------------------------------------------------------- | --------- |
+| `core.debug`            | Whether to output debug information to the command line | `bool`    |
+| `core.millis`           | Time since booting the microcontroller (ms)             | `int`     |
+| `core.heap`             | Free heap memory (bytes)                                | `int`     |
+| `core.last_message_age` | Time since last message received (ms)                   | `int`     |
 
-| Methods                          | Description                                        | Arguments    |
-| -------------------------------- | -------------------------------------------------- | ------------ |
-| `core.restart()`                 | Restart the microcontroller                        |              |
-| `core.version()`                 | Show lizard version                                |              |
-| `core.info()`                    | Show lizard version, compile time and IDF version  |              |
-| `core.print(...)`                | Print arbitrary arguments to the command line      | arbitrary    |
-| `core.output(format)`            | Define the output format                           | `str`        |
-| `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
-| `core.ota(ssid, password, url)`  | Starts OTA update on a URL with given WiFi         | 3x `str`     |
-| `core.ota()`                     | **TODO: UPDATE** Starts UART OTA update (new)      |              |
-| `core.ota_bridge()`              | **TODO: UPDATE** Bridge OTA to device (new)        |              |
-| `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
-| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
-| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
-
-<!-- TODO: Update OTA methods documentation with new UART-based OTA functions and bridge capabilities -->
+| Methods                             | Description                                        | Arguments    |
+| ----------------------------------- | -------------------------------------------------- | ------------ |
+| `core.restart()`                    | Restart the microcontroller                        |              |
+| `core.version()`                    | Show lizard version                                |              |
+| `core.info()`                       | Show lizard version, compile time and IDF version  |              |
+| `core.print(...)`                   | Print arbitrary arguments to the command line      | arbitrary    |
+| `core.output(format)`               | Define the output format                           | `str`        |
+| `core.startup_checksum()`           | Show 16-bit checksum of the startup script         |              |
+| `core.ota(target)`                  | Get bridge path for target device                  | `str`        |
+| `core.ota()`                        | Start UART OTA update process                      |              |
+| `core.ota_bridge_start([up, down])` | Start OTA bridge with optional UART ports          | 2x `int`     |
+| `core.run_step()`                   | Execute one step cycle (for external control)      |              |
+| `core.set_device_id(id)`            | Set device ID for PlexusExpander addressing        | `int`        |
+| `core.get_device_id()`              | Get current device ID                              |              |
+| `core.get_pin_status(pin)`          | Print the status of the chosen pin                 | `int`        |
+| `core.set_pin_level(pin, value)`    | Turns the pin into an output and sets its level    | `int`, `int` |
+| `core.get_pin_strapping(pin)`       | Print value of the pin from the strapping register | `int`        |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
 
-The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
-After initializing the WiFi connection, it will attempt an OTA update from the given URL.
-Upon successful updating, the ESP will restart and attempt to verify the OTA update.
-It will reconnect to the WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard.
-The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
-If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
-
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
+
+### OTA
+
+The UART-based OTA system provides reliable firmware updates through serial communication:
+
+**Direct OTA (`core.ota()`)**: Receives firmware binary via UART with XOR checksum validation. The device enters receive mode and accepts firmware chunks with automatic verification and confirmation signals.
+
+**Bridge Discovery (`core.ota(target)`)**: Analyzes the module hierarchy to determine required communication bridges for reaching a target device in multi-ESP32 setups.
+
+**Bridge Setup (`core.ota_bridge_start()`)**: Creates transparent UART bridges that forward OTA data between devices, enabling firmware updates across multiple ESP32 hops (e.g., ESP32_A → ESP32_B → ESP32_C).
+
+A Python script (`lizard_ota.py`) uses these commands to orchestrate complete OTA updates over UART, automatically discovering bridge paths and setting up the necessary communication channels for multi-device firmware updates.
 
 ## Bluetooth
 
@@ -841,27 +848,34 @@ The expander module allows communication with another microcontroller connected 
 | --------------------------------------------- | ---------------------------------- | ----------------------- |
 | `expander = Expander(serial[, boot, enable])` | Serial module and boot/enable pins | Serial module, 2x `int` |
 
-| Methods                   | Description                                      | Arguments |
-| ------------------------- | ------------------------------------------------ | --------- |
-| `expander.run(command)`   | Run any `command` on the other microcontroller   | `string`  |
-| `expander.disconnect()`   | Disconnect serial connection and pins            |           |
-| `expander.flash([force])` | Flash other microcontroller with own binary data | `bool`    |
-| `expander.restart()`      | Restart other microcontroller                    |           |
+## PlexusExpander
 
-The `flash()` method requires the `boot` and `enable` pins to be defined.
-The optional `force` argument skips the default check whether certain strapping pins are set correctly.
+The PlexusExpander module enables controlled communication with another ESP32s3 via ID-based addressing, designed for multi-device orchestration where one ESP32 controls multiple others.
 
-The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
+| Constructor                                  | Description                    | Arguments            |
+| -------------------------------------------- | ------------------------------ | -------------------- |
+| `plexus = PlexusExpander(serial, device_id)` | Serial module, device ID (0-9) | Serial module, `int` |
 
-Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
+| Methods               | Description                                      | Arguments |
+| --------------------- | ------------------------------------------------ | --------- |
+| `plexus.run(command)` | Queue command for execution on controlled device | `string`  |
+| `plexus.restart()`    | Restart the controlled device                    |           |
 
-| Properties         | Description                                             | Data type |
-| ------------------ | ------------------------------------------------------- | --------- |
-| `boot_timeout`     | Time to wait for other microcontroller to boot (s)      | `float`   |
-| `ping_interval`    | Time between pings (s)                                  | `float`   |
-| `ping_timeout`     | Time before timing out (s)                              | `float`   |
-| `is_ready`         | Whether the remote module has booted and is ready       | `bool`    |
-| `last_message_age` | Time since last message from other microcontroller (ms) | `int`     |
+The PlexusExpander uses a sophisticated message batching system:
+
+- Commands are queued and sent together during each step cycle
+- All messages are prefixed with `$<device_id>` for proper routing
+- The controlled device only executes when commanded via `core.run_step()`
+- Supports proxy chaining for multi-hop communication (ESP32_A → ESP32_B → ESP32_C)
+
+Note that the PlexusExpander forwards all other method calls to the remote core module, e.g. `plexus.info()`.
+
+| Properties                 | Description                                         | Data type |
+| -------------------------- | --------------------------------------------------- | --------- |
+| `boot_timeout`             | Time to wait for controlled device to boot (s)      | `float`   |
+| `is_ready`                 | Whether the controlled device is ready              | `bool`    |
+| `last_message_age`         | Time since last message from controlled device (ms) | `int`     |
+| `awaiting_step_completion` | Whether waiting for step completion signal          | `bool`    |
 
 ## Proxy
 
