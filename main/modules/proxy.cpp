@@ -39,9 +39,7 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
 }
 
 void Proxy::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
-    // For proxy chaining, we always need to preserve the expander reference in the module type
-    // The command should be: module_name = proxy_name.original_module_type(args)
-    // This ensures the module gets created on the correct target, not the intermediate ESP32 (this proxy)
+    // Preserve chain path for multi-level routing
     std::string chained_module_type = this->name + "." + module_type;
     this->expandable->send_proxy(module_name, chained_module_type, arguments);
 }
