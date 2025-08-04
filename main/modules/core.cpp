@@ -100,7 +100,6 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
                 echo("OTA failed, not restarting");
             }
         } else {
-            echo("Error: ota() expects 0 or 1 arguments");
             throw std::runtime_error("ota() expects 0 or 1 arguments");
         }
     } else if (method_name == "ota_bridge_start") {
