@@ -103,9 +103,28 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             throw std::runtime_error("ota() expects 0 or 1 arguments");
         }
     } else if (method_name == "ota_bridge_start") {
-        Module::expect(arguments, 0);
+        Module::expect(arguments, -1, integer, integer);
         echo("Starting UART bridge...");
-        ota::start_ota_bridge_task();
+        if (arguments.size() == 0) {
+            ota::start_ota_bridge_task(UART_NUM_0, UART_NUM_1);
+        } else if (arguments.size() == 2) {
+            uart_port_t upstream_port = static_cast<uart_port_t>(arguments[0]->evaluate_integer());
+            uart_port_t downstream_port = static_cast<uart_port_t>(arguments[1]->evaluate_integer());
+            
+            if (upstream_port < 0 || upstream_port >= UART_NUM_MAX) {
+                throw std::runtime_error("invalid upstream UART port");
+            }
+            if (downstream_port < 0 || downstream_port >= UART_NUM_MAX) {
+                throw std::runtime_error("invalid downstream UART port");
+            }
+            if (upstream_port == downstream_port) {
+                throw std::runtime_error("upstream and downstream ports cannot be the same");
+            }
+            
+            ota::start_ota_bridge_task(upstream_port, downstream_port);
+        } else {
+            throw std::runtime_error("ota_bridge_start() expects 0 or 2 arguments (upstream_port, downstream_port)");
+        }
     } else if (method_name == "get_pin_status") {
         Module::expect(arguments, 1, integer);
         const int gpio_num = arguments[0]->evaluate_integer();
