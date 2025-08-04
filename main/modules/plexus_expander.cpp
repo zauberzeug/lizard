@@ -13,8 +13,6 @@ REGISTER_MODULE_DEFAULTS(PlexusExpander)
 const std::map<std::string, Variable_ptr> PlexusExpander::get_defaults() {
     return {
         {"boot_timeout", std::make_shared<NumberVariable>(5.0)},
-        {"ping_interval", std::make_shared<NumberVariable>(1.0)},
-        {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
         {"is_ready", std::make_shared<BooleanVariable>(false)},
         {"last_message_age", std::make_shared<IntegerVariable>(0)},
         {"awaiting_step_completion", std::make_shared<BooleanVariable>(false)},
