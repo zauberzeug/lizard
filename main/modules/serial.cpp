@@ -172,13 +172,11 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
 }
 
 void Serial::activate_external_mode() const {
-    echo("Activating external mode");
     static const char *command = "$$1\n";
     uart_write_bytes(this->uart_num, (uint8_t *)command, std::strlen(command));
 }
 
 void Serial::deactivate_external_mode() const {
-    echo("Deactivating external mode");
     static const char *command = "$$0\n";
     uart_write_bytes(this->uart_num, (uint8_t *)command, std::strlen(command));
 }
