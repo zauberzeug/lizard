@@ -237,7 +237,7 @@ void Core::keep_alive() {
 
 void Core::run_step() {
     if (!get_uart_external_mode()) {
-        echo("Debug: Not in external mode, skipping step");
+        echo("Not in external mode, skipping step");
         return;
     }
 
