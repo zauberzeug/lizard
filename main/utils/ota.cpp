@@ -22,24 +22,19 @@
 
 namespace ota {
 
+static const size_t CHUNK_BUFFER_SIZE = 2048;
+static const size_t BRIDGE_BUFFER_SIZE = 1024;
+static const size_t CONFIRM_MSG_SIZE = 16;
+static const uint32_t BRIDGE_IDLE_TIMEOUT_MS = 10000;
+static const uint32_t DEFAULT_TRANSFER_TIMEOUT_MS = 7000;
+
 #define UART_PORT_NUM UART_NUM_0
 
 static TaskHandle_t ota_bridge_task_handle = nullptr;
-static volatile bool ota_bridge_should_stop = false;
-static uint32_t confirm_index = 0; // number of confirmations, not chunks received
+static uint32_t confirm_index = 0;
 static uart_port_t bridge_upstream_port = UART_NUM_0;
 static uart_port_t bridge_downstream_port = UART_NUM_1;
-static uint32_t transfer_timeout_ms = 7000;
-static uint32_t ota_bridge_timeout_ms = 10000;
 
-bool echo_if_error(const char *message, esp_err_t err) {
-    if (err != ESP_OK) {
-        const char *error_name = esp_err_to_name(err);
-        echo("Error: %s in %s", error_name, message);
-        return false;
-    }
-    return true;
-}
 
 int8_t wait_for_uart_data(uint16_t timeout_ms) {
     int64_t start_time = esp_timer_get_time();
@@ -57,8 +52,7 @@ int8_t wait_for_uart_data(uint16_t timeout_ms) {
 
 void send_uart_confirmation() {
     confirm_index++;
-
-    char confirm_msg[16];
+    char confirm_msg[CONFIRM_MSG_SIZE];
     int len = snprintf(confirm_msg, sizeof(confirm_msg), "%lu\r\n", confirm_index);
     uart_write_bytes(UART_PORT_NUM, confirm_msg, len);
 }
@@ -66,6 +60,38 @@ void send_uart_confirmation() {
 void send_bridge_shutdown_signal() {
     const char *shutdown_msg = "!END\r\n";
     uart_write_bytes(UART_PORT_NUM, shutdown_msg, strlen(shutdown_msg));
+}
+
+char* find_checksum_delimiter(uint8_t* buffer, size_t buffer_pos) {
+    for (size_t i = 0; i <= buffer_pos - 3; i++) {
+        if (buffer[i] == '\r' && buffer[i + 1] == '\n' && buffer[i + 2] == '@') {
+            return (char*)&buffer[i];
+        }
+    }
+    return nullptr;
+}
+
+bool transfer_bridge_data(uart_port_t from_port, uart_port_t to_port, bool& shutdown_received, unsigned long& last_data) {
+    size_t avail = 0;
+    uart_get_buffered_data_len(from_port, &avail);
+    if (!avail) {
+        return false;
+    }
+
+    uint8_t buf[BRIDGE_BUFFER_SIZE];
+    int n = uart_read_bytes(from_port, buf, std::min<size_t>(avail, sizeof buf), 0);
+    if (n <= 0) {
+        return false;
+    }
+
+    if (strstr((char *)buf, "!END") != nullptr) {
+        echo("Received bridge shutdown signal");
+        shutdown_received = true;
+    }
+
+    uart_write_bytes(to_port, buf, n);
+    last_data = millis();
+    return true;
 }
 
 bool receive_firmware_via_uart() {
@@ -81,7 +107,7 @@ bool receive_firmware_via_uart() {
 
     if (get_uart_external_mode()) {
         echo("External mode detected, deactivating");
-        deactivate_uart_external_mode(); // just deactivate it, this is a single plexus solution only
+        deactivate_uart_external_mode();
     }
 
     const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
@@ -100,7 +126,7 @@ bool receive_firmware_via_uart() {
     uart_flush_input(UART_PORT_NUM);
     send_uart_confirmation();
 
-    uint8_t chunk_buffer[2048] = {0};
+    uint8_t chunk_buffer[CHUNK_BUFFER_SIZE] = {0};
     uint32_t buffer_pos = 0;
     uint32_t chunk_count = 0;
 
@@ -113,7 +139,7 @@ bool receive_firmware_via_uart() {
     };
 
     while (true) {
-        if (!wait_for_uart_data(transfer_timeout_ms)) {
+        if (!wait_for_uart_data(DEFAULT_TRANSFER_TIMEOUT_MS)) {
             echo("Timeout waiting for data, finishing transfer");
             break;
         }
@@ -125,7 +151,7 @@ bool receive_firmware_via_uart() {
             continue;
         }
 
-        size_t can_read = sizeof(chunk_buffer) - buffer_pos - 1;
+        size_t can_read = CHUNK_BUFFER_SIZE - buffer_pos - 1;
         if (can_read > available) {
             can_read = available;
         }
@@ -144,13 +170,7 @@ bool receive_firmware_via_uart() {
         buffer_pos += bytes_read;
         chunk_buffer[buffer_pos] = 0;
 
-        char *delimiter_start = nullptr;
-        for (size_t i = 0; i <= buffer_pos - 3; i++) {
-            if (chunk_buffer[i] == '\r' && chunk_buffer[i + 1] == '\n' && chunk_buffer[i + 2] == '@') {
-                delimiter_start = (char *)&chunk_buffer[i];
-                break;
-            }
-        }
+        char *delimiter_start = find_checksum_delimiter(chunk_buffer, buffer_pos);
 
         while (delimiter_start != nullptr) {
             size_t chunk_data_len = delimiter_start - (char *)chunk_buffer;
@@ -185,13 +205,7 @@ bool receive_firmware_via_uart() {
                 buffer_pos = remaining;
                 chunk_buffer[buffer_pos] = 0;
 
-                delimiter_start = nullptr;
-                for (size_t i = 0; i <= buffer_pos - 3; i++) {
-                    if (chunk_buffer[i] == '\r' && chunk_buffer[i + 1] == '\n' && chunk_buffer[i + 2] == '@') {
-                        delimiter_start = (char *)&chunk_buffer[i];
-                        break;
-                    }
-                }
+                delimiter_start = find_checksum_delimiter(chunk_buffer, buffer_pos);
 
                 taskYIELD();
             } else {
@@ -200,7 +214,7 @@ bool receive_firmware_via_uart() {
         }
     }
 
-    transfer_end_ms = (esp_timer_get_time() / 1000) - transfer_timeout_ms;
+    transfer_end_ms = (esp_timer_get_time() / 1000) - DEFAULT_TRANSFER_TIMEOUT_MS;
     echo("Downloaded %dB in %dms (%d chunks)", total_bytes_received, (int32_t)(transfer_end_ms - transfer_start_ms), chunk_count);
 
     echo("Waiting for flash operations to complete...");
@@ -226,11 +240,7 @@ bool receive_firmware_via_uart() {
 }
 
 bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downstream_port) {
-    constexpr int64_t IDLE_TIMEOUT_MS = 10000;
-
     echo("Starting device OTA bridge (upstream: %d, downstream: %d)", upstream_port, downstream_port);
-
-    // flush any old data from the buffers
     uart_flush_input(upstream_port);
     uart_flush_input(downstream_port);
 
@@ -239,50 +249,13 @@ bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downs
     bool bridge_shutdown_received = false;
 
     while (!bridge_shutdown_received) {
-        if (ota_bridge_should_stop) {
-            echo("Bridge stop requested");
-            break;
-        }
-
         bool data_transferred = false;
 
-        size_t avail = 0;
-        uart_get_buffered_data_len(upstream_port, &avail);
-        if (avail) {
-            uint8_t buf[1024];
-            int n = uart_read_bytes(upstream_port, buf, std::min<size_t>(avail, sizeof buf), 0);
-            if (n > 0) {
-                // Check for bridge shutdown signal
-                if (strstr((char *)buf, "!END") != nullptr) {
-                    echo("Received bridge shutdown signal");
-                    bridge_shutdown_received = true;
-                }
+        data_transferred |= transfer_bridge_data(upstream_port, downstream_port, bridge_shutdown_received, last_data);
+        data_transferred |= transfer_bridge_data(downstream_port, upstream_port, bridge_shutdown_received, last_data);
 
-                uart_write_bytes(downstream_port, buf, n);
-                last_data = millis();
-                data_transferred = true;
-            }
-        }
-
-        uart_get_buffered_data_len(downstream_port, &avail);
-        if (avail) {
-            uint8_t buf[1024];
-            int n = uart_read_bytes(downstream_port, buf, std::min<size_t>(avail, sizeof buf), 0);
-            if (n > 0) {
-                // Check for bridge shutdown signal
-                if (strstr((char *)buf, "!END") != nullptr) {
-                    echo("Received bridge shutdown signal");
-                    bridge_shutdown_received = true;
-                }
-
-                uart_write_bytes(upstream_port, buf, n);
-                last_data = millis();
-                data_transferred = true;
-            }
-        }
-
-        if (millis_since(last_data) > IDLE_TIMEOUT_MS) {
-            echo("last_data: %d. IDLE_TIMEOUT_MS: %d. millis_since: %d", last_data, IDLE_TIMEOUT_MS, millis_since(last_data));
+        if (millis_since(last_data) > BRIDGE_IDLE_TIMEOUT_MS) {
+            echo("last_data: %d. BRIDGE_IDLE_TIMEOUT_MS: %d. millis_since: %d", last_data, BRIDGE_IDLE_TIMEOUT_MS, millis_since(last_data));
             echo("Bridge idle – leaving bridge mode");
             break;
         }
@@ -312,7 +285,6 @@ static void ota_bridge_task_wrapper(void *parameter) {
 void start_ota_bridge_task(uart_port_t upstream_port, uart_port_t downstream_port) {
     bridge_upstream_port = upstream_port;
     bridge_downstream_port = downstream_port;
-    ota_bridge_should_stop = false;
 
     BaseType_t result = xTaskCreatePinnedToCore(
         ota_bridge_task_wrapper,
@@ -370,7 +342,7 @@ std::vector<std::string> build_bridge_path(const std::string &target_name) {
             }
         } catch (const std::runtime_error &e) {
             echo("Error accessing module %s: %s", current_target.c_str(), e.what());
-            return {}; // Return empty vector on error
+            return {};
         }
     }
 
@@ -394,7 +366,7 @@ std::vector<std::string> detect_required_bridges(const std::string &target_name)
         echo("Target module %s found, type: %d", target_name.c_str(), target_module->type);
     } catch (const std::runtime_error &e) {
         echo("Target module %s not found: %s", target_name.c_str(), e.what());
-        return {}; // Return empty vector if target doesn't exist
+        return {};
     }
 
     return build_bridge_path(target_name);
