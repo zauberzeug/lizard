@@ -379,11 +379,11 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '1') { // hardcoded activation: $$1\n
+        if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '1') {
             echo("Activating external mode");
             activate_uart_external_mode();
             return;
-        } else if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '0') { // hardcoded deactivation: $$0\n
+        } else if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '0') {
             echo("Deactivating external mode");
             deactivate_uart_external_mode();
             return;
@@ -399,14 +399,11 @@ void process_uart() {
                 echo("Detected tag, but not in external mode");
             }
 
-            // Shift the input buffer 2 positions to the left (tag + 1 digit id)
             for (int i = 0; i < len - 2; i++) {
                 input[i] = input[i + 2];
             }
             input[len - 2] = '\0';
             len -= 2;
-
-            // echo("Debug: Processed input: %s", input);
             process_line(input, len);
         } else {
             process_line(input, len);
@@ -438,7 +435,7 @@ void app_main() {
     uart_param_config(UART_NUM_0, &uart_config);
     QueueHandle_t uart_queue;
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-    uart_set_pin(UART_NUM_0, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE); // s3 pins for connection
+    uart_set_pin(UART_NUM_0, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 #endif
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
@@ -460,7 +457,7 @@ void app_main() {
 
     Storage::load_device_id();
 
-    // Removed WiFi/WAN OTA verify task - not needed for UART OTA
+
 
     printf("\nReady.\n");
 
@@ -473,7 +470,7 @@ void app_main() {
             }
         }
 
-        if (!get_uart_external_mode() && !ota::is_uart_bridge_running()) { // only loop in external mode by core.run_step() or when OTA bridge is active
+        if (!get_uart_external_mode() && !ota::is_uart_bridge_running()) {
             for (auto const &[module_name, module] : Global::modules) {
                 if (module != core_module) {
                     run_step(module);
@@ -501,6 +498,10 @@ void app_main() {
             }
         }
 
-        delay(10);
+        if (get_uart_external_mode() || ota::is_uart_bridge_running()) {
+            delay(1);
+        } else {
+            delay(10);
+        }
     }
 }
