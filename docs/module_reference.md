@@ -54,9 +54,7 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 The UART-based OTA system provides reliable firmware updates through serial communication:
 
 **Direct OTA (`core.ota()`)**: Receives firmware binary via UART with XOR checksum validation. The device enters receive mode and accepts firmware chunks with automatic verification and confirmation signals.
-
 **Bridge Discovery (`core.ota(target)`)**: Analyzes the module hierarchy to determine required communication bridges for reaching a target device in multi-ESP32 setups.
-
 **Bridge Setup (`core.ota_bridge_start()`)**: Creates transparent UART bridges that forward OTA data between devices, enabling firmware updates across multiple ESP32 hops (e.g., ESP32_A → ESP32_B → ESP32_C).
 
 A Python script (`lizard_ota.py`) uses these commands to orchestrate complete OTA updates over UART, automatically discovering bridge paths and setting up the necessary communication channels for multi-device firmware updates.
@@ -847,6 +845,28 @@ The expander module allows communication with another microcontroller connected 
 | Constructor                                   | Description                        | Arguments               |
 | --------------------------------------------- | ---------------------------------- | ----------------------- |
 | `expander = Expander(serial[, boot, enable])` | Serial module and boot/enable pins | Serial module, 2x `int` |
+
+| Methods                   | Description                                      | Arguments |
+| ------------------------- | ------------------------------------------------ | --------- |
+| `expander.run(command)`   | Run any `command` on the other microcontroller   | `string`  |
+| `expander.disconnect()`   | Disconnect serial connection and pins            |           |
+| `expander.flash([force])` | Flash other microcontroller with own binary data | `bool`    |
+| `expander.restart()`      | Restart other microcontroller                    |           |
+
+The `flash()` method requires the `boot` and `enable` pins to be defined.
+The optional `force` argument skips the default check whether certain strapping pins are set correctly.
+
+The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
+
+Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
+
+| Properties         | Description                                             | Data type |
+| ------------------ | ------------------------------------------------------- | --------- |
+| `boot_timeout`     | Time to wait for other microcontroller to boot (s)      | `float`   |
+| `ping_interval`    | Time between pings (s)                                  | `float`   |
+| `ping_timeout`     | Time before timing out (s)                              | `float`   |
+| `is_ready`         | Whether the remote module has booted and is ready       | `bool`    |
+| `last_message_age` | Time since last message from other microcontroller (ms) | `int`     |
 
 ## PlexusExpander
 
