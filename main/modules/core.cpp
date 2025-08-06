@@ -110,7 +110,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         } else if (arguments.size() == 2) {
             uart_port_t upstream_port = static_cast<uart_port_t>(arguments[0]->evaluate_integer());
             uart_port_t downstream_port = static_cast<uart_port_t>(arguments[1]->evaluate_integer());
-            
+
             if (upstream_port < 0 || upstream_port >= UART_NUM_MAX) {
                 throw std::runtime_error("invalid upstream UART port");
             }
@@ -120,7 +120,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             if (upstream_port == downstream_port) {
                 throw std::runtime_error("upstream and downstream ports cannot be the same");
             }
-            
+
             ota::start_ota_bridge_task(upstream_port, downstream_port);
         } else {
             throw std::runtime_error("ota_bridge_start() expects 0 or 2 arguments (upstream_port, downstream_port)");

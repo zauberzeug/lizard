@@ -43,13 +43,13 @@ def main():
             send(port, 'core.get_device_id()')
 
             try:
-                response = wait_for_response(port, "Device ID:")
+                response = wait_for_response(port, 'Device ID:')
 
                 # Extract the ID from response (format: "Device ID: X@checksum")
-                if "Device ID:" in response:
-                    current_id_raw = response.split("Device ID:")[1].strip()
+                if 'Device ID:' in response:
+                    current_id_raw = response.split('Device ID:')[1].strip()
                     # Strip off checksum if present (everything after @)
-                    current_id = current_id_raw.split("@")[0]
+                    current_id = current_id_raw.split('@')[0]
                     print(f'Current device ID: {current_id}')
                 else:
                     print(f'✗ ERROR: Unexpected response format: {response}')
@@ -73,7 +73,7 @@ def main():
 
             # Wait for confirmation that it was set
             try:
-                wait_for_response(port, "Device ID set to")
+                wait_for_response(port, 'Device ID set to')
             except TimeoutError:
                 print(f'ERROR: Timeout waiting for set confirmation for ID {device_id}')
                 sys.exit(1)
@@ -86,13 +86,13 @@ def main():
 
             # Wait for the device ID response
             try:
-                response = wait_for_response(port, "Device ID:")
+                response = wait_for_response(port, 'Device ID:')
 
                 # Extract the ID from response (format: "Device ID: X@checksum")
-                if "Device ID:" in response:
-                    returned_id_raw = response.split("Device ID:")[1].strip()
+                if 'Device ID:' in response:
+                    returned_id_raw = response.split('Device ID:')[1].strip()
                     # Strip off checksum if present (everything after @)
-                    returned_id = returned_id_raw.split("@")[0]
+                    returned_id = returned_id_raw.split('@')[0]
                     expected_id = str(device_id)
 
                     if returned_id == expected_id:
