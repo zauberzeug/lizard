@@ -1,9 +1,16 @@
 #pragma once
 
+#include "../utils/global_error_state.h"
 #include "can.h"
 #include "module.h"
 #include "motor.h"
 #include <memory>
+#include <string_view>
+
+struct ErrorEntry {
+    ErrorCode code;
+    std::string_view msg;
+};
 
 class ODriveMotor;
 using ODriveMotor_ptr = std::shared_ptr<ODriveMotor>;
@@ -18,8 +25,15 @@ private:
     uint8_t axis_control_mode = -1;
     uint8_t axis_input_mode = -1;
     bool enabled = true;
+    uint32_t last_can_message_time = 0;
+    bool connection_error_reported = false;
+
+    // Error bitmask (each bit represents an error)
+    uint8_t error_bitmask_ = 0;
 
     void set_mode(const uint8_t state, const uint8_t control_mode = 0, const uint8_t input_mode = 0);
+    void check_connection();
+    void set_error(ErrorCode code);
 
 public:
     ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version);
@@ -27,6 +41,11 @@ public:
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+
+    // Module error management
+    bool has_error() const;
+    std::string get_error() const;
+
     void power(const float torque);
     void speed(const float speed);
     void position(const float position);

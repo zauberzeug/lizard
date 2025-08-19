@@ -1,6 +1,10 @@
 #include "odrive_motor.h"
+#include "../utils/timing.h"
+#include <algorithm>
+#include <array>
 #include <cstring>
 #include <memory>
+#include <string_view>
 
 REGISTER_MODULE_DEFAULTS(ODriveMotor)
 
@@ -18,9 +22,60 @@ const std::map<std::string, Variable_ptr> ODriveMotor::get_defaults() {
     };
 }
 
+// Error codes for ODriveMotor
+static constexpr ErrorCode ERROR_NOT_CONNECTED = 0x01;
+static constexpr ErrorCode ERROR_HARDWARE_FAULT = 0x02;
+
+// Error table (stored in flash memory, pre-sorted by code)
+static constexpr std::array<ErrorEntry, 2> kODriveErrors{{
+    {ERROR_NOT_CONNECTED, "Not connected"},  // 0x01 -> bit 0
+    {ERROR_HARDWARE_FAULT, "Hardware fault"} // 0x02 -> bit 1
+}};
+
+// Check if module has any errors
+bool ODriveMotor::has_error() const {
+    return error_bitmask_ != 0;
+}
+
+// Get error string for this module (returns empty if no errors)
+std::string ODriveMotor::get_error() const {
+    if (!has_error()) {
+        return ""; // No errors
+    }
+
+    std::string error_messages;
+    bool first = true;
+
+    for (const auto &entry : kODriveErrors) {
+        uint8_t bit_position = entry.code - 1; // Convert error code to bit position
+        if (error_bitmask_ & (1 << bit_position)) {
+            if (!first) {
+                error_messages += ", ";
+            }
+            error_messages += entry.msg;
+            first = false;
+        }
+    }
+
+    return this->name + " - " + error_messages;
+}
+
+// Set error by setting the corresponding bit in bitmask
+void ODriveMotor::set_error(ErrorCode code) {
+    uint8_t bit_position = code - 1; // Convert error code to bit position
+    error_bitmask_ |= (1 << bit_position);
+    GlobalErrorState::set_error_flag(true);
+}
+
 ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version)
     : Module(odrive_motor, name), can_id(can_id), can(can), version(version) {
     this->properties = ODriveMotor::get_defaults();
+    this->last_can_message_time = millis();
+
+    // Register this module's error system with GlobalErrorState using lambda
+    GlobalErrorState::register_module(this->name.c_str(), [this]() {
+        return this->get_error();
+    });
 }
 
 void ODriveMotor::subscribe_to_can() {
@@ -86,8 +141,23 @@ void ODriveMotor::call(const std::string method_name, const std::vector<ConstExp
     }
 }
 
+void ODriveMotor::check_connection() {
+    const uint32_t connection_timeout_ms = 5000; // 5 seconds
+    const uint32_t current_time = millis();
+
+    if (millis_since(this->last_can_message_time) > connection_timeout_ms) {
+        if (!this->connection_error_reported) {
+            this->set_error(ERROR_NOT_CONNECTED);
+            this->connection_error_reported = true;
+        }
+    }
+}
+
 void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     this->is_boot_complete = true;
+    this->last_can_message_time = millis();
+    this->connection_error_reported = false; // Reset error flag since we received a message
+
     switch (id - this->can_id) {
     case 0x001: {
         int axis_error;
@@ -178,6 +248,12 @@ void ODriveMotor::reset_motor_error() {
 }
 
 void ODriveMotor::step() {
+    this->check_connection();
+
+    if (!this->connection_error_reported && this->properties.at("motor_error_flag")->integer_value == 1) {
+        this->set_error(ERROR_HARDWARE_FAULT);
+    }
+
     if (this->properties.at("enabled")->boolean_value != this->enabled) {
         if (this->properties.at("enabled")->boolean_value) {
             this->enable();

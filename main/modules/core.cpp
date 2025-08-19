@@ -1,6 +1,7 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
+#include "../utils/global_error_state.h"
 #include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -21,12 +22,14 @@ Core::Core(const std::string name) : Module(core, name) {
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
+    this->properties["has_error"] = std::make_shared<BooleanVariable>(false);
 }
 
 void Core::step() {
     this->properties.at("millis")->integer_value = millis();
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
+    this->properties.at("has_error")->boolean_value = GlobalErrorState::has_error();
     Module::step();
 }
 
@@ -162,6 +165,17 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         default:
             echo("Not a strapping pin");
             break;
+        }
+    } else if (method_name == "get_errors") {
+        Module::expect(arguments, 0);
+        auto all_errors = GlobalErrorState::get_all_errors();
+        if (!this->properties.at("has_error")->boolean_value) {
+            echo("No errors");
+        } else {
+            echo("Errors:");
+            for (const auto &error_msg : all_errors) {
+                echo("  %s", error_msg.c_str());
+            }
         }
     } else {
         Module::call(method_name, arguments);
