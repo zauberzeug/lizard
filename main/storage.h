@@ -18,4 +18,6 @@ public:
     static void clear_nvs();
     static void put_device_id(const uint8_t id);
     static void load_device_id();
+    static void put_external_mode(const bool enabled);
+    static void load_external_mode();
 };

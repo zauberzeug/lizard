@@ -382,10 +382,12 @@ void process_uart() {
         if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '1') {
             echo("Activating external mode");
             activate_uart_external_mode();
+            Storage::put_external_mode(true);
             return;
         } else if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '0') {
             echo("Deactivating external mode");
             deactivate_uart_external_mode();
+            Storage::put_external_mode(false);
             return;
         }
         len = check(input, len);
@@ -456,8 +458,7 @@ void app_main() {
     }
 
     Storage::load_device_id();
-
-
+    Storage::load_external_mode();
 
     printf("\nReady.\n");
 

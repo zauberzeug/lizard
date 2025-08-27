@@ -151,3 +151,45 @@ void Storage::load_device_id() {
     set_uart_expander_id(static_cast<char>(value));
     nvs_close(handle);
 }
+
+void Storage::put_external_mode(const bool enabled) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace for external mode");
+    }
+
+    if ((err = nvs_set_u8(handle, "external_mode", enabled ? 1 : 0)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not write external mode to storage");
+    }
+
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit external mode to storage");
+    }
+    nvs_close(handle);
+}
+
+void Storage::load_external_mode() {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace for external mode");
+    }
+
+    uint8_t value;
+    if ((err = nvs_get_u8(handle, "external_mode", &value)) != ESP_OK) {
+        nvs_close(handle);
+        // External mode not found in storage, use default (no error)
+        return;
+    }
+
+    // Restore the external mode state
+    if (value) {
+        activate_uart_external_mode();
+    } else {
+        deactivate_uart_external_mode();
+    }
+    nvs_close(handle);
+}
