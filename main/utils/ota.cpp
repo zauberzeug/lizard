@@ -35,7 +35,6 @@ static uint32_t confirm_index = 0;
 static uart_port_t bridge_upstream_port = UART_NUM_0;
 static uart_port_t bridge_downstream_port = UART_NUM_1;
 
-
 int8_t wait_for_uart_data(uint16_t timeout_ms) {
     int64_t start_time = esp_timer_get_time();
     size_t available_bytes = 0;
@@ -62,16 +61,16 @@ void send_bridge_shutdown_signal() {
     uart_write_bytes(UART_PORT_NUM, shutdown_msg, strlen(shutdown_msg));
 }
 
-char* find_checksum_delimiter(uint8_t* buffer, size_t buffer_pos) {
+char *find_checksum_delimiter(uint8_t *buffer, size_t buffer_pos) {
     for (size_t i = 0; i <= buffer_pos - 3; i++) {
         if (buffer[i] == '\r' && buffer[i + 1] == '\n' && buffer[i + 2] == '@') {
-            return (char*)&buffer[i];
+            return (char *)&buffer[i];
         }
     }
     return nullptr;
 }
 
-bool transfer_bridge_data(uart_port_t from_port, uart_port_t to_port, bool& shutdown_received, unsigned long& last_data) {
+bool transfer_bridge_data(uart_port_t from_port, uart_port_t to_port, bool &shutdown_received, unsigned long &last_data) {
     size_t avail = 0;
     uart_get_buffered_data_len(from_port, &avail);
     if (!avail) {
@@ -105,9 +104,12 @@ bool receive_firmware_via_uart() {
     uint32_t total_bytes_received = 0;
     esp_ota_handle_t ota_handle = 0;
 
+    bool check_id_prefixes = false;
+    char expected_id = '0';
     if (get_uart_external_mode()) {
-        echo("External mode detected, deactivating");
-        deactivate_uart_external_mode();
+        check_id_prefixes = true;
+        expected_id = get_uart_expander_id();
+        echo("External mode detected, keeping active for ID-based addressing (expected ID: %c)", expected_id);
     }
 
     const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
@@ -169,6 +171,24 @@ bool receive_firmware_via_uart() {
 
         buffer_pos += bytes_read;
         chunk_buffer[buffer_pos] = 0;
+
+        // Handle ID-prefixed messages if in external mode
+        if (check_id_prefixes && buffer_pos >= 2 && chunk_buffer[0] == ID_TAG) {
+            char received_id = chunk_buffer[1];
+
+            if (received_id != expected_id) {
+                // Wrong ID, clear buffer and continue waiting for correct ID
+                echo("OTA: Received data for ID %c, but expected ID %c - ignoring", received_id, expected_id);
+                buffer_pos = 0;
+                chunk_buffer[0] = 0;
+                continue;
+            }
+
+            // Correct ID, remove the ID prefix before processing
+            memmove(chunk_buffer, chunk_buffer + 2, buffer_pos - 2);
+            buffer_pos -= 2;
+            chunk_buffer[buffer_pos] = 0;
+        }
 
         char *delimiter_start = find_checksum_delimiter(chunk_buffer, buffer_pos);
 

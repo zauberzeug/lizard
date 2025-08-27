@@ -20,6 +20,7 @@ class OTAConfig:
     ota_command_timeout: float = 10.0
     device_response_timeout: float = 10.0
     progress_bar_width: int = 40
+    target_id: Optional[int] = None
 
 
 class OTAProtocol:
@@ -105,6 +106,12 @@ class LizardOTA:
         self.device: Optional[serial.Serial] = None
         self.logger = OTALogger()
 
+    def _add_id_prefix(self, command: str) -> str:
+        '''Add ID prefix to command if target_id is set.'''
+        if self.config.target_id is not None:
+            return f'${self.config.target_id}{command}'
+        return command
+
     def connect(self) -> bool:
         '''Connect to the serial device.'''
         try:
@@ -139,8 +146,9 @@ class LizardOTA:
             return False
 
         try:
+            prefixed_command = self._add_id_prefix(command)
             self.logger.info(f'Sending {command.strip()} command...')
-            self.device.write(command.encode())
+            self.device.write(prefixed_command.encode())
 
             start_time = time.time()
             while time.time() - start_time < self.config.ota_command_timeout:
@@ -171,7 +179,8 @@ class LizardOTA:
         try:
             self.logger.info(f'Getting bridge path for target: {target}')
             ota_cmd = OTAProtocol.COMMAND_FORMAT.format(target)
-            self.device.write(ota_cmd.encode())
+            prefixed_cmd = self._add_id_prefix(ota_cmd)
+            self.device.write(prefixed_cmd.encode())
 
             bridge_path = []
             start_time = time.time()
@@ -232,7 +241,8 @@ class LizardOTA:
             try:
                 self.logger.info(f'Activating bridge: {bridge}')
                 bridge_cmd = f'{bridge}.ota_bridge_start()\n'
-                self.device.write(bridge_cmd.encode())
+                prefixed_bridge_cmd = self._add_id_prefix(bridge_cmd)
+                self.device.write(prefixed_bridge_cmd.encode())
 
                 # Wait for bridge activation response
                 start_time = time.time()
@@ -493,6 +503,8 @@ def parse_args() -> argparse.Namespace:
                         help='Debug output (shows ready signals and protocol details)')
     parser.add_argument('--target', default='core',
                         help='OTA target (e.g. core, p0, plexus, etc.; default: core)')
+    parser.add_argument('--id', type=int,
+                        help='Target device ID for addressing (prefixes all messages with $<id>)')
 
     return parser.parse_args()
 
@@ -503,7 +515,8 @@ def main() -> None:
 
     config = OTAConfig(
         port=args.port,
-        baudrate=args.baudrate
+        baudrate=args.baudrate,
+        target_id=args.id
     )
 
     ota = LizardOTA(config, debug=args.debug)
