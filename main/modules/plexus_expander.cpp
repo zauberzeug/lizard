@@ -32,10 +32,19 @@ PlexusExpander::PlexusExpander(const std::string name,
     this->serial->enable_line_detection();
     this->serial->activate_external_mode();
 
-    wait_for_ready_response();
+    this->restart();
+    const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
+    while (this->properties.at("is_ready")->boolean_value == false) {
+        if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
+            echo("warning: plexus expander %c connection timed out.", '0' + device_id);
+            break;
+        }
+        this->check_boot_progress();
+        delay(30);
+    }
 }
 
-void PlexusExpander::queue_command(const char* command) {
+void PlexusExpander::queue_command(const char *command) {
     size_t cmd_len = strlen(command);
 
     if (buffer_pos == 0) {
@@ -164,71 +173,45 @@ std::string PlexusExpander::get_name() const {
     return this->name;
 }
 
-void PlexusExpander::restart() {
-    send_tagged_command("core.restart()");
-    this->properties.at("is_ready")->boolean_value = false;
+void PlexusExpander::check_boot_progress() {
+    static char buffer[1024];
+    while (this->serial->has_buffered_lines()) {
+        int len = this->serial->read_line(buffer, sizeof(buffer));
+        check(buffer, len);
 
-    static char read_buffer[1024];
-    const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
-    const unsigned long start_time = millis();
+        // Message format: $<id>COMMAND - check for tagged Ready message
+        if (buffer[0] == ID_TAG && buffer[1] == '0' + device_id) {
+            strcpy(buffer, buffer + 2);
+        } else {
+            // During boot, we might get non-tagged messages, just echo them
+            echo("%s: %s", this->name.c_str(), buffer);
+            continue;
+        }
 
-    while (!this->properties.at("is_ready")->boolean_value) {
-        if (boot_timeout > 0 && millis_since(start_time) > boot_timeout) {
-            echo("warning: plexus expander %c restart timed out", '0' + device_id);
+        this->last_message_time = millis();
+        echo("%s: %s", this->name.c_str(), buffer);
+        if (strcmp("Ready.", buffer) == 0) {
+            this->properties.at("is_ready")->boolean_value = true;
+            echo("plexus expander %c: Booting process completed successfully", '0' + device_id);
             break;
         }
-
-        while (this->serial->has_buffered_lines()) {
-            int len = this->serial->read_line(read_buffer, sizeof(read_buffer));
-            check(read_buffer, len);
-
-            if (read_buffer[0] == ID_TAG && read_buffer[1] == '0' + device_id) {
-                strcpy(read_buffer, read_buffer + 2);
-            }
-
-            echo("%s: %s", this->name.c_str(), read_buffer);
-            if (strcmp("Ready.", read_buffer) == 0) {
-                echo("plexus expander %c ready after restart", '0' + device_id);
-                break;
-            }
-        }
-
-        if (strcmp("Ready.", read_buffer) == 0) {
-            break;
-        }
-
-        delay(BOOT_DELAY_MS);
     }
-
-    this->serial->enable_line_detection();
-    this->serial->activate_external_mode();
-
-    buffer_pos = 0;
-    wait_for_ready_response();
 }
 
-std::string PlexusExpander::format_command(const std::string& command) {
+void PlexusExpander::restart() {
+    send_tagged_command("core.restart()");
+    this->boot_start_time = millis();
+    this->properties.at("is_ready")->boolean_value = false;
+    buffer_pos = 0;
+}
+
+std::string PlexusExpander::format_command(const std::string &command) {
     char buffer[256];
     int pos = csprintf(buffer, sizeof(buffer), "%c%c%s", ID_TAG, '0' + device_id, command.c_str());
     return std::string(buffer, pos);
 }
 
-void PlexusExpander::send_tagged_command(const std::string& command) {
+void PlexusExpander::send_tagged_command(const std::string &command) {
     std::string tagged_command = format_command(command);
     this->serial->write_checked_line(tagged_command.c_str(), tagged_command.length());
-}
-
-bool PlexusExpander::wait_for_ready_response(int max_retries) {
-    for (int i = 0; i < max_retries; i++) {
-        echo("Waiting for READY response (attempt %d/%d)", i + 1, max_retries);
-        this->process_incoming_messages();
-        delay(RETRY_DELAY_MS);
-        send_tagged_command("core.print('__" + std::to_string(device_id) + "_READY__')");
-        if (this->properties.at("is_ready")->boolean_value) {
-            echo("Got READY response");
-            return true;
-        }
-    }
-    echo("Warning: No READY response received");
-    return false;
 }

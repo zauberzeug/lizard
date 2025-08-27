@@ -25,11 +25,10 @@ private:
     void check_boot_progress();
     void restart();
     void process_incoming_messages();
-    void queue_command(const char* command);
+    void queue_command(const char *command);
     void flush_commands();
-    std::string format_command(const std::string& command);
-    void send_tagged_command(const std::string& command);
-    bool wait_for_ready_response(int max_retries = MAX_RETRIES);
+    std::string format_command(const std::string &command);
+    void send_tagged_command(const std::string &command);
 
 public:
     Serial_ptr serial;
