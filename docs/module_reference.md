@@ -886,7 +886,8 @@ The PlexusExpander uses a sophisticated message batching system:
 - Commands are queued and sent together during each step cycle
 - All messages are prefixed with `$<device_id>` for proper routing
 - The controlled device only executes when commanded via `core.run_step()`
-- Supports proxy chaining for multi-hop communication (ESP32_A → ESP32_B → ESP32_C)
+- Supports proxy chaining for multi-hop communication, like ESP32_A (core) → ESP32_B (p0) → PLEXUS
+- The default ID of an ESP32 will always be 0
 
 Note that the PlexusExpander forwards all other method calls to the remote core module, e.g. `plexus.info()`.
 
