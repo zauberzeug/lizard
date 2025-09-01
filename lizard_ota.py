@@ -448,6 +448,7 @@ class LizardOTA:
                     self.logger.error(f'Device not ready for final confirmation after {bytes_sent:,} bytes')
                     return False
 
+                print()  # new line
                 self.logger.success(f'Transfer complete: {bytes_sent:,} bytes sent in {chunk_count} chunks')
 
                 return self.wait_for_final_confirmation()
