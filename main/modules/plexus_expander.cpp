@@ -105,8 +105,7 @@ void PlexusExpander::process_incoming_messages() {
         if (buffer[0] == ID_TAG && buffer[1] == '0' + device_id) {
             strcpy(buffer, buffer + 2);
         } else {
-            echo("Debug: msg received. Tag and Id did not match");
-            echo("Debug: buffer: %s", buffer);
+            echo("Plexus untagged message: %s", buffer);
             continue;
         }
 
