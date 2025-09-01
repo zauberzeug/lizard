@@ -408,7 +408,9 @@ void process_uart() {
             len -= 2;
             process_line(input, len);
         } else {
-            process_line(input, len);
+            if (!get_uart_external_mode()) {
+                process_line(input, len);
+            }
         }
     }
 }
