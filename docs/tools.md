@@ -64,13 +64,21 @@ Use the id_manager script to configure device IDs for multi-device setups with I
 ./id_manager.py --set <device_id> -p <device_path>
 
 # Get device ID from specific target (e.g., plexus expander)
-./id_manager.py --get -p <device_path> --target <target_name>
+./id_manager.py --get -p <device_path> --target <target_id>
 
 # Set device ID on specific target
-./id_manager.py --set <device_id> -p <device_path> --target <target_name>
+./id_manager.py --set <device_id> -p <device_path> --target <target_id>
+
+# Enable external mode
+./id_manager.py --enable-external -p <device_path>
+
+# Disable external mode
+./id_manager.py --disable-external -p <device_path>
 ```
 
-Device IDs enable multiple ESP32 devices to share the same UART bus while responding only to commands prefixed with their specific ID. The `--target` option allows managing IDs on specific expanders that are already in external mode.
+**Important:** When setting a device ID with `--target`, the device changes what ID it responds to. For example, `--set 5 --target 0` tells the device currently responding to `$0` to change its ID to `5`. After this change, the device will only respond to `$5` commands, not `$0`.
+
+Device IDs enable multiple ESP32 devices to share the same UART bus while responding only to commands prefixed with their specific ID (e.g., `$2core.get_device_id()`). The `--target` option allows managing IDs on specific expanders that are already in external mode. External mode enables devices to receive commands from external sources while passing through unmatched commands.
 
 ### Over-the-Air Updates
 

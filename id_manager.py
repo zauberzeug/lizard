@@ -15,15 +15,28 @@ def send(port, line_: str) -> None:
 
 
 def wait_for_response(port, expected_prefix: str, timeout: float = 3.0) -> str:
-    """Wait for a response line that starts with the expected prefix."""
+    """Wait for a response line that starts with the expected prefix.
+
+    Handles responses with device ID prefixes like '$0Device ID: 0'.
+    """
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             line = port.read_until(b'\r\n').decode().rstrip()
         except UnicodeDecodeError:
             continue
-        if line.startswith(expected_prefix):
-            return line
+
+        # Strip device ID prefix if present (format: $<id>message)
+        cleaned_line = line
+        if line.startswith('$') and len(line) > 1:
+            # Find where the device ID ends (after first digit)
+            for i, char in enumerate(line[1:], 1):
+                if not char.isdigit():
+                    cleaned_line = line[i:]
+                    break
+
+        if cleaned_line.startswith(expected_prefix):
+            return cleaned_line
     raise TimeoutError(f'Timeout waiting for response starting with "{expected_prefix}"')
 
 
@@ -83,9 +96,11 @@ def set_device_id(port, device_id: int, target: Optional[str] = None) -> None:
     # Small delay before checking
     time.sleep(0.1)
 
-    # Get the device ID to verify
+    # Get the device ID to verify - use the NEW device ID, not the original target
+    # because the device now responds to the new ID
     get_command = 'core.get_device_id()'
-    prefixed_get_command = add_target_prefix(get_command, target)
+    new_target = str(device_id)  # Use the newly set device ID
+    prefixed_get_command = add_target_prefix(get_command, new_target)
     send(port, prefixed_get_command)
 
     # Wait for the device ID response
@@ -100,7 +115,10 @@ def set_device_id(port, device_id: int, target: Optional[str] = None) -> None:
             expected_id = str(device_id)
 
             if returned_id == expected_id:
-                print(f'✓ SUCCESS: Device ID {device_id} set and verified correctly')
+                target_note = f' (was target {target})' if target else ''
+                print(f'✓ SUCCESS: Device ID {device_id} set and verified correctly{target_note}')
+                if target and target != str(device_id):
+                    print(f'  Note: Device now responds to ${device_id} instead of ${target}')
             else:
                 print(f'✗ ERROR: Expected ID {expected_id}, got {returned_id}')
                 sys.exit(1)
@@ -113,6 +131,26 @@ def set_device_id(port, device_id: int, target: Optional[str] = None) -> None:
         sys.exit(1)
 
 
+def enable_external_mode(port) -> None:
+    """Enable external mode on the device."""
+    print('Enabling external mode...')
+    # Send raw command without checksum (special protocol command)
+    port.write(b'$$1\n')
+    port.flush()
+    time.sleep(0.5)  # Give device time to process
+    print('✓ SUCCESS: External mode enabled')
+
+
+def disable_external_mode(port) -> None:
+    """Disable external mode on the device."""
+    print('Disabling external mode...')
+    # Send raw command without checksum (special protocol command)
+    port.write(b'$$0\n')
+    port.flush()
+    time.sleep(0.5)  # Give device time to process
+    print('✓ SUCCESS: External mode disabled')
+
+
 def main():
     parser = argparse.ArgumentParser(description='Device ID management for Lizard devices')
     parser.add_argument('-p', '--port', default='/dev/ttyUSB0',
@@ -120,12 +158,16 @@ def main():
     parser.add_argument('--target', '-tar',
                         help='Target device name for command prefixing (e.g., p0, plexus)')
 
-    # Create mutually exclusive group for get/set operations
+    # Create mutually exclusive group for all operations
     operation_group = parser.add_mutually_exclusive_group(required=True)
     operation_group.add_argument('--get', action='store_true',
                                  help='Get current device ID')
     operation_group.add_argument('--set', type=int, metavar='ID',
                                  help='Set device ID (0-9)')
+    operation_group.add_argument('--enable-external', action='store_true',
+                                 help='Enable external mode ($$1)')
+    operation_group.add_argument('--disable-external', action='store_true',
+                                 help='Disable external mode ($$0)')
 
     args = parser.parse_args()
 
@@ -140,6 +182,12 @@ def main():
         elif args.set is not None:
             # Set and verify the device ID
             set_device_id(port, args.set, args.target)
+        elif args.enable_external:
+            # Enable external mode
+            enable_external_mode(port)
+        elif args.disable_external:
+            # Disable external mode
+            disable_external_mode(port)
 
 
 if __name__ == '__main__':
