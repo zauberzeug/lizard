@@ -460,7 +460,11 @@ void app_main() {
     Storage::load_device_id();
     Storage::load_external_mode();
 
-    printf("\nReady.\n");
+    if (get_uart_external_mode()) {
+        printf("\n$%cReady.\n", get_uart_expander_id());
+    } else {
+        printf("\nReady.\n");
+    }
 
     while (true) {
         if (!ota::is_uart_bridge_running()) {
@@ -500,7 +504,7 @@ void app_main() {
         }
 
         if (get_uart_external_mode() || ota::is_uart_bridge_running()) {
-            delay(1);
+            delay(10); // 10ms is the minimum delay to allow the IDLE task to run without affecting the watchdog, to lower delay it needs to run in its own task
         } else {
             delay(10);
         }

@@ -36,7 +36,7 @@ PlexusExpander::PlexusExpander(const std::string name,
     const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
     while (this->properties.at("is_ready")->boolean_value == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
-            echo("warning: plexus expander %c connection timed out.", '0' + device_id);
+            echo("warning: plexus expander with id %c connection timed out.", '0' + device_id);
             break;
         }
         this->check_boot_progress();

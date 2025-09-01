@@ -147,8 +147,8 @@ void Storage::load_device_id() {
         // Device ID not found in storage, use default (no error)
         return;
     }
-    // Convert uint8_t to char for UART system
-    set_uart_expander_id(static_cast<char>(value));
+    // Convert numeric ID (0-9) to character for UART system ('0'-'9')
+    set_uart_expander_id(static_cast<char>('0' + value));
     nvs_close(handle);
 }
 
