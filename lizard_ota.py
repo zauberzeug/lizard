@@ -28,8 +28,8 @@ class OTAProtocol:
     # Device responses
     OTA_START_RESPONSES = ['Starting UART OTA', 'Starting UART bridge']
     READY_MESSAGE = 'Ready for firmware download'
-    SUCCESS_INDICATORS = ['ota ok', 'restarting']
-    FAILURE_INDICATORS = ['uart ota failed']
+    SUCCESS_INDICATORS = ['ota successful', 'ota ok']
+    FAILURE_INDICATORS = ['ota failed', 'ota end fail', 'mismatch chip id', 'uart ota failed']
 
     # Protocol format
     CHECKSUM_SUFFIX_FORMAT = '\r\n@{:02x}\r\n'

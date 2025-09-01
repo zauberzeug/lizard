@@ -104,14 +104,6 @@ bool receive_firmware_via_uart() {
     uint32_t total_bytes_received = 0;
     esp_ota_handle_t ota_handle = 0;
 
-    bool check_id_prefixes = false;
-    char expected_id = '0';
-    if (get_uart_external_mode()) {
-        check_id_prefixes = true;
-        expected_id = get_uart_expander_id();
-        echo("External mode detected, keeping active for ID-based addressing (expected ID: %c)", expected_id);
-    }
-
     const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
     if (!ota_partition) {
         echo("No available OTA partition found");
@@ -171,25 +163,6 @@ bool receive_firmware_via_uart() {
 
         buffer_pos += bytes_read;
         chunk_buffer[buffer_pos] = 0;
-
-        // Handle ID-prefixed messages if in external mode
-        if (check_id_prefixes && buffer_pos >= 2 && chunk_buffer[0] == ID_TAG) {
-            char received_id = chunk_buffer[1];
-
-            if (received_id != expected_id) {
-                // Wrong ID, clear buffer and continue waiting for correct ID
-                echo("OTA: Received data for ID %c, but expected ID %c - ignoring", received_id, expected_id);
-                buffer_pos = 0;
-                chunk_buffer[0] = 0;
-                continue;
-            }
-
-            // Correct ID, remove the ID prefix before processing
-            memmove(chunk_buffer, chunk_buffer + 2, buffer_pos - 2);
-            buffer_pos -= 2;
-            chunk_buffer[buffer_pos] = 0;
-        }
-
         char *delimiter_start = find_checksum_delimiter(chunk_buffer, buffer_pos);
 
         while (delimiter_start != nullptr) {
