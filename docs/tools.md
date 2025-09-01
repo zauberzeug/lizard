@@ -54,17 +54,23 @@ Note that the configure script cannot communicate while the serial interface is 
 
 ### Device ID Management
 
-Use the set_id script to configure device IDs for multi-device setups with ID-based addressing:
+Use the id_manager script to configure device IDs for multi-device setups with ID-based addressing:
 
 ```bash
 # Get current device ID
-./set_id.py -p <device_path>
+./id_manager.py --get -p <device_path>
 
 # Set device ID (0-9)
-./set_id.py -p <device_path> <device_id>
+./id_manager.py --set <device_id> -p <device_path>
+
+# Get device ID from specific target (e.g., plexus expander)
+./id_manager.py --get -p <device_path> --target <target_name>
+
+# Set device ID on specific target
+./id_manager.py --set <device_id> -p <device_path> --target <target_name>
 ```
 
-Device IDs enable multiple ESP32 devices to share the same UART bus while responding only to commands prefixed with their specific ID.
+Device IDs enable multiple ESP32 devices to share the same UART bus while responding only to commands prefixed with their specific ID. The `--target` option allows managing IDs on specific expanders that are already in external mode.
 
 ### Over-the-Air Updates
 
