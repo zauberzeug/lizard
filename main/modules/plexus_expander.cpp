@@ -115,9 +115,6 @@ void PlexusExpander::process_incoming_messages() {
             this->message_handler(&buffer[2], false, true);
         } else if (strstr(buffer, "__step_done__") != nullptr) {
             this->properties.at("awaiting_step_completion")->boolean_value = false;
-        } else if (strstr(buffer, "_READY__") != nullptr) {
-            echo("plexus expander %c is ready", '0' + device_id);
-            this->properties.at("is_ready")->boolean_value = true;
         } else {
             echo("%s: %s", this->name.c_str(), buffer);
         }
@@ -192,7 +189,7 @@ void PlexusExpander::check_boot_progress() {
         echo("%s: %s", this->name.c_str(), buffer);
         if (strcmp("Ready.", buffer) == 0) {
             this->properties.at("is_ready")->boolean_value = true;
-            echo("plexus expander %c: Booting process completed successfully", '0' + device_id);
+            echo("plexus expander with id %c: Booting process completed successfully", '0' + device_id);
             break;
         }
     }
