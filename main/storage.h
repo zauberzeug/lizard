@@ -16,4 +16,9 @@ public:
     static void print_startup(const std::string substring = "");
     static void save_startup();
     static void clear_nvs();
+
+    // PIN management
+    static void set_user_pin(const std::string pin);
+    static std::string get_user_pin();
+    static void remove_user_pin();
 };

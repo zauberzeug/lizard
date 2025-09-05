@@ -108,3 +108,39 @@ void Storage::save_startup() {
 void Storage::clear_nvs() {
     Storage::put("");
 }
+
+// PIN management functions
+void Storage::set_user_pin(const std::string pin) {
+    write("ble_pins", "user_pin", pin);
+}
+
+std::string Storage::get_user_pin() {
+    try {
+        return read("ble_pins", "user_pin");
+    } catch (const std::runtime_error &e) {
+        // Return empty string if no user PIN is set
+        return "";
+    }
+}
+
+static void nvs_delete_key(const std::string &ns, const std::string &key) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    err = nvs_erase_key(handle, key.c_str());
+    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
+        throw std::runtime_error("could not erase key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit erase for key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    nvs_close(handle);
+}
+
+void Storage::remove_user_pin() {
+    nvs_delete_key("ble_pins", "user_pin");
+}
