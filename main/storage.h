@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 class Storage {
@@ -18,7 +19,7 @@ public:
     static void clear_nvs();
 
     // PIN management
-    static void set_user_pin(const std::string pin);
-    static std::string get_user_pin();
+    static void set_user_pin(std::uint32_t pin);
+    static bool get_user_pin(std::uint32_t &pin);
     static void remove_user_pin();
 };

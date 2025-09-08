@@ -1,8 +1,10 @@
 #include "storage.h"
 #include "esp_check.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 #include "utils/string_utils.h"
 #include "utils/uart.h"
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 
@@ -109,18 +111,38 @@ void Storage::clear_nvs() {
     Storage::put("");
 }
 
-// PIN management functions
-void Storage::set_user_pin(const std::string pin) {
-    write("ble_pins", "user_pin", pin);
+// PIN management functions (store as NVS u32)
+void Storage::set_user_pin(std::uint32_t pin) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open("ble_pins", NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace \"ble_pins\" (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_set_u32(handle, "user_pin", pin)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not write user_pin (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit user_pin (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    nvs_close(handle);
 }
 
-std::string Storage::get_user_pin() {
-    try {
-        return read("ble_pins", "user_pin");
-    } catch (const std::runtime_error &e) {
-        // Return empty string if no user PIN is set
-        return "";
+bool Storage::get_user_pin(std::uint32_t &pin) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open("ble_pins", NVS_READWRITE, &handle)) != ESP_OK) {
+        return false;
     }
+    uint32_t value = 0;
+    err = nvs_get_u32(handle, "user_pin", &value);
+    nvs_close(handle);
+    if (err == ESP_OK) {
+        pin = value;
+        return true;
+    }
+    return false;
 }
 
 static void nvs_delete_key(const std::string &ns, const std::string &key) {
