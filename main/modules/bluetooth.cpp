@@ -26,28 +26,20 @@ void Bluetooth::call(const std::string method_name, const std::vector<ConstExpre
         expect(arguments, 1, string);
         ZZ::BleCommand::send(arguments[0]->evaluate_string());
     } else if (method_name == "set_pin") {
-        expect(arguments, 1, string);
-        std::string pin = arguments[0]->evaluate_string();
-
-        // Efficient PIN validation for ESP32
-        if (pin.length() != 6) {
-            throw std::runtime_error("PIN must be exactly 6 digits");
+        expect(arguments, 1, integer);
+        int64_t pin64 = arguments[0]->evaluate_integer();
+        if (pin64 < 0 || pin64 > 999999) {
+            throw std::runtime_error("PIN must be a 6-digit non-negative integer (000000-999999)");
         }
-        for (char c : pin) {
-            if (c < '0' || c > '9') {
-                throw std::runtime_error("PIN contains invalid characters");
-            }
-        }
-
-        Storage::set_user_pin(pin);
+        Storage::set_user_pin(static_cast<std::uint32_t>(pin64));
         echo("User PIN set successfully");
     } else if (method_name == "get_pin") {
         expect(arguments, 0);
-        std::string pin = Storage::get_user_pin();
-        if (pin.empty()) {
+        std::uint32_t pin;
+        if (!Storage::get_user_pin(pin)) {
             echo("No user PIN set");
         } else {
-            echo(pin.c_str());
+            echo("%06u", static_cast<unsigned>(pin));
         }
     } else if (method_name == "remove_pin") {
         expect(arguments, 0);
