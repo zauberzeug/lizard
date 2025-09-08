@@ -31,7 +31,7 @@ jobs:
         if: ${{ env.BLE_DEV_ACCESS_PIN != '' }}
         shell: bash
         run: |
-          printf 'CONFIG_ZZ_BLE_DEV_PIN="%s"\n' "$BLE_DEV_ACCESS_PIN" > sdkconfig.defaults.secret
+          printf 'CONFIG_ZZ_BLE_DEV_PIN=%s\n' "$BLE_DEV_ACCESS_PIN" > sdkconfig.defaults.secret
       - name: Build firmware for ${{ matrix.target }}
         uses: espressif/esp-idf-ci-action@v1
         with:
