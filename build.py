@@ -19,9 +19,7 @@ def main() -> int:
         print(f'Error: {base_defaults} not found!')
         return 1
 
-    # Optionally include a local secret defaults file for private settings like dev PIN.
     secret_defaults = Path('sdkconfig.defaults.secret')
-    # Use absolute paths and semicolon-separated list for CMake list handling
     defaults_list = [str(base_defaults.resolve())]
     if secret_defaults.exists():
         defaults_list.append(str(secret_defaults.resolve()))

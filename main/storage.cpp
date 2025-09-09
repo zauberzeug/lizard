@@ -111,7 +111,6 @@ void Storage::clear_nvs() {
     Storage::put("");
 }
 
-// PIN management functions (store as NVS u32)
 void Storage::set_user_pin(std::uint32_t pin) {
     esp_err_t err;
     nvs_handle handle;
