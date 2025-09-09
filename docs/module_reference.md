@@ -67,6 +67,7 @@ Simply create a Bluetooth module with a device name of your choice.
 | `bluetooth.remove_pin()` | remove the user PIN                         |           |
 
 Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0 that allows writing Lizard statements like on the command line. On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
+The Bluetooth module stores up to four devices. When a fifth connects, the oldest entry is removed.
 
 ## Input
 
