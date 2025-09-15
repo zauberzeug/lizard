@@ -1,0 +1,41 @@
+menu "Lizard Hardware Configuration"
+
+choice LIZARD_TARGET
+    prompt "Hardware Target"
+    default LIZARD_TARGET_INTERNAL_ESP32
+    help
+        Select the target hardware configuration for Lizard.
+
+    config LIZARD_TARGET_PLEXUS
+        bool "Plexus"
+        help
+            Original Plexus hardware configuration with ESP32S3.
+
+    config LIZARD_TARGET_INTERNAL_ESP32
+        bool "Internal ESP32"
+        help
+            Internal ESP32 hardware configuration.
+
+    config LIZARD_TARGET_PLEXUS_MINI
+        bool "Plexus Mini"
+        help
+            Plexus Mini hardware configuration with different pin configuration.
+endchoice
+
+config LIZARD_UART_TX_PIN
+    int "UART TX Pin"
+    default 17 if LIZARD_TARGET_PLEXUS
+    default 1 if LIZARD_TARGET_INTERNAL_ESP32
+    default 43 if LIZARD_TARGET_PLEXUS_MINI
+    help
+        GPIO pin number for UART TX.
+
+config LIZARD_UART_RX_PIN
+    int "UART RX Pin"
+    default 18 if LIZARD_TARGET_PLEXUS
+    default 3 if LIZARD_TARGET_INTERNAL_ESP32
+    default 44 if LIZARD_TARGET_PLEXUS_MINI
+    help
+        GPIO pin number for UART RX.
+
+endmenu

@@ -438,8 +438,9 @@ void app_main() {
     };
     uart_param_config(UART_NUM_0, &uart_config);
     QueueHandle_t uart_queue;
-#ifdef CONFIG_IDF_TARGET_ESP32S3
-    uart_set_pin(UART_NUM_0, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    // define UART pins for Plexus targets
+#if defined(CONFIG_LIZARD_TARGET_PLEXUS) || defined(CONFIG_LIZARD_TARGET_PLEXUS_MINI)
+    uart_set_pin(UART_NUM_0, (gpio_num_t)CONFIG_LIZARD_UART_TX_PIN, (gpio_num_t)CONFIG_LIZARD_UART_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 #endif
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);

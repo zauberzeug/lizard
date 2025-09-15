@@ -8,8 +8,8 @@ from pathlib import Path
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Build ESP project for different targets')
-    parser.add_argument('target', choices=['esp32', 'esp32s3'], nargs='?', default='esp32',
-                        help='Target chip type (default: esp32)')
+    parser.add_argument('target', choices=['esp32_internal', 'plexus', 'plexus_mini'], nargs='?', default='esp32_internal',
+                        help='Hardware target (default: esp32_internal)')
     parser.add_argument('--clean', action='store_true',
                         help='Clean build directory before building')
     args = parser.parse_args()
@@ -19,7 +19,13 @@ def main() -> int:
         print(f'Error: {sdkconfig_defaults_file} not found!')
         return 1
 
-    os.environ['IDF_TARGET'] = args.target
+    # Map esp-idf IDF_TARGET for hardware targets
+    if args.target == 'esp32_internal':
+        idf_target = 'esp32'
+    else:
+        idf_target = 'esp32s3'
+
+    os.environ['IDF_TARGET'] = idf_target
     os.environ['SDKCONFIG_DEFAULTS'] = sdkconfig_defaults_file
     print(f'Using target: {args.target}')
     print(f'Using config: {sdkconfig_defaults_file}')
