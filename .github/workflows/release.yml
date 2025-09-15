@@ -13,7 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [esp32, esp32s3]
+        include:
+          - idf: esp32
+            hw: esp32_internal
+          - idf: esp32s3
+            hw: plexus
+          - idf: esp32s3
+            hw: plexus_mini
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,21 +31,21 @@ jobs:
         run: echo "value=$(git describe --always --tags --dirty)" >> $GITHUB_OUTPUT
       - name: Generate parser
         run: "./gen_parser.sh"
-      - name: Build firmware for ${{ matrix.target }}
+      - name: Build firmware for ${{ matrix.hw }}
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.1
-          target: ${{ matrix.target }}
-          command: python3 build.py ${{ matrix.target }}
-      - name: Zip bins and tools for ${{ matrix.target }}
-        run: "zip lizard_${{ matrix.target }}.zip -@ < .github/zip_content.txt"
+          target: ${{ matrix.idf }}
+          command: python3 build.py ${{ matrix.hw }}
+      - name: Zip bins and tools for ${{ matrix.hw }}
+        run: "zip lizard_${{ matrix.hw }}.zip -@ < .github/zip_content.txt"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lizard_${{ matrix.target }}_artifacts
+          name: lizard_${{ matrix.hw }}_artifacts
           path: |
             build/lizard.bin
-            lizard_${{ matrix.target }}.zip
+            lizard_${{ matrix.hw }}.zip
 
   release:
     needs: build
@@ -68,14 +74,14 @@ jobs:
             --title "lizard_${{ steps.version_id.outputs.value }}" \
             --generate-notes
 
-          # Prepare and upload assets for each target
-          for target in esp32 esp32s3; do
-            echo "=== Processing target: $target ==="
+          # Prepare and upload assets for each hardware variant
+          for hw in esp32_internal plexus plexus_mini; do
+            echo "=== Processing target: $hw ==="
 
             # Check and upload .bin file
-            bin_file="artifacts/lizard_${target}_artifacts/build/lizard.bin"
+            bin_file="artifacts/lizard_${hw}_artifacts/build/lizard.bin"
             if [ -f "$bin_file" ]; then
-              bin_name="lizard_${{ steps.version_id.outputs.value }}_${target}.bin"
+              bin_name="lizard_${{ steps.version_id.outputs.value }}_${hw}.bin"
               cp "$bin_file" "$bin_name"
               echo "Uploading $bin_name"
               gh release upload ${{ steps.version_id.outputs.value }} "$bin_name"
@@ -84,9 +90,9 @@ jobs:
             fi
 
             # Check and upload .zip file
-            zip_file="artifacts/lizard_${target}_artifacts/lizard_${target}.zip"
+            zip_file="artifacts/lizard_${hw}_artifacts/lizard_${hw}.zip"
             if [ -f "$zip_file" ]; then
-              zip_name="lizard_firmware_and_devtools_${{ steps.version_id.outputs.value }}_${target}.zip"
+              zip_name="lizard_firmware_and_devtools_${{ steps.version_id.outputs.value }}_${hw}.zip"
               cp "$zip_file" "$zip_name"
               echo "Uploading $zip_name"
               gh release upload ${{ steps.version_id.outputs.value }} "$zip_name"
