@@ -1,5 +1,6 @@
 #include "odrive_wheels.h"
 #include "../utils/timing.h"
+#include <cmath>
 #include <memory>
 
 REGISTER_MODULE_DEFAULTS(ODriveWheels)
@@ -9,6 +10,8 @@ const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
         {"width", std::make_shared<NumberVariable>(1.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
+        {"test_linear_speed", std::make_shared<NumberVariable>()},
+        {"test_angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
@@ -24,11 +27,24 @@ void ODriveWheels::step() {
 
     if (this->initialized) {
         unsigned long int d_micros = micros_since(this->last_micros);
-        double left_speed = (left_position - this->last_left_position) / d_micros * 1000000;
-        double right_speed = (right_position - this->last_right_position) / d_micros * 1000000;
-        this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
-        this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
+        if (d_micros >= 2000) {
+            double left_speed = (left_position - this->last_left_position) / d_micros * 1000000;
+            double right_speed = (right_position - this->last_right_position) / d_micros * 1000000;
+            const double max_speed_mps = 10.0;
+            if (std::isfinite(left_speed) && std::isfinite(right_speed) &&
+                std::fabs(left_speed) < max_speed_mps && std::fabs(right_speed) < max_speed_mps) {
+                this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
+                this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
+            }
+        }
     }
+
+    // Compute speeds directly from motor-reported speeds for comparison, this is for testing. Remove this for production.
+    const double left_measured_speed = this->left_motor->get_speed();
+    const double right_measured_speed = this->right_motor->get_speed();
+    const double width = this->properties.at("width")->number_value;
+    this->properties.at("test_linear_speed")->number_value = (left_measured_speed + right_measured_speed) / 2.0;
+    this->properties.at("test_angular_speed")->number_value = (right_measured_speed - left_measured_speed) / width;
 
     this->last_micros = micros();
     this->last_left_position = left_position;
