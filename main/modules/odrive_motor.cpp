@@ -1,4 +1,5 @@
 #include "odrive_motor.h"
+#include <cmath>
 #include <cstring>
 #include <memory>
 
@@ -105,18 +106,21 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         break;
     }
     case 0x009: {
+        if (count < 8) {
+            break;
+        }
         float tick;
-        std::memcpy(&tick, data, 4);
-        this->properties.at("position")->number_value =
-            (tick - this->properties.at("tick_offset")->number_value) *
-            (this->properties.at("reversed")->boolean_value ? -1 : 1) *
-            this->properties.at("m_per_tick")->number_value;
         float ticks_per_second;
+        std::memcpy(&tick, data, 4);
         std::memcpy(&ticks_per_second, data + 4, 4);
-        this->properties.at("speed")->number_value =
-            ticks_per_second *
-            (this->properties.at("reversed")->boolean_value ? -1 : 1) *
-            this->properties.at("m_per_tick")->number_value;
+        if (!std::isfinite(tick) || !std::isfinite(ticks_per_second)) {
+            break;
+        }
+        const double sign = this->properties.at("reversed")->boolean_value ? -1.0 : 1.0;
+        const double m_per_tick = this->properties.at("m_per_tick")->number_value;
+        this->properties.at("position")->number_value =
+            (tick - this->properties.at("tick_offset")->number_value) * sign * m_per_tick;
+        this->properties.at("speed")->number_value = ticks_per_second * sign * m_per_tick;
     }
     }
 }
