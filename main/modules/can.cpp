@@ -58,7 +58,7 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
     }
 
     g_config.rx_queue_len = 20;
-    g_config.tx_queue_len = 20;
+    g_config.tx_queue_len = 40;
 
     this->properties = Can::get_defaults();
 
@@ -147,18 +147,29 @@ void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t
         message.data[i] = data[i];
     }
 
-    if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
-        try {
-            echo("CAN send failed, attempting bus reset...");
-            const_cast<Can *>(this)->reset_can_bus();
+    const int max_attempts = 3;
+    for (int attempt = 0; attempt < max_attempts; ++attempt) {
+        const esp_err_t tx_result = twai_transmit(&message, pdMS_TO_TICKS(10));
+        if (tx_result == ESP_OK) {
+            return;
+        }
 
-            if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
-                throw std::runtime_error("could not send CAN message even after bus reset");
+        // Check bus state and only reset if actually BUS_OFF; otherwise retry
+        twai_status_info_t status_info;
+        if (twai_get_status_info(&status_info) == ESP_OK && status_info.state == TWAI_STATE_BUS_OFF) {
+            try {
+                echo("CAN send failed (BUS_OFF), attempting bus reset...");
+                const_cast<Can *>(this)->reset_can_bus();
+            } catch (const std::exception &e) {
+                throw std::runtime_error(std::string("Failed to send CAN message (bus reset failed): ") + e.what());
             }
-        } catch (const std::exception &e) {
-            throw std::runtime_error(std::string("Failed to send CAN message: ") + e.what());
+        } else {
+            // Transient condition: queue full/arbitration lost. Brief backoff before retry.
+            delay(2);
         }
     }
+
+    throw std::runtime_error("Failed to send CAN message after retries");
 }
 
 void Can::send(uint32_t id,
