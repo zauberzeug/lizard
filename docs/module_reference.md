@@ -812,14 +812,24 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
 
+## Analog Unit
+
+The AnalogUnit module owns an ADC oneshot unit and is shared by one or more `Analog` or `TemperatureSensor` modules. This allows multiple analog channels on the same hardware unit to be used safely without conflicts.
+
+| Constructor                      | Description             | Arguments |
+| -------------------------------- | ----------------------- | --------- |
+| `analog_unit = AnalogUnit(unit)` | ADC unit index (1 or 2) | `int`     |
+
+This module has no properties or methods and is used only as a dependency by other modules.
+
 ## Analog Input
 
 This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
 For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
 
-| Constructor                                     | Description                              | Arguments             |
-| ----------------------------------------------- | ---------------------------------------- | --------------------- |
-| `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (dB) | `int`, `int`, `float` |
+| Constructor                                            | Description                                          | Arguments                         |
+| ------------------------------------------------------ | ---------------------------------------------------- | --------------------------------- |
+| `analog = Analog(analog_unit, channel[, attenuation])` | Use `AnalogUnit`, channel and attenuation level (dB) | AnalogUnit module, `int`, `float` |
 
 Possible attenuation levels are 0, 2.5, 6, and 12 dB.
 The default attenuation level is 12 dB.
@@ -828,6 +838,10 @@ The default attenuation level is 12 dB.
 | ---------- | ------------------------------ | --------- |
 | `raw`      | raw measurement value (0-4095) | `int`     |
 | `voltage`  | voltage (V)                    | `float`   |
+
+## Temperature Sensor
+
+todo
 
 ## Expander
 
