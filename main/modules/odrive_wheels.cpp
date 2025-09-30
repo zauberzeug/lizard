@@ -10,8 +10,6 @@ const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
         {"width", std::make_shared<NumberVariable>(1.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
-        {"test_linear_speed", std::make_shared<NumberVariable>()},
-        {"test_angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
@@ -38,13 +36,6 @@ void ODriveWheels::step() {
             }
         }
     }
-
-    // Compute speeds directly from motor-reported speeds for comparison, this is for testing. Remove this for production.
-    const double left_measured_speed = this->left_motor->get_speed();
-    const double right_measured_speed = this->right_motor->get_speed();
-    const double width = this->properties.at("width")->number_value;
-    this->properties.at("test_linear_speed")->number_value = (left_measured_speed + right_measured_speed) / 2.0;
-    this->properties.at("test_angular_speed")->number_value = (right_measured_speed - left_measured_speed) / width;
 
     this->last_micros = micros();
     this->last_left_position = left_position;
