@@ -3,7 +3,6 @@
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "analog.h"
-#include "analog_dual.h"
 #include "analog_unit.h"
 #include "bluetooth.h"
 #include "can.h"
@@ -32,6 +31,7 @@
 #include "roboclaw_wheels.h"
 #include "serial.h"
 #include "stepper_motor.h"
+#include "temperature_sensor.h"
 #include <stdarg.h>
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
@@ -356,24 +356,24 @@ Module_ptr Module::create(const std::string type,
         float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 11;
         Analog_ptr analog = std::make_shared<Analog>(name, unit_ref, channel, attenuation);
         return analog;
-    } else if (type == "AnalogDual") {
-        // Usage: AnalogDual <name> <AnalogUnit> <ch1> <ch2> [attenuation]
+    } else if (type == "TemperatureSensor") {
+        // Usage: TemperatureSensor <name> <AnalogUnit> <temp_ch> <ref_ch> [attenuation]
         if (arguments.size() < 3 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, identifier, integer, integer, numbery);
         const AnalogUnit_ptr unit_ref = get_module_paramter<AnalogUnit>(arguments[0], analog_unit, "analog unit");
-        uint8_t channel1 = arguments[1]->evaluate_integer();
-        uint8_t channel2 = arguments[2]->evaluate_integer();
+        uint8_t temp_ch = arguments[1]->evaluate_integer();
+        uint8_t ref_ch = arguments[2]->evaluate_integer();
         float attenuation = arguments.size() > 3 ? arguments[3]->evaluate_number() : 11;
-        AnalogDual_ptr analog_dual = std::make_shared<AnalogDual>(name, unit_ref, channel1, channel2, attenuation);
-        return analog_dual;
+        TemperatureSensor_ptr temperature_sensor = std::make_shared<TemperatureSensor>(name, unit_ref, temp_ch, ref_ch, attenuation);
+        return temperature_sensor;
     } else if (type == "AnalogUnit") {
         // Usage: AnalogUnit <name> <unit>
         Module::expect(arguments, 1, integer);
         uint8_t unit = arguments[0]->evaluate_integer();
-        AnalogUnit_ptr au = std::make_shared<AnalogUnit>(name, unit);
-        return au;
+        AnalogUnit_ptr analog_unit = std::make_shared<AnalogUnit>(name, unit);
+        return analog_unit;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
