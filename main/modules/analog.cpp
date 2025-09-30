@@ -49,8 +49,6 @@ Analog::Analog(const std::string name, const AnalogUnit_ptr unit_ref, gpio_num_t
         attenuation = ADC_ATTEN_DB_12;
     }
 
-    // Reuse oneshot unit from AnalogUnit; only configure channels here
-
     adc_oneshot_chan_cfg_t config = {
         .atten = attenuation,
         .bitwidth = ADC_BITWIDTH_12,

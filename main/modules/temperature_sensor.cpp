@@ -60,8 +60,6 @@ TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_pt
         attenuation = ADC_ATTEN_DB_12;
     }
 
-    // Reuse oneshot unit from AnalogUnit; only configure channels here
-
     adc_oneshot_chan_cfg_t config = {
         .atten = attenuation,
         .bitwidth = ADC_BITWIDTH_12,
@@ -89,7 +87,7 @@ TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_pt
         ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_ref));
     }
 #else
-    // TemperatureSensor is only supported for ESP32S3 devices in this codebase.
+    throw std::runtime_error("TemperatureSensor is only supported for ESP32S3 devices");
 #endif
 }
 
