@@ -15,8 +15,8 @@ const std::map<std::string, Variable_ptr> Analog::get_defaults() {
     };
 }
 
-Analog::Analog(const std::string name, const AnalogUnit_ptr unit_ref, uint8_t channel, float attenuation_level)
-    : Module(analog, name), channel(channel), unit_ref(unit_ref) {
+Analog::Analog(const std::string name, const AnalogUnit_ptr unit_ref, gpio_num_t pin, float attenuation_level)
+    : Module(analog, name), pin(pin), unit_ref(unit_ref) {
     this->properties = Analog::get_defaults();
 
     if (!unit_ref) {
@@ -24,11 +24,14 @@ Analog::Analog(const std::string name, const AnalogUnit_ptr unit_ref, uint8_t ch
     }
 
     adc_handle = unit_ref->get_handle();
-    const uint8_t max_channel = unit_ref->get_unit_id() == ADC_UNIT_1 ? ADC_CHANNEL_7 : ADC_CHANNEL_9;
-    if (channel > max_channel) {
-        echo("error: invalid channel, using default 0");
-        channel = 0;
+
+    adc_unit_t detected_unit;
+    adc_channel_t detected_channel;
+    ESP_ERROR_CHECK(adc_oneshot_io_to_channel(pin, &detected_unit, &detected_channel));
+    if (detected_unit != unit_ref->get_unit_id()) {
+        throw std::runtime_error("Analog pin does not belong to the provided AnalogUnit");
     }
+    channel = detected_channel;
 
     adc_atten_t attenuation;
     if (attenuation_level == 0.0) {
@@ -70,7 +73,7 @@ Analog::Analog(const std::string name, const AnalogUnit_ptr unit_ref, uint8_t ch
     }
 
     adc_cali_line_fitting_config_t cali_config = {
-        .unit_id = static_cast<adc_unit_t>(unit - 1),
+        .unit_id = unit_ref->get_unit_id(),
         .atten = attenuation,
         .bitwidth = ADC_BITWIDTH_12,
         .default_vref = 1100,
