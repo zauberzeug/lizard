@@ -827,9 +827,9 @@ This module has no properties or methods and is used only as a dependency by oth
 This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
 For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
 
-| Constructor                                            | Description                                          | Arguments                         |
-| ------------------------------------------------------ | ---------------------------------------------------- | --------------------------------- |
-| `analog = Analog(analog_unit, channel[, attenuation])` | Use `AnalogUnit`, channel and attenuation level (dB) | AnalogUnit module, `int`, `float` |
+| Constructor                                        | Description                                      | Arguments                         |
+| -------------------------------------------------- | ------------------------------------------------ | --------------------------------- |
+| `analog = Analog(analog_unit, pin[, attenuation])` | Use `AnalogUnit`, pin and attenuation level (dB) | AnalogUnit module, `int`, `float` |
 
 Possible attenuation levels are 0, 2.5, 6, and 12 dB.
 The default attenuation level is 12 dB.
@@ -841,7 +841,26 @@ The default attenuation level is 12 dB.
 
 ## Temperature Sensor
 
-todo
+This module reads two analog inputs on the same ADC unit to compute temperature from an NTC divider and a matching reference divider.
+It uses GPIO pins (internally mapped to ADC channels) and shares the ADC unit via `AnalogUnit`.
+
+| Constructor                                                        | Description                                           | Arguments                                |
+| ------------------------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------- |
+| `temp = TemperatureSensor(analog_unit, temp_pin, ref_pin[, attn])` | Use `AnalogUnit`, two GPIO pins, and attenuation (dB) | AnalogUnit module, `int`, `int`, `float` |
+
+Notes:
+
+- Default thermistor: TDK/EPCOS B57332V5103F360 (10 kΩ @ 25°C, B25/85 = 3380 K)
+- Default divider: 3 kΩ to GND on both nodes; reference top resistor 10 kΩ to 3V3
+- Attenuation defaults to 12 dB
+
+| Properties      | Description                      | Data type |
+| --------------- | -------------------------------- | --------- |
+| `raw_temp`      | raw ADC reading (NTC node)       | `int`     |
+| `raw_ref`       | raw ADC reading (reference node) | `int`     |
+| `voltage_temp`  | voltage at NTC node (V)          | `float`   |
+| `voltage_ref`   | voltage at reference node (V)    | `float`   |
+| `temperature_c` | computed temperature (°C)        | `float`   |
 
 ## Expander
 
