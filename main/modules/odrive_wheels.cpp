@@ -1,5 +1,6 @@
 #include "odrive_wheels.h"
 #include "../utils/timing.h"
+#include "../utils/uart.h"
 #include <cmath>
 #include <memory>
 
@@ -33,7 +34,11 @@ void ODriveWheels::step() {
                 std::fabs(left_speed) < max_speed_mps && std::fabs(right_speed) < max_speed_mps) {
                 this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
                 this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
+            } else {
+                echo("DEBUG: %s wheels: filtered speed outlier l=%.3f r=%.3f dt=%luus", this->name.c_str(), left_speed, right_speed, d_micros);
             }
+        } else {
+            echo("DEBUG: %s wheels: skipped small dt=%luus", this->name.c_str(), d_micros);
         }
     }
 
