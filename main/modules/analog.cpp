@@ -15,16 +15,16 @@ const std::map<std::string, Variable_ptr> Analog::get_defaults() {
     };
 }
 
-Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float attenuation_level)
-    : Module(analog, name), unit(unit), channel(channel) {
+Analog::Analog(const std::string name, const AnalogUnit_ptr unit_ref, uint8_t channel, float attenuation_level)
+    : Module(analog, name), channel(channel), unit_ref(unit_ref) {
     this->properties = Analog::get_defaults();
 
-    if (unit < 1 || unit > 2) {
-        echo("error: invalid unit, using default 1");
-        unit = 1;
+    if (!unit_ref) {
+        throw std::runtime_error("Analog requires a valid AnalogUnit");
     }
 
-    const uint8_t max_channel = unit == 1 ? ADC_CHANNEL_7 : ADC_CHANNEL_9;
+    adc_handle = unit_ref->get_handle();
+    const uint8_t max_channel = unit_ref->get_unit_id() == ADC_UNIT_1 ? ADC_CHANNEL_7 : ADC_CHANNEL_9;
     if (channel > max_channel) {
         echo("error: invalid channel, using default 0");
         channel = 0;
@@ -46,12 +46,7 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
         attenuation = ADC_ATTEN_DB_12;
     }
 
-    adc_oneshot_unit_init_cfg_t init_config = {
-        .unit_id = static_cast<adc_unit_t>(unit - 1),
-        .clk_src = ADC_RTC_CLK_SRC_DEFAULT,
-        .ulp_mode = ADC_ULP_MODE_DISABLE,
-    };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle));
+    // Reuse oneshot unit from AnalogUnit; only configure channels here
 
     adc_oneshot_chan_cfg_t config = {
         .atten = attenuation,
@@ -61,7 +56,7 @@ Analog::Analog(const std::string name, uint8_t unit, uint8_t channel, float atte
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     adc_cali_curve_fitting_config_t cali_config = {
-        .unit_id = static_cast<adc_unit_t>(unit - 1),
+        .unit_id = unit_ref->get_unit_id(),
         .chan = static_cast<adc_channel_t>(channel),
         .atten = attenuation,
         .bitwidth = ADC_BITWIDTH_12,

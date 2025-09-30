@@ -17,16 +17,17 @@ const std::map<std::string, Variable_ptr> AnalogDual::get_defaults() {
     };
 }
 
-AnalogDual::AnalogDual(const std::string name, uint8_t unit, uint8_t channel1, uint8_t channel2, float attenuation_level)
-    : Module(analog_dual, name), unit(unit), channel1(channel1), channel2(channel2) {
+AnalogDual::AnalogDual(const std::string name, const AnalogUnit_ptr unit_ref, uint8_t channel1, uint8_t channel2, float attenuation_level)
+    : Module(analog_dual, name), unit_ref(unit_ref), channel1(channel1), channel2(channel2) {
     this->properties = AnalogDual::get_defaults();
 
-    if (unit < 1 || unit > 2) {
-        echo("error: invalid unit, using default 1");
-        unit = 1;
+    if (!unit_ref) {
+        throw std::runtime_error("AnalogDual requires a valid AnalogUnit");
     }
 
-    const uint8_t max_channel = unit == 1 ? ADC_CHANNEL_7 : ADC_CHANNEL_9;
+    adc_handle = unit_ref->get_handle();
+
+    const uint8_t max_channel = unit_ref->get_unit_id() == ADC_UNIT_1 ? ADC_CHANNEL_7 : ADC_CHANNEL_9;
     if (channel1 > max_channel) {
         echo("error: invalid channel1, using default 0");
         channel1 = 0;
@@ -52,12 +53,7 @@ AnalogDual::AnalogDual(const std::string name, uint8_t unit, uint8_t channel1, u
         attenuation = ADC_ATTEN_DB_12;
     }
 
-    adc_oneshot_unit_init_cfg_t init_config = {
-        .unit_id = static_cast<adc_unit_t>(unit - 1),
-        .clk_src = ADC_RTC_CLK_SRC_DEFAULT,
-        .ulp_mode = ADC_ULP_MODE_DISABLE,
-    };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle));
+    // Reuse oneshot unit from AnalogUnit; only configure channels here
 
     adc_oneshot_chan_cfg_t config = {
         .atten = attenuation,
@@ -69,7 +65,7 @@ AnalogDual::AnalogDual(const std::string name, uint8_t unit, uint8_t channel1, u
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     {
         adc_cali_curve_fitting_config_t cali_config = {
-            .unit_id = static_cast<adc_unit_t>(unit - 1),
+            .unit_id = unit_ref->get_unit_id(),
             .chan = static_cast<adc_channel_t>(channel1),
             .atten = attenuation,
             .bitwidth = ADC_BITWIDTH_12,
@@ -78,7 +74,7 @@ AnalogDual::AnalogDual(const std::string name, uint8_t unit, uint8_t channel1, u
     }
     {
         adc_cali_curve_fitting_config_t cali_config = {
-            .unit_id = static_cast<adc_unit_t>(unit - 1),
+            .unit_id = unit_ref->get_unit_id(),
             .chan = static_cast<adc_channel_t>(channel2),
             .atten = attenuation,
             .bitwidth = ADC_BITWIDTH_12,

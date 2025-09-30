@@ -4,6 +4,7 @@
 #include "../utils/uart.h"
 #include "analog.h"
 #include "analog_dual.h"
+#include "analog_unit.h"
 #include "bluetooth.h"
 #include "can.h"
 #include "canopen_master.h"
@@ -345,26 +346,34 @@ Module_ptr Module::create(const std::string type,
         const DunkerMotor_ptr right_motor = std::static_pointer_cast<DunkerMotor>(right_module);
         return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
     } else if (type == "Analog") {
+        // Usage: Analog <name> <AnalogUnit> <channel> [attenuation]
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, integer, integer, numbery);
-        uint8_t unit = arguments[0]->evaluate_integer();
+        Module::expect(arguments, -1, identifier, integer, numbery);
+        const AnalogUnit_ptr unit_ref = get_module_paramter<AnalogUnit>(arguments[0], analog_unit, "analog unit");
         uint8_t channel = arguments[1]->evaluate_integer();
         float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 11;
-        Analog_ptr analog = std::make_shared<Analog>(name, unit, channel, attenuation);
+        Analog_ptr analog = std::make_shared<Analog>(name, unit_ref, channel, attenuation);
         return analog;
     } else if (type == "AnalogDual") {
+        // Usage: AnalogDual <name> <AnalogUnit> <ch1> <ch2> [attenuation]
         if (arguments.size() < 3 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, integer, integer, integer, numbery);
-        uint8_t unit = arguments[0]->evaluate_integer();
+        Module::expect(arguments, -1, identifier, integer, integer, numbery);
+        const AnalogUnit_ptr unit_ref = get_module_paramter<AnalogUnit>(arguments[0], analog_unit, "analog unit");
         uint8_t channel1 = arguments[1]->evaluate_integer();
         uint8_t channel2 = arguments[2]->evaluate_integer();
         float attenuation = arguments.size() > 3 ? arguments[3]->evaluate_number() : 11;
-        AnalogDual_ptr analog_dual = std::make_shared<AnalogDual>(name, unit, channel1, channel2, attenuation);
+        AnalogDual_ptr analog_dual = std::make_shared<AnalogDual>(name, unit_ref, channel1, channel2, attenuation);
         return analog_dual;
+    } else if (type == "AnalogUnit") {
+        // Usage: AnalogUnit <name> <unit>
+        Module::expect(arguments, 1, integer);
+        uint8_t unit = arguments[0]->evaluate_integer();
+        AnalogUnit_ptr au = std::make_shared<AnalogUnit>(name, unit);
+        return au;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
