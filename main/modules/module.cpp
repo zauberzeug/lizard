@@ -346,30 +346,27 @@ Module_ptr Module::create(const std::string type,
         const DunkerMotor_ptr right_motor = std::static_pointer_cast<DunkerMotor>(right_module);
         return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
     } else if (type == "Analog") {
-        // Usage: Analog <name> <AnalogUnit> <channel> [attenuation]
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, identifier, integer, numbery);
         const AnalogUnit_ptr unit_ref = get_module_paramter<AnalogUnit>(arguments[0], analog_unit, "analog unit");
-        uint8_t channel = arguments[1]->evaluate_integer();
+        gpio_num_t pin = (gpio_num_t)arguments[1]->evaluate_integer();
         float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 11;
-        Analog_ptr analog = std::make_shared<Analog>(name, unit_ref, channel, attenuation);
+        Analog_ptr analog = std::make_shared<Analog>(name, unit_ref, pin, attenuation);
         return analog;
     } else if (type == "TemperatureSensor") {
-        // Usage: TemperatureSensor <name> <AnalogUnit> <temp_ch> <ref_ch> [attenuation]
         if (arguments.size() < 3 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, identifier, integer, integer, numbery);
         const AnalogUnit_ptr unit_ref = get_module_paramter<AnalogUnit>(arguments[0], analog_unit, "analog unit");
-        uint8_t temp_ch = arguments[1]->evaluate_integer();
-        uint8_t ref_ch = arguments[2]->evaluate_integer();
+        gpio_num_t temp_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+        gpio_num_t ref_pin = (gpio_num_t)arguments[2]->evaluate_integer();
         float attenuation = arguments.size() > 3 ? arguments[3]->evaluate_number() : 11;
-        TemperatureSensor_ptr temperature_sensor = std::make_shared<TemperatureSensor>(name, unit_ref, temp_ch, ref_ch, attenuation);
+        TemperatureSensor_ptr temperature_sensor = std::make_shared<TemperatureSensor>(name, unit_ref, temp_pin, ref_pin, attenuation);
         return temperature_sensor;
     } else if (type == "AnalogUnit") {
-        // Usage: AnalogUnit <name> <unit>
         Module::expect(arguments, 1, integer);
         uint8_t unit = arguments[0]->evaluate_integer();
         AnalogUnit_ptr analog_unit = std::make_shared<AnalogUnit>(name, unit);
