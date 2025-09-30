@@ -3,6 +3,7 @@
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "analog.h"
+#include "analog_dual.h"
 #include "bluetooth.h"
 #include "can.h"
 #include "canopen_master.h"
@@ -353,6 +354,17 @@ Module_ptr Module::create(const std::string type,
         float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 11;
         Analog_ptr analog = std::make_shared<Analog>(name, unit, channel, attenuation);
         return analog;
+    } else if (type == "AnalogDual") {
+        if (arguments.size() < 3 || arguments.size() > 4) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer, integer, integer, numbery);
+        uint8_t unit = arguments[0]->evaluate_integer();
+        uint8_t channel1 = arguments[1]->evaluate_integer();
+        uint8_t channel2 = arguments[2]->evaluate_integer();
+        float attenuation = arguments.size() > 3 ? arguments[3]->evaluate_number() : 11;
+        AnalogDual_ptr analog_dual = std::make_shared<AnalogDual>(name, unit, channel1, channel2, attenuation);
+        return analog_dual;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
