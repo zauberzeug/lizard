@@ -7,7 +7,7 @@
 To install Lizard on your ESP32 run
 
 ```bash
-sudo ./espresso.py flash -d <device_path>
+sudo ./espresso.py flash <device_path>
 ```
 
 Note that flashing may require root access (hence the sudo).

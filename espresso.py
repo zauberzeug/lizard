@@ -10,7 +10,8 @@ from contextlib import contextmanager
 
 parser = argparse.ArgumentParser(description='Flash and control an ESP32 microcontroller from a Jetson board')
 
-parser.add_argument('command', choices=['flash', 'enable', 'disable', 'reset', 'erase', 'free'], help='Command to execute')
+parser.add_argument('command', choices=['flash', 'enable', 'disable', 'reset', 'erase', 'release_pins'],
+                    help='Command to execute')
 parser.add_argument('-j', '--jetson', choices=['nano', 'xavier', 'orin'], default=None, help='Jetson board type')
 parser.add_argument('--nand', action='store_true', help='Board has NAND gates')
 parser.add_argument('--swap_pins', action='store_true',
@@ -61,11 +62,11 @@ def _pin_config() -> Generator[None, None, None]:
     write_gpio(f'{GPIO_G0}/direction', 'out')
     time.sleep(0.5)
     yield
-    _reset_pin_config()
+    _release_pins()
 
 
-def _reset_pin_config() -> None:
-    """Reset the pin configuration of _pin_config."""
+def _release_pins() -> None:
+    """Release pins in case they have not been unexported in a previous run."""
     write_gpio('unexport', EN_PIN)
     time.sleep(0.5)
     write_gpio('unexport', G0_PIN)
@@ -204,8 +205,8 @@ def main(command: str) -> None:
         erase()
     elif command == 'flash':
         flash()
-    elif command == 'free':
-        _reset_pin_config()
+    elif command == 'release_pins':
+        _release_pins()
     else:
         raise RuntimeError(f'Invalid command "{command}".')
     print_ok('Finished. ☕️')
