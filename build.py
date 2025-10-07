@@ -20,15 +20,14 @@ def main() -> int:
         return 1
 
     secret_defaults = Path('sdkconfig.defaults.secret')
-    defaults_list = [str(base_defaults.resolve())]
+    all_defaults = [str(base_defaults.resolve())]
     if secret_defaults.exists():
-        defaults_list.append(str(secret_defaults.resolve()))
-    sdkconfig_defaults_value = ';'.join(defaults_list)
+        all_defaults.append(str(secret_defaults.resolve()))
 
     os.environ['IDF_TARGET'] = args.target
-    os.environ['SDKCONFIG_DEFAULTS'] = sdkconfig_defaults_value
+    os.environ['SDKCONFIG_DEFAULTS'] = ';'.join(all_defaults)
     print(f'Using target: {args.target}')
-    print(f'Using defaults: {sdkconfig_defaults_value}')
+    print(f'Using defaults: {all_defaults}')
 
     if args.clean:
         print('Running full clean...')

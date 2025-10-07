@@ -111,7 +111,7 @@ void Storage::clear_nvs() {
     Storage::put("");
 }
 
-void Storage::set_user_pin(std::uint32_t pin) {
+void Storage::set_user_pin(const std::uint32_t pin) {
     esp_err_t err;
     nvs_handle handle;
     if ((err = nvs_open("ble_pins", NVS_READWRITE, &handle)) != ESP_OK) {

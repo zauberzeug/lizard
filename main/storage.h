@@ -18,7 +18,7 @@ public:
     static void save_startup();
     static void clear_nvs();
 
-    static void set_user_pin(std::uint32_t pin);
+    static void set_user_pin(const std::uint32_t pin);
     static bool get_user_pin(std::uint32_t &pin);
     static void remove_user_pin();
 };
