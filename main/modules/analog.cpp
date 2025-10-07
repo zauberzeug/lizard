@@ -6,6 +6,8 @@
 #include "freertos/task.h"
 #include "uart.h"
 
+#include "../utils/uart.h"
+
 REGISTER_MODULE_DEFAULTS(Analog)
 
 const std::map<std::string, Variable_ptr> Analog::get_defaults() {
@@ -15,23 +17,21 @@ const std::map<std::string, Variable_ptr> Analog::get_defaults() {
     };
 }
 
-Analog::Analog(const std::string name, const AnalogUnit_ptr unit_ref, gpio_num_t pin, float attenuation_level)
-    : Module(analog, name), pin(pin), unit_ref(unit_ref) {
+Analog::Analog(const std::string name, const AnalogUnit_ptr unit, gpio_num_t pin, float attenuation_level)
+    : Module(analog, name), pin(pin), unit(unit) {
     this->properties = Analog::get_defaults();
 
-    if (!unit_ref) {
-        throw std::runtime_error("Analog requires a valid AnalogUnit");
+    if (!unit) {
+        throw std::runtime_error("Analog module requires a valid unit");
     }
-
-    adc_handle = unit_ref->get_handle();
 
     adc_unit_t detected_unit;
     adc_channel_t detected_channel;
     ESP_ERROR_CHECK(adc_oneshot_io_to_channel(pin, &detected_unit, &detected_channel));
-    if (detected_unit != unit_ref->get_unit_id()) {
-        throw std::runtime_error("Analog pin does not belong to the provided AnalogUnit");
+    if (detected_unit != unit->get_adc_unit()) {
+        throw std::runtime_error("Analog pin does not belong to the provided unit");
     }
-    channel = detected_channel;
+    this->channel = detected_channel;
 
     adc_atten_t attenuation;
     if (attenuation_level == 0.0) {
@@ -53,16 +53,16 @@ Analog::Analog(const std::string name, const AnalogUnit_ptr unit_ref, gpio_num_t
         .atten = attenuation,
         .bitwidth = ADC_BITWIDTH_12,
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, static_cast<adc_channel_t>(channel), &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(this->unit->get_adc_handle(), static_cast<adc_channel_t>(this->channel), &config));
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     adc_cali_curve_fitting_config_t cali_config = {
-        .unit_id = unit_ref->get_unit_id(),
-        .chan = static_cast<adc_channel_t>(channel),
+        .unit_id = unit->get_adc_unit(),
+        .chan = static_cast<adc_channel_t>(this->channel),
         .atten = attenuation,
         .bitwidth = ADC_BITWIDTH_12,
     };
-    ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_handle));
+    ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &this->adc_cali_handle));
 #else
     adc_cali_line_fitting_efuse_val_t cali_val;
     esp_err_t cali_check = adc_cali_scheme_line_fitting_check_efuse(&cali_val);
@@ -71,21 +71,21 @@ Analog::Analog(const std::string name, const AnalogUnit_ptr unit_ref, gpio_num_t
     }
 
     adc_cali_line_fitting_config_t cali_config = {
-        .unit_id = unit_ref->get_unit_id(),
+        .unit_id = unit->get_adc_unit(),
         .atten = attenuation,
         .bitwidth = ADC_BITWIDTH_12,
         .default_vref = 1100,
     };
-    ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali_handle));
+    ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_config, &this->adc_cali_handle));
 #endif
 }
 
 void Analog::step() {
     int raw_value;
-    ESP_ERROR_CHECK(adc_oneshot_read(adc_handle, static_cast<adc_channel_t>(channel), &raw_value));
+    ESP_ERROR_CHECK(adc_oneshot_read(this->unit->get_adc_handle(), static_cast<adc_channel_t>(this->channel), &raw_value));
 
     int voltage;
-    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc_cali_handle, raw_value, &voltage));
+    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(this->adc_cali_handle, raw_value, &voltage));
 
     this->properties.at("raw")->integer_value = raw_value;
     this->properties.at("voltage")->number_value = voltage * 0.001;

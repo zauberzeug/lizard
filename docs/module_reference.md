@@ -814,7 +814,8 @@ When the wheels are disabled, they will freewheel and ignore movement commands.
 
 ## Analog Unit
 
-The AnalogUnit module owns an ADC oneshot unit and is shared by one or more `Analog` or `TemperatureSensor` modules. This allows multiple analog channels on the same hardware unit to be used safely without conflicts.
+The AnalogUnit module owns an ADC oneshot unit and is shared by one or more `Analog` or `TemperatureSensor` modules.
+This allows multiple analog channels on the same hardware unit to be used safely without conflicts.
 
 | Constructor                      | Description             | Arguments |
 | -------------------------------- | ----------------------- | --------- |
@@ -827,9 +828,9 @@ This module has no properties or methods and is used only as a dependency by oth
 This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
 For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
 
-| Constructor                                        | Description                                      | Arguments                         |
-| -------------------------------------------------- | ------------------------------------------------ | --------------------------------- |
-| `analog = Analog(analog_unit, pin[, attenuation])` | Use `AnalogUnit`, pin and attenuation level (dB) | AnalogUnit module, `int`, `float` |
+| Constructor                                 | Description                          | Arguments                         |
+| ------------------------------------------- | ------------------------------------ | --------------------------------- |
+| `analog = Analog(unit, pin[, attenuation])` | Unit, pin and attenuation level (dB) | AnalogUnit module, `int`, `float` |
 
 Possible attenuation levels are 0, 2.5, 6, and 12 dB.
 The default attenuation level is 12 dB.
@@ -841,26 +842,28 @@ The default attenuation level is 12 dB.
 
 ## Temperature Sensor
 
-This module reads two analog inputs on the same ADC unit to compute temperature from an NTC divider and a matching reference divider.
-It uses GPIO pins (internally mapped to ADC channels) and shares the ADC unit via `AnalogUnit`.
+This module reads two analog inputs on the same ADC unit
+to compute temperature from an NTC divider and a matching reference divider.
 
-| Constructor                                                        | Description                                           | Arguments                                |
-| ------------------------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------- |
-| `temp = TemperatureSensor(analog_unit, temp_pin, ref_pin[, attn])` | Use `AnalogUnit`, two GPIO pins, and attenuation (dB) | AnalogUnit module, `int`, `int`, `float` |
+| Constructor                                                        | Description                          | Arguments                            |
+| ------------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
+| `temp = TemperatureSensor(unit, temp_pin, ref_pin[, attenuation])` | Unit, GPIO pins and attenuation (dB) | AnalogUnit module, 2x `int`, `float` |
 
-Notes:
+The attenuation level defaults to 12 dB.
 
-- Default thermistor: TDK/EPCOS B57332V5103F360 (10 kΩ @ 25°C, B25/85 = 3380 K)
-- Default divider: 3 kΩ to GND on both nodes; reference top resistor 10 kΩ to 3V3
-- Attenuation defaults to 12 dB
+| Properties      | Description                     | Data type |
+| --------------- | ------------------------------- | --------- |
+| `raw_temp`      | Raw ADC reading (NTC pin)       | `int`     |
+| `raw_ref`       | Raw ADC reading (reference pin) | `int`     |
+| `voltage_temp`  | Voltage at NTC pin (V)          | `float`   |
+| `voltage_ref`   | Voltage at reference pin (V)    | `float`   |
+| `temperature_c` | Computed temperature (°C)       | `float`   |
 
-| Properties      | Description                      | Data type |
-| --------------- | -------------------------------- | --------- |
-| `raw_temp`      | raw ADC reading (NTC node)       | `int`     |
-| `raw_ref`       | raw ADC reading (reference node) | `int`     |
-| `voltage_temp`  | voltage at NTC node (V)          | `float`   |
-| `voltage_ref`   | voltage at reference node (V)    | `float`   |
-| `temperature_c` | computed temperature (°C)        | `float`   |
+The computed temperature is calculated based on the following assumptions:
+
+- NTC thermistor TDK/EPCOS B57332V5103F360 (10 kΩ @ 25°C, B25/85 = 3380 K)
+- divider 3 kΩ to GND on both pins
+- reference top resistor 10 kΩ to 3V3
 
 ## Expander
 

@@ -10,19 +10,19 @@ const std::map<std::string, Variable_ptr> AnalogUnit::get_defaults() {
     return {};
 }
 
-AnalogUnit::AnalogUnit(const std::string name, uint8_t unit)
+AnalogUnit::AnalogUnit(const std::string name, uint8_t unit_id)
     : Module(analog_unit, name) {
-    if (unit < 1 || unit > 2) {
+    if (unit_id < 1 || unit_id > 2) {
         echo("error: invalid unit, using default 1");
-        unit = 1;
+        unit_id = 1;
     }
 
-    unit_id = static_cast<adc_unit_t>(unit - 1);
+    this->adc_unit = static_cast<adc_unit_t>(unit_id - 1);
 
     adc_oneshot_unit_init_cfg_t init_config = {
-        .unit_id = unit_id,
+        .unit_id = this->adc_unit,
         .clk_src = ADC_RTC_CLK_SRC_DEFAULT,
         .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle));
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &this->adc_handle));
 }

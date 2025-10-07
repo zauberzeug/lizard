@@ -20,29 +20,26 @@ const std::map<std::string, Variable_ptr> TemperatureSensor::get_defaults() {
     };
 }
 
-TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_ptr unit_ref, gpio_num_t temp_pin, gpio_num_t ref_pin, float attenuation_level)
-    : Module(temperature_sensor, name), unit_ref(unit_ref), temp_pin(temp_pin), ref_pin(ref_pin) {
+TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_ptr unit, gpio_num_t temp_pin, gpio_num_t ref_pin, float attenuation_level)
+    : Module(temperature_sensor, name), unit(unit), temp_pin(temp_pin), ref_pin(ref_pin) {
     this->properties = TemperatureSensor::get_defaults();
 
-    if (!unit_ref) {
-        throw std::runtime_error("TemperatureSensor requires a valid AnalogUnit");
+    if (!unit) {
+        throw std::runtime_error("TemperatureSensor module requires a valid unit");
     }
-
-    adc_handle = unit_ref->get_handle();
 
     adc_unit_t detected_unit;
     adc_channel_t detected_channel;
     ESP_ERROR_CHECK(adc_oneshot_io_to_channel(temp_pin, &detected_unit, &detected_channel));
-    if (detected_unit != unit_ref->get_unit_id()) {
-        throw std::runtime_error("TemperatureSensor temp pin does not belong to the provided AnalogUnit");
+    if (detected_unit != unit->get_adc_unit()) {
+        throw std::runtime_error("TemperatureSensor temp pin does not belong to the provided unit");
     }
-    channel_temp = detected_channel;
-
+    this->channel_temp = detected_channel;
     ESP_ERROR_CHECK(adc_oneshot_io_to_channel(ref_pin, &detected_unit, &detected_channel));
-    if (detected_unit != unit_ref->get_unit_id()) {
-        throw std::runtime_error("TemperatureSensor ref pin does not belong to the provided AnalogUnit");
+    if (detected_unit != unit->get_adc_unit()) {
+        throw std::runtime_error("TemperatureSensor ref pin does not belong to the provided unit");
     }
-    channel_ref = detected_channel;
+    this->channel_ref = detected_channel;
 
     adc_atten_t attenuation;
     if (attenuation_level == 0.0) {
@@ -64,27 +61,27 @@ TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_pt
         .atten = attenuation,
         .bitwidth = ADC_BITWIDTH_12,
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, channel_temp, &config));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, channel_ref, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(this->unit->get_adc_handle(), this->channel_temp, &config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(this->unit->get_adc_handle(), this->channel_ref, &config));
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     {
         adc_cali_curve_fitting_config_t cali_config = {
-            .unit_id = unit_ref->get_unit_id(),
-            .chan = channel_temp,
+            .unit_id = unit->get_adc_unit(),
+            .chan = this->channel_temp,
             .atten = attenuation,
             .bitwidth = ADC_BITWIDTH_12,
         };
-        ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_temp));
+        ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &this->adc_cali_temp));
     }
     {
         adc_cali_curve_fitting_config_t cali_config = {
-            .unit_id = unit_ref->get_unit_id(),
-            .chan = channel_ref,
+            .unit_id = unit->get_adc_unit(),
+            .chan = this->channel_ref,
             .atten = attenuation,
             .bitwidth = ADC_BITWIDTH_12,
         };
-        ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_ref));
+        ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &this->adc_cali_ref));
     }
 #else
     throw std::runtime_error("TemperatureSensor is only supported for ESP32S3 devices");
@@ -94,14 +91,14 @@ TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_pt
 void TemperatureSensor::step() {
     int raw_t;
     int raw_r;
-    ESP_ERROR_CHECK(adc_oneshot_read(adc_handle, channel_temp, &raw_t));
+    ESP_ERROR_CHECK(adc_oneshot_read(this->unit->get_adc_handle(), this->channel_temp, &raw_t));
     esp_rom_delay_us(80);
-    ESP_ERROR_CHECK(adc_oneshot_read(adc_handle, channel_ref, &raw_r));
+    ESP_ERROR_CHECK(adc_oneshot_read(this->unit->get_adc_handle(), this->channel_ref, &raw_r));
 
     int mv_t;
     int mv_r;
-    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc_cali_temp, raw_t, &mv_t));
-    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc_cali_ref, raw_r, &mv_r));
+    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(this->adc_cali_temp, raw_t, &mv_t));
+    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(this->adc_cali_ref, raw_r, &mv_r));
 
     this->properties.at("raw_temp")->integer_value = raw_t;
     this->properties.at("raw_ref")->integer_value = raw_r;
