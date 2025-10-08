@@ -234,22 +234,16 @@ bool CanOpenMotor::send_sdo_with_retry(uint32_t cob_id, const uint8_t *data) {
         try {
             this->properties[PROP_PENDING_WRITES]->integer_value++;
             this->can->send(cob_id, data);
-            wait_for_sdo_writes(150);
+            wait_for_sdo_writes(100);
             return true;
         } catch (const std::exception &e) {
             this->properties[PROP_PENDING_WRITES]->integer_value--;
             if (attempt < max_attempts - 1) {
-                // Only reset the bus if actually BUS_OFF; otherwise brief backoff and retry
-                twai_status_info_t status_info;
-                if (twai_get_status_info(&status_info) == ESP_OK && status_info.state == TWAI_STATE_BUS_OFF) {
-                    try {
-                        this->can->reset_can_bus();
-                        delay(50);
-                    } catch (const std::exception &e) {
-                        echo("CAN recovery failed: %s", e.what());
-                    }
-                } else {
-                    delay(10);
+                try {
+                    this->can->reset_can_bus();
+                    delay(50);
+                } catch (const std::exception &e) {
+                    echo("CAN recovery failed: %s", e.what());
                 }
             }
         }
