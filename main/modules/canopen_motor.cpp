@@ -1,6 +1,5 @@
 #include "canopen_motor.h"
 #include "canopen.h"
-#include "driver/twai.h"
 #include "timing.h"
 #include "uart.h"
 #include <cassert>
