@@ -46,6 +46,10 @@ void Bluetooth::call(const std::string method_name, const std::vector<ConstExpre
         expect(arguments, 0);
         Storage::remove_user_pin();
         echo("User PIN removed");
+    } else if (method_name == "reset_bonds") {
+        expect(arguments, 0);
+        ZZ::BleCommand::reset_bonds();
+        echo("Bluetooth bonds reset. Restart ESP to put the changes into effect.");
     } else {
         Module::call(method_name, arguments);
     }
