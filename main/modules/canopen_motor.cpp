@@ -241,7 +241,6 @@ bool CanOpenMotor::send_sdo_with_retry(uint32_t cob_id, const uint8_t *data) {
             if (attempt < max_attempts - 1) {
                 try {
                     this->can->reset_can_bus();
-                    delay(50);
                 } catch (const std::exception &e) {
                     echo("CAN recovery failed: %s", e.what());
                 }
