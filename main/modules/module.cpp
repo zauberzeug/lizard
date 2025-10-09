@@ -3,6 +3,7 @@
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "analog.h"
+#include "analog_unit.h"
 #include "bluetooth.h"
 #include "can.h"
 #include "canopen_master.h"
@@ -30,6 +31,7 @@
 #include "roboclaw_wheels.h"
 #include "serial.h"
 #include "stepper_motor.h"
+#include "temperature_sensor.h"
 #include <stdarg.h>
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
@@ -92,8 +94,7 @@ Module_ptr Module::create(const std::string type,
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();
-        Bluetooth_ptr bluetooth = std::make_shared<Bluetooth>(name, device_name, message_handler);
-        return bluetooth;
+        return std::make_shared<Bluetooth>(name, device_name, message_handler);
     } else if (type == "Output") {
         if (arguments.size() == 1) {
             Module::expect(arguments, 1, integer);
@@ -312,8 +313,7 @@ Module_ptr Module::create(const std::string type,
     } else if (type == "CanOpenMaster") {
         Module::expect(arguments, 1, identifier);
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
-        CanOpenMaster_ptr master = std::make_shared<CanOpenMaster>(name, can_module);
-        return master;
+        return std::make_shared<CanOpenMaster>(name, can_module);
     } else if (type == "D1Motor") {
         Module::expect(arguments, 2, identifier, integer);
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
@@ -347,12 +347,25 @@ Module_ptr Module::create(const std::string type,
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, integer, integer, numbery);
-        uint8_t unit = arguments[0]->evaluate_integer();
-        uint8_t channel = arguments[1]->evaluate_integer();
-        float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 11;
-        Analog_ptr analog = std::make_shared<Analog>(name, unit, channel, attenuation);
-        return analog;
+        Module::expect(arguments, -1, identifier, integer, numbery);
+        const AnalogUnit_ptr unit = get_module_paramter<AnalogUnit>(arguments[0], analog_unit, "analog unit");
+        const gpio_num_t pin = (gpio_num_t)arguments[1]->evaluate_integer();
+        const float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 12;
+        return std::make_shared<Analog>(name, unit, pin, attenuation);
+    } else if (type == "TemperatureSensor") {
+        if (arguments.size() < 3 || arguments.size() > 4) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, identifier, integer, integer, numbery);
+        const AnalogUnit_ptr unit = get_module_paramter<AnalogUnit>(arguments[0], analog_unit, "analog unit");
+        const gpio_num_t temp_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+        const gpio_num_t ref_pin = (gpio_num_t)arguments[2]->evaluate_integer();
+        const float attenuation = arguments.size() > 3 ? arguments[3]->evaluate_number() : 12;
+        return std::make_shared<TemperatureSensor>(name, unit, temp_pin, ref_pin, attenuation);
+    } else if (type == "AnalogUnit") {
+        Module::expect(arguments, 1, integer);
+        const uint8_t unit_id = arguments[0]->evaluate_integer();
+        return std::make_shared<AnalogUnit>(name, unit_id);
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
