@@ -225,9 +225,21 @@ static auto onGapEvent(struct ble_gap_event *event, void *) -> int {
         BLE_LOGI(TAG, "Security event: previously bonded device connecting");
         return onSecurityEvent(event, nullptr);
 
-    case BLE_GAP_EVENT_REPEAT_PAIRING:
-        BLE_LOGI(TAG, "Security event: repeat pairing attempt");
-        return 0;
+    case BLE_GAP_EVENT_REPEAT_PAIRING: {
+        BLE_LOGI(TAG, "Security event: repeat pairing attempt - deleting old bond and retrying");
+
+        struct ble_gap_conn_desc desc;
+        int rc = ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc);
+        if (rc == 0) {
+            /* Remove the stored bond for this peer so it can pair again */
+            ble_store_util_delete_peer(&desc.peer_id_addr);
+        } else {
+            ESP_LOGW(TAG, "repeat_pairing: unable to find conn desc (rc=%d)", rc);
+        }
+
+        /* Tell NimBLE to retry pairing now that we removed the old bond */
+        return BLE_GAP_REPEAT_PAIRING_RETRY;
+    }
 
     case BLE_GAP_EVENT_CONN_UPDATE_REQ:
         BLE_LOGI(TAG, "Connection update requested");
@@ -342,7 +354,21 @@ static auto onSecurityEvent(struct ble_gap_event *event, void *) -> int {
         if (event->enc_change.status == 0) {
             BLE_LOGI(TAG, "PIN authentication successful; connection encrypted");
         } else {
-            ESP_LOGW(TAG, "Security failed: %d", event->enc_change.status);
+            /* Common case: phone deleted pairing, ESP still has bond. Delete and retry. */
+            ESP_LOGW(TAG, "Security failed (status=%d) - deleting peer bond and re-initiating",
+                     event->enc_change.status);
+
+            struct ble_gap_conn_desc desc;
+            int rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
+            if (rc == 0) {
+                ble_store_util_delete_peer(&desc.peer_id_addr);
+                rc = ble_gap_security_initiate(event->enc_change.conn_handle);
+                if (rc != 0) {
+                    ESP_LOGW(TAG, "Failed to re-initiate security after bond delete: %d", rc);
+                }
+            } else {
+                ESP_LOGW(TAG, "enc_change: unable to find conn desc (rc=%d)", rc);
+            }
         }
         return 0;
 
