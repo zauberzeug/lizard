@@ -106,7 +106,7 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         break;
     }
     case 0x009: {
-        if (count < 8) {
+        if (count != 8) {
             break;
         }
         float tick;
