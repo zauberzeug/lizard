@@ -108,6 +108,7 @@ using namespace FrtosUtil;
 static uint8_t l_ownAddrType;
 static CommandCallback l_clientCallback;
 static bool l_running{false};
+static bool l_deactivated{false};
 
 static std::uint16_t l_notifyCharaValueHandle;
 static std::uint16_t l_currentCon{BLE_HS_CONN_HANDLE_NONE};
@@ -139,18 +140,22 @@ static auto onGapEvent(struct ble_gap_event *event, void *) -> int {
             /* Connection failed; resume advertising. */
             advertise();
         } else {
-            /* Connection successful - enforce PIN authentication for all connections */
-            ESP_LOGI(TAG, "Connection established - enforcing mandatory PIN");
+            if (!l_deactivated) {
+                /* Connection successful - enforce PIN authentication for all connections */
+                ESP_LOGI(TAG, "Connection established - enforcing mandatory PIN");
 
-            vTaskDelay(100 / portTICK_PERIOD_MS);
+                vTaskDelay(100 / portTICK_PERIOD_MS);
 
-            int rc = ble_gap_security_initiate(event->connect.conn_handle);
-            if (rc != 0) {
-                ESP_LOGW(TAG, "Failed to initiate PIN security: %d", rc);
-                ble_gap_terminate(event->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-                ESP_LOGW(TAG, "Connection terminated - security enforcement failed");
+                int rc = ble_gap_security_initiate(event->connect.conn_handle);
+                if (rc != 0) {
+                    ESP_LOGW(TAG, "Failed to initiate PIN security: %d", rc);
+                    ble_gap_terminate(event->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+                    ESP_LOGW(TAG, "Connection terminated - security enforcement failed");
+                } else {
+                    BLE_LOGI(TAG, "PIN authentication initiated");
+                }
             } else {
-                BLE_LOGI(TAG, "PIN authentication initiated");
+                ESP_LOGW(TAG, "Bluetooth PIN deactivated - proceeding without authentication");
             }
         }
         return 0;
@@ -309,6 +314,10 @@ static auto advertise() -> void {
 }
 
 static auto onSecurityEvent(struct ble_gap_event *event, void *) -> int {
+    if (l_deactivated) {
+        /* Security disabled at runtime; ignore security events */
+        return 0;
+    }
     switch (event->type) {
     case BLE_GAP_EVENT_PASSKEY_ACTION:
         BLE_LOGI(TAG, "Passkey action: %d", event->passkey.params.action);
@@ -413,17 +422,21 @@ static const Ble::Gatts::Service lizardComService{
                     return BLE_ATT_ERR_UNLIKELY;
                 }
 
-                if (!desc.sec_state.encrypted) {
-                    ESP_LOGE(TAG, "Unencrypted command attempt - connection not authenticated");
-                    return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
-                }
+                if (!l_deactivated) {
+                    if (!desc.sec_state.encrypted) {
+                        ESP_LOGE(TAG, "Unencrypted command attempt - connection not authenticated");
+                        return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
+                    }
 
-                if (!desc.sec_state.authenticated) {
-                    ESP_LOGE(TAG, "Unauthenticated command attempt - missing PIN authentication");
-                    return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
-                }
+                    if (!desc.sec_state.authenticated) {
+                        ESP_LOGE(TAG, "Unauthenticated command attempt - missing PIN authentication");
+                        return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
+                    }
 
-                BLE_LOGI(TAG, "Secure command: encrypted & authenticated connection verified");
+                    BLE_LOGI(TAG, "Secure command: encrypted & authenticated connection verified");
+                } else {
+                    BLE_LOGW(TAG, "Bluetooth PIN deactivated - accepting command without authentication");
+                }
 
                 const std::string_view command{reinterpret_cast<char *>(ctx->om->om_data), ctx->om->om_len};
                 l_clientCallback(command);
@@ -539,6 +552,11 @@ auto fini() -> void {
         ESP_ERROR_CHECK(nimble_port_deinit());
     }
     l_running = false;
+}
+
+auto deactivate_pin() -> void {
+    l_deactivated = true;
+    ESP_LOGW(TAG, "Bluetooth security deactivated: PIN/authentication checks are bypassed");
 }
 
 auto reset_bonds() -> void {

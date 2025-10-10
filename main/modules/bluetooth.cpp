@@ -42,7 +42,7 @@ void Bluetooth::call(const std::string method_name, const std::vector<ConstExpre
         } else {
             echo("No user PIN set");
         }
-    } else if (method_name == "remove_pin") {
+    } else if (method_name == "remove_user_pin") {
         expect(arguments, 0);
         Storage::remove_user_pin();
         echo("User PIN removed");
@@ -50,6 +50,10 @@ void Bluetooth::call(const std::string method_name, const std::vector<ConstExpre
         expect(arguments, 0);
         ZZ::BleCommand::reset_bonds();
         echo("Bluetooth bonds reset. Restart ESP to put the changes into effect.");
+    } else if (method_name == "deactivate_pin") {
+        expect(arguments, 0);
+        ZZ::BleCommand::deactivate_pin();
+        echo("Bluetooth PIN/security deactivated - connections are unauthenticated");
     } else {
         Module::call(method_name, arguments);
     }

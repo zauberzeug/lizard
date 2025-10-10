@@ -23,6 +23,8 @@ auto init(const std::string_view &deviceName,
  * Returns 0 on success, NimBLE error code otherwise. */
 auto send(const std::string_view &data) -> int;
 auto fini() -> void;
+/* Disable security enforcement (pairing/PIN), allowing unencrypted, unauthenticated access. */
+auto deactivate_pin() -> void;
 /* Remove all bonded devices from NimBLE store (NVS). */
 auto reset_bonds() -> void;
 } // namespace ZZ::BleCommand

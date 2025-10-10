@@ -59,13 +59,14 @@ Simply create a Bluetooth module with a device name of your choice.
 | ------------------------------------ | -------------------------------------------------- | --------- |
 | `bluetooth = Bluetooth(device_name)` | initialize bluetooth with advertised `device_name` | `str`     |
 
-| Methods                   | Description                                             | Arguments |
-| ------------------------- | ------------------------------------------------------- | --------- |
-| `bluetooth.send(data)`    | send `data` via notification                            | `str`     |
-| `bluetooth.set_pin(pin)`  | set 6-digit user PIN (000000-999999)                    | `int`     |
-| `bluetooth.get_pin()`     | print current user PIN or "No user PIN set"             |           |
-| `bluetooth.remove_pin()`  | remove the user PIN                                     |           |
-| `bluetooth.reset_bonds()` | forget all bonded devices saved in NVS (BLE bond store) |           |
+| Methods                       | Description                                             | Arguments |
+| ----------------------------- | ------------------------------------------------------- | --------- |
+| `bluetooth.send(data)`        | send `data` via notification                            | `str`     |
+| `bluetooth.set_pin(pin)`      | set 6-digit user PIN (000000-999999)                    | `int`     |
+| `bluetooth.get_pin()`         | print current user PIN or "No user PIN set"             |           |
+| `bluetooth.remove_user_pin()` | remove the user PIN                                     |           |
+| `bluetooth.reset_bonds()`     | forget all bonded devices saved in NVS (BLE bond store) |           |
+| `bluetooth.deactivate_pin()`  | Disables PIN enforcement                                |           |
 
 Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0
 that allows writing Lizard statements like on the command line.
