@@ -25,13 +25,12 @@ void ODriveWheels::step() {
     double right_position = this->right_motor->get_position();
 
     if (this->initialized) {
-        unsigned long int d_micros = micros_since(this->last_micros);
+        const unsigned long int d_micros = micros_since(this->last_micros);
         if (d_micros >= 2000) {
-            double left_speed = (left_position - this->last_left_position) / d_micros * 1000000;
-            double right_speed = (right_position - this->last_right_position) / d_micros * 1000000;
-            const double max_speed_mps = 10.0;
-            if (std::isfinite(left_speed) && std::isfinite(right_speed) &&
-                std::fabs(left_speed) < max_speed_mps && std::fabs(right_speed) < max_speed_mps) {
+            const double left_speed = (left_position - this->last_left_position) / d_micros * 1000000;
+            const double right_speed = (right_position - this->last_right_position) / d_micros * 1000000;
+            const double max_speed = 10.0;
+            if (std::fabs(left_speed) < max_speed && std::fabs(right_speed) < max_speed) {
                 this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
                 this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
             } else {

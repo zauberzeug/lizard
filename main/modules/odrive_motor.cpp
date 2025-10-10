@@ -116,7 +116,7 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         if (!std::isfinite(tick) || !std::isfinite(ticks_per_second)) {
             break;
         }
-        const double sign = this->properties.at("reversed")->boolean_value ? -1.0 : 1.0;
+        const int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
         const double m_per_tick = this->properties.at("m_per_tick")->number_value;
         this->properties.at("position")->number_value =
             (tick - this->properties.at("tick_offset")->number_value) * sign * m_per_tick;
@@ -131,7 +131,7 @@ void ODriveMotor::power(const float torque) {
     }
     this->set_mode(8, 1, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_TORQUE_CONTROL, INPUT_MODE_PASSTHROUGH
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-    int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
+    const int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
     const float motor_torque = sign * torque;
     std::memcpy(data, &motor_torque, 4);
     this->can->send(this->can_id + 0x00e, data); // "Set Input Torque"
