@@ -434,9 +434,9 @@ Now the vehicle can be pushed manually with motors turned off, without taking ca
 
 The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD motor via CAN.
 
-| Constructor                            | Description                                        | Arguments                |
-| -------------------------------------- | -------------------------------------------------- | ------------------------ |
-| `rmd = RmdMotor(can, motor_id, ratio)` | CAN module, motor ID (1..8) and transmission ratio | CAN module, `int`, `int` |
+| Constructor                                              | Description                                        | Arguments                        |
+| -------------------------------------------------------- | -------------------------------------------------- | -------------------------------- |
+| `rmd = RmdMotor(can, motor_id, ratio[, switch_address])` | CAN module, motor ID (1..8) and transmission ratio | CAN module, `int`, `int`, `bool` |
 
 | Properties        | Description                                | Data type |
 | ----------------- | ------------------------------------------ | --------- |
@@ -466,6 +466,8 @@ The RMD motor module controls a [MyActuator](https://www.myactuator.com/) RMD mo
 | `rmd.disable()`             | Disable the motor                                                 |                  |
 
 When the motor is disabled, it will stop and ignore movement commands.
+
+The `switch_address` switches the return address of the motor from 0x240 to 0x140. Some RMD motor configurations use the same address for receiving and sending.
 
 **Set acceleration**
 

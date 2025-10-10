@@ -12,6 +12,7 @@ class RmdMotor : public Module, public std::enable_shared_from_this<RmdMotor> {
 private:
     const uint32_t motor_id;
     const Can_ptr can;
+    const bool switch_address;
     uint8_t last_msg_id = 0;
     int ratio;
     const double encoder_range;
@@ -25,7 +26,7 @@ private:
               const unsigned long int timeout_ms = 3);
 
 public:
-    RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio);
+    RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio, const bool switch_address);
     void subscribe_to_can();
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
