@@ -4,6 +4,7 @@ owl/
 site/
 __pycache__/
 sdkconfig
+sdkconfig.defaults.secret
 *.swp
 *.bin
 owl_executable

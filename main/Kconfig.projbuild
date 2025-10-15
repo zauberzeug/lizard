@@ -1,0 +1,30 @@
+menu "Zeug BLE command module"
+
+config ZZ_BLE_COM_SVC_UUID
+    string
+    prompt "Service UUID"
+    default "23014ccc-4677-4864-b4c1-8f772b373fac"
+    help
+        The component defines a single BLE service; this is its UUID. Within the service two characteristics are defined, one writable (for receiving commands) and one readable (for sending replies).
+
+config ZZ_BLE_COM_CHR_UUID
+    string
+    prompt "Command characteristic UUID"
+    default "37107598-7030-46d3-b688-e3664c1712f0"
+    help
+        UUID of the writable characteristic for receiving commands.
+
+config ZZ_BLE_COM_SEND_CHR_UUID
+    string
+    prompt "Reply characteristic UUID"
+    default "19f91f52-e3b1-4809-9d71-bc16ecd81069"
+    help
+        UUID of the readable characteristic. Replies are always only sent via notifications, so do not perform reads on it.
+
+config ZZ_BLE_DEV_PIN
+    int "Developer PIN"
+    range 0 999999
+    help
+        Hardcoded developer PIN for system access (numeric, 0-999999). This PIN provides administrative access to the device.
+
+endmenu
