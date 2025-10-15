@@ -20,8 +20,6 @@ private:
     unsigned long int last_msg_millis = 0;
     bool enabled = true;
     unsigned long last_9c_micros = 0;
-    int8_t commanded_direction = 0;
-    double last_speed_motor = 0.0;
     bool send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
               const unsigned long int timeout_ms = 3);

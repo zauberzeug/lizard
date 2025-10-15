@@ -12,13 +12,14 @@ REGISTER_MODULE_DEFAULTS(Rmd8xProV2)
  * Unique features of the RMD 8x Pro V2:
  * - return address is 0x140
  * - no 0x60 frame
- * - 0x9c position value uses full 65536 resolution for internal motor position to represent the full 360 degree range
+ * - 0x9c position value uses full 65536 resolution for internal motor position to represent the full 360 degree range. from 0 for 0 degrees to 65535 for 359.99 degrees.
  * - 0x92 position value is on byte 1 and not byte 4 as with other RMD motors
  */
 
 const std::map<std::string, Variable_ptr> Rmd8xProV2::get_defaults() {
     return {
         {"position", std::make_shared<NumberVariable>()},
+        {"position_internal", std::make_shared<NumberVariable>()},
         {"torque", std::make_shared<NumberVariable>()},
         {"speed", std::make_shared<NumberVariable>()},
         {"temperature", std::make_shared<NumberVariable>()},
@@ -79,8 +80,6 @@ bool Rmd8xProV2::power(double target_power) {
     if (!this->enabled) {
         return false;
     }
-    this->commanded_direction = (target_power > 0.1) ? 1 : (target_power < -0.1) ? -1
-                                                                                 : 0;
     int16_t power = target_power * 100;
     return this->send(0xa1, 0,
                       0,
@@ -95,8 +94,6 @@ bool Rmd8xProV2::speed(double target_speed) {
     if (!this->enabled) {
         return false;
     }
-    this->commanded_direction = (target_speed > 0.1) ? 1 : (target_speed < -0.1) ? -1
-                                                                                 : 0;
     int32_t speed = target_speed * 100;
     return this->send(0xa2, 0,
                       0,
@@ -113,8 +110,6 @@ bool Rmd8xProV2::position(double target_position, double target_speed) {
     }
     double current_pos = this->properties.at("position")->number_value;
     double delta = target_position - current_pos;
-    this->commanded_direction = (delta > 0.1) ? 1 : (delta < -0.1) ? -1
-                                                                   : 0;
 
     int32_t position = target_position * 100;
     uint16_t speed = target_speed;
@@ -128,12 +123,10 @@ bool Rmd8xProV2::position(double target_position, double target_speed) {
 }
 
 bool Rmd8xProV2::stop() {
-    this->commanded_direction = 0;
     return this->send(0x81, 0, 0, 0, 0, 0, 0, 0);
 }
 
 bool Rmd8xProV2::off() {
-    this->commanded_direction = 0;
     return this->send(0x80, 0, 0, 0, 0, 0, 0, 0);
 }
 
@@ -153,6 +146,14 @@ void Rmd8xProV2::call(const std::string method_name, const std::vector<ConstExpr
         Module::expect(arguments, 1, numbery);
         this->speed(arguments[0]->evaluate_number());
     } else if (method_name == "position") {
+        if (arguments.size() == 1) {
+            Module::expect(arguments, 1, numbery);
+            this->position(arguments[0]->evaluate_number() * this->ratio, 0);
+        } else {
+            Module::expect(arguments, 2, numbery, numbery);
+            this->position(arguments[0]->evaluate_number() * this->ratio, arguments[1]->evaluate_number());
+        }
+    } else if (method_name == "position_internal") { // Question: what's the better style?
         if (arguments.size() == 1) {
             Module::expect(arguments, 1, numbery);
             this->position(arguments[0]->evaluate_number(), 0);
@@ -223,17 +224,6 @@ void Rmd8xProV2::disable() {
     this->properties.at("enabled")->boolean_value = false;
 }
 
-double modulo_encoder_range(double position, double range) {
-    double result = std::fmod(position, range);
-    if (result > range / 2) {
-        return result - range;
-    }
-    if (result < -range / 2) {
-        return result + range;
-    }
-    return result;
-}
-
 void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     if (count < 8 || data == nullptr) {
         return;
@@ -279,14 +269,14 @@ void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_
         int32_t raw_angle = 0;
         std::memcpy(&raw_angle, data + 1, 4);
         double motor_degrees = 0.01 * raw_angle;
-        this->properties.at("position_92")->number_value = motor_degrees;
+        this->properties.at("position_internal")->number_value = motor_degrees;
 
         if (!this->has_last_encoder_position) {
             this->properties.at("position")->number_value = motor_degrees / this->ratio;
             double motor_wrapped = std::fmod(motor_degrees, 360.0);
             if (motor_wrapped < 0)
                 motor_wrapped += 360.0;
-            uint16_t counts = (uint16_t)std::lround(motor_wrapped * 65536.0 / 360.0) & 0xFFFF;
+            uint16_t counts = (uint16_t)std::lround(motor_wrapped * 65536.0 / 360.0);
 
             this->last_encoder_position = counts;
             this->has_last_encoder_position = true;
@@ -315,7 +305,7 @@ void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_
         std::memcpy(&counts, data + 6, 2);
 
         if (this->has_last_encoder_position) {
-            double old_position_motor = this->properties.at("position")->number_value * this->ratio;
+            double old_position_motor = this->properties.at("position_internal")->number_value;
 
             double predicted_position_motor = old_position_motor;
             if (dt_seconds > 0 && dt_seconds < 1.0) {
@@ -337,29 +327,7 @@ void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_
             }
 
             double new_position_output = new_position_motor / this->ratio;
-            double old_position_output = this->properties.at("position")->number_value;
-            double delta_output = new_position_output - old_position_output;
-
-            int actual_direction = (delta_output > 0.01) ? 1 : (delta_output < -0.01) ? -1
-                                                                                      : 0;
-            if (this->commanded_direction != 0 && actual_direction != 0 &&
-                actual_direction != this->commanded_direction) {
-                echo("%s warning: actual dir (%d) != commanded (%d)",
-                     this->name.c_str(), actual_direction, this->commanded_direction);
-            }
-
-            echo("%s: pos=%.2f pred=%.2f enc=%.1f rot=%d",
-                 this->name.c_str(),
-                 old_position_output,
-                 predicted_position_motor / this->ratio,
-                 encoder_angle,
-                 predicted_rotations);
-            echo("%s: -> %.2f (delta=%.3f dir=%d)",
-                 this->name.c_str(),
-                 new_position_output,
-                 delta_output,
-                 actual_direction);
-
+            this->properties.at("position_internal")->number_value = new_position_motor;
             this->properties.at("position")->number_value = new_position_output;
         } else {
             this->has_last_encoder_position = true;
@@ -367,7 +335,6 @@ void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_
 
         this->last_encoder_position = counts;
         this->last_9c_micros = current_micros;
-        this->last_speed_motor = speed_motor;
         break;
     }
     }
