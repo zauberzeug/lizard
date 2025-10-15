@@ -24,6 +24,7 @@
 #include "odrive_wheels.h"
 #include "output.h"
 #include "pwm_output.h"
+#include "rmd_8x_pro_v2.h"
 #include "rmd_motor.h"
 #include "rmd_pair.h"
 #include "roboclaw.h"
@@ -217,7 +218,7 @@ Module_ptr Module::create(const std::string type,
         if (arguments.size() < 3 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, identifier, integer, integer, boolean);
+        Module::expect(arguments, 3, identifier, integer, integer);
         std::string can_name = arguments[0]->evaluate_identifier();
         Module_ptr module = Global::get_module(can_name);
         if (module->type != can) {
@@ -226,10 +227,25 @@ Module_ptr Module::create(const std::string type,
         const Can_ptr can = std::static_pointer_cast<Can>(module);
         uint8_t motor_id = arguments[1]->evaluate_integer();
         int ratio = arguments[2]->evaluate_integer();
-        bool switch_address = arguments.size() > 3 ? arguments[3]->evaluate_boolean() : false;
-        RmdMotor_ptr rmd_motor = std::make_shared<RmdMotor>(name, can, motor_id, ratio, switch_address);
+        RmdMotor_ptr rmd_motor = std::make_shared<RmdMotor>(name, can, motor_id, ratio);
         rmd_motor->subscribe_to_can();
         return rmd_motor;
+    } else if (type == "Rmd8xProV2") {
+        if (arguments.size() < 3 || arguments.size() > 4) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, 3, identifier, integer, integer);
+        std::string can_name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(can_name);
+        if (module->type != can) {
+            throw std::runtime_error("module \"" + can_name + "\" is no can connection");
+        }
+        const Can_ptr can = std::static_pointer_cast<Can>(module);
+        uint8_t motor_id = arguments[1]->evaluate_integer();
+        int ratio = arguments[2]->evaluate_integer();
+        Rmd8xProV2_ptr rmd_8x_pro_v2 = std::make_shared<Rmd8xProV2>(name, can, motor_id, ratio);
+        rmd_8x_pro_v2->subscribe_to_can();
+        return rmd_8x_pro_v2;
     } else if (type == "RmdPair") {
         Module::expect(arguments, 2, identifier, identifier);
         std::string rmd1_name = arguments[0]->evaluate_identifier();

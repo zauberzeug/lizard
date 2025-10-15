@@ -33,6 +33,7 @@ enum ModuleType {
     odrive_wheels,
     rmd_motor,
     rmd_pair,
+    rmd_8x_pro_v2,
     roboclaw,
     roboclaw_motor,
     roboclaw_wheels,
