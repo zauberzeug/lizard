@@ -19,14 +19,13 @@ const std::map<std::string, Variable_ptr> RmdMotor::get_defaults() {
     };
 }
 
-RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio, const bool switch_address)
-    : Module(rmd_motor, name), motor_id(motor_id), can(can), switch_address(switch_address), ratio(ratio), encoder_range(262144.0 / ratio) {
+RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
+    : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
     this->properties = RmdMotor::get_defaults();
 }
 
 void RmdMotor::subscribe_to_can() {
-    const uint32_t base = this->switch_address ? 0x140 : 0x240;
-    can->subscribe(this->motor_id + base, std::static_pointer_cast<Module>(this->shared_from_this()));
+    can->subscribe(this->motor_id + 0x240, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
 bool RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
