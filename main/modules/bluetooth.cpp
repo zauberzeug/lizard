@@ -42,10 +42,10 @@ void Bluetooth::call(const std::string method_name, const std::vector<ConstExpre
         } else {
             echo("No user PIN set");
         }
-    } else if (method_name == "remove_user_pin") {
+    } else if (method_name == "reset_pin") {
         expect(arguments, 0);
         Storage::remove_user_pin();
-        echo("User PIN removed");
+        echo("User PIN has been reset.");
     } else if (method_name == "reset_bonds") {
         expect(arguments, 0);
         ZZ::BleCommand::reset_bonds();
