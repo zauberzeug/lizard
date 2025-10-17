@@ -205,7 +205,7 @@ void Rmd8xProV2::call(const std::string method_name, const std::vector<ConstExpr
     } else if (method_name == "disable") {
         Module::expect(arguments, 0);
         this->disable();
-    } else if (method_name == "t92") {
+    } else if (method_name == "reposition") {
         Module::expect(arguments, 0);
         this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
     } else {
@@ -269,7 +269,17 @@ void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_
         int32_t raw_angle = 0;
         std::memcpy(&raw_angle, data + 1, 4);
         double motor_degrees = 0.01 * raw_angle;
+
+        echo("%s.position before: %.3f, internal: %.3f", this->name.c_str(),
+             this->properties.at("position")->number_value,
+             this->properties.at("position_internal")->number_value);
+
+        this->properties.at("position")->number_value = motor_degrees / this->ratio;
+
         this->properties.at("position_internal")->number_value = motor_degrees;
+        echo("%s.position after: %.3f, internal: %.3f", this->name.c_str(),
+             this->properties.at("position")->number_value,
+             this->properties.at("position_internal")->number_value);
 
         if (!this->has_last_encoder_position) {
             this->properties.at("position")->number_value = motor_degrees / this->ratio;
