@@ -19,7 +19,7 @@ REGISTER_MODULE_DEFAULTS(Rmd8xProV2)
 const std::map<std::string, Variable_ptr> Rmd8xProV2::get_defaults() {
     return {
         {"position", std::make_shared<NumberVariable>()},
-        {"position_internal", std::make_shared<NumberVariable>()},
+        {"position_motor", std::make_shared<NumberVariable>()},
         {"torque", std::make_shared<NumberVariable>()},
         {"speed", std::make_shared<NumberVariable>()},
         {"temperature", std::make_shared<NumberVariable>()},
@@ -108,9 +108,6 @@ bool Rmd8xProV2::position(double target_position, double target_speed) {
     if (!this->enabled) {
         return false;
     }
-    double current_pos = this->properties.at("position")->number_value;
-    double delta = target_position - current_pos;
-
     int32_t position = target_position * 100;
     uint16_t speed = target_speed;
     return this->send(0xa4, 0,
@@ -123,15 +120,22 @@ bool Rmd8xProV2::position(double target_position, double target_speed) {
 }
 
 bool Rmd8xProV2::stop() {
+    this->last_9c_micros = 0;
     return this->send(0x81, 0, 0, 0, 0, 0, 0, 0);
 }
 
 bool Rmd8xProV2::off() {
+    this->has_last_encoder_position = false;
+    this->last_9c_micros = 0;
     return this->send(0x80, 0, 0, 0, 0, 0, 0, 0);
 }
 
 bool Rmd8xProV2::hold() {
-    return this->position(this->properties.at("position")->number_value);
+    if (!this->has_last_encoder_position)
+        return false;
+    echo("%s.hold position_motor: %.3f", this->name.c_str(), this->properties.at("position_motor")->number_value);
+    echo("%s.hold position: %.3f", this->name.c_str(), this->properties.at("position")->number_value);
+    return this->position(this->properties.at("position_motor")->number_value);
 }
 
 bool Rmd8xProV2::clear_errors() {
@@ -153,7 +157,7 @@ void Rmd8xProV2::call(const std::string method_name, const std::vector<ConstExpr
             Module::expect(arguments, 2, numbery, numbery);
             this->position(arguments[0]->evaluate_number() * this->ratio, arguments[1]->evaluate_number());
         }
-    } else if (method_name == "position_internal") { // Question: what's the better style?
+    } else if (method_name == "position_motor") { // Question: what's the better style?
         if (arguments.size() == 1) {
             Module::expect(arguments, 1, numbery);
             this->position(arguments[0]->evaluate_number(), 0);
@@ -270,78 +274,63 @@ void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_
         std::memcpy(&raw_angle, data + 1, 4);
         double motor_degrees = 0.01 * raw_angle;
 
-        echo("%s.position before: %.3f, internal: %.3f", this->name.c_str(),
-             this->properties.at("position")->number_value,
-             this->properties.at("position_internal")->number_value);
-
+        this->properties.at("position_motor")->number_value = motor_degrees;
         this->properties.at("position")->number_value = motor_degrees / this->ratio;
 
-        this->properties.at("position_internal")->number_value = motor_degrees;
-        echo("%s.position after: %.3f, internal: %.3f", this->name.c_str(),
-             this->properties.at("position")->number_value,
-             this->properties.at("position_internal")->number_value);
+        double motor_wrapped = fmod(motor_degrees, 360.0);
+        if (motor_wrapped < 0)
+            motor_wrapped += 360.0;
+        this->last_encoder_position = (uint16_t)llround(motor_wrapped * 65536.0 / 360.0);
 
-        if (!this->has_last_encoder_position) {
-            this->properties.at("position")->number_value = motor_degrees / this->ratio;
-            double motor_wrapped = std::fmod(motor_degrees, 360.0);
-            if (motor_wrapped < 0)
-                motor_wrapped += 360.0;
-            uint16_t counts = (uint16_t)std::lround(motor_wrapped * 65536.0 / 360.0);
-
-            this->last_encoder_position = counts;
-            this->has_last_encoder_position = true;
-        }
+        this->has_last_encoder_position = true;
+        this->last_9c_micros = 0;
         break;
     }
     case 0x9c: {
         unsigned long current_micros = micros();
-        double dt_seconds = this->last_9c_micros > 0
-                                ? (current_micros - this->last_9c_micros) / 1e6
-                                : 0.0;
 
         int8_t temperature = 0;
         std::memcpy(&temperature, data + 1, 1);
-        this->properties.at("temperature")->number_value = temperature;
-
         int16_t torque = 0;
         std::memcpy(&torque, data + 2, 2);
-        this->properties.at("torque")->number_value = 0.01 * torque;
-
         int16_t speed_motor = 0;
         std::memcpy(&speed_motor, data + 4, 2);
-        this->properties.at("speed")->number_value = (double)speed_motor / this->ratio;
-
         uint16_t counts = 0;
         std::memcpy(&counts, data + 6, 2);
 
-        if (this->has_last_encoder_position) {
-            double old_position_motor = this->properties.at("position_internal")->number_value;
+        this->properties.at("temperature")->number_value = temperature;
+        this->properties.at("torque")->number_value = 0.01 * torque; // A
+        this->properties.at("speed")->number_value = (double)speed_motor / this->ratio;
 
-            double predicted_position_motor = old_position_motor;
-            if (dt_seconds > 0 && dt_seconds < 1.0) {
-                predicted_position_motor = old_position_motor + (speed_motor * dt_seconds);
-            }
-
-            int predicted_rotations = (int)std::floor(predicted_position_motor / 360.0);
-
-            double encoder_angle = (double)counts * 360.0 / 65536.0;
-            double new_position_motor = predicted_rotations * 360.0 + encoder_angle;
-
-            double diff = new_position_motor - predicted_position_motor;
-            if (diff > 180.0) {
-                new_position_motor -= 360.0;
-                predicted_rotations -= 1;
-            } else if (diff < -180.0) {
-                new_position_motor += 360.0;
-                predicted_rotations += 1;
-            }
-
-            double new_position_output = new_position_motor / this->ratio;
-            this->properties.at("position_internal")->number_value = new_position_motor;
-            this->properties.at("position")->number_value = new_position_output;
-        } else {
-            this->has_last_encoder_position = true;
+        if (!this->has_last_encoder_position) {
+            this->last_9c_micros = 0;
+            return;
         }
+
+        double dt_seconds = 0.0;
+        if (this->last_9c_micros > 0) {
+            dt_seconds = (current_micros - this->last_9c_micros) / 1e6;
+            if (dt_seconds <= 0.0 || dt_seconds > 0.2)
+                dt_seconds = 0.0;
+        }
+
+        double old_position_motor = this->properties.at("position_motor")->number_value;
+
+        double predicted_position_motor = old_position_motor + (speed_motor * dt_seconds);
+
+        int predicted_rotations = (int)std::floor(predicted_position_motor / 360.0);
+        double encoder_angle = (double)counts * 360.0 / 65536.0;
+        double new_position_motor = predicted_rotations * 360.0 + encoder_angle;
+
+        double diff = new_position_motor - predicted_position_motor;
+        if (diff > 180.0) {
+            new_position_motor -= 360.0;
+        } else if (diff < -180.0) {
+            new_position_motor += 360.0;
+        }
+
+        this->properties.at("position_motor")->number_value = new_position_motor;
+        this->properties.at("position")->number_value = new_position_motor / this->ratio;
 
         this->last_encoder_position = counts;
         this->last_9c_micros = current_micros;
