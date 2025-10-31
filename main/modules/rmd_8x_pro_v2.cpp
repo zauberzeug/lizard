@@ -300,7 +300,7 @@ void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_
 
         this->properties.at("temperature")->number_value = temperature;
         this->properties.at("torque")->number_value = 0.01 * torque; // A
-        this->properties.at("speed")->number_value = (double)speed_motor / this->ratio;
+        this->properties.at("speed")->number_value = (double)speed_motor;
 
         if (!this->has_last_encoder_position) {
             this->last_9c_micros = 0;
