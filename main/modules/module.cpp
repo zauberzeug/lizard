@@ -25,6 +25,7 @@
 #include "output.h"
 #include "pwm_output.h"
 #include "rmd_8x_pro_v2.h"
+#include "rmd_axis.h"
 #include "rmd_motor.h"
 #include "rmd_pair.h"
 #include "roboclaw.h"
@@ -230,6 +231,12 @@ Module_ptr Module::create(const std::string type,
         RmdMotor_ptr rmd_motor = std::make_shared<RmdMotor>(name, can, motor_id, ratio);
         rmd_motor->subscribe_to_can();
         return rmd_motor;
+    } else if (type == "RmdAxis") {
+        Module::expect(arguments, 3, identifier, identifier, boolean);
+        const Rmd8xProV2_ptr motor = get_module_paramter<Rmd8xProV2>(arguments[0], rmd_8x_pro_v2, "rmd_8x_pro_v2");
+        const Input_ptr top_endstop = get_module_paramter<Input>(arguments[1], input, "input");
+        const bool inverted = arguments[2]->evaluate_boolean();
+        return std::make_shared<RmdAxis>(name, motor, top_endstop, inverted);
     } else if (type == "Rmd8xProV2") {
         if (arguments.size() < 3 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");

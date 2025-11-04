@@ -48,6 +48,7 @@ enum ModuleType {
     analog_unit,
     temperature_sensor,
     proxy,
+    rmd_axis,
 };
 
 class Module;
