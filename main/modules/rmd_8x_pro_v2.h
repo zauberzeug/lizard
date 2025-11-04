@@ -14,12 +14,15 @@ private:
     const Can_ptr can;
     uint8_t last_msg_id = 0;
     int ratio;
-    const double encoder_range;
-    uint16_t last_encoder_position;
-    bool has_last_encoder_position = false;
+    bool has_encoder_position = false;
     unsigned long int last_msg_millis = 0;
     bool enabled = true;
-    unsigned long last_9c_micros = 0;
+
+    // Motion tracking
+    double target_position_motor = 0.0;
+    double position_tolerance = 2.0; // degrees
+    bool initial_telemetry_sent = false;
+
     bool send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
               const unsigned long int timeout_ms = 3);

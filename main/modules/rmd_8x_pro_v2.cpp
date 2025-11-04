@@ -14,6 +14,11 @@ REGISTER_MODULE_DEFAULTS(Rmd8xProV2)
  * - no 0x60 frame
  * - 0x9c position value uses full 65536 resolution for internal motor position to represent the full 360 degree range. from 0 for 0 degrees to 65535 for 359.99 degrees.
  * - 0x92 position value is on byte 1 and not byte 4 as with other RMD motors
+ *
+ * Position tracking strategy:
+ * - 0x92 (absolute position) is the ONLY source of position updates
+ * - 0x9c is only used for telemetry (temperature, torque, speed) during motion
+ * - This prevents encoder drift during fast back-and-forth movements
  */
 
 const std::map<std::string, Variable_ptr> Rmd8xProV2::get_defaults() {
@@ -25,11 +30,12 @@ const std::map<std::string, Variable_ptr> Rmd8xProV2::get_defaults() {
         {"temperature", std::make_shared<NumberVariable>()},
         {"can_age", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
+        {"running", std::make_shared<BooleanVariable>(false)},
     };
 }
 
 Rmd8xProV2::Rmd8xProV2(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
-    : Module(rmd_8x_pro_v2, name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(65536.0) {
+    : Module(rmd_8x_pro_v2, name), motor_id(motor_id), can(can), ratio(ratio) {
     this->properties = Rmd8xProV2::get_defaults();
 }
 
@@ -60,10 +66,25 @@ bool Rmd8xProV2::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, cons
 void Rmd8xProV2::step() {
     this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
 
-    if (!this->has_last_encoder_position) {
-        this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
+    // Always request absolute position via 0x92
+    this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
+
+    // Send one initial 0x9c to get telemetry values on startup
+    if (!this->initial_telemetry_sent) {
+        this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
+        this->initial_telemetry_sent = true;
     }
-    this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
+
+    // Request telemetry (torque, speed, temp) only when running
+    if (this->properties.at("running")->boolean_value) {
+        this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
+
+        // Check if motor reached target position
+        double current = this->properties.at("position_motor")->number_value;
+        if (fabs(current - this->target_position_motor) < this->position_tolerance) {
+            this->properties.at("running")->boolean_value = false;
+        }
+    }
 
     if (this->properties.at("enabled")->boolean_value != this->enabled) {
         if (this->properties.at("enabled")->boolean_value) {
@@ -80,6 +101,7 @@ bool Rmd8xProV2::power(double target_power) {
     if (!this->enabled) {
         return false;
     }
+    this->properties.at("running")->boolean_value = true;
     int16_t power = target_power * 100;
     return this->send(0xa1, 0,
                       0,
@@ -94,6 +116,7 @@ bool Rmd8xProV2::speed(double target_speed) {
     if (!this->enabled) {
         return false;
     }
+    this->properties.at("running")->boolean_value = true;
     int32_t speed = target_speed * 100;
     return this->send(0xa2, 0,
                       0,
@@ -108,6 +131,8 @@ bool Rmd8xProV2::position(double target_position, double target_speed) {
     if (!this->enabled) {
         return false;
     }
+    this->target_position_motor = target_position;
+    this->properties.at("running")->boolean_value = true;
     int32_t position = target_position * 100;
     uint16_t speed = target_speed;
     return this->send(0xa4, 0,
@@ -120,19 +145,20 @@ bool Rmd8xProV2::position(double target_position, double target_speed) {
 }
 
 bool Rmd8xProV2::stop() {
-    this->last_9c_micros = 0;
+    this->properties.at("running")->boolean_value = false;
     return this->send(0x81, 0, 0, 0, 0, 0, 0, 0);
 }
 
 bool Rmd8xProV2::off() {
-    this->has_last_encoder_position = false;
-    this->last_9c_micros = 0;
+    this->properties.at("running")->boolean_value = false;
+    this->has_encoder_position = false;
     return this->send(0x80, 0, 0, 0, 0, 0, 0, 0);
 }
 
 bool Rmd8xProV2::hold() {
-    if (!this->has_last_encoder_position)
+    if (!this->has_encoder_position)
         return false;
+    this->properties.at("running")->boolean_value = false;
     echo("%s.hold position_motor: %.3f", this->name.c_str(), this->properties.at("position_motor")->number_value);
     echo("%s.hold position: %.3f", this->name.c_str(), this->properties.at("position")->number_value);
     return this->position(this->properties.at("position_motor")->number_value);
@@ -270,6 +296,7 @@ void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_
         break;
     }
     case 0x92: {
+        // 0x92: Absolute multi-turn position - THE ONLY SOURCE OF POSITION UPDATES
         int32_t raw_angle = 0;
         std::memcpy(&raw_angle, data + 1, 4);
         double motor_degrees = 0.01 * raw_angle;
@@ -277,63 +304,23 @@ void Rmd8xProV2::handle_can_msg(const uint32_t id, const int count, const uint8_
         this->properties.at("position_motor")->number_value = motor_degrees;
         this->properties.at("position")->number_value = motor_degrees / this->ratio;
 
-        double motor_wrapped = fmod(motor_degrees, 360.0);
-        if (motor_wrapped < 0)
-            motor_wrapped += 360.0;
-        this->last_encoder_position = (uint16_t)llround(motor_wrapped * 65536.0 / 360.0);
-
-        this->has_last_encoder_position = true;
-        this->last_9c_micros = 0;
+        this->has_encoder_position = true;
         break;
     }
     case 0x9c: {
-        unsigned long current_micros = micros();
-
+        // 0x9c: Telemetry only - temperature, torque, speed
+        // Position from encoder is IGNORED to prevent drift
         int8_t temperature = 0;
         std::memcpy(&temperature, data + 1, 1);
         int16_t torque = 0;
         std::memcpy(&torque, data + 2, 2);
         int16_t speed_motor = 0;
         std::memcpy(&speed_motor, data + 4, 2);
-        uint16_t counts = 0;
-        std::memcpy(&counts, data + 6, 2);
 
         this->properties.at("temperature")->number_value = temperature;
         this->properties.at("torque")->number_value = 0.01 * torque; // A
         this->properties.at("speed")->number_value = (double)speed_motor;
 
-        if (!this->has_last_encoder_position) {
-            this->last_9c_micros = 0;
-            return;
-        }
-
-        double dt_seconds = 0.0;
-        if (this->last_9c_micros > 0) {
-            dt_seconds = (current_micros - this->last_9c_micros) / 1e6;
-            if (dt_seconds <= 0.0 || dt_seconds > 0.2)
-                dt_seconds = 0.0;
-        }
-
-        double old_position_motor = this->properties.at("position_motor")->number_value;
-
-        double predicted_position_motor = old_position_motor + (speed_motor * dt_seconds);
-
-        int predicted_rotations = (int)std::floor(predicted_position_motor / 360.0);
-        double encoder_angle = (double)counts * 360.0 / 65536.0;
-        double new_position_motor = predicted_rotations * 360.0 + encoder_angle;
-
-        double diff = new_position_motor - predicted_position_motor;
-        if (diff > 180.0) {
-            new_position_motor -= 360.0;
-        } else if (diff < -180.0) {
-            new_position_motor += 360.0;
-        }
-
-        this->properties.at("position_motor")->number_value = new_position_motor;
-        this->properties.at("position")->number_value = new_position_motor / this->ratio;
-
-        this->last_encoder_position = counts;
-        this->last_9c_micros = current_micros;
         break;
     }
     }
