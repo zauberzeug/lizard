@@ -1,9 +1,6 @@
 [submodule "owl"]
 	path = owl
 	url = https://github.com/ianh/owl.git
-[submodule "components/esp32-ble-command"]
-	path = components/esp32-ble-command
-	url = git@github.com:zauberzeug/esp32-ble-command.git
 [submodule "components/esp32-zeug"]
 	path = components/esp32-zeug
 	url = git@github.com:zauberzeug/esp32-zeug.git

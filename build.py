@@ -14,15 +14,20 @@ def main() -> int:
                         help='Clean build directory before building')
     args = parser.parse_args()
 
-    sdkconfig_defaults_file = f'sdkconfig.defaults.{args.target}'
-    if not Path(sdkconfig_defaults_file).exists():
-        print(f'Error: {sdkconfig_defaults_file} not found!')
+    base_defaults = Path(f'sdkconfig.defaults.{args.target}')
+    if not base_defaults.exists():
+        print(f'Error: {base_defaults} not found!')
         return 1
 
+    secret_defaults = Path('sdkconfig.defaults.secret')
+    all_defaults = [str(base_defaults.resolve())]
+    if secret_defaults.exists():
+        all_defaults.append(str(secret_defaults.resolve()))
+
     os.environ['IDF_TARGET'] = args.target
-    os.environ['SDKCONFIG_DEFAULTS'] = sdkconfig_defaults_file
+    os.environ['SDKCONFIG_DEFAULTS'] = ';'.join(all_defaults)
     print(f'Using target: {args.target}')
-    print(f'Using config: {sdkconfig_defaults_file}')
+    print(f'Using defaults: {all_defaults}')
 
     if args.clean:
         print('Running full clean...')

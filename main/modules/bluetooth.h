@@ -1,7 +1,7 @@
 #pragma once
 
 #include "module.h"
-#include <esp32-ble-command.h>
+#include "utils/ble_command.h"
 #include <string>
 
 class Bluetooth;
