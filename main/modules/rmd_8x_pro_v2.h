@@ -45,6 +45,7 @@ public:
 
     double get_position() const;
     double get_speed() const;
+    int get_ratio() const;
     bool set_acceleration(const uint8_t index, const uint32_t acceleration);
     void enable();
     void disable();

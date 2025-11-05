@@ -1,4 +1,5 @@
 #include "rmd_axis.h"
+#include "../utils/uart.h"
 #include <stdexcept>
 
 REGISTER_MODULE_DEFAULTS(RmdAxis)
@@ -24,6 +25,7 @@ bool RmdAxis::can_move_positive(const float value) const {
     }
     // If endstop is active, block motion towards it: up is positive when not inverted, negative when inverted
     if ((!this->inverted && value > 0) || (this->inverted && value < 0)) {
+        echo("%s.can_move_positive: Endstop triggered", this->name.c_str());
         return false;
     }
     return true;
@@ -40,7 +42,7 @@ void RmdAxis::step() {
 
     float speed = this->motor->get_speed();
     if (!this->can_move_positive(speed)) {
-        this->motor->stop();
+        this->motor->hold(); // Use hold to get new speed information, stop will not update the speed
     }
     Module::step();
 }
@@ -53,9 +55,7 @@ void RmdAxis::call(const std::string method_name, const std::vector<ConstExpress
         Module::expect(arguments, -1, numbery, numbery, numbery);
         float distance = arguments[0]->evaluate_number() - this->motor->get_position();
         if (this->can_move_positive(distance)) {
-            this->motor->position(arguments[0]->evaluate_number(), arguments[1]->evaluate_number());
-        } else {
-            this->motor->stop();
+            this->motor->position(arguments[0]->evaluate_number() * this->motor->get_ratio(), arguments[1]->evaluate_number());
         }
     } else if (method_name == "speed") {
         if (arguments.size() < 1 || arguments.size() > 2) {

@@ -246,6 +246,7 @@ void Rmd8xProV2::call(const std::string method_name, const std::vector<ConstExpr
 void Rmd8xProV2::enable() {
     this->enabled = true;
     this->properties.at("enabled")->boolean_value = true;
+    this->send(0x9c, 0, 0, 0, 0, 0, 0, 0); // Request telemetry to get initial values
 }
 
 void Rmd8xProV2::disable() {
@@ -334,6 +335,10 @@ double Rmd8xProV2::get_position() const {
 
 double Rmd8xProV2::get_speed() const {
     return this->properties.at("speed")->number_value;
+}
+
+int Rmd8xProV2::get_ratio() const {
+    return this->ratio;
 }
 
 bool Rmd8xProV2::set_acceleration(const uint8_t index, const uint32_t acceleration) {
