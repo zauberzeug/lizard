@@ -30,6 +30,8 @@
 #include <esp_zeug/frtos-util.h>
 #include <esp_zeug/util.h>
 #include <host/ble_store.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include "sdkconfig.h"
 
@@ -141,19 +143,7 @@ static auto onGapEvent(struct ble_gap_event *event, void *) -> int {
             advertise();
         } else {
             if (!l_deactivated) {
-                /* Connection successful - enforce PIN authentication for all connections */
-                ESP_LOGI(TAG, "Connection established - enforcing mandatory PIN");
-
-                vTaskDelay(100 / portTICK_PERIOD_MS);
-
-                int rc = ble_gap_security_initiate(event->connect.conn_handle);
-                if (rc != 0) {
-                    ESP_LOGW(TAG, "Failed to initiate PIN security: %d", rc);
-                    ble_gap_terminate(event->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-                    ESP_LOGW(TAG, "Connection terminated - security enforcement failed");
-                } else {
-                    BLE_LOGI(TAG, "PIN authentication initiated");
-                }
+                ESP_LOGI(TAG, "Connection established - secured access required; pairing starts on first GATT access");
             } else {
                 ESP_LOGW(TAG, "Bluetooth PIN deactivated - proceeding without authentication");
             }
@@ -200,6 +190,7 @@ static auto onGapEvent(struct ble_gap_event *event, void *) -> int {
             l_currentCon = BLE_HS_CONN_HANDLE_NONE;
         }
 
+
         /* Connection terminated; resume advertising. */
         advertise();
         return 0;
@@ -231,7 +222,7 @@ static auto onGapEvent(struct ble_gap_event *event, void *) -> int {
         return onSecurityEvent(event, nullptr);
 
     case BLE_GAP_EVENT_REPEAT_PAIRING: {
-        BLE_LOGI(TAG, "Security event: repeat pairing attempt - deleting old bond and retrying");
+        BLE_LOGI(TAG, "Security event: repeat pairing attempt - deleting old bond and NOT retrying immediately");
 
         struct ble_gap_conn_desc desc;
         int rc = ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc);
@@ -242,8 +233,8 @@ static auto onGapEvent(struct ble_gap_event *event, void *) -> int {
             ESP_LOGW(TAG, "repeat_pairing: unable to find conn desc (rc=%d)", rc);
         }
 
-        /* Tell NimBLE to retry pairing now that we removed the old bond */
-        return BLE_GAP_REPEAT_PAIRING_RETRY;
+        /* Do not retry pairing immediately to avoid double prompts */
+        return BLE_GAP_REPEAT_PAIRING_IGNORE;
     }
 
     case BLE_GAP_EVENT_CONN_UPDATE_REQ:
@@ -363,21 +354,18 @@ static auto onSecurityEvent(struct ble_gap_event *event, void *) -> int {
         if (event->enc_change.status == 0) {
             BLE_LOGI(TAG, "PIN authentication successful; connection encrypted");
         } else {
-            /* Common case: phone deleted pairing, ESP still has bond. Delete and retry. */
-            ESP_LOGW(TAG, "Security failed (status=%d) - deleting peer bond and re-initiating",
+            /* Pairing failed: clear any stored bond but keep the connection so client can retry. */
+            ESP_LOGW(TAG, "Security failed (status=%d) - deleting peer bond and keeping connection",
                      event->enc_change.status);
 
             struct ble_gap_conn_desc desc;
             int rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
             if (rc == 0) {
                 ble_store_util_delete_peer(&desc.peer_id_addr);
-                rc = ble_gap_security_initiate(event->enc_change.conn_handle);
-                if (rc != 0) {
-                    ESP_LOGW(TAG, "Failed to re-initiate security after bond delete: %d", rc);
-                }
             } else {
                 ESP_LOGW(TAG, "enc_change: unable to find conn desc (rc=%d)", rc);
             }
+
         }
         return 0;
 
@@ -413,7 +401,7 @@ static const Ble::Gatts::Service lizardComService{
     {
         Ble::Gatts::Characteristic{
             characteristicUuid,
-            BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
+            BLE_GATT_CHR_F_WRITE,
             [](std::uint16_t conn_handle, std::uint16_t attr_handle, ble_gatt_access_ctxt *ctx) -> int {
                 struct ble_gap_conn_desc desc;
                 int rc = ble_gap_conn_find(conn_handle, &desc);
@@ -423,13 +411,10 @@ static const Ble::Gatts::Service lizardComService{
                 }
 
                 if (!l_deactivated) {
-                    if (!desc.sec_state.encrypted) {
-                        ESP_LOGE(TAG, "Unencrypted command attempt - connection not authenticated");
-                        return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
-                    }
-
-                    if (!desc.sec_state.authenticated) {
-                        ESP_LOGE(TAG, "Unauthenticated command attempt - missing PIN authentication");
+                    if (!desc.sec_state.encrypted || !desc.sec_state.authenticated) {
+                        /* Reject unauthenticated writes, but keep the connection so the peer can finish pairing. */
+                        BLE_LOGW(TAG, "Rejecting write: not authenticated (enc=%d, auth=%d)",
+                                 desc.sec_state.encrypted, desc.sec_state.authenticated);
                         return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
                     }
 
@@ -560,12 +545,10 @@ auto deactivate_pin() -> void {
 }
 
 auto reset_bonds() -> void {
-    /* NimBLE stores bonds and CCCDs using its ble_store implementation
-     * which persists to NVS. There is no exported C API to delete-all
-     * in the ESP-IDF NimBLE host. As a pragmatic approach, clear the
-     * NimBLE store namespaces in NVS. This does not affect other app
-     * namespaces (e.g. our Storage). */
+    /* Clear all stored bonds/CCCDs from NVS and refresh security for any
+     * active connection, without rebooting or restarting the stack. */
 
+    // Clear NimBLE store namespaces in NVS
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_init());
@@ -584,8 +567,21 @@ auto reset_bonds() -> void {
     eraseNamespace("nimble_bond");
     eraseNamespace("nimble_cccd");
 
+    // If connected, also delete the in-memory bond for this peer and re-initiate security
     if (l_currentCon != BLE_HS_CONN_HANDLE_NONE) {
-        ble_gap_terminate(l_currentCon, BLE_ERR_REM_USER_CONN_TERM);
+        struct ble_gap_conn_desc desc{};
+        int rc = ble_gap_conn_find(l_currentCon, &desc);
+        if (rc == 0) {
+            ble_store_util_delete_peer(&desc.peer_id_addr);
+            // Prompt a fresh pairing immediately on the existing link
+            rc = ble_gap_security_initiate(l_currentCon);
+            if (rc != 0) {
+                ESP_LOGW(TAG, "reset_bonds: security initiate failed rc=%d; disconnecting to ensure clean retry", rc);
+                ble_gap_terminate(l_currentCon, BLE_ERR_REM_USER_CONN_TERM);
+            }
+        } else {
+            ESP_LOGW(TAG, "reset_bonds: unable to find conn desc (rc=%d)", rc);
+        }
     }
 }
 
