@@ -29,9 +29,9 @@
 #include <esp_zeug/ble/uuid.h>
 #include <esp_zeug/frtos-util.h>
 #include <esp_zeug/util.h>
-#include <host/ble_store.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <host/ble_store.h>
 
 #include "sdkconfig.h"
 
@@ -189,7 +189,6 @@ static auto onGapEvent(struct ble_gap_event *event, void *) -> int {
         if (event->disconnect.conn.conn_handle == l_currentCon) {
             l_currentCon = BLE_HS_CONN_HANDLE_NONE;
         }
-
 
         /* Connection terminated; resume advertising. */
         advertise();
@@ -365,7 +364,6 @@ static auto onSecurityEvent(struct ble_gap_event *event, void *) -> int {
             } else {
                 ESP_LOGW(TAG, "enc_change: unable to find conn desc (rc=%d)", rc);
             }
-
         }
         return 0;
 
