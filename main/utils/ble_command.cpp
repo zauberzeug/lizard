@@ -111,12 +111,15 @@ static uint8_t l_ownAddrType;
 static CommandCallback l_clientCallback;
 static bool l_running{false};
 static bool l_deactivated{false};
+static volatile bool l_host_down{true};
 
 static std::uint16_t l_notifyCharaValueHandle;
 static std::uint16_t l_currentCon{BLE_HS_CONN_HANDLE_NONE};
 
 static auto advertise() -> void;
 static auto onSecurityEvent(struct ble_gap_event *event, void *) -> int;
+static void ble_host_task(void *);
+static void reset_bonds_worker(void *);
 
 static auto onGapEvent(struct ble_gap_event *event, void *) -> int {
     switch (event->type) {
@@ -381,18 +384,8 @@ static auto onSecurityEvent(struct ble_gap_event *event, void *) -> int {
 
 extern "C" void ble_store_config_init(void);
 
-Task<NIMBLE_HS_STACK_SIZE> hostTask{
-    "ble_host",
-    Core::PRO,
-    []() {
-        /* This function will return only when nimble_port_stop() is executed */
-        nimble_port_run();
-
-        /* Cleanup */
-        nimble_port_deinit();
-        Task<>::haltCurrent();
-    },
-};
+// Note: we start the NimBLE host using a plain FreeRTOS task (not the Task<> wrapper)
+// so that we can stop and restart it safely at runtime.
 
 static const Ble::Gatts::Service lizardComService{
     serviceUuid,
@@ -449,6 +442,7 @@ auto init(const std::string_view &deviceName,
     l_deviceName = decltype(l_deviceName)(deviceName);
     l_clientCallback = onCommand;
     l_running = true;
+    l_host_down = false;
 
     esp_err_t nvs_rc = nvs_flash_init();
     if (nvs_rc == ESP_ERR_NVS_NO_FREE_PAGES || nvs_rc == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -510,7 +504,18 @@ auto init(const std::string_view &deviceName,
      * but not within advertisement packets */
     ble_svc_gap_device_name_set(deviceName.data());
 
-    hostTask.run();
+    // Start NimBLE host task
+    xTaskCreatePinnedToCore(ble_host_task, "ble_host", NIMBLE_HS_STACK_SIZE, nullptr, 5, nullptr, Core::PRO);
+}
+
+static void ble_host_task(void *) {
+    /* This function will return only when nimble_port_stop() is executed */
+    nimble_port_run();
+
+    /* Cleanup */
+    nimble_port_deinit();
+    l_host_down = true;
+    vTaskDelete(nullptr);
 }
 
 auto send(const std::string_view &data) -> int {
@@ -527,13 +532,11 @@ auto send(const std::string_view &data) -> int {
 }
 
 auto fini() -> void {
-
     if (!l_running) {
         return;
     }
-    if (nimble_port_stop() == 0) {
-        ESP_ERROR_CHECK(nimble_port_deinit());
-    }
+    /* Request NimBLE host to stop. Deinit is handled inside hostTask */
+    (void)nimble_port_stop();
     l_running = false;
 }
 
@@ -543,13 +546,29 @@ auto deactivate_pin() -> void {
 }
 
 auto reset_bonds() -> void {
-    /* Clear all stored bonds/CCCDs from NVS and refresh security for any
-     * active connection, without rebooting or restarting the stack. */
+    /* Reliable approach: stop host, wipe NVS, re-init host in a separate task. */
+    xTaskCreatePinnedToCore(reset_bonds_worker, "ble_reset_bonds", 4096, nullptr, 5, nullptr, tskNO_AFFINITY);
+}
+
+static void reset_bonds_worker(void *) {
+    // Leave current context
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    // Stop BLE host (drops any active connections)
+    if (l_running) {
+        (void)nimble_port_stop();
+        l_running = false;
+        // Wait for host task to exit and deinit
+        for (int i = 0; i < 50 && !l_host_down; ++i) { // ~500ms max
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        l_currentCon = BLE_HS_CONN_HANDLE_NONE;
+    }
 
     // Clear NimBLE store namespaces in NVS
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_init());
+        (void)nvs_flash_init();
     }
 
     auto eraseNamespace = [](const char *ns) {
@@ -565,22 +584,10 @@ auto reset_bonds() -> void {
     eraseNamespace("nimble_bond");
     eraseNamespace("nimble_cccd");
 
-    // If connected, also delete the in-memory bond for this peer and re-initiate security
-    if (l_currentCon != BLE_HS_CONN_HANDLE_NONE) {
-        struct ble_gap_conn_desc desc{};
-        int rc = ble_gap_conn_find(l_currentCon, &desc);
-        if (rc == 0) {
-            ble_store_util_delete_peer(&desc.peer_id_addr);
-            // Prompt a fresh pairing immediately on the existing link
-            rc = ble_gap_security_initiate(l_currentCon);
-            if (rc != 0) {
-                ESP_LOGW(TAG, "reset_bonds: security initiate failed rc=%d; disconnecting to ensure clean retry", rc);
-                ble_gap_terminate(l_currentCon, BLE_ERR_REM_USER_CONN_TERM);
-            }
-        } else {
-            ESP_LOGW(TAG, "reset_bonds: unable to find conn desc (rc=%d)", rc);
-        }
-    }
+    // Bring BLE host back up
+    init(std::string_view{l_deviceName.data(), l_deviceName.length()}, l_clientCallback);
+
+    vTaskDelete(nullptr);
 }
 
 } // namespace ZZ::BleCommand
