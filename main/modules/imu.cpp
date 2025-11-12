@@ -1,8 +1,6 @@
 #include "imu.h"
+#include "i2c_bus.h"
 #include <stdexcept>
-
-#define I2C_MASTER_TX_BUF_DISABLE 0
-#define I2C_MASTER_RX_BUF_DISABLE 0
 
 REGISTER_MODULE_DEFAULTS(Imu)
 
@@ -41,23 +39,7 @@ const std::map<std::string, Variable_ptr> Imu::get_defaults() {
 
 Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
     : Module(imu, name), i2c_port(i2c_port), address(address) {
-    i2c_config_t config;
-    config.mode = I2C_MODE_MASTER;
-    config.sda_io_num = sda_pin,
-    config.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    config.scl_io_num = scl_pin;
-    config.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    config.master.clk_speed = clk_speed;
-    config.clk_flags = 0;
-    if (i2c_param_config(i2c_port, &config) != ESP_OK) {
-        throw std::runtime_error("could not configure i2c port");
-    }
-    if (i2c_driver_install(i2c_port, I2C_MODE_MASTER, I2C_MASTER_TX_BUF_DISABLE, I2C_MASTER_RX_BUF_DISABLE, 0) != ESP_OK) {
-        throw std::runtime_error("could not install i2c driver");
-    }
-    if (i2c_set_timeout(i2c_port, 1048575) != ESP_OK) {
-        throw std::runtime_error("could not set i2c timeout");
-    }
+    I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     this->bno = std::make_shared<BNO055>((i2c_port_t)i2c_port, address);
     try {
         this->bno->begin();
