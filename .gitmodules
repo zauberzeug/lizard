@@ -7,3 +7,6 @@
 [submodule "components/esp32-serial-flasher"]
 	path = components/esp32-serial-flasher
 	url = https://github.com/zauberzeug/esp-serial-flasher
+[submodule "components/Adafruit_BNO08x"]
+	path = components/Adafruit_BNO08x
+	url = https://github.com/adafruit/Adafruit_BNO08x.git
