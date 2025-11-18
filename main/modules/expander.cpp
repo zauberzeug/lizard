@@ -1,6 +1,7 @@
 #include "expander.h"
 
 #include "storage.h"
+#include "utils/ota.h"
 #include "utils/serial-replicator.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
@@ -238,4 +239,12 @@ void Expander::send_call(const std::string proxy_name, const std::string method_
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");
     this->serial->write_checked_line(buffer, pos);
+}
+
+bool Expander::is_ready() const {
+    return this->properties.at("is_ready")->boolean_value;
+}
+
+std::string Expander::get_name() const {
+    return this->name;
 }

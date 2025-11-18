@@ -1,19 +1,19 @@
 #pragma once
+#include "driver/uart.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string>
+#include <vector>
 
 namespace ota {
 
-typedef struct {
-    std::string ssid;
-    std::string password;
-    std::string url;
-} ota_params_t;
+bool receive_firmware_via_uart();
+bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downstream_port);
 
-bool setup_wifi(const char *ssid, const char *password);
-void attempt(const char *url);
-void verify();
-void verify_task(void *pvParameters);
-void ota_task(void *pvParameters);
-bool version_checker(const char *url);
+void start_ota_bridge_task(uart_port_t upstream_port, uart_port_t downstream_port);
+bool is_uart_bridge_running();
+
+std::vector<std::string> detect_required_bridges(const std::string &target_name);
+std::vector<std::string> build_bridge_path(const std::string &target_name);
 
 } // namespace ota

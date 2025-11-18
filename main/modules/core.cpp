@@ -1,6 +1,7 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
+#include "../utils/addressing.h"
 #include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -81,13 +82,49 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
         echo("checksum: %04x", checksum);
     } else if (method_name == "ota") {
-        Module::expect(arguments, 3, string, string, string);
-        auto *params = new ota::ota_params_t{
-            arguments[0]->evaluate_string(),
-            arguments[1]->evaluate_string(),
-            arguments[2]->evaluate_string(),
-        };
-        xTaskCreate(ota::ota_task, "ota_task", 8192, params, 5, nullptr);
+        Module::expect(arguments, -1, string);
+        if (arguments.size() == 1) {
+            std::string target = arguments[0]->evaluate_string();
+            std::vector<std::string> bridge_path = ota::detect_required_bridges(target);
+            echo("Bridge path: %d bridges needed", (int)bridge_path.size());
+            for (const auto &bridge : bridge_path) {
+                echo("  Bridge: %s", bridge.c_str());
+            }
+        } else if (arguments.size() == 0) {
+            echo("Starting UART OTA receive mode...");
+            bool success = ota::receive_firmware_via_uart();
+            if (success) {
+                echo("OTA successful, restarting...");
+                esp_restart();
+            } else {
+                echo("OTA failed, not restarting");
+            }
+        } else {
+            throw std::runtime_error("ota() expects 0 or 1 arguments");
+        }
+    } else if (method_name == "ota_bridge_start") {
+        Module::expect(arguments, -1, integer, integer);
+        echo("Starting UART bridge...");
+        if (arguments.size() == 0) {
+            ota::start_ota_bridge_task(UART_NUM_0, UART_NUM_1);
+        } else if (arguments.size() == 2) {
+            uart_port_t upstream_port = static_cast<uart_port_t>(arguments[0]->evaluate_integer());
+            uart_port_t downstream_port = static_cast<uart_port_t>(arguments[1]->evaluate_integer());
+
+            if (upstream_port < 0 || upstream_port >= UART_NUM_MAX) {
+                throw std::runtime_error("invalid upstream UART port");
+            }
+            if (downstream_port < 0 || downstream_port >= UART_NUM_MAX) {
+                throw std::runtime_error("invalid downstream UART port");
+            }
+            if (upstream_port == downstream_port) {
+                throw std::runtime_error("upstream and downstream ports cannot be the same");
+            }
+
+            ota::start_ota_bridge_task(upstream_port, downstream_port);
+        } else {
+            throw std::runtime_error("ota_bridge_start() expects 0 or 2 arguments (upstream_port, downstream_port)");
+        }
     } else if (method_name == "get_pin_status") {
         Module::expect(arguments, 1, integer);
         const int gpio_num = arguments[0]->evaluate_integer();
@@ -163,6 +200,22 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             echo("Not a strapping pin");
             break;
         }
+    } else if (method_name == "run_step") {
+        Module::expect(arguments, 0);
+        run_step();
+    } else if (method_name == "set_device_id") {
+        Module::expect(arguments, 1, integer);
+        uint8_t id = arguments[0]->evaluate_integer();
+        if (id > 9) {
+            throw std::runtime_error("expander id must be between 0 and 9");
+        }
+        set_uart_expander_id(static_cast<char>('0' + id));
+        Storage::put_device_id(id);
+        echo("Device ID set to %d", id);
+    } else if (method_name == "get_device_id") {
+        Module::expect(arguments, 0);
+        char id = get_uart_expander_id();
+        echo("Device ID: %c", id);
     } else {
         Module::call(method_name, arguments);
     }
@@ -199,4 +252,29 @@ std::string Core::get_output() const {
 
 void Core::keep_alive() {
     this->last_message_millis = millis();
+}
+
+void Core::run_step() {
+    if (!get_uart_external_mode()) {
+        echo("Not in external mode, skipping step");
+        return;
+    }
+
+    for (auto const &[module_name, module] : Global::modules) {
+        if (module->name != "core") {
+            try {
+                module->step();
+            } catch (const std::runtime_error &e) {
+                echo("error in module \"%s\": %s", module->name.c_str(), e.what());
+            }
+        }
+    }
+
+    try {
+        this->step();
+    } catch (const std::runtime_error &e) {
+        echo("error in core module: %s", e.what());
+    }
+
+    echo("__step_done__");
 }

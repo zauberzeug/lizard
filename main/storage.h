@@ -17,8 +17,11 @@ public:
     static void print_startup(const std::string substring = "");
     static void save_startup();
     static void clear_nvs();
-
     static void set_user_pin(const std::uint32_t pin);
     static bool get_user_pin(std::uint32_t &pin);
     static void remove_user_pin();
+    static void put_device_id(const uint8_t id);
+    static void load_device_id();
+    static void put_external_mode(const bool enabled);
+    static void load_external_mode();
 };

@@ -2,6 +2,7 @@
 #include "esp_check.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "utils/addressing.h"
 #include "utils/string_utils.h"
 #include "utils/uart.h"
 #include <cstdint>
@@ -14,7 +15,7 @@
 std::string Storage::startup;
 
 void Storage::init() {
-    nvs_flash_init();
+    ESP_ERROR_CHECK(nvs_flash_init());
     Storage::startup = Storage::get();
 }
 
@@ -71,9 +72,14 @@ void Storage::put(const std::string value) {
 
 std::string Storage::get() {
     std::string result = "";
-    const int num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
-    for (int i = 0; i < num_chunks; i++) {
-        result += read(NAMESPACE, "chunk" + std::to_string(i));
+    try {
+        const int num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
+        for (int i = 0; i < num_chunks; i++) {
+            result += read(NAMESPACE, "chunk" + std::to_string(i));
+        }
+    } catch (const std::runtime_error &e) {
+        // NVS is empty or corrupted, return empty string
+        result = "";
     }
     return result;
 }
@@ -164,4 +170,83 @@ static void nvs_delete_key(const std::string &ns, const std::string &key) {
 
 void Storage::remove_user_pin() {
     nvs_delete_key("ble_pins", "user_pin");
+}
+
+void Storage::put_device_id(const uint8_t id) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace for device ID");
+    }
+
+    if ((err = nvs_set_u8(handle, "device_id", id)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not write device ID to storage");
+    }
+
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit device ID to storage");
+    }
+    nvs_close(handle);
+}
+
+void Storage::load_device_id() {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace for device ID");
+    }
+
+    uint8_t value;
+    if ((err = nvs_get_u8(handle, "device_id", &value)) != ESP_OK) {
+        nvs_close(handle);
+        // Device ID not found in storage, use default (no error)
+        return;
+    }
+    // Convert numeric ID (0-9) to character for UART system ('0'-'9')
+    set_uart_expander_id(static_cast<char>('0' + value));
+    nvs_close(handle);
+}
+
+void Storage::put_external_mode(const bool enabled) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace for external mode");
+    }
+
+    if ((err = nvs_set_u8(handle, "external_mode", enabled ? 1 : 0)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not write external mode to storage");
+    }
+
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit external mode to storage");
+    }
+    nvs_close(handle);
+}
+
+void Storage::load_external_mode() {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(NAMESPACE, NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace for external mode");
+    }
+
+    uint8_t value;
+    if ((err = nvs_get_u8(handle, "external_mode", &value)) != ESP_OK) {
+        nvs_close(handle);
+        // External mode not found in storage, use default (no error)
+        return;
+    }
+
+    // Restore the external mode state
+    if (value) {
+        activate_uart_external_mode();
+    } else {
+        deactivate_uart_external_mode();
+    }
+    nvs_close(handle);
 }

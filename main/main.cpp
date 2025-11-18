@@ -12,12 +12,15 @@
 #include "global.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
+#include "modules/expandable.h"
 #include "modules/expander.h"
 #include "modules/module.h"
+#include "modules/plexus_expander.h"
 #include "proxy.h"
 #include "rom/gpio.h"
 #include "rom/uart.h"
 #include "storage.h"
+#include "utils/addressing.h"
 #include "utils/ota.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
@@ -207,12 +210,19 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                if (expander_module->type != expander) {
-                    throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
+                if (expander_module->type != expander && expander_module->type != plexus_expander && expander_module->type != proxy) {
+                    throw std::runtime_error("module \"" + expander_name + "\" is not an expander or proxy");
                 }
-                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
+                std::shared_ptr<Expandable> expandable;
+                if (expander_module->type == expander) {
+                    expandable = std::static_pointer_cast<Expander>(expander_module);
+                } else if (expander_module->type == plexus_expander) {
+                    expandable = std::static_pointer_cast<PlexusExpander>(expander_module);
+                } else {
+                    expandable = std::static_pointer_cast<Proxy>(expander_module);
+                }
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expandable, arguments);
                 Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
@@ -369,8 +379,39 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+        if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '1') {
+            echo("Activating external mode");
+            activate_uart_external_mode();
+            Storage::put_external_mode(true);
+            return;
+        } else if (input[0] == ID_TAG && input[1] == ID_TAG && input[2] == '0') {
+            echo("Deactivating external mode");
+            deactivate_uart_external_mode();
+            Storage::put_external_mode(false);
+            return;
+        }
         len = check(input, len);
-        process_line(input, len);
+        if (input[0] == ID_TAG) {
+            if (get_uart_external_mode()) {
+                if (input[1] != get_uart_expander_id()) {
+                    uart_flush_input(UART_NUM_0);
+                    continue;
+                }
+            } else {
+                echo("Detected tag, but not in external mode");
+            }
+
+            for (int i = 0; i < len - 2; i++) {
+                input[i] = input[i + 2];
+            }
+            input[len - 2] = '\0';
+            len -= 2;
+            process_line(input, len);
+        } else {
+            if (!get_uart_external_mode()) {
+                process_line(input, len);
+            }
+        }
     }
 }
 
@@ -397,6 +438,9 @@ void app_main() {
     };
     uart_param_config(UART_NUM_0, &uart_config);
     QueueHandle_t uart_queue;
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    uart_set_pin(UART_NUM_0, GPIO_NUM_17, GPIO_NUM_18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+#endif
     uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
@@ -415,47 +459,56 @@ void app_main() {
         echo("error while loading startup script: %s", e.what());
     }
 
-    try {
-        xTaskCreate(&ota::verify_task, "ota_verify_task", 8192, NULL, 5, NULL);
-    } catch (const std::runtime_error &e) {
-        echo("error while verifying OTA: %s", e.what());
+    Storage::load_device_id();
+    Storage::load_external_mode();
+
+    if (get_uart_external_mode()) {
+        printf("\n$%cReady.\n", get_uart_expander_id());
+    } else {
+        printf("\nReady.\n");
     }
 
-    printf("\nReady.\n");
-
     while (true) {
-        try {
-            process_uart();
-        } catch (const std::runtime_error &e) {
-            echo("error processing uart0: %s", e.what());
-        }
-
-        for (auto const &[module_name, module] : Global::modules) {
-            if (module != core_module) {
-                run_step(module);
+        if (!ota::is_uart_bridge_running()) {
+            try {
+                process_uart();
+            } catch (const std::runtime_error &e) {
+                echo("error processing uart0: %s", e.what());
             }
         }
-        run_step(core_module);
 
-        for (auto const &rule : Global::rules) {
-            try {
-                if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
-                    rule->routine->start();
+        if (!get_uart_external_mode() && !ota::is_uart_bridge_running()) {
+            for (auto const &[module_name, module] : Global::modules) {
+                if (module != core_module) {
+                    run_step(module);
                 }
-                rule->routine->step();
-            } catch (const std::runtime_error &e) {
-                echo("error in rule: %s", e.what());
+            }
+            run_step(core_module);
+
+            for (auto const &rule : Global::rules) {
+                try {
+                    if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
+                        rule->routine->start();
+                    }
+                    rule->routine->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in rule: %s", e.what());
+                }
+            }
+
+            for (auto const &[routine_name, routine] : Global::routines) {
+                try {
+                    routine->step();
+                } catch (const std::runtime_error &e) {
+                    echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
+                }
             }
         }
 
-        for (auto const &[routine_name, routine] : Global::routines) {
-            try {
-                routine->step();
-            } catch (const std::runtime_error &e) {
-                echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
-            }
+        if (get_uart_external_mode() || ota::is_uart_bridge_running()) {
+            delay(10); // 10ms is the minimum delay to allow the IDLE task to run without affecting the watchdog, to lower delay it needs to run in its own task
+        } else {
+            delay(10);
         }
-
-        delay(10);
     }
 }

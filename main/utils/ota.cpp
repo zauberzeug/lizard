@@ -1,360 +1,368 @@
 #include "ota.h"
-#include "esp_event.h"
 #include "esp_log.h"
-#include "esp_netif.h"
 #include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_zeug/eventhandler.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
-#include "nvs_flash.h"
+#include "freertos/task.h"
 #include "utils/uart.h"
 #include "version.h"
-#include <atomic>
 #include <cstring>
-#include <memory>
 #include <stdio.h>
 #include <string>
-#include <vector>
 
-#include "esp_http_client.h"
-#include "esp_https_ota.h"
+#include "driver/uart.h"
 #include "esp_ota_ops.h"
+#include "esp_task_wdt.h"
+#include "esp_timer.h"
+#include "timing.h"
+#include <algorithm>
+
+#include "../global.h"
+#include "../modules/proxy.h"
+#include "addressing.h"
 
 namespace ota {
 
-#define MAX_HTTP_BUFFER_SIZE 1024
+static const size_t CHUNK_BUFFER_SIZE = 2048;
+static const size_t BRIDGE_BUFFER_SIZE = 1024;
+static const size_t CONFIRM_MSG_SIZE = 16;
+static const uint32_t BRIDGE_IDLE_TIMEOUT_MS = 10000;
+static const uint32_t DEFAULT_TRANSFER_TIMEOUT_MS = 7000;
 
-static RTC_NOINIT_ATTR bool check_version_;
-static RTC_NOINIT_ATTR char ssid_[32];
-static RTC_NOINIT_ATTR char password_[32];
-static RTC_NOINIT_ATTR char url_[128];
+#define UART_PORT_NUM UART_NUM_0
 
-int retry_num_ = 0;
-int max_retry_num_ = 10;
-const char *verify_path = "/verify";
+static TaskHandle_t ota_bridge_task_handle = nullptr;
+static uint32_t confirm_index = 0;
+static uart_port_t bridge_upstream_port = UART_NUM_0;
+static uart_port_t bridge_downstream_port = UART_NUM_1;
 
-static size_t total_content_length_ = 0;
-static size_t received_length_ = 0;
+int8_t wait_for_uart_data(uint16_t timeout_ms) {
+    int64_t start_time = esp_timer_get_time();
+    size_t available_bytes = 0;
 
-static SemaphoreHandle_t wifi_semaphore = NULL;
-static const TickType_t semaphore_timeout = 60 * 1000 / portTICK_PERIOD_MS;
-
-bool echo_if_error(const char *message, esp_err_t err) {
-    if (err != ESP_OK) {
-        const char *error_name = esp_err_to_name(err);
-        echo("Error: %s in %s\n", error_name, message);
-        return false;
+    while (esp_timer_get_time() - start_time < timeout_ms * 1000) {
+        uart_get_buffered_data_len(UART_PORT_NUM, &available_bytes);
+        if (available_bytes > 0) {
+            return 1;
+        }
+        vTaskDelay(1);
     }
-    return true;
+    return 0;
 }
 
-bool is_wifi_connected() {
-    wifi_ap_record_t ap_info;
-    esp_err_t err = esp_wifi_sta_get_ap_info(&ap_info);
-    return err == ESP_OK;
+void send_uart_confirmation() {
+    confirm_index++;
+    char confirm_msg[CONFIRM_MSG_SIZE];
+    int len = snprintf(confirm_msg, sizeof(confirm_msg), "%lu\r\n", confirm_index);
+    uart_write_bytes(UART_PORT_NUM, confirm_msg, len);
 }
 
-char *append_verify_to_url(const char *verify_path) {
-    size_t remaining_size = sizeof(url_) - strlen(url_) - 1;
-    char *output = url_;
-
-    if (remaining_size >= strlen(verify_path)) {
-        strncat(output, verify_path, remaining_size);
-    } else {
-        echo("URL too long to append verify path");
-    }
-
-    return output;
+void send_bridge_shutdown_signal() {
+    const char *shutdown_msg = "!END\r\n";
+    uart_write_bytes(UART_PORT_NUM, shutdown_msg, strlen(shutdown_msg));
 }
 
-void rollback_and_reboot() {
-    echo("Rolling back to previous version");
-    check_version_ = false;
-    memset(ssid_, 0, sizeof(ssid_));
-    memset(password_, 0, sizeof(password_));
-    memset(url_, 0, sizeof(url_));
-    echo_if_error("stopping wifi", esp_wifi_stop());
-    echo_if_error("rolling back", esp_ota_mark_app_invalid_rollback_and_reboot());
-}
-
-void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-    switch (event_id) {
-    case WIFI_EVENT_STA_START:
-        echo("WiFi started\n");
-        break;
-    case WIFI_EVENT_STA_CONNECTED:
-        echo("WiFi connected\n");
-        break;
-    case WIFI_EVENT_STA_DISCONNECTED:
-        echo("WiFi lost connection\n");
-        if (++retry_num_ <= max_retry_num_) {
-            echo("Retrying to Connect... (%d/%d)\n", retry_num_, max_retry_num_);
-            esp_wifi_connect();
-        } else {
-            echo("Max retry attempts reached, stopping WiFi attempts.\n");
-            xSemaphoreGive(wifi_semaphore);
-        }
-        break;
-    case IP_EVENT_STA_GOT_IP:
-        echo("WiFi got IP...\n");
-        xSemaphoreGive(wifi_semaphore);
-        break;
-    case WIFI_EVENT_STA_STOP:
-        echo("WiFi stopped\n");
-        break;
-    default:
-        echo("Unhandled WiFi Event: %d\n", event_id);
-        break;
-    }
-}
-
-esp_err_t http_event_handler(esp_http_client_event_t *evt) {
-    switch (evt->event_id) {
-    case HTTP_EVENT_ERROR:
-        echo("HTTP_EVENT_ERROR\n");
-        break;
-    case HTTP_EVENT_ON_CONNECTED:
-        echo("HTTP_EVENT_ON_CONNECTED\n");
-        break;
-    case HTTP_EVENT_HEADER_SENT:
-        echo("HTTP_EVENT_HEADER_SENT\n");
-        break;
-    case HTTP_EVENT_ON_HEADER:
-        echo("Header %s: %s\n", evt->header_key, evt->header_value);
-        if (strcasecmp(evt->header_key, "Content-Length") == 0) {
-            total_content_length_ = strtoul(evt->header_value, NULL, 10);
-            echo("Total content length set: %d bytes\n", total_content_length_);
-        }
-        break;
-    case HTTP_EVENT_ON_DATA:
-        received_length_ += evt->data_len;
-        if (evt->data_len > 0) {
-            echo("Received data (%d bytes), Total received: %d bytes", evt->data_len, received_length_);
-            if (total_content_length_ > 0) {
-                double percentage = (double)received_length_ / total_content_length_ * 100;
-                echo("Progress: %.2f%%\n", percentage);
-            }
-        }
-        if (received_length_ == total_content_length_) {
-            echo("All content received. Total size: %d bytes\n", total_content_length_);
-        }
-        break;
-    case HTTP_EVENT_ON_FINISH:
-        echo("HTTP_EVENT_ON_FINISH\n");
-        received_length_ = 0;
-        total_content_length_ = 0;
-        break;
-    case HTTP_EVENT_DISCONNECTED:
-        echo("HTTP_EVENT_DISCONNECTED\n");
-        break;
-    default:
-        echo("Unhandled HTTP Event\n");
-        break;
-    }
-    return ESP_OK;
-}
-
-bool setup_wifi(const char *ssid, const char *password) {
-    retry_num_ = 0;
-    wifi_mode_t mode;
-    esp_err_t err = esp_wifi_get_mode(&mode);
-
-    if (err == ESP_ERR_WIFI_NOT_INIT) {
-        echo("WiFi not initialized");
-        if (!echo_if_error("netif init", esp_netif_init())) {
-            return false;
-        }
-
-        esp_err_t loop_error = esp_event_loop_create_default();
-        if (loop_error != ESP_OK && loop_error != ESP_ERR_INVALID_STATE) {
-            echo_if_error("event loop create", loop_error);
-            return false;
-        }
-
-        esp_netif_create_default_wifi_sta();
-
-        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-        if (!echo_if_error("wifi init", esp_wifi_init(&cfg)) ||
-            !echo_if_error("wifi event handler register", esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL)) ||
-            !echo_if_error("ip event handler register", esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL))) {
-            return false;
+char *find_checksum_delimiter(uint8_t *buffer, size_t buffer_pos) {
+    for (size_t i = 0; i <= buffer_pos - 3; i++) {
+        if (buffer[i] == '\r' && buffer[i + 1] == '\n' && buffer[i + 2] == '@') {
+            return (char *)&buffer[i];
         }
     }
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    return nullptr;
+}
 
-    wifi_config_t wifi_config{};
-    strcpy((char *)wifi_config.sta.ssid, ssid);
-    strcpy((char *)wifi_config.sta.password, password);
-
-    if (!echo_if_error("wifi set mode", esp_wifi_set_mode(WIFI_MODE_STA)) ||
-        !echo_if_error("wifi set config", esp_wifi_set_config(WIFI_IF_STA, &wifi_config)) ||
-        !echo_if_error("wifi start", esp_wifi_start()) ||
-        !echo_if_error("wifi connect", esp_wifi_connect())) {
+bool transfer_bridge_data(uart_port_t from_port, uart_port_t to_port, bool &shutdown_received, unsigned long &last_data) {
+    size_t avail = 0;
+    uart_get_buffered_data_len(from_port, &avail);
+    if (!avail) {
         return false;
     }
 
+    uint8_t buf[BRIDGE_BUFFER_SIZE];
+    int n = uart_read_bytes(from_port, buf, std::min<size_t>(avail, sizeof buf), 0);
+    if (n <= 0) {
+        return false;
+    }
+
+    if (strstr((char *)buf, "!END") != nullptr) {
+        echo("Received bridge shutdown signal");
+        shutdown_received = true;
+    }
+
+    uart_write_bytes(to_port, buf, n);
+    last_data = millis();
     return true;
 }
 
-void attempt(const char *url) {
-    esp_http_client_config_t config{};
-    esp_err_t err;
-    config.skip_cert_common_name_check = true;
-    config.keep_alive_enable = true;
-    config.url = url;
-    config.buffer_size = 1024;
-    config.timeout_ms = 10 * 1000;
-    config.event_handler = http_event_handler;
+bool receive_firmware_via_uart() {
+    confirm_index = 0;
 
-    esp_https_ota_config_t ota_config{};
-    ota_config.http_config = &config;
+    echo("Starting UART OTA process");
+    echo("Ready for firmware download");
 
-    total_content_length_ = 0;
-    received_length_ = 0;
+    esp_err_t result;
+    int64_t transfer_start_ms = 0, transfer_end_ms = 0;
+    uint32_t total_bytes_received = 0;
+    esp_ota_handle_t ota_handle = 0;
 
-    echo("OTA Attempting to connect to %s", url);
-    err = esp_https_ota(&ota_config);
-    if (err == ESP_OK) {
-        check_version_ = true;
-        echo_if_error("stopping wifi", esp_wifi_stop());
-        echo("OTA Successful. Rebooting");
-        esp_restart();
-    } else {
-        echo("OTA Failed. Check HTTP output for more information");
+    const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
+    if (!ota_partition) {
+        echo("No available OTA partition found");
+        return false;
     }
-}
 
-void verify() {
-    bool rollback = false;
-    esp_reset_reason_t reason = esp_reset_reason();
-    if (reason != ESP_RST_DEEPSLEEP && reason != ESP_RST_SW) {
-        check_version_ = false;
-        memset(ssid_, 0, sizeof(ssid_));
-        memset(password_, 0, sizeof(password_));
-        memset(url_, 0, sizeof(url_));
-    } else {
-        if (check_version_) {
-            echo("Detected OTA update, checking version");
+    result = esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle);
+    if (result != ESP_OK) {
+        echo("OTA begin fail [0x%x]", result);
+        return false;
+    }
 
-            if (!is_wifi_connected()) {
-                echo("Not connected to WiFi, connecting");
-                wifi_semaphore = xSemaphoreCreateBinary();
-                if (!setup_wifi(ssid_, password_)) {
-                    echo("Failed to connect to WiFi. Rolling back");
-                    rollback = true;
-                } else {
-                    if (xSemaphoreTake(wifi_semaphore, semaphore_timeout) == pdTRUE) {
-                        if (!version_checker(append_verify_to_url(verify_path))) {
-                            echo("Problem with version check. Rolling back");
-                            rollback = true;
-                        }
-                    } else {
-                        echo("Failed to connect to WiFi. Rolling back");
-                        rollback = true;
+    transfer_start_ms = esp_timer_get_time() / 1000;
+    uart_flush_input(UART_PORT_NUM);
+    send_uart_confirmation();
+
+    uint8_t chunk_buffer[CHUNK_BUFFER_SIZE] = {0};
+    uint32_t buffer_pos = 0;
+    uint32_t chunk_count = 0;
+
+    auto calculate_checksum = [](const uint8_t *data, size_t len) -> uint8_t {
+        uint8_t checksum = 0;
+        for (size_t i = 0; i < len; i++) {
+            checksum ^= data[i];
+        }
+        return checksum;
+    };
+
+    while (true) {
+        if (!wait_for_uart_data(DEFAULT_TRANSFER_TIMEOUT_MS)) {
+            echo("Timeout waiting for data, finishing transfer");
+            break;
+        }
+
+        size_t available = 0;
+        uart_get_buffered_data_len(UART_PORT_NUM, &available);
+
+        if (available == 0) {
+            continue;
+        }
+
+        size_t can_read = CHUNK_BUFFER_SIZE - buffer_pos - 1;
+        if (can_read > available) {
+            can_read = available;
+        }
+
+        if (can_read == 0) {
+            echo("Buffer full without finding checksum delimiter, aborting");
+            esp_ota_abort(ota_handle);
+            return false;
+        }
+
+        int bytes_read = uart_read_bytes(UART_PORT_NUM, chunk_buffer + buffer_pos, can_read, 0);
+        if (bytes_read <= 0) {
+            continue;
+        }
+
+        buffer_pos += bytes_read;
+        chunk_buffer[buffer_pos] = 0;
+        char *delimiter_start = find_checksum_delimiter(chunk_buffer, buffer_pos);
+
+        while (delimiter_start != nullptr) {
+            size_t chunk_data_len = delimiter_start - (char *)chunk_buffer;
+            size_t total_needed = chunk_data_len + 7;
+
+            if (buffer_pos >= total_needed) {
+                char checksum_str[3] = {delimiter_start[3], delimiter_start[4], 0};
+                uint8_t expected_checksum = (uint8_t)strtol(checksum_str, nullptr, 16);
+                uint8_t actual_checksum = calculate_checksum(chunk_buffer, chunk_data_len);
+
+                if (actual_checksum == expected_checksum) {
+                    result = esp_ota_write(ota_handle, chunk_buffer, chunk_data_len);
+                    if (result != ESP_OK) {
+                        echo("OTA write fail [%x]", result);
+                        esp_ota_abort(ota_handle);
+                        return false;
                     }
+
+                    total_bytes_received += chunk_data_len;
+                    chunk_count++;
+                    send_uart_confirmation();
+                } else {
+                    echo("Checksum mismatch: expected %02x, got %02x", expected_checksum, actual_checksum);
+                    esp_ota_abort(ota_handle);
+                    return false;
                 }
-                vSemaphoreDelete(wifi_semaphore);
-            }
 
-            check_version_ = false;
-            memset(ssid_, 0, sizeof(ssid_));
-            memset(password_, 0, sizeof(password_));
-            memset(url_, 0, sizeof(url_));
+                size_t remaining = buffer_pos - total_needed;
+                if (remaining > 0) {
+                    memmove(chunk_buffer, chunk_buffer + total_needed, remaining);
+                }
+                buffer_pos = remaining;
+                chunk_buffer[buffer_pos] = 0;
 
-            if (rollback) {
-                rollback_and_reboot();
+                delimiter_start = find_checksum_delimiter(chunk_buffer, buffer_pos);
+
+                taskYIELD();
             } else {
-                echo_if_error("stopping wifi", esp_wifi_stop());
-                echo("Version check complete. OTA was successful");
+                break;
             }
         }
     }
+
+    transfer_end_ms = (esp_timer_get_time() / 1000) - DEFAULT_TRANSFER_TIMEOUT_MS;
+    echo("Downloaded %dB in %dms (%d chunks)", total_bytes_received, (int32_t)(transfer_end_ms - transfer_start_ms), chunk_count);
+
+    echo("Waiting for flash operations to complete...");
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    result = esp_ota_end(ota_handle);
+    bool ota_success = false;
+
+    if (result == ESP_OK) {
+        result = esp_ota_set_boot_partition(ota_partition);
+        if (result == ESP_OK) {
+            echo("OTA OK, restarting...");
+            ota_success = true;
+        } else {
+            echo("OTA set boot partition fail [0x%x]", result);
+        }
+    } else {
+        echo("OTA end fail [0x%x]", result);
+    }
+
+    send_bridge_shutdown_signal();
+    return ota_success;
 }
 
-bool version_checker(const char *url) {
-    char output_buffer[MAX_HTTP_BUFFER_SIZE + 1] = {0};
-    int content_length = 0;
-    esp_http_client_config_t config{};
-    config.url = url;
+bool run_uart_bridge_for_device_ota(uart_port_t upstream_port, uart_port_t downstream_port) {
+    echo("Starting device OTA bridge (upstream: %d, downstream: %d)", upstream_port, downstream_port);
+    uart_flush_input(upstream_port);
+    uart_flush_input(downstream_port);
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) {
-        echo("Failed to initialize HTTP client");
-        return false;
+    unsigned long last_data = millis();
+    uint32_t loop_count = 0;
+    bool bridge_shutdown_received = false;
+
+    while (!bridge_shutdown_received) {
+        bool data_transferred = false;
+
+        data_transferred |= transfer_bridge_data(upstream_port, downstream_port, bridge_shutdown_received, last_data);
+        data_transferred |= transfer_bridge_data(downstream_port, upstream_port, bridge_shutdown_received, last_data);
+
+        if (millis_since(last_data) > BRIDGE_IDLE_TIMEOUT_MS) {
+            echo("last_data: %d. BRIDGE_IDLE_TIMEOUT_MS: %d. millis_since: %d", last_data, BRIDGE_IDLE_TIMEOUT_MS, millis_since(last_data));
+            echo("Bridge idle – leaving bridge mode");
+            break;
+        }
+
+        taskYIELD();
+
+        loop_count++;
+        if (!data_transferred || (loop_count % 100 == 0)) {
+            vTaskDelay(1);
+            esp_task_wdt_reset();
+        }
     }
 
-    if (!echo_if_error("HTTP set method", esp_http_client_set_method(client, HTTP_METHOD_GET))) {
-        esp_http_client_cleanup(client);
-        return false;
-    }
-
-    if (!echo_if_error("HTTP open", esp_http_client_open(client, 0))) {
-        esp_http_client_cleanup(client);
-        return false;
-    }
-
-    content_length = esp_http_client_fetch_headers(client);
-    if (content_length <= 0) {
-        echo("Invalid content length: %d", content_length);
-        esp_http_client_cleanup(client);
-        return false;
-    }
-
-    int data_read = esp_http_client_read_response(client, output_buffer, MAX_HTTP_BUFFER_SIZE);
-    if (data_read < 0) {
-        echo("Failed to read data");
-        esp_http_client_cleanup(client);
-        return false;
-    }
-
-    esp_http_client_close(client);
-    std::string version(output_buffer);
-
-    if (version != GIT_VERSION) {
-        echo(version == "Unknown version" ? "Unknown version, but connection successful" : "Found different version: %s. But connection successful", version.c_str());
-    } else {
-        echo("Version matches: %s", version.c_str());
-    }
-
-    esp_http_client_cleanup(client);
     return true;
 }
 
-void verify_task(void *pvParameters) {
-    ota::verify();
+static void ota_bridge_task_wrapper(void *parameter) {
+    esp_task_wdt_add(NULL);
+    run_uart_bridge_for_device_ota(bridge_upstream_port, bridge_downstream_port);
+    echo("OTA bridge task completed");
+    esp_task_wdt_delete(NULL);
+
+    ota_bridge_task_handle = nullptr;
     vTaskDelete(NULL);
 }
 
-void ota_task(void *pvParameters) {
-    ota_params_t *params = static_cast<ota_params_t *>(pvParameters);
+void start_ota_bridge_task(uart_port_t upstream_port, uart_port_t downstream_port) {
+    bridge_upstream_port = upstream_port;
+    bridge_downstream_port = downstream_port;
 
-    strcpy(ssid_, params->ssid.c_str());
-    strcpy(password_, params->password.c_str());
-    strcpy(url_, params->url.c_str());
+    BaseType_t result = xTaskCreatePinnedToCore(
+        ota_bridge_task_wrapper,
+        "ota_bridge",
+        8192,
+        NULL,
+        5,
+        &ota_bridge_task_handle,
+        1);
 
-    echo("Starting OTA task");
-    if (is_wifi_connected()) {
-        echo("Already connected to WiFi");
-        attempt(params->url.c_str());
+    if (result != pdPASS) {
+        echo("Failed to create OTA bridge task");
+        ota_bridge_task_handle = nullptr;
     } else {
-        echo("Not connected to WiFi, setting up WiFi");
-        wifi_semaphore = xSemaphoreCreateBinary();
+        echo("OTA bridge task created on core 1 (upstream: %d, downstream: %d)", upstream_port, downstream_port);
+    }
+}
 
-        if (!setup_wifi(params->ssid.c_str(), params->password.c_str())) {
-            echo("Failed to connect to WiFi during OTA");
-        } else {
-            if (xSemaphoreTake(wifi_semaphore, semaphore_timeout) == pdTRUE) {
-                attempt(params->url.c_str());
+bool is_uart_bridge_running() {
+    return ota_bridge_task_handle != nullptr;
+}
+
+std::vector<std::string> build_bridge_path(const std::string &target_name) {
+    std::vector<std::string> bridge_path;
+    std::string current_target = target_name;
+
+    echo("Building bridge path for target: %s", target_name.c_str());
+
+    // Keep following the parent chain until we reach core
+    while (current_target != "core") {
+        try {
+            Module_ptr module = Global::get_module(current_target);
+
+            if (module->type == proxy) {
+                // It's a proxy, get its parent
+                Proxy *proxy_module = static_cast<Proxy *>(module.get());
+                std::string parent = proxy_module->get_parent_expander_name();
+
+                echo("Found proxy %s -> parent: %s", current_target.c_str(), parent.c_str());
+
+                // Add parent to bridge path
+                bridge_path.push_back(parent);
+                current_target = parent;
+            } else if (module->type == expander || module->type == plexus_expander) {
+                // It's an expander/plexus_expander, it must be on core
+                echo("Found expander %s -> must be on core", current_target.c_str());
+
+                // Add core to bridge path
+                bridge_path.push_back("core");
+                break;
             } else {
-                echo("Failed to connect to WiFi within the time period");
+                // Unknown module type, assume it's on core
+                echo("Unknown module type %s, assuming on core", current_target.c_str());
+                break;
             }
+        } catch (const std::runtime_error &e) {
+            echo("Error accessing module %s: %s", current_target.c_str(), e.what());
+            return {};
         }
-        vSemaphoreDelete(wifi_semaphore);
     }
 
-    delete params;
-    vTaskDelete(NULL);
+    echo("Bridge path built: %d bridges needed", (int)bridge_path.size());
+    for (const auto &bridge : bridge_path) {
+        echo("  Bridge: %s", bridge.c_str());
+    }
+
+    return bridge_path;
+}
+
+std::vector<std::string> detect_required_bridges(const std::string &target_name) {
+    if (target_name == "core") {
+        echo("Target is core, no bridges needed");
+        return {};
+    }
+
+    // Check if target module exists
+    try {
+        Module_ptr target_module = Global::get_module(target_name);
+        echo("Target module %s found, type: %d", target_name.c_str(), target_module->type);
+    } catch (const std::runtime_error &e) {
+        echo("Target module %s not found: %s", target_name.c_str(), e.what());
+        return {};
+    }
+
+    return build_bridge_path(target_name);
 }
 
 } // namespace ota
