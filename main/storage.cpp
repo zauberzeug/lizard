@@ -115,6 +115,61 @@ void Storage::clear_nvs() {
     Storage::put("");
 }
 
+void Storage::set_user_pin(const std::uint32_t pin) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open("ble_pins", NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace \"ble_pins\" (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_set_u32(handle, "user_pin", pin)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not write user_pin (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit user_pin (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    nvs_close(handle);
+}
+
+bool Storage::get_user_pin(std::uint32_t &pin) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open("ble_pins", NVS_READWRITE, &handle)) != ESP_OK) {
+        return false;
+    }
+    uint32_t value = 0;
+    err = nvs_get_u32(handle, "user_pin", &value);
+    nvs_close(handle);
+    if (err == ESP_OK) {
+        pin = value;
+        return true;
+    }
+    return false;
+}
+
+static void nvs_delete_key(const std::string &ns, const std::string &key) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    err = nvs_erase_key(handle, key.c_str());
+    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
+        throw std::runtime_error("could not erase key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit erase for key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    nvs_close(handle);
+}
+
+void Storage::remove_user_pin() {
+    nvs_delete_key("ble_pins", "user_pin");
+}
+
 void Storage::put_device_id(const uint8_t id) {
     esp_err_t err;
     nvs_handle handle;
