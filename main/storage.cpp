@@ -1,9 +1,11 @@
 #include "storage.h"
 #include "esp_check.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 #include "utils/addressing.h"
 #include "utils/string_utils.h"
 #include "utils/uart.h"
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 

@@ -11,6 +11,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      BLE_DEV_ACCESS_PIN: ${{ secrets.BLE_DEV_ACCESS_PIN }}
     strategy:
       matrix:
         target: [esp32, esp32s3]
@@ -25,6 +27,11 @@ jobs:
         run: echo "value=$(git describe --always --tags --dirty)" >> $GITHUB_OUTPUT
       - name: Generate parser
         run: "./gen_parser.sh"
+      - name: Create secret sdkconfig defaults
+        if: ${{ env.BLE_DEV_ACCESS_PIN != '' }}
+        shell: bash
+        run: |
+          printf 'CONFIG_ZZ_BLE_DEV_PIN=%s\n' "$BLE_DEV_ACCESS_PIN" > sdkconfig.defaults.secret
       - name: Build firmware for ${{ matrix.target }}
         uses: espressif/esp-idf-ci-action@v1
         with:

@@ -68,11 +68,23 @@ Simply create a Bluetooth module with a device name of your choice.
 | ------------------------------------ | -------------------------------------------------- | --------- |
 | `bluetooth = Bluetooth(device_name)` | initialize bluetooth with advertised `device_name` | `str`     |
 
-| Methods                | Description                  | Arguments |
-| ---------------------- | ---------------------------- | --------- |
-| `bluetooth.send(data)` | send `data` via notification | `str`     |
+| Methods                      | Description                                             | Arguments |
+| ---------------------------- | ------------------------------------------------------- | --------- |
+| `bluetooth.send(data)`       | send `data` via notification                            | `str`     |
+| `bluetooth.set_pin(pin)`     | set 6-digit user PIN (000000-999999)                    | `int`     |
+| `bluetooth.get_pin()`        | print current user PIN or "No user PIN set"             |           |
+| `bluetooth.reset_pin()`      | remove the user PIN                                     |           |
+| `bluetooth.reset_bonds()`    | forget all bonded devices saved in NVS (BLE bond store) |           |
+| `bluetooth.deactivate_pin()` | Disables PIN enforcement                                |           |
 
-Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0 that allows writing Lizard statements like on the command line. On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
+Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0
+that allows writing Lizard statements like on the command line.
+On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
+
+The Bluetooth module stores up to four devices.
+When a fifth connects, the oldest entry is removed.
+
+To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
 
 ## Input
 
@@ -821,14 +833,25 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
 
+## Analog Unit
+
+The AnalogUnit module owns an ADC oneshot unit and is shared by one or more `Analog` or `TemperatureSensor` modules.
+This allows multiple analog channels on the same hardware unit to be used safely without conflicts.
+
+| Constructor                      | Description             | Arguments |
+| -------------------------------- | ----------------------- | --------- |
+| `analog_unit = AnalogUnit(unit)` | ADC unit index (1 or 2) | `int`     |
+
+This module has no properties or methods and is used only as a dependency by other modules.
+
 ## Analog Input
 
 This module is designed for reading analog voltages and converting them to digital values using the ESP32's ADC units.
 For detailed specifications of the ESP32 ADC modules, including attenuation levels, voltage range mappings, and GPIO-to-channel mapping, check the ESP32 documentation.
 
-| Constructor                                     | Description                              | Arguments             |
-| ----------------------------------------------- | ---------------------------------------- | --------------------- |
-| `analog = Analog(unit, channel[, attenuation])` | unit, channel and attenuation level (dB) | `int`, `int`, `float` |
+| Constructor                                 | Description                          | Arguments                         |
+| ------------------------------------------- | ------------------------------------ | --------------------------------- |
+| `analog = Analog(unit, pin[, attenuation])` | Unit, pin and attenuation level (dB) | AnalogUnit module, `int`, `float` |
 
 Possible attenuation levels are 0, 2.5, 6, and 12 dB.
 The default attenuation level is 12 dB.
@@ -837,6 +860,31 @@ The default attenuation level is 12 dB.
 | ---------- | ------------------------------ | --------- |
 | `raw`      | raw measurement value (0-4095) | `int`     |
 | `voltage`  | voltage (V)                    | `float`   |
+
+## Temperature Sensor
+
+This module reads two analog inputs on the same ADC unit
+to compute temperature from an NTC divider and a matching reference divider.
+
+| Constructor                                                        | Description                          | Arguments                            |
+| ------------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
+| `temp = TemperatureSensor(unit, temp_pin, ref_pin[, attenuation])` | Unit, GPIO pins and attenuation (dB) | AnalogUnit module, 2x `int`, `float` |
+
+The attenuation level defaults to 12 dB.
+
+| Properties      | Description                     | Data type |
+| --------------- | ------------------------------- | --------- |
+| `raw_temp`      | Raw ADC reading (NTC pin)       | `int`     |
+| `raw_ref`       | Raw ADC reading (reference pin) | `int`     |
+| `voltage_temp`  | Voltage at NTC pin (V)          | `float`   |
+| `voltage_ref`   | Voltage at reference pin (V)    | `float`   |
+| `temperature_c` | Computed temperature (°C)       | `float`   |
+
+The computed temperature is calculated based on the following assumptions:
+
+- NTC thermistor TDK/EPCOS B57332V5103F360 (10 kΩ @ 25°C, B25/85 = 3380 K)
+- divider 3 kΩ to GND on both pins
+- reference top resistor 10 kΩ to 3V3
 
 ## Expander
 

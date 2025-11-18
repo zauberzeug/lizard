@@ -45,6 +45,8 @@ enum ModuleType {
     dunker_motor,
     dunker_wheels,
     analog,
+    analog_unit,
+    temperature_sensor,
     proxy,
 };
 
