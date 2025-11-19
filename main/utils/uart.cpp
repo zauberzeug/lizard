@@ -1,8 +1,29 @@
 #include "uart.h"
+#include <algorithm>
 #include <cstdarg>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+static EchoConsumer current_consumer = nullptr;
+static void *consumer_context = nullptr;
+static TaskHandle_t consumer_task = nullptr;
+
+void echo_push_consumer(EchoConsumer consumer, void *context) {
+    current_consumer = consumer;
+    consumer_context = context;
+    consumer_task = xTaskGetCurrentTaskHandle();
+}
+
+void echo_pop_consumer(EchoConsumer consumer, void *context) {
+    if (current_consumer == consumer && consumer_context == context && consumer_task == xTaskGetCurrentTaskHandle()) {
+        current_consumer = nullptr;
+        consumer_context = nullptr;
+        consumer_task = nullptr;
+    }
+}
 
 void echo(const char *format, ...) {
     static char buffer[1024];
@@ -21,6 +42,9 @@ void echo(const char *format, ...) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
             printf("%s@%02x\n", &buffer[start], checksum);
+            if (current_consumer && consumer_task == xTaskGetCurrentTaskHandle()) {
+                current_consumer(&buffer[start], consumer_context);
+            }
             start = i + 1;
             checksum = 0;
         } else {

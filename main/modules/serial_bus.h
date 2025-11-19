@@ -64,7 +64,11 @@ private:
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
     void send_frame(uint8_t receiver, const char *payload, size_t length) const;
     void send_done(uint8_t receiver) const;
+    void send_response_line(uint8_t receiver, const char *line);
+    void execute_remote_command(uint8_t requester, const char *payload, size_t length);
+    static void echo_consumer_trampoline(const char *line, void *context);
     bool parse_frame(const char *line, BusFrame &frame) const;
+    bool handle_control_payload(const BusFrame &frame);
     void handle_frame(const BusFrame &frame);
     void handle_poll_request(uint8_t sender);
     void handle_done(uint8_t sender);

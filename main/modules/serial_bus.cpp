@@ -3,10 +3,12 @@
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "esp_ota_ops.h"
+#include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <stdexcept>
-
 extern void process_line(const char *line, const int len);
 
 namespace {
@@ -15,6 +17,13 @@ constexpr uint8_t BROADCAST_ID = 0xff;
 constexpr unsigned long POLL_TIMEOUT_MS = 250;
 constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 constexpr size_t INCOMING_QUEUE_LENGTH = 32;
+constexpr const char RESPONSE_PREFIX[] = "__BUS_RESPONSE__";
+
+struct ResponseContext {
+    SerialBus *bus;
+    uint8_t receiver;
+    bool sent_line = false;
+};
 
 std::string trim_copy(const std::string &value) {
     size_t start = 0;
@@ -37,7 +46,6 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
         {"is_coordinator", std::make_shared<BooleanVariable>(false)},
         {"peer_count", std::make_shared<IntegerVariable>(0)},
         {"last_message_age", std::make_shared<IntegerVariable>(0)},
-        {"debug", std::make_shared<BooleanVariable>(false)},
     };
 }
 
@@ -103,9 +111,6 @@ void SerialBus::communicator_task_trampoline(void *param) {
             this->flush_outgoing_queue();
             this->send_done(this->window_requester);
             this->transmit_window_open = false;
-        }
-        if (this->properties.at("debug")->boolean_value) {
-            echo("serial bus %s communicator loop", this->name.c_str());
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -225,6 +230,14 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         this->enqueue_message(target, "!.", 2);
         const char restart_cmd[] = "core.restart()";
         this->enqueue_message(target, restart_cmd, sizeof(restart_cmd) - 1);
+    } else if (method_name == "version") {
+        Module::expect(arguments, 1, integer);
+        const int receiver = arguments[0]->evaluate_integer();
+        if (receiver < 0 || receiver > 255) {
+            throw std::runtime_error("receiver id must be between 0 and 255");
+        }
+        const char cmd[] = "core.version()";
+        this->enqueue_message(static_cast<uint8_t>(receiver), cmd, sizeof(cmd) - 1);
     } else {
         Module::call(method_name, arguments);
     }
@@ -270,6 +283,48 @@ void SerialBus::send_done(uint8_t receiver) const {
     this->send_frame(receiver, done_cmd, sizeof(done_cmd) - 1);
 }
 
+void SerialBus::send_response_line(uint8_t receiver, const char *line) {
+    if (!line) {
+        return;
+    }
+    char payload[PAYLOAD_CAPACITY];
+    const int len = std::snprintf(payload, sizeof(payload), "%s:%s", RESPONSE_PREFIX, line);
+    if (len < 0 || len >= static_cast<int>(sizeof(payload))) {
+        echo("warning: serial bus %s response truncated", this->name.c_str());
+        return;
+    }
+    try {
+        this->enqueue_message(receiver, payload, len);
+    } catch (const std::runtime_error &e) {
+        echo("warning: serial bus %s could not send response: %s", this->name.c_str(), e.what());
+    }
+}
+
+void SerialBus::echo_consumer_trampoline(const char *line, void *context) {
+    auto *ctx = static_cast<ResponseContext *>(context);
+    if (!ctx || !ctx->bus || !line) {
+        return;
+    }
+    ctx->bus->send_response_line(ctx->receiver, line);
+    ctx->sent_line = true;
+}
+
+void SerialBus::execute_remote_command(uint8_t requester, const char *payload, size_t length) {
+    if (length == 0) {
+        return;
+    }
+    ResponseContext context{this, requester, false};
+    echo_push_consumer(echo_consumer_trampoline, &context);
+    try {
+        process_line(payload, length);
+    } catch (const std::exception &e) {
+        this->send_response_line(requester, e.what());
+    } catch (...) {
+        this->send_response_line(requester, "unknown error");
+    }
+    echo_pop_consumer(echo_consumer_trampoline, &context);
+}
+
 bool SerialBus::parse_frame(const char *line, BusFrame &frame) const {
     const std::string message(line);
     if (!starts_with(message, "$$")) {
@@ -305,12 +360,37 @@ bool SerialBus::parse_frame(const char *line, BusFrame &frame) const {
     return true;
 }
 
+bool SerialBus::handle_control_payload(const BusFrame &frame) {
+    if (frame.length >= sizeof(RESPONSE_PREFIX) - 1 &&
+        std::strncmp(frame.payload, RESPONSE_PREFIX, sizeof(RESPONSE_PREFIX) - 1) == 0) {
+        const size_t prefix_len = sizeof(RESPONSE_PREFIX) - 1;
+        const char *message = frame.payload + prefix_len;
+        size_t message_len = frame.length > prefix_len ? frame.length - prefix_len : 0;
+        if (message_len > 0 && message[0] == ':') {
+            message++;
+            message_len--;
+        }
+        if (message_len > 0) {
+            static char buffer[PAYLOAD_CAPACITY];
+            const size_t copy_len = std::min(message_len, sizeof(buffer) - 1);
+            memcpy(buffer, message, copy_len);
+            buffer[copy_len] = '\0';
+            echo("bus[%u]: %s", frame.sender, buffer);
+        }
+        return true;
+    }
+    return false;
+}
+
 void SerialBus::handle_frame(const BusFrame &frame) {
+    if (this->handle_control_payload(frame)) {
+        return;
+    }
     if (frame.length > 0 && frame.payload[0] == '!') {
         process_line(frame.payload, frame.length);
         return;
     }
-    this->message_handler(frame.payload, true, false);
+    this->execute_remote_command(frame.sender, frame.payload, frame.length);
 }
 
 void SerialBus::handle_poll_request(uint8_t sender) {
