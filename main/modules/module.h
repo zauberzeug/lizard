@@ -47,6 +47,7 @@ enum ModuleType {
     analog_unit,
     temperature_sensor,
     proxy,
+    serial_bus,
 };
 
 class Module;

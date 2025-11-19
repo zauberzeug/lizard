@@ -30,6 +30,7 @@
 #include "roboclaw_motor.h"
 #include "roboclaw_wheels.h"
 #include "serial.h"
+#include "serial_bus.h"
 #include "stepper_motor.h"
 #include "temperature_sensor.h"
 #include <stdarg.h>
@@ -91,6 +92,36 @@ Module_ptr Module::create(const std::string type,
         const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_NC;
         const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_NC;
         return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
+    } else if (type == "SerialBus") {
+        if (arguments.size() < 2) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        if ((arguments[0]->type & identifier) == 0 || (arguments[1]->type & integer) == 0) {
+            throw std::runtime_error("invalid arguments for SerialBus");
+        }
+        const std::string serial_name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(serial_name);
+        if (module->type != serial) {
+            throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
+        }
+        const ConstSerial_ptr serial_module = std::static_pointer_cast<const Serial>(module);
+        const long node_id_value = arguments[1]->evaluate_integer();
+        if (node_id_value < 0 || node_id_value > 255) {
+            throw std::runtime_error("serial bus id must be between 0 and 255");
+        }
+        const uint8_t node_id = static_cast<uint8_t>(node_id_value);
+        std::vector<uint8_t> peer_ids;
+        for (size_t i = 2; i < arguments.size(); ++i) {
+            if ((arguments[i]->type & integer) == 0) {
+                throw std::runtime_error("peer ids must be integers");
+            }
+            const long peer_value = arguments[i]->evaluate_integer();
+            if (peer_value < 0 || peer_value > 255) {
+                throw std::runtime_error("peer ids must be between 0 and 255");
+            }
+            peer_ids.push_back(static_cast<uint8_t>(peer_value));
+        }
+        return std::make_shared<SerialBus>(name, serial_module, node_id, peer_ids, message_handler);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();
