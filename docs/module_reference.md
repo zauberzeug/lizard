@@ -401,6 +401,8 @@ The `version` parameter is an optional integer indicating the patch number of th
 | `motor.enabled`           | Whether the motor is enabled               | `bool`    |
 | `motor.motor_temperature` | The Temperature measured in the Motor (°C) | `float`   |
 
+The `motor_temperature` will only work with the firmware generated from the [zauberzeug/ODrive](https://github.com/zauberzeug/ODrive) fork.
+
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |
 | `motor.zero()`                 | Set current position as zero position  |                  |
