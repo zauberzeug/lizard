@@ -229,7 +229,3 @@ double ODriveMotor::get_speed() {
 void ODriveMotor::speed(const double speed, const double acceleration) {
     this->speed(static_cast<float>(speed));
 }
-
-double ODriveMotor::get_motor_temperature() {
-    return this->properties.at("motor_temperature")->number_value;
-}

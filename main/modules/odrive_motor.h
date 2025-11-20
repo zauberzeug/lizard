@@ -40,7 +40,6 @@ public:
     void position(const double position, const double speed, const double acceleration) override;
     double get_speed() override;
     void speed(const double speed, const double acceleration) override;
-    double get_motor_temperature();
     void enable() override;
     void disable() override;
 };
