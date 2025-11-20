@@ -52,12 +52,10 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
 SerialBus::SerialBus(const std::string &name,
                      const ConstSerial_ptr serial,
                      const uint8_t node_id,
-                     const std::vector<uint8_t> peer_ids,
                      MessageHandler message_handler)
     : Module(serial_bus, name),
       serial(serial),
       node_id(node_id),
-      peer_ids(peer_ids),
       message_handler(message_handler) {
     this->properties = SerialBus::get_defaults();
     this->properties.at("is_coordinator")->boolean_value = this->is_coordinator();
@@ -74,7 +72,17 @@ SerialBus::SerialBus(const std::string &name,
 }
 
 bool SerialBus::is_coordinator() const {
-    return this->node_id == 0;
+    return this->coordinator;
+}
+
+void SerialBus::configure_coordinator(const std::vector<uint8_t> &peers) {
+    this->coordinator = true;
+    this->peer_ids = peers;
+    this->poll_index = 0;
+    this->waiting_for_done = false;
+    this->current_poll_target = 0;
+    this->properties.at("is_coordinator")->boolean_value = true;
+    this->properties.at("peer_count")->integer_value = this->peer_ids.size();
 }
 
 void SerialBus::start_communicator() {
@@ -190,6 +198,23 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         }
         const std::string payload = arguments[1]->evaluate_string();
         this->enqueue_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
+    } else if (method_name == "set_coordinator") {
+        if (arguments.empty()) {
+            throw std::runtime_error("set_coordinator expects at least one peer id");
+        }
+        std::vector<uint8_t> peers;
+        peers.reserve(arguments.size());
+        for (const auto &argument : arguments) {
+            if ((argument->type & integer) == 0) {
+                throw std::runtime_error("peer ids must be integers");
+            }
+            const long peer_value = argument->evaluate_integer();
+            if (peer_value < 0 || peer_value > 255) {
+                throw std::runtime_error("peer ids must be between 0 and 255");
+            }
+            peers.push_back(static_cast<uint8_t>(peer_value));
+        }
+        this->configure_coordinator(peers);
     } else if (method_name == "configure") {
         Module::expect(arguments, 2, integer, string);
         const int receiver = arguments[0]->evaluate_integer();
@@ -230,14 +255,6 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         this->enqueue_message(target, "!.", 2);
         const char restart_cmd[] = "core.restart()";
         this->enqueue_message(target, restart_cmd, sizeof(restart_cmd) - 1);
-    } else if (method_name == "version") {
-        Module::expect(arguments, 1, integer);
-        const int receiver = arguments[0]->evaluate_integer();
-        if (receiver < 0 || receiver > 255) {
-            throw std::runtime_error("receiver id must be between 0 and 255");
-        }
-        const char cmd[] = "core.version()";
-        this->enqueue_message(static_cast<uint8_t>(receiver), cmd, sizeof(cmd) - 1);
     } else {
         Module::call(method_name, arguments);
     }

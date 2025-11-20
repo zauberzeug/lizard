@@ -18,7 +18,6 @@ public:
     SerialBus(const std::string &name,
               const ConstSerial_ptr serial,
               const uint8_t node_id,
-              const std::vector<uint8_t> peer_ids,
               MessageHandler message_handler);
 
     void step() override;
@@ -40,7 +39,8 @@ private:
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
-    const std::vector<uint8_t> peer_ids;
+    std::vector<uint8_t> peer_ids;
+    bool coordinator = false;
     MessageHandler message_handler;
 
     QueueHandle_t outbound_queue = nullptr;
@@ -75,4 +75,5 @@ private:
     void coordinator_poll_step();
     void check_poll_timeout();
     bool is_coordinator() const;
+    void configure_coordinator(const std::vector<uint8_t> &peers);
 };

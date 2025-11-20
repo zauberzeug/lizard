@@ -77,6 +77,29 @@ When a fifth connects, the oldest entry is removed.
 
 To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
 
+## Serial Bus
+
+The serial bus module lets multiple ESP32s share a UART link with a coordinator that polls peers in turn.
+
+| Constructor                   | Description                                    | Arguments       |
+| ----------------------------- | ---------------------------------------------- | --------------- |
+| `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
+
+| Properties             | Description                                        | Data type |
+| ---------------------- | -------------------------------------------------- | --------- |
+| `bus.is_coordinator`   | Whether this node is acting as bus coordinator     | `bool`    |
+| `bus.peer_count`       | Number of peer nodes the coordinator will poll     | `int`     |
+| `bus.last_message_age` | Milliseconds since the last bus frame was received | `int`     |
+
+| Methods                            | Description                                                                                    | Arguments    |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------- | ------------ |
+| `bus.send(receiver, payload)`      | Send a payload to a peer `receiver` (0-255); payload must not contain newlines                 | `int`, `str` |
+| `bus.configure(receiver, script)`  | Send a multi-line setup script to a peer and restart it (`!-`/`!+` framing is handled for you) | `int`, `str` |
+| `bus.set_coordinator(peer_ids...)` | Mark this node as coordinator and set the list of peer IDs to poll in round-robin order        | `int`...     |
+
+Use `bus.configure()` to push startup scripts line by line;
+it wraps the required framing and finishes with a restart so peers boot with the new configuration.
+
 ## Input
 
 The input module is associated with a digital input pin that is be connected to a pushbutton, sensor or other input signal.
