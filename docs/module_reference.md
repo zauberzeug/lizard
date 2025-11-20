@@ -388,17 +388,18 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 
 The `version` parameter is an optional integer indicating the patch number of the ODrive firmware (4, 5 or 6; default: 4 for version "0.5.4"). Version 0.5.6 allows to read the motor error flag.
 
-| Properties          | Description                               | Data type |
-| ------------------- | ----------------------------------------- | --------- |
-| `motor.position`    | Motor position (meters)                   | `float`   |
-| `motor.speed`       | Motor speed (m/s)                         | `float`   |
-| `motor.tick_offset` | Encoder tick offset                       | `float`   |
-| `motor.m_per_tick`  | Meters per encoder tick                   | `float`   |
-| `motor.reversed`    | Reverse motor direction                   | `bool`    |
-| `motor.axis_state`  | State of the motor axis                   | `int`     |
-| `motor.axis_error`  | Error code of the axis                    | `int`     |
-| `motor.motor_error` | Motor error flat (requires version 0.5.6) | `int`     |
-| `motor.enabled`     | Whether the motor is enabled              | `bool`    |
+| Properties                | Description                                | Data type |
+| ------------------------- | ------------------------------------------ | --------- |
+| `motor.position`          | Motor position (meters)                    | `float`   |
+| `motor.speed`             | Motor speed (m/s)                          | `float`   |
+| `motor.tick_offset`       | Encoder tick offset                        | `float`   |
+| `motor.m_per_tick`        | Meters per encoder tick                    | `float`   |
+| `motor.reversed`          | Reverse motor direction                    | `bool`    |
+| `motor.axis_state`        | State of the motor axis                    | `int`     |
+| `motor.axis_error`        | Error code of the axis                     | `int`     |
+| `motor.motor_error`       | Motor error flat (requires version 0.5.6)  | `int`     |
+| `motor.enabled`           | Whether the motor is enabled               | `bool`    |
+| `motor.motor_temperature` | The Temperature measured in the Motor (°C) | `float`   |
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |
