@@ -1,5 +1,6 @@
 #include "serial_bus.h"
 
+#include "../global.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -18,6 +19,7 @@ constexpr unsigned long POLL_TIMEOUT_MS = 250;
 constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 constexpr const char RESPONSE_PREFIX[] = "__BUS_RESPONSE__";
+constexpr const char SUBSCRIBE_PREFIX[] = "__SUBSCRIBE__:";
 
 struct ResponseContext {
     SerialBus *bus;
@@ -35,6 +37,16 @@ std::string trim_copy(const std::string &value) {
         end--;
     }
     return value.substr(start, end - start);
+}
+
+bool split_property_path(const std::string &path, std::string &module_name, std::string &property_name) {
+    const size_t dot = path.find('.');
+    if (dot == std::string::npos || dot == 0 || dot + 1 >= path.size()) {
+        return false;
+    }
+    module_name = path.substr(0, dot);
+    property_name = path.substr(dot + 1);
+    return true;
 }
 
 } // namespace
@@ -109,6 +121,7 @@ void SerialBus::communicator_task_trampoline(void *param) {
         this->communicator_process_uart();
         if (this->is_coordinator()) {
             if (!this->waiting_for_done) {
+                this->send_subscription_updates();
                 if (!this->flush_outgoing_queue()) {
                     this->coordinator_poll_step();
                 }
@@ -116,6 +129,7 @@ void SerialBus::communicator_task_trampoline(void *param) {
                 this->check_poll_timeout();
             }
         } else if (this->transmit_window_open) {
+            this->send_subscription_updates();
             this->flush_outgoing_queue();
             this->send_done(this->window_requester);
             this->transmit_window_open = false;
@@ -154,6 +168,9 @@ void SerialBus::communicator_process_uart() {
             this->handle_done(frame.sender);
             continue;
         }
+        if (this->handle_subscribe_payload(frame)) {
+            continue;
+        }
         this->push_incoming_frame(frame);
     }
 }
@@ -163,6 +180,82 @@ bool SerialBus::flush_outgoing_queue() {
     OutgoingMessage message;
     while (xQueueReceive(this->outbound_queue, &message, 0) == pdTRUE) {
         this->send_frame(message.receiver, message.payload, message.length);
+        sent = true;
+    }
+    return sent;
+}
+
+void SerialBus::add_subscription(uint8_t subscriber, const std::string &module_name, const std::string &property_name) {
+    auto existing = std::find_if(this->property_subscriptions.begin(),
+                                 this->property_subscriptions.end(),
+                                 [&](const PropertySubscription &subscription) {
+                                     return subscription.subscriber == subscriber &&
+                                            subscription.module_name == module_name &&
+                                            subscription.property_name == property_name;
+                                 });
+    if (existing == this->property_subscriptions.end()) {
+        this->property_subscriptions.push_back({subscriber, module_name, property_name, ""});
+    }
+}
+
+bool SerialBus::send_subscription_updates() {
+    bool sent = false;
+    for (auto &subscription : this->property_subscriptions) {
+        Module_ptr module;
+        try {
+            module = Global::get_module(subscription.module_name);
+        } catch (const std::exception &e) {
+            echo("warning: serial bus %s subscription to %s failed: %s",
+                 this->name.c_str(),
+                 subscription.module_name.c_str(),
+                 e.what());
+            continue;
+        }
+
+        Variable_ptr property;
+        try {
+            property = module->get_property(subscription.property_name);
+        } catch (const std::exception &e) {
+            echo("warning: serial bus %s missing property %s.%s: %s",
+                 this->name.c_str(),
+                 subscription.module_name.c_str(),
+                 subscription.property_name.c_str(),
+                 e.what());
+            continue;
+        }
+
+        char value_buffer[PAYLOAD_CAPACITY];
+        const int value_len = property->print_to_buffer(value_buffer, sizeof(value_buffer));
+        if (value_len <= 0 || value_len >= static_cast<int>(sizeof(value_buffer))) {
+            echo("warning: serial bus %s could not serialize %s.%s",
+                 this->name.c_str(),
+                 subscription.module_name.c_str(),
+                 subscription.property_name.c_str());
+            continue;
+        }
+
+        const std::string value(value_buffer, value_len);
+        if (value == subscription.last_value) {
+            continue;
+        }
+
+        char payload[PAYLOAD_CAPACITY];
+        const int payload_len = csprintf(payload,
+                                         sizeof(payload),
+                                         "%s.%s=%s",
+                                         subscription.module_name.c_str(),
+                                         subscription.property_name.c_str(),
+                                         value.c_str());
+        if (payload_len < 0 || payload_len >= static_cast<int>(sizeof(payload))) {
+            echo("warning: serial bus %s subscription payload too large for %s.%s",
+                 this->name.c_str(),
+                 subscription.module_name.c_str(),
+                 subscription.property_name.c_str());
+            continue;
+        }
+
+        this->send_frame(subscription.subscriber, payload, payload_len);
+        subscription.last_value = value;
         sent = true;
     }
     return sent;
@@ -255,6 +348,24 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         this->enqueue_message(target, "!.", 2);
         const char restart_cmd[] = "core.restart()";
         this->enqueue_message(target, restart_cmd, sizeof(restart_cmd) - 1);
+    } else if (method_name == "subscribe") {
+        Module::expect(arguments, 2, integer, string);
+        const int receiver = arguments[0]->evaluate_integer();
+        if (receiver < 0 || receiver > 255) {
+            throw std::runtime_error("receiver id must be between 0 and 255");
+        }
+        const std::string property_path = arguments[1]->evaluate_string();
+        std::string module_name;
+        std::string property_name;
+        if (!split_property_path(property_path, module_name, property_name)) {
+            throw std::runtime_error("property path must look like \"module.property\"");
+        }
+        char payload[PAYLOAD_CAPACITY];
+        const int len = csprintf(payload, sizeof(payload), "%s%s", SUBSCRIBE_PREFIX, property_path.c_str());
+        if (len < 0 || len >= static_cast<int>(sizeof(payload))) {
+            throw std::runtime_error("subscription payload is too large for serial bus");
+        }
+        this->enqueue_message(static_cast<uint8_t>(receiver), payload, len);
     } else {
         Module::call(method_name, arguments);
     }
@@ -397,6 +508,24 @@ bool SerialBus::handle_control_payload(const BusFrame &frame) {
         return true;
     }
     return false;
+}
+
+bool SerialBus::handle_subscribe_payload(const BusFrame &frame) {
+    const size_t prefix_len = sizeof(SUBSCRIBE_PREFIX) - 1;
+    if (frame.length <= prefix_len || std::strncmp(frame.payload, SUBSCRIBE_PREFIX, prefix_len) != 0) {
+        return false;
+    }
+
+    const std::string property_path(frame.payload + prefix_len, frame.length - prefix_len);
+    std::string module_name;
+    std::string property_name;
+    if (!split_property_path(property_path, module_name, property_name)) {
+        echo("warning: serial bus %s invalid subscription \"%s\"", this->name.c_str(), property_path.c_str());
+        return true;
+    }
+
+    this->add_subscription(frame.sender, module_name, property_name);
+    return true;
 }
 
 void SerialBus::handle_frame(const BusFrame &frame) {

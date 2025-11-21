@@ -43,6 +43,21 @@
 #define DEFAULT_SCL_PIN GPIO_NUM_22
 #endif
 
+namespace {
+class PlaceholderModule : public Module {
+public:
+    explicit PlaceholderModule(const std::string &name) : Module(dynamic_module, name) {
+    }
+
+    void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) override {
+        if (!this->properties.count(property_name)) {
+            this->properties[property_name] = std::make_shared<Variable>(expression->type);
+        }
+        Module::write_property(property_name, expression, from_expander);
+    }
+};
+} // namespace
+
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
 }
 
@@ -384,6 +399,10 @@ Module_ptr Module::create(const std::string type,
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
+}
+
+Module_ptr Module::create_placeholder(const std::string &name) {
+    return std::make_shared<PlaceholderModule>(name);
 }
 
 void Module::step() {
