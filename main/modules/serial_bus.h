@@ -6,7 +6,9 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include <cstdint>
+#include <string_view>
 #include <vector>
+#include "../utils/ota.h"
 
 class SerialBus;
 using SerialBus_ptr = std::shared_ptr<SerialBus>;
@@ -53,6 +55,7 @@ private:
     bool transmit_window_open = false;
     uint8_t window_requester = 0;
     unsigned long last_message_millis = 0;
+    ota::BusOtaSession ota_session;
 
     void start_communicator();
     static void communicator_task_trampoline(void *param);
