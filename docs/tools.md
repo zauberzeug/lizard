@@ -36,6 +36,17 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
+### Bus OTA
+
+`serial_bus_ota.py` pushes firmware to a peer over a `SerialBus` coordinator.
+
+```bash
+./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--chunk-size 174] [--window 12]
+```
+
+- Chunk size: device advertises its cap in `__OTA_READY__`; default/build-time cap is 174 bytes. The host clamps to whatever the device reports.
+- Window: how many chunks are in flight before waiting for an ack (defaults to 12; raising to ~16–24 can shorten transfers if the link is stable).
+
 ### Configure
 
 Use the configure script to send a new startup script to the microcontroller.

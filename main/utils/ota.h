@@ -17,7 +17,7 @@ constexpr const char OTA_ACK_PREFIX[] = "__OTA_ACK__";
 constexpr const char OTA_DONE_PREFIX[] = "__OTA_DONE__";
 constexpr const char OTA_ERROR_PREFIX[] = "__OTA_ERROR__";
 
-constexpr size_t BUS_OTA_CHUNK_SIZE = 150;
+constexpr size_t BUS_OTA_CHUNK_SIZE = 174;
 constexpr size_t BUS_OTA_BUFFER_SIZE = 256;
 constexpr unsigned long BUS_OTA_SESSION_TIMEOUT_MS = 10000;
 
