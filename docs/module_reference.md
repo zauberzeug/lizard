@@ -35,6 +35,8 @@ It is automatically created right after the boot sequence.
 | `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
 | `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
 | `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
+| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
+| `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -96,7 +98,7 @@ To push firmware over the bus, send OTA control payloads through `bus.send(...)`
 `__OTA_BEGIN__:<size>` starts a session, each `__OTA_CHUNK__:<seq>:<base64>` adds data (150-byte chunks recommended),
 `__OTA_COMMIT__` finalizes the image, and `__OTA_ABORT__` cancels. Peers answer with `__OTA_READY__`, `__OTA_ACK__`,
 `__OTA_DONE__`, or `__OTA_ERROR__` messages that show up on the coordinator console. The helper script `serial_bus_ota.py`
-wraps this flow: `./serial_bus_ota.py --port /dev/ttyUSB0 --id 1 build/firmware.bin`.
+wraps this flow and can optionally pause broadcasts on an expander hop: `./serial_bus_ota.py --port /dev/ttyUSB0 --id 1 [--expander p0] build/firmware.bin`.
 
 ## Input
 

@@ -43,6 +43,8 @@
 #define DEFAULT_SCL_PIN GPIO_NUM_22
 #endif
 
+bool Module::broadcast_paused = false;
+
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
 }
 
@@ -393,7 +395,7 @@ void Module::step() {
             echo("%s %s", this->name.c_str(), output.c_str());
         }
     }
-    if (this->broadcast && !this->properties.empty()) {
+    if (!Module::broadcast_paused && this->broadcast && !this->properties.empty()) {
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "!!");
         for (auto const &[property_name, property] : this->properties) {
@@ -454,6 +456,14 @@ void Module::write_property(const std::string property_name, const ConstExpressi
 
 void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *data) {
     throw std::runtime_error("CAN message handler is not implemented");
+}
+
+void Module::set_broadcast_paused(bool paused) {
+    Module::broadcast_paused = paused;
+}
+
+bool Module::is_broadcast_paused() {
+    return Module::broadcast_paused;
 }
 
 DefaultsRegistry &Module::get_defaults_registry() {
