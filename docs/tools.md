@@ -41,11 +41,11 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 `serial_bus_ota.py` pushes firmware to a peer over a `SerialBus` coordinator.
 
 ```bash
-./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--chunk-size 174] [--window 12] [--expander p0]
+./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--chunk-size 162] [--window 12] [--expander p0]
 ```
 
-- Chunk size: device advertises its cap in `__OTA_READY__`; default/build-time cap is 174 bytes. The host clamps to whatever the device reports.
-- Window: how many chunks are in flight before waiting for an ack (defaults to 12; raising to ~16–24 can shorten transfers if the link is stable).
+- Chunk size: defaults to 162 bytes so OTA payloads survive expander hops; peers may advertise a higher cap (up to 174) in `__OTA_READY__`, and the host clamps to whatever they report.
+- Window: defaults to 12 for expander chains; only raise it if you have a clean single-hop link and need extra throughput.
 - Expander hop: pass `--expander <name>` (e.g. `p0`) when the coordinator sits behind an expander; the script pauses broadcasts on that expander via `core.pause_broadcasts()` before the transfer and resumes afterwards to keep the UART link clear.
 
 ### Configure
