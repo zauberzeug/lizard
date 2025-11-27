@@ -9,7 +9,7 @@ from typing import Iterable, Optional
 import serial
 
 
-DEFAULT_CHUNK_SIZE = 174
+DEFAULT_CHUNK_SIZE = 162
 READY_TIMEOUT = 10.0
 ACK_TIMEOUT = 8.0
 DONE_TIMEOUT = 15.0
