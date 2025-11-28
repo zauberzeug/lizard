@@ -58,6 +58,15 @@ std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
     return arguments;
 }
 
+Module_ptr get_or_create_property_module(const std::string &module_name) {
+    if (Global::has_module(module_name)) {
+        return Global::get_module(module_name);
+    }
+    const Module_ptr module = Module::create_placeholder(module_name);
+    Global::add_module(module_name, module);
+    return module;
+}
+
 Expression_ptr compile_expression(const struct owl_ref ref) {
     const struct parsed_expression expression = parsed_expression_get(ref);
     switch (expression.type) {
@@ -149,7 +158,7 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
         } else if (!action.property_assignment.empty) {
             const struct parsed_property_assignment property_assignment = parsed_property_assignment_get(action.property_assignment);
             const std::string module_name = identifier_to_string(property_assignment.module_name);
-            const Module_ptr module = Global::get_module(module_name);
+            const Module_ptr module = get_or_create_property_module(module_name);
             const std::string property_name = identifier_to_string(property_assignment.property_name);
             const ConstExpression_ptr expression = compile_expression(property_assignment.expression);
             actions.push_back(std::make_shared<PropertyAssignment>(module, property_name, expression));
@@ -233,7 +242,7 @@ void process_tree(owl_tree *const tree, bool from_expander) {
         } else if (!statement.property_assignment.empty) {
             const struct parsed_property_assignment property_assignment = parsed_property_assignment_get(statement.property_assignment);
             const std::string module_name = identifier_to_string(property_assignment.module_name);
-            const Module_ptr module = Global::get_module(module_name);
+            const Module_ptr module = get_or_create_property_module(module_name);
             const std::string property_name = identifier_to_string(property_assignment.property_name);
             const ConstExpression_ptr expression = compile_expression(property_assignment.expression);
             module->write_property(property_name, expression, from_expander);

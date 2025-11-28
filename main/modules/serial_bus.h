@@ -6,6 +6,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include <cstdint>
+#include <string>
 #include <vector>
 
 class SerialBus;
@@ -36,6 +37,12 @@ private:
         uint16_t length;
         char payload[PAYLOAD_CAPACITY];
     };
+    struct PropertySubscription {
+        uint8_t subscriber;
+        std::string module_name;
+        std::string property_name;
+        std::string last_value;
+    };
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
@@ -53,12 +60,16 @@ private:
     bool transmit_window_open = false;
     uint8_t window_requester = 0;
     unsigned long last_message_millis = 0;
+    std::vector<PropertySubscription> property_subscriptions;
 
     void start_communicator();
     static void communicator_task_trampoline(void *param);
     [[noreturn]] void communicator_loop();
     void communicator_process_uart();
     bool flush_outgoing_queue();
+    bool send_subscription_updates();
+    void add_subscription(uint8_t subscriber, const std::string &module_name, const std::string &property_name);
+    bool handle_subscribe_payload(const BusFrame &frame);
     void push_incoming_frame(const BusFrame &frame);
     void drain_inbox();
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
