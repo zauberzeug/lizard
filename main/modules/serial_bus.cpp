@@ -102,6 +102,7 @@ void SerialBus::start_communicator() {
 void SerialBus::communicator_task_trampoline(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
     bus->communicator_loop();
+    configASSERT(!"SerialBus::communicator_loop returned unexpectedly");
 }
 
 [[noreturn]] void SerialBus::communicator_loop() {
@@ -389,7 +390,7 @@ bool SerialBus::handle_control_payload(const BusFrame &frame) {
         }
         if (message_len > 0) {
             static char buffer[PAYLOAD_CAPACITY];
-            const size_t copy_len = std::min(message_len, sizeof(buffer) - 1);
+            const size_t copy_len = std::min(message_len, static_cast<size_t>(sizeof(buffer) - 1));
             memcpy(buffer, message, copy_len);
             buffer[copy_len] = '\0';
             echo("bus[%u]: %s", frame.sender, buffer);
