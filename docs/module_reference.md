@@ -32,21 +32,15 @@ It is automatically created right after the boot sequence.
 | `core.print(...)`                | Print arbitrary arguments to the command line      | arbitrary    |
 | `core.output(format)`            | Define the output format                           | `str`        |
 | `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
-| `core.ota(ssid, password, url)`  | Starts OTA update on a URL with given WiFi         | 3x `str`     |
 | `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
 | `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
 | `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
+| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
+| `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
-
-The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
-After initializing the WiFi connection, it will attempt an OTA update from the given URL.
-Upon successful updating, the ESP will restart and attempt to verify the OTA update.
-It will reconnect to the WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard.
-The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
-If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
@@ -99,6 +93,9 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 
 Use `bus.configure()` to push startup scripts line by line;
 it wraps the required framing and finishes with a restart so peers boot with the new configuration.
+
+To push firmware over the bus use helper script `serial_bus_ota.py`.
+It automatically controlls the OTA flow and can handle serial bus connected to an expander: `./serial_bus_ota.py --port /dev/ttyUSB0 --id 1 [--expander p0] build/firmware.bin`.
 
 ## Input
 

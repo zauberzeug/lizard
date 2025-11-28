@@ -3,11 +3,12 @@
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
-#include "esp_ota_ops.h"
+#include "../utils/ota.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <string_view>
 #include <stdexcept>
 extern void process_line(const char *line, const int len);
 
@@ -36,7 +37,6 @@ std::string trim_copy(const std::string &value) {
     }
     return value.substr(start, end - start);
 }
-
 } // namespace
 
 REGISTER_MODULE_DEFAULTS(SerialBus)
@@ -186,6 +186,12 @@ void SerialBus::drain_inbox() {
 
 void SerialBus::step() {
     this->drain_inbox();
+
+    ota::bus_tick(this->ota_session, millis(), this->name.c_str(),
+                  [this](uint8_t receiver, const char *payload, size_t length) {
+                      this->enqueue_message(receiver, payload, length);
+                  });
+
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
 }
@@ -345,7 +351,7 @@ void SerialBus::execute_remote_command(uint8_t requester, const char *payload, s
 
 bool SerialBus::parse_frame(const char *line, BusFrame &frame) const {
     const std::string message(line);
-    if (!starts_with(message, "$$")) {
+    if (message.size() < 2 || message.compare(0, 2, "$$") != 0) {
         return false;
     }
     const size_t header_end = message.find("$$", 2);
@@ -401,6 +407,14 @@ bool SerialBus::handle_control_payload(const BusFrame &frame) {
 }
 
 void SerialBus::handle_frame(const BusFrame &frame) {
+    if (ota::bus_handle_frame(
+            this->ota_session,
+            frame.sender,
+            std::string_view(frame.payload, frame.length),
+            this->name.c_str(),
+            [this](uint8_t receiver, const char *payload, size_t length) { this->enqueue_message(receiver, payload, length); })) {
+        return;
+    }
     if (this->handle_control_payload(frame)) {
         return;
     }
