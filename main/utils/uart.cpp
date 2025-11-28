@@ -41,19 +41,47 @@ int strip(char *buffer, int len) {
     return len;
 }
 
-int check(char *buffer, int len) {
+static int parse_hex_byte(const char high, const char low, bool &ok) {
+    auto parse_nibble = [&](char c) -> int {
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        } else if (c >= 'a' && c <= 'f') {
+            return c - 'a' + 10;
+        } else if (c >= 'A' && c <= 'F') {
+            return c - 'A' + 10;
+        }
+        ok = false;
+        return 0;
+    };
+
+    const int high_val = parse_nibble(high);
+    const int low_val = parse_nibble(low);
+    if (!ok) {
+        return 0;
+    }
+    return (high_val << 4) | low_val;
+}
+
+int check(char *buffer, int len, bool *checksum_ok) {
     len = strip(buffer, len);
+    bool ok = true;
     if (len >= 3 && buffer[len - 3] == '@') {
         uint8_t checksum = 0;
         for (int i = 0; i < len - 3; ++i) {
             checksum ^= buffer[i];
         }
-        const std::string hex_number(&buffer[len - 2], 2);
-        if (std::stoi(hex_number, 0, 16) != checksum) {
-            throw std::runtime_error("checksum mismatch");
+        const int parsed_checksum = parse_hex_byte(buffer[len - 2], buffer[len - 1], ok);
+        if (!ok || parsed_checksum != checksum) {
+            ok = false;
+        } else {
+            len -= 3;
         }
-        len -= 3;
     }
     buffer[len] = 0;
+    if (checksum_ok != nullptr) {
+        *checksum_ok = ok;
+    } else if (!ok) {
+        throw std::runtime_error("checksum mismatch");
+    }
     return len;
 }

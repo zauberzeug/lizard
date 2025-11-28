@@ -53,6 +53,22 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             pos += argument->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
         }
         echo(buffer);
+    } else if (method_name == "print_wrong_checksum") {
+        static char buffer[1024];
+        int pos = 0;
+        for (auto const &argument : arguments) {
+            if (argument != arguments[0]) {
+                pos += csprintf(&buffer[pos], sizeof(buffer) - pos, " ");
+            }
+            pos += argument->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
+        }
+        // Calculate correct checksum
+        uint8_t checksum = 0;
+        for (int i = 0; i < pos; ++i) {
+            checksum ^= buffer[i];
+        }
+        // Output with wrong checksum (add 1 to make it wrong)
+        printf("%s@%02x\n", buffer, checksum + 1);
     } else if (method_name == "output") {
         Module::expect(arguments, 1, string);
         this->output_list.clear();

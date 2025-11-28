@@ -369,7 +369,11 @@ void process_uart() {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        len = check(input, len);
+        bool checksum_ok = true;
+        len = check(input, len, &checksum_ok);
+        if (!checksum_ok) {
+            echo("warning: checksum mismatch on uart0");
+        }
         process_line(input, len);
     }
 }
