@@ -94,11 +94,8 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 Use `bus.configure()` to push startup scripts line by line;
 it wraps the required framing and finishes with a restart so peers boot with the new configuration.
 
-To push firmware over the bus, send OTA control payloads through `bus.send(...)`:
-`__OTA_BEGIN__:<size>` starts a session, each `__OTA_CHUNK__:<seq>:<base64>` adds data (150-byte chunks recommended),
-`__OTA_COMMIT__` finalizes the image, and `__OTA_ABORT__` cancels. Peers answer with `__OTA_READY__`, `__OTA_ACK__`,
-`__OTA_DONE__`, or `__OTA_ERROR__` messages that show up on the coordinator console. The helper script `serial_bus_ota.py`
-wraps this flow and can optionally pause broadcasts on an expander hop: `./serial_bus_ota.py --port /dev/ttyUSB0 --id 1 [--expander p0] build/firmware.bin`.
+To push firmware over the bus use helper script `serial_bus_ota.py`.
+It automatically controlls the OTA flow and can handle serial bus connected to an expander: `./serial_bus_ota.py --port /dev/ttyUSB0 --id 1 [--expander p0] build/firmware.bin`.
 
 ## Input
 
