@@ -22,7 +22,6 @@ parser.add_argument('--partition-table', default='build/partition_table/partitio
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
-parser.add_argument('--reset-ota', action='store_true', help='Erase OTA data/slot info after flashing')
 parser.add_argument('device', nargs='?', default='/dev/tty.SLAB_USBtoUART',
                     help='Serial device path (overwritten by --jetson)')
 
@@ -140,21 +139,6 @@ def erase() -> None:
                 raise RuntimeError('Failed to erase flash.')
 
 
-def reset_ota_partition() -> None:
-    """Reset the OTA partition to the default state."""
-    print_bold('Resetting OTA partition to OTA 0...')
-    success = run(
-        'esptool.py',
-        '--chip', args.chip,
-        '--port', DEVICE,
-        '--baud', '115200',
-        'erase_region',
-        '0xf000', '0x2000',
-    )
-    if not success:
-        raise RuntimeError('Failed to reset OTA partition.')
-
-
 def flash() -> None:
     """Flash the microcontroller."""
     print_bold('Flashing...')
@@ -178,8 +162,6 @@ def flash() -> None:
             )
             if not success:
                 raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
-            if args.reset_ota:
-                reset_ota_partition()
 
 
 def run(*run_args: str) -> bool:
