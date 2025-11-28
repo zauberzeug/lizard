@@ -1,7 +1,6 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
-#include "../utils/debug.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -123,9 +122,6 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             throw std::runtime_error("failed to set pin");
         }
         echo("GPIO_set[%d] set to %d", gpio_num, value);
-    } else if (method_name == "debug") {
-        Module::expect(arguments, 0);
-        debug::print_memory_usage();
     } else if (method_name == "get_pin_strapping") {
         Module::expect(arguments, 1, integer);
         const gpio_num_t gpio_num = static_cast<gpio_num_t>(arguments[0]->evaluate_integer());
