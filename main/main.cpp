@@ -373,8 +373,9 @@ void process_uart() {
         len = check(input, len, &checksum_ok);
         if (!checksum_ok) {
             echo("warning: checksum mismatch on uart0");
+        } else {
+            process_line(input, len);
         }
-        process_line(input, len);
     }
 }
 
