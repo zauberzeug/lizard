@@ -1,27 +1,31 @@
 #include "uart.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <algorithm>
 #include <cstdarg>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
-static EchoConsumer current_consumer = nullptr;
-static void *consumer_context = nullptr;
-static TaskHandle_t consumer_task = nullptr;
+static EchoCallback current_callback = nullptr;
+static void *callback_context = nullptr;
+static TaskHandle_t callback_task = nullptr;
 
-void echo_push_consumer(EchoConsumer consumer, void *context) {
-    current_consumer = consumer;
-    consumer_context = context;
-    consumer_task = xTaskGetCurrentTaskHandle();
+// Optional callback that receives each line written by echo(). Used to intercept output
+// and route it elsewhere (e.g., relay to remote nodes). Task-scoped so normal logging
+// from other tasks remains unaffected.
+
+void echo_push_callback(EchoCallback callback, void *context) {
+    current_callback = callback;
+    callback_context = context;
+    callback_task = xTaskGetCurrentTaskHandle();
 }
 
-void echo_pop_consumer(EchoConsumer consumer, void *context) {
-    if (current_consumer == consumer && consumer_context == context && consumer_task == xTaskGetCurrentTaskHandle()) {
-        current_consumer = nullptr;
-        consumer_context = nullptr;
-        consumer_task = nullptr;
+void echo_pop_callback(EchoCallback callback, void *context) {
+    if (current_callback == callback && callback_context == context && callback_task == xTaskGetCurrentTaskHandle()) {
+        current_callback = nullptr;
+        callback_context = nullptr;
+        callback_task = nullptr;
     }
 }
 
@@ -42,8 +46,8 @@ void echo(const char *format, ...) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
             printf("%s@%02x\n", &buffer[start], checksum);
-            if (current_consumer && consumer_task == xTaskGetCurrentTaskHandle()) {
-                current_consumer(&buffer[start], consumer_context);
+            if (current_callback && callback_task == xTaskGetCurrentTaskHandle()) {
+                current_callback(&buffer[start], callback_context);
             }
             start = i + 1;
             checksum = 0;

@@ -33,6 +33,11 @@ private:
         uint16_t length;
         char payload[PAYLOAD_CAPACITY];
     };
+    struct RemoteOutputRelay {
+        SerialBus *bus;
+        uint8_t remote_sender;
+        bool sent_line = false;
+    };
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
@@ -50,25 +55,14 @@ private:
     uint8_t window_requester = 0;
     unsigned long last_message_millis = 0;
 
-    void start_communicator();
-    static void communicator_task_trampoline(void *param);
+    static void communicator_task_entry(void *param);
     [[noreturn]] void communicator_loop();
     void communicator_process_uart();
     bool flush_outgoing_queue();
-    void push_incoming_message(const IncomingMessage &message);
-    void drain_inbox();
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
-    void send_done(uint8_t receiver) const;
-    void send_response_line(uint8_t receiver, const char *line);
-    void execute_remote_command(uint8_t requester, const char *payload, size_t length);
-    static void echo_consumer_trampoline(const char *line, void *context);
+    void relay_output_line(uint8_t remote_sender, const char *line);
+    static void relay_output_to_remote(const char *line, void *context);
     bool parse_message(const char *line, IncomingMessage &message) const;
-    bool handle_control_payload(const IncomingMessage &message);
     void handle_message(const IncomingMessage &message);
-    void handle_poll_request(uint8_t sender);
-    void handle_done(uint8_t sender);
-    void coordinator_poll_step();
-    void check_poll_timeout();
-    void configure_coordinator(const std::vector<uint8_t> &peers);
 };

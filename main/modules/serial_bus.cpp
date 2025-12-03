@@ -3,7 +3,6 @@
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
-#include "esp_ota_ops.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -11,33 +10,12 @@
 #include <stdexcept>
 extern void process_line(const char *line, const int len);
 
-namespace {
-constexpr size_t FRAME_BUFFER_SIZE = 512;
-constexpr uint8_t BROADCAST_ID = 0xff;
-constexpr unsigned long POLL_TIMEOUT_MS = 250;
-constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
-constexpr size_t INCOMING_QUEUE_LENGTH = 32;
-constexpr const char RESPONSE_PREFIX[] = "__BUS_RESPONSE__";
-
-struct ResponseContext {
-    SerialBus *bus;
-    uint8_t receiver;
-    bool sent_line = false;
-};
-
-std::string trim_copy(const std::string &value) {
-    size_t start = 0;
-    while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
-        start++;
-    }
-    size_t end = value.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
-        end--;
-    }
-    return value.substr(start, end - start);
-}
-
-} // namespace
+static constexpr size_t FRAME_BUFFER_SIZE = 512;
+static constexpr uint8_t BROADCAST_ID = 0xff;
+static constexpr unsigned long POLL_TIMEOUT_MS = 250;
+static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
+static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
+static constexpr const char RESPONSE_PREFIX[] = "__BUS_RESPONSE__";
 
 REGISTER_MODULE_DEFAULTS(SerialBus)
 
@@ -62,22 +40,10 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     if (!this->outbound_queue || !this->inbound_queue) {
         throw std::runtime_error("failed to create serial bus queues");
     }
-    this->start_communicator();
-}
 
-void SerialBus::configure_coordinator(const std::vector<uint8_t> &peers) {
-    this->coordinator = true;
-    this->peer_ids = peers;
-    this->poll_index = 0;
-    this->waiting_for_done = false;
-    this->current_poll_target = 0;
-    this->properties.at("is_coordinator")->boolean_value = true;
-    this->properties.at("peer_count")->integer_value = this->peer_ids.size();
-}
-
-void SerialBus::start_communicator() {
+    // Start FreeRTOS task for serial bus communication
     BaseType_t result = xTaskCreatePinnedToCore(
-        SerialBus::communicator_task_trampoline,
+        SerialBus::communicator_task_entry,
         "serial_bus_comm",
         4096,
         this,
@@ -89,7 +55,8 @@ void SerialBus::start_communicator() {
     }
 }
 
-void SerialBus::communicator_task_trampoline(void *param) {
+void SerialBus::communicator_task_entry(void *param) {
+    // FreeRTOS task entry point: converts void* param to SerialBus* and calls the instance method
     SerialBus *bus = static_cast<SerialBus *>(param);
     bus->communicator_loop();
     configASSERT(!"SerialBus::communicator_loop returned unexpectedly");
@@ -101,14 +68,32 @@ void SerialBus::communicator_task_trampoline(void *param) {
         if (this->coordinator) {
             if (!this->waiting_for_done) {
                 if (!this->flush_outgoing_queue()) {
-                    this->coordinator_poll_step();
+
+                    // Poll next peer in round-robin fashion
+                    if (!this->peer_ids.empty()) {
+                        this->current_poll_target = this->peer_ids[this->poll_index];
+                        this->poll_index = (this->poll_index + 1) % this->peer_ids.size();
+                        static constexpr char poll_cmd[] = "__POLL__";
+                        this->send_message(this->current_poll_target, poll_cmd, sizeof(poll_cmd) - 1);
+                        this->waiting_for_done = true;
+                        this->poll_start_millis = millis();
+                    }
                 }
             } else {
-                this->check_poll_timeout();
+
+                // Check if poll timeout expired
+                if (millis_since(this->poll_start_millis) > POLL_TIMEOUT_MS) {
+                    echo("warning: serial bus %s poll to %u timed out", this->name.c_str(), this->current_poll_target);
+                    this->waiting_for_done = false;
+                    this->current_poll_target = 0;
+                }
             }
         } else if (this->transmit_window_open) {
             this->flush_outgoing_queue();
-            this->send_done(this->window_requester);
+
+            // Send done signal to coordinator
+            static constexpr char done_cmd[] = "__DONE__";
+            this->send_message(this->window_requester, done_cmd, sizeof(done_cmd) - 1);
             this->transmit_window_open = false;
         }
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -138,14 +123,28 @@ void SerialBus::communicator_process_uart() {
         }
 
         if (message.length == 8 && std::strncmp(message.payload, "__POLL__", message.length) == 0) {
-            this->handle_poll_request(message.sender);
+
+            // Open transmit window for peer when coordinator polls
+            if (!this->coordinator) {
+                this->window_requester = message.sender;
+                this->transmit_window_open = true;
+            }
             continue;
         }
         if (message.length == 8 && std::strncmp(message.payload, "__DONE__", message.length) == 0) {
-            this->handle_done(message.sender);
+
+            // Coordinator receives done signal from peer
+            if (this->coordinator && this->waiting_for_done && message.sender == this->current_poll_target) {
+                this->waiting_for_done = false;
+                this->current_poll_target = 0;
+            }
             continue;
         }
-        this->push_incoming_message(message);
+        if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
+            echo("warning: serial bus %s inbound queue overflow", this->name.c_str());
+        } else {
+            this->last_message_millis = millis();
+        }
     }
 }
 
@@ -159,23 +158,11 @@ bool SerialBus::flush_outgoing_queue() {
     return sent;
 }
 
-void SerialBus::push_incoming_message(const IncomingMessage &message) {
-    if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
-        echo("warning: serial bus %s inbound queue overflow", this->name.c_str());
-    } else {
-        this->last_message_millis = millis();
-    }
-}
-
-void SerialBus::drain_inbox() {
+void SerialBus::step() {
     IncomingMessage message;
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_message(message);
     }
-}
-
-void SerialBus::step() {
-    this->drain_inbox();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
 }
@@ -205,7 +192,15 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             }
             peers.push_back(static_cast<uint8_t>(peer_value));
         }
-        this->configure_coordinator(peers);
+
+        // Configure this node as coordinator with given peer list
+        this->coordinator = true;
+        this->peer_ids = peers;
+        this->poll_index = 0;
+        this->waiting_for_done = false;
+        this->current_poll_target = 0;
+        this->properties.at("is_coordinator")->boolean_value = true;
+        this->properties.at("peer_count")->integer_value = this->peer_ids.size();
     } else if (method_name == "configure") {
         Module::expect(arguments, 2, integer, string);
         const int receiver = arguments[0]->evaluate_integer();
@@ -217,11 +212,19 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         this->enqueue_message(target, "!-", 2);
 
         std::string current;
-        auto flush_line = [&](void) {
-            std::string trimmed = trim_copy(current);
-            if (!trimmed.empty()) {
-                std::string command = "!+" + trimmed;
-                this->enqueue_message(target, command.c_str(), command.size());
+        auto flush_line = [&]() {
+            // Trim whitespace and send line if non-empty
+            size_t start = 0;
+            while (start < current.size() && std::isspace(static_cast<unsigned char>(current[start]))) {
+                start++;
+            }
+            size_t end = current.size();
+            while (end > start && std::isspace(static_cast<unsigned char>(current[end - 1]))) {
+                end--;
+            }
+            if (end > start) {
+                std::string cmd = "!+" + current.substr(start, end - start);
+                this->enqueue_message(target, cmd.c_str(), cmd.size());
             }
             current.clear();
         };
@@ -286,51 +289,31 @@ void SerialBus::send_message(uint8_t receiver, const char *payload, size_t lengt
     this->serial->write_checked_line(buffer, header_len + length);
 }
 
-void SerialBus::send_done(uint8_t receiver) const {
-    static constexpr char done_cmd[] = "__DONE__";
-    this->send_message(receiver, done_cmd, sizeof(done_cmd) - 1);
-}
-
-void SerialBus::send_response_line(uint8_t receiver, const char *line) {
+void SerialBus::relay_output_line(uint8_t remote_sender, const char *line) {
     if (!line) {
         return;
     }
     char payload[PAYLOAD_CAPACITY];
     const int len = std::snprintf(payload, sizeof(payload), "%s:%s", RESPONSE_PREFIX, line);
     if (len < 0 || len >= static_cast<int>(sizeof(payload))) {
-        echo("warning: serial bus %s response truncated", this->name.c_str());
+        echo("warning: serial bus %s output relay truncated", this->name.c_str());
         return;
     }
     try {
-        this->enqueue_message(receiver, payload, len);
+        this->enqueue_message(remote_sender, payload, len);
     } catch (const std::runtime_error &e) {
-        echo("warning: serial bus %s could not send response: %s", this->name.c_str(), e.what());
+        echo("warning: serial bus %s could not relay output: %s", this->name.c_str(), e.what());
     }
 }
 
-void SerialBus::echo_consumer_trampoline(const char *line, void *context) {
-    auto *ctx = static_cast<ResponseContext *>(context);
-    if (!ctx || !ctx->bus || !line) {
+void SerialBus::relay_output_to_remote(const char *line, void *context) {
+    // Callback that intercepts local command output and relays it back to the remote sender
+    auto *relay = static_cast<RemoteOutputRelay *>(context);
+    if (!relay || !relay->bus || !line) {
         return;
     }
-    ctx->bus->send_response_line(ctx->receiver, line);
-    ctx->sent_line = true;
-}
-
-void SerialBus::execute_remote_command(uint8_t requester, const char *payload, size_t length) {
-    if (length == 0) {
-        return;
-    }
-    ResponseContext context{this, requester, false};
-    echo_push_consumer(echo_consumer_trampoline, &context);
-    try {
-        process_line(payload, length);
-    } catch (const std::exception &e) {
-        this->send_response_line(requester, e.what());
-    } catch (...) {
-        this->send_response_line(requester, "unknown error");
-    }
-    echo_pop_consumer(echo_consumer_trampoline, &context);
+    relay->bus->relay_output_line(relay->remote_sender, line);
+    relay->sent_line = true;
 }
 
 bool SerialBus::parse_message(const char *line, IncomingMessage &message) const {
@@ -368,76 +351,45 @@ bool SerialBus::parse_message(const char *line, IncomingMessage &message) const 
     return true;
 }
 
-bool SerialBus::handle_control_payload(const IncomingMessage &message) {
-    if (message.length >= sizeof(RESPONSE_PREFIX) - 1 &&
-        std::strncmp(message.payload, RESPONSE_PREFIX, sizeof(RESPONSE_PREFIX) - 1) == 0) {
-        const size_t prefix_len = sizeof(RESPONSE_PREFIX) - 1;
-        const char *message_line = message.payload + prefix_len;
-        size_t message_len = message.length > prefix_len ? message.length - prefix_len : 0;
-        if (message_len > 0 && message_line[0] == ':') {
-            message_line++;
-            message_len--;
+void SerialBus::handle_message(const IncomingMessage &message) {
+    if (message.length == 0) {
+        return;
+    }
+
+    // Display output that was relayed back from a remote node
+    const size_t prefix_len = sizeof(RESPONSE_PREFIX) - 1;
+    if (message.length >= prefix_len && std::strncmp(message.payload, RESPONSE_PREFIX, prefix_len) == 0) {
+        const char *msg = message.payload + prefix_len;
+        size_t len = message.length - prefix_len;
+        if (len > 0 && msg[0] == ':') {
+            msg++;
+            len--;
         }
-        if (message_len > 0) {
+        if (len > 0) {
             static char buffer[PAYLOAD_CAPACITY];
-            const size_t copy_len = std::min(message_len, static_cast<size_t>(sizeof(buffer) - 1));
-            memcpy(buffer, message_line, copy_len);
+            const size_t copy_len = std::min(len, static_cast<size_t>(sizeof(buffer) - 1));
+            memcpy(buffer, msg, copy_len);
             buffer[copy_len] = '\0';
             echo("bus[%u]: %s", message.sender, buffer);
         }
-        return true;
-    }
-    return false;
-}
-
-void SerialBus::handle_message(const IncomingMessage &message) {
-    if (this->handle_control_payload(message)) {
         return;
     }
-    if (message.length > 0 && message.payload[0] == '!') {
+
+    // Configuration commands starting with '!' are processed silently (no output relay)
+    if (message.payload[0] == '!') {
         process_line(message.payload, message.length);
         return;
     }
-    this->execute_remote_command(message.sender, message.payload, message.length);
-}
 
-void SerialBus::handle_poll_request(uint8_t sender) {
-    if (this->coordinator) {
-        return;
+    // Regular commands: process locally and relay any echo() output back to sender
+    RemoteOutputRelay relay{this, message.sender, false};
+    echo_push_callback(relay_output_to_remote, &relay);
+    try {
+        process_line(message.payload, message.length);
+    } catch (const std::exception &e) {
+        this->relay_output_line(message.sender, e.what());
+    } catch (...) {
+        this->relay_output_line(message.sender, "unknown error");
     }
-    this->window_requester = sender;
-    this->transmit_window_open = true;
-}
-
-void SerialBus::handle_done(uint8_t sender) {
-    if (!this->coordinator) {
-        return;
-    }
-    if (this->waiting_for_done && sender == this->current_poll_target) {
-        this->waiting_for_done = false;
-        this->current_poll_target = 0;
-    }
-}
-
-void SerialBus::coordinator_poll_step() {
-    if (this->peer_ids.empty()) {
-        return;
-    }
-    this->current_poll_target = this->peer_ids[this->poll_index];
-    this->poll_index = (this->poll_index + 1) % this->peer_ids.size();
-    static constexpr char poll_cmd[] = "__POLL__";
-    this->send_message(this->current_poll_target, poll_cmd, sizeof(poll_cmd) - 1);
-    this->waiting_for_done = true;
-    this->poll_start_millis = millis();
-}
-
-void SerialBus::check_poll_timeout() {
-    if (!this->waiting_for_done) {
-        return;
-    }
-    if (millis_since(this->poll_start_millis) > POLL_TIMEOUT_MS) {
-        echo("warning: serial bus %s poll to %u timed out", this->name.c_str(), this->current_poll_target);
-        this->waiting_for_done = false;
-        this->current_poll_target = 0;
-    }
+    echo_pop_callback(relay_output_to_remote, &relay);
 }
