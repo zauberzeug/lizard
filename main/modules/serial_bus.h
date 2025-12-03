@@ -1,10 +1,10 @@
 #pragma once
 
-#include "module.h"
-#include "serial.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "module.h"
+#include "serial.h"
 #include <cstdint>
 #include <vector>
 
@@ -15,17 +15,14 @@ class SerialBus : public Module {
 public:
     static constexpr size_t PAYLOAD_CAPACITY = 256;
 
-    SerialBus(const std::string &name,
-              const ConstSerial_ptr serial,
-              const uint8_t node_id,
-              MessageHandler message_handler);
+    SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id);
 
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 
 private:
-    struct BusFrame {
+    struct IncomingMessage {
         uint8_t sender;
         uint8_t receiver;
         uint16_t length;
@@ -41,7 +38,6 @@ private:
     const uint8_t node_id;
     std::vector<uint8_t> peer_ids;
     bool coordinator = false;
-    MessageHandler message_handler;
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
@@ -59,21 +55,20 @@ private:
     [[noreturn]] void communicator_loop();
     void communicator_process_uart();
     bool flush_outgoing_queue();
-    void push_incoming_frame(const BusFrame &frame);
+    void push_incoming_message(const IncomingMessage &message);
     void drain_inbox();
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
-    void send_frame(uint8_t receiver, const char *payload, size_t length) const;
+    void send_message(uint8_t receiver, const char *payload, size_t length) const;
     void send_done(uint8_t receiver) const;
     void send_response_line(uint8_t receiver, const char *line);
     void execute_remote_command(uint8_t requester, const char *payload, size_t length);
     static void echo_consumer_trampoline(const char *line, void *context);
-    bool parse_frame(const char *line, BusFrame &frame) const;
-    bool handle_control_payload(const BusFrame &frame);
-    void handle_frame(const BusFrame &frame);
+    bool parse_message(const char *line, IncomingMessage &message) const;
+    bool handle_control_payload(const IncomingMessage &message);
+    void handle_message(const IncomingMessage &message);
     void handle_poll_request(uint8_t sender);
     void handle_done(uint8_t sender);
     void coordinator_poll_step();
     void check_poll_timeout();
-    bool is_coordinator() const;
     void configure_coordinator(const std::vector<uint8_t> &peers);
 };

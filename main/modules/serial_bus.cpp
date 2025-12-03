@@ -49,30 +49,20 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
     };
 }
 
-SerialBus::SerialBus(const std::string &name,
-                     const ConstSerial_ptr serial,
-                     const uint8_t node_id,
-                     MessageHandler message_handler)
-    : Module(serial_bus, name),
-      serial(serial),
-      node_id(node_id),
-      message_handler(message_handler) {
+SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
+    : Module(serial_bus, name), serial(serial), node_id(node_id) {
     this->properties = SerialBus::get_defaults();
-    this->properties.at("is_coordinator")->boolean_value = this->is_coordinator();
+    this->properties.at("is_coordinator")->boolean_value = this->coordinator;
     this->properties.at("peer_count")->integer_value = this->peer_ids.size();
     this->serial->enable_line_detection();
     this->last_message_millis = millis();
 
     this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage));
-    this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(BusFrame));
+    this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage));
     if (!this->outbound_queue || !this->inbound_queue) {
         throw std::runtime_error("failed to create serial bus queues");
     }
     this->start_communicator();
-}
-
-bool SerialBus::is_coordinator() const {
-    return this->coordinator;
 }
 
 void SerialBus::configure_coordinator(const std::vector<uint8_t> &peers) {
@@ -108,7 +98,7 @@ void SerialBus::communicator_task_trampoline(void *param) {
 [[noreturn]] void SerialBus::communicator_loop() {
     for (;;) {
         this->communicator_process_uart();
-        if (this->is_coordinator()) {
+        if (this->coordinator) {
             if (!this->waiting_for_done) {
                 if (!this->flush_outgoing_queue()) {
                     this->coordinator_poll_step();
@@ -137,25 +127,25 @@ void SerialBus::communicator_process_uart() {
             continue;
         }
 
-        BusFrame frame;
-        if (!this->parse_frame(buffer, frame)) {
-            echo("warning: serial bus %s received malformed frame: %s", this->name.c_str(), buffer);
+        IncomingMessage message;
+        if (!this->parse_message(buffer, message)) {
+            echo("warning: serial bus %s received malformed message: %s", this->name.c_str(), buffer);
             continue;
         }
 
-        if (frame.receiver != this->node_id && frame.receiver != BROADCAST_ID) {
+        if (message.receiver != this->node_id && message.receiver != BROADCAST_ID) {
             continue;
         }
 
-        if (frame.length == 8 && std::strncmp(frame.payload, "__POLL__", frame.length) == 0) {
-            this->handle_poll_request(frame.sender);
+        if (message.length == 8 && std::strncmp(message.payload, "__POLL__", message.length) == 0) {
+            this->handle_poll_request(message.sender);
             continue;
         }
-        if (frame.length == 8 && std::strncmp(frame.payload, "__DONE__", frame.length) == 0) {
-            this->handle_done(frame.sender);
+        if (message.length == 8 && std::strncmp(message.payload, "__DONE__", message.length) == 0) {
+            this->handle_done(message.sender);
             continue;
         }
-        this->push_incoming_frame(frame);
+        this->push_incoming_message(message);
     }
 }
 
@@ -163,14 +153,14 @@ bool SerialBus::flush_outgoing_queue() {
     bool sent = false;
     OutgoingMessage message;
     while (xQueueReceive(this->outbound_queue, &message, 0) == pdTRUE) {
-        this->send_frame(message.receiver, message.payload, message.length);
+        this->send_message(message.receiver, message.payload, message.length);
         sent = true;
     }
     return sent;
 }
 
-void SerialBus::push_incoming_frame(const BusFrame &frame) {
-    if (xQueueSend(this->inbound_queue, &frame, 0) != pdTRUE) {
+void SerialBus::push_incoming_message(const IncomingMessage &message) {
+    if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
         echo("warning: serial bus %s inbound queue overflow", this->name.c_str());
     } else {
         this->last_message_millis = millis();
@@ -178,9 +168,9 @@ void SerialBus::push_incoming_frame(const BusFrame &frame) {
 }
 
 void SerialBus::drain_inbox() {
-    BusFrame frame;
-    while (xQueueReceive(this->inbound_queue, &frame, 0) == pdTRUE) {
-        this->handle_frame(frame);
+    IncomingMessage message;
+    while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
+        this->handle_message(message);
     }
 }
 
@@ -283,7 +273,7 @@ void SerialBus::enqueue_message(uint8_t receiver, const char *payload, size_t le
     }
 }
 
-void SerialBus::send_frame(uint8_t receiver, const char *payload, size_t length) const {
+void SerialBus::send_message(uint8_t receiver, const char *payload, size_t length) const {
     static char buffer[FRAME_BUFFER_SIZE];
     const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver);
     if (header_len < 0) {
@@ -298,7 +288,7 @@ void SerialBus::send_frame(uint8_t receiver, const char *payload, size_t length)
 
 void SerialBus::send_done(uint8_t receiver) const {
     static constexpr char done_cmd[] = "__DONE__";
-    this->send_frame(receiver, done_cmd, sizeof(done_cmd) - 1);
+    this->send_message(receiver, done_cmd, sizeof(done_cmd) - 1);
 }
 
 void SerialBus::send_response_line(uint8_t receiver, const char *line) {
@@ -343,16 +333,16 @@ void SerialBus::execute_remote_command(uint8_t requester, const char *payload, s
     echo_pop_consumer(echo_consumer_trampoline, &context);
 }
 
-bool SerialBus::parse_frame(const char *line, BusFrame &frame) const {
-    const std::string message(line);
-    if (!starts_with(message, "$$")) {
+bool SerialBus::parse_message(const char *line, IncomingMessage &message) const {
+    const std::string message_line(line);
+    if (!starts_with(message_line, "$$")) {
         return false;
     }
-    const size_t header_end = message.find("$$", 2);
+    const size_t header_end = message_line.find("$$", 2);
     if (header_end == std::string::npos) {
         return false;
     }
-    const std::string header = message.substr(2, header_end - 2);
+    const std::string header = message_line.substr(2, header_end - 2);
     const size_t colon = header.find(':');
     if (colon == std::string::npos) {
         return false;
@@ -363,56 +353,56 @@ bool SerialBus::parse_frame(const char *line, BusFrame &frame) const {
         if (sender < 0 || sender > 255 || receiver < 0 || receiver > 255) {
             return false;
         }
-        const size_t payload_len = message.size() - (header_end + 2);
+        const size_t payload_len = message_line.size() - (header_end + 2);
         if (payload_len >= PAYLOAD_CAPACITY) {
             return false;
         }
-        frame.sender = static_cast<uint8_t>(sender);
-        frame.receiver = static_cast<uint8_t>(receiver);
-        frame.length = payload_len;
-        memcpy(frame.payload, message.c_str() + header_end + 2, payload_len);
-        frame.payload[payload_len] = '\0';
+        message.sender = static_cast<uint8_t>(sender);
+        message.receiver = static_cast<uint8_t>(receiver);
+        message.length = payload_len;
+        memcpy(message.payload, message_line.c_str() + header_end + 2, payload_len);
+        message.payload[payload_len] = '\0';
     } catch (...) {
         return false;
     }
     return true;
 }
 
-bool SerialBus::handle_control_payload(const BusFrame &frame) {
-    if (frame.length >= sizeof(RESPONSE_PREFIX) - 1 &&
-        std::strncmp(frame.payload, RESPONSE_PREFIX, sizeof(RESPONSE_PREFIX) - 1) == 0) {
+bool SerialBus::handle_control_payload(const IncomingMessage &message) {
+    if (message.length >= sizeof(RESPONSE_PREFIX) - 1 &&
+        std::strncmp(message.payload, RESPONSE_PREFIX, sizeof(RESPONSE_PREFIX) - 1) == 0) {
         const size_t prefix_len = sizeof(RESPONSE_PREFIX) - 1;
-        const char *message = frame.payload + prefix_len;
-        size_t message_len = frame.length > prefix_len ? frame.length - prefix_len : 0;
-        if (message_len > 0 && message[0] == ':') {
-            message++;
+        const char *message_line = message.payload + prefix_len;
+        size_t message_len = message.length > prefix_len ? message.length - prefix_len : 0;
+        if (message_len > 0 && message_line[0] == ':') {
+            message_line++;
             message_len--;
         }
         if (message_len > 0) {
             static char buffer[PAYLOAD_CAPACITY];
             const size_t copy_len = std::min(message_len, static_cast<size_t>(sizeof(buffer) - 1));
-            memcpy(buffer, message, copy_len);
+            memcpy(buffer, message_line, copy_len);
             buffer[copy_len] = '\0';
-            echo("bus[%u]: %s", frame.sender, buffer);
+            echo("bus[%u]: %s", message.sender, buffer);
         }
         return true;
     }
     return false;
 }
 
-void SerialBus::handle_frame(const BusFrame &frame) {
-    if (this->handle_control_payload(frame)) {
+void SerialBus::handle_message(const IncomingMessage &message) {
+    if (this->handle_control_payload(message)) {
         return;
     }
-    if (frame.length > 0 && frame.payload[0] == '!') {
-        process_line(frame.payload, frame.length);
+    if (message.length > 0 && message.payload[0] == '!') {
+        process_line(message.payload, message.length);
         return;
     }
-    this->execute_remote_command(frame.sender, frame.payload, frame.length);
+    this->execute_remote_command(message.sender, message.payload, message.length);
 }
 
 void SerialBus::handle_poll_request(uint8_t sender) {
-    if (this->is_coordinator()) {
+    if (this->coordinator) {
         return;
     }
     this->window_requester = sender;
@@ -420,7 +410,7 @@ void SerialBus::handle_poll_request(uint8_t sender) {
 }
 
 void SerialBus::handle_done(uint8_t sender) {
-    if (!this->is_coordinator()) {
+    if (!this->coordinator) {
         return;
     }
     if (this->waiting_for_done && sender == this->current_poll_target) {
@@ -436,7 +426,7 @@ void SerialBus::coordinator_poll_step() {
     this->current_poll_target = this->peer_ids[this->poll_index];
     this->poll_index = (this->poll_index + 1) % this->peer_ids.size();
     static constexpr char poll_cmd[] = "__POLL__";
-    this->send_frame(this->current_poll_target, poll_cmd, sizeof(poll_cmd) - 1);
+    this->send_message(this->current_poll_target, poll_cmd, sizeof(poll_cmd) - 1);
     this->waiting_for_done = true;
     this->poll_start_millis = millis();
 }
