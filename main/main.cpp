@@ -364,7 +364,7 @@ void process_line(const char *line, const int len) {
 void process_uart() {
     static char input[BUFFER_SIZE];
     while (true) {
-        int pos = uart_pattern_pop_pos(UART_NUM_0);
+        const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
             break;
         }
@@ -372,10 +372,10 @@ void process_uart() {
         bool checksum_ok = true;
         len = check(input, len, &checksum_ok);
         if (!checksum_ok) {
-            echo("warning: checksum mismatch on uart0");
-        } else {
-            process_line(input, len);
+            echo("warning: Checksum mismatch while processing UART0");
+            continue;
         }
+        process_line(input, len);
     }
 }
 

@@ -1,5 +1,6 @@
 #include "uart.h"
 #include <cstdarg>
+#include <cstdint>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
@@ -57,10 +58,6 @@ int check(char *buffer, int len, bool *checksum_ok) {
         }
     }
     buffer[len] = 0;
-    if (checksum_ok != nullptr) {
-        *checksum_ok = ok;
-    } else if (!ok) {
-        throw std::runtime_error("checksum mismatch");
-    }
+    *checksum_ok = ok;
     return len;
 }

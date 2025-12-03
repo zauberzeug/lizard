@@ -72,7 +72,7 @@ void Expander::check_boot_progress() {
         bool checksum_ok = true;
         check(buffer, len, &checksum_ok);
         if (!checksum_ok) {
-            echo("%s: discarded boot message (checksum mismatch)", this->name.c_str());
+            echo("%s: Checksum mismatch while checking boot progress", this->name.c_str());
             continue;
         }
         this->last_message_millis = millis();
@@ -123,7 +123,7 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
         bool checksum_ok = true;
         len = check(buffer, len, &checksum_ok);
         if (!checksum_ok) {
-            echo("%s: discarded line (checksum mismatch)", this->name.c_str());
+            echo("%s: Checksum mismatch while handling messages", this->name.c_str());
             this->last_message_millis = millis();
             this->ping_pending = false;
             continue;
