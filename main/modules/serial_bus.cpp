@@ -95,11 +95,13 @@ void SerialBus::communicator_task_entry(void *param) {
                 }
             }
         } else if (this->transmit_window_open) {
-            this->send_outgoing_queue();
-
-            // Send done signal to coordinator
-            static constexpr char done_cmd[] = "__DONE__";
-            this->send_message(this->window_requester, done_cmd, sizeof(done_cmd) - 1);
+            try {
+                this->send_outgoing_queue();
+                static constexpr char done_cmd[] = "__DONE__";
+                this->send_message(this->window_requester, done_cmd, sizeof(done_cmd) - 1);
+            } catch (const std::exception &e) {
+                echo("warning: serial bus %s error during transmit window: %s", this->name.c_str(), e.what());
+            }
             this->transmit_window_open = false;
         }
         vTaskDelay(pdMS_TO_TICKS(1));
