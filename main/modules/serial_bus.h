@@ -58,7 +58,7 @@ private:
     static void communicator_task_entry(void *param);
     [[noreturn]] void communicator_loop();
     void communicator_process_uart();
-    bool flush_outgoing_queue();
+    bool send_outgoing_queue();
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
     void relay_output_line(uint8_t remote_sender, const char *line);

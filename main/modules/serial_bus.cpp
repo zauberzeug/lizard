@@ -38,6 +38,12 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage));
     this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage));
     if (!this->outbound_queue || !this->inbound_queue) {
+        if (this->outbound_queue) {
+            vQueueDelete(this->outbound_queue);
+        }
+        if (this->inbound_queue) {
+            vQueueDelete(this->inbound_queue);
+        }
         throw std::runtime_error("failed to create serial bus queues");
     }
 
@@ -51,6 +57,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
         &this->communicator_task,
         1);
     if (result != pdPASS) {
+        vQueueDelete(this->outbound_queue);
+        vQueueDelete(this->inbound_queue);
         throw std::runtime_error("failed to create serial bus communicator task");
     }
 }
@@ -67,8 +75,7 @@ void SerialBus::communicator_task_entry(void *param) {
         this->communicator_process_uart();
         if (this->coordinator) {
             if (!this->waiting_for_done) {
-                if (!this->flush_outgoing_queue()) {
-
+                if (!this->send_outgoing_queue()) {
                     // Poll next peer in round-robin fashion
                     if (!this->peer_ids.empty()) {
                         this->current_poll_target = this->peer_ids[this->poll_index];
@@ -80,7 +87,6 @@ void SerialBus::communicator_task_entry(void *param) {
                     }
                 }
             } else {
-
                 // Check if poll timeout expired
                 if (millis_since(this->poll_start_millis) > POLL_TIMEOUT_MS) {
                     echo("warning: serial bus %s poll to %u timed out", this->name.c_str(), this->current_poll_target);
@@ -89,7 +95,7 @@ void SerialBus::communicator_task_entry(void *param) {
                 }
             }
         } else if (this->transmit_window_open) {
-            this->flush_outgoing_queue();
+            this->send_outgoing_queue();
 
             // Send done signal to coordinator
             static constexpr char done_cmd[] = "__DONE__";
@@ -123,7 +129,6 @@ void SerialBus::communicator_process_uart() {
         }
 
         if (message.length == 8 && std::strncmp(message.payload, "__POLL__", message.length) == 0) {
-
             // Open transmit window for peer when coordinator polls
             if (!this->coordinator) {
                 this->window_requester = message.sender;
@@ -132,7 +137,6 @@ void SerialBus::communicator_process_uart() {
             continue;
         }
         if (message.length == 8 && std::strncmp(message.payload, "__DONE__", message.length) == 0) {
-
             // Coordinator receives done signal from peer
             if (this->coordinator && this->waiting_for_done && message.sender == this->current_poll_target) {
                 this->waiting_for_done = false;
@@ -148,7 +152,7 @@ void SerialBus::communicator_process_uart() {
     }
 }
 
-bool SerialBus::flush_outgoing_queue() {
+bool SerialBus::send_outgoing_queue() {
     bool sent = false;
     OutgoingMessage message;
     while (xQueueReceive(this->outbound_queue, &message, 0) == pdTRUE) {
