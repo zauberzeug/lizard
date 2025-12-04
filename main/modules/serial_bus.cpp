@@ -1,5 +1,6 @@
 #include "serial_bus.h"
 
+#include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -8,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
+#include <string_view>
 extern void process_line(const char *line, const int len);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
@@ -16,6 +18,9 @@ static constexpr unsigned long POLL_TIMEOUT_MS = 250;
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static constexpr const char RESPONSE_PREFIX[] = "__BUS_RESPONSE__";
+
+// Global pointer to the active SerialBus instance for echo relay
+static SerialBus *active_bus_instance = nullptr;
 
 REGISTER_MODULE_DEFAULTS(SerialBus)
 
@@ -61,6 +66,10 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
         vQueueDelete(this->inbound_queue);
         throw std::runtime_error("failed to create serial bus communicator task");
     }
+
+    // Set up echo relay handler (assumes single bus instance per device)
+    active_bus_instance = this;
+    echo_set_relay_handler(SerialBus::echo_relay_handler);
 }
 
 void SerialBus::communicator_task_entry(void *param) {
@@ -76,7 +85,7 @@ void SerialBus::communicator_task_entry(void *param) {
         if (this->coordinator) {
             if (!this->waiting_for_done) {
                 if (!this->send_outgoing_queue()) {
-                    // Poll next peer in round-robin fashion
+                    // Poll next peer in round-robin fashion, when coordinator's queue is empty
                     if (!this->peer_ids.empty()) {
                         this->current_poll_target = this->peer_ids[this->poll_index];
                         this->poll_index = (this->poll_index + 1) % this->peer_ids.size();
@@ -91,7 +100,7 @@ void SerialBus::communicator_task_entry(void *param) {
                 if (millis_since(this->poll_start_millis) > POLL_TIMEOUT_MS) {
                     echo("warning: serial bus %s poll to %u timed out", this->name.c_str(), this->current_poll_target);
                     this->waiting_for_done = false;
-                    this->current_poll_target = 0;
+                    this->current_poll_target = BROADCAST_ID;
                 }
             }
         } else if (this->transmit_window_open) {
@@ -142,7 +151,7 @@ void SerialBus::communicator_process_uart() {
             // Coordinator receives done signal from peer
             if (this->coordinator && this->waiting_for_done && message.sender == this->current_poll_target) {
                 this->waiting_for_done = false;
-                this->current_poll_target = 0;
+                this->current_poll_target = BROADCAST_ID;
             }
             continue;
         }
@@ -204,7 +213,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         this->peer_ids = peers;
         this->poll_index = 0;
         this->waiting_for_done = false;
-        this->current_poll_target = 0;
+        this->current_poll_target = BROADCAST_ID;
         this->properties.at("is_coordinator")->boolean_value = true;
         this->properties.at("peer_count")->integer_value = this->peer_ids.size();
     } else if (method_name == "configure") {
@@ -312,14 +321,11 @@ void SerialBus::relay_output_line(uint8_t remote_sender, const char *line) {
     }
 }
 
-void SerialBus::relay_output_to_remote(const char *line, void *context) {
-    // Callback that intercepts local command output and relays it back to the remote sender
-    auto *relay = static_cast<RemoteOutputRelay *>(context);
-    if (!relay || !relay->bus || !line) {
-        return;
+void SerialBus::echo_relay_handler(uint8_t target, const char *line) {
+    // Static handler that relays echo output to the specified target via the active bus
+    if (active_bus_instance && line) {
+        active_bus_instance->relay_output_line(target, line);
     }
-    relay->bus->relay_output_line(relay->remote_sender, line);
-    relay->sent_line = true;
 }
 
 bool SerialBus::parse_message(const char *line, IncomingMessage &message) const {
@@ -388,8 +394,7 @@ void SerialBus::handle_message(const IncomingMessage &message) {
     }
 
     // Regular commands: process locally and relay any echo() output back to sender
-    RemoteOutputRelay relay{this, message.sender, false};
-    echo_push_callback(relay_output_to_remote, &relay);
+    echo_set_target(message.sender);
     try {
         process_line(message.payload, message.length);
     } catch (const std::exception &e) {
@@ -397,5 +402,5 @@ void SerialBus::handle_message(const IncomingMessage &message) {
     } catch (...) {
         this->relay_output_line(message.sender, "unknown error");
     }
-    echo_pop_callback(relay_output_to_remote, &relay);
+    echo_set_target(0xff);
 }

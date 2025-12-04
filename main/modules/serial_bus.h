@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../utils/ota.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -33,11 +34,6 @@ private:
         uint16_t length;
         char payload[PAYLOAD_CAPACITY];
     };
-    struct RemoteOutputRelay {
-        SerialBus *bus;
-        uint8_t remote_sender;
-        bool sent_line = false;
-    };
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
@@ -48,7 +44,7 @@ private:
     QueueHandle_t inbound_queue = nullptr;
     TaskHandle_t communicator_task = nullptr;
     bool waiting_for_done = false;
-    uint8_t current_poll_target = 0;
+    uint8_t current_poll_target = 0xff; // 0xff = BROADCAST_ID used as sentinel for "no target"
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
     bool transmit_window_open = false;
@@ -62,7 +58,7 @@ private:
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
     void relay_output_line(uint8_t remote_sender, const char *line);
-    static void relay_output_to_remote(const char *line, void *context);
+    static void echo_relay_handler(uint8_t target, const char *line);
     bool parse_message(const char *line, IncomingMessage &message) const;
     void handle_message(const IncomingMessage &message);
 };

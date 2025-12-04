@@ -7,26 +7,20 @@
 #include <stdio.h>
 #include <string>
 
-static EchoCallback current_callback = nullptr;
-static void *callback_context = nullptr;
-static TaskHandle_t callback_task = nullptr;
+static EchoRelayHandler relay_handler = nullptr;
+static uint8_t echo_target_id = 0xff; // 0xff = normal echo, else = relay to target
+static TaskHandle_t relay_task = nullptr;
 
-// Optional callback that receives each line written by echo(). Used to intercept output
-// and route it elsewhere (e.g., relay to remote nodes). Task-scoped so normal logging
-// from other tasks remains unaffected.
+// Simple redirect system: when target is set to a valid ID (not 0xff), echo output
+// is relayed to that target via the handler. Task-scoped for safety.
 
-void echo_push_callback(EchoCallback callback, void *context) {
-    current_callback = callback;
-    callback_context = context;
-    callback_task = xTaskGetCurrentTaskHandle();
+void echo_set_relay_handler(EchoRelayHandler handler) {
+    relay_handler = handler;
 }
 
-void echo_pop_callback(EchoCallback callback, void *context) {
-    if (current_callback == callback && callback_context == context && callback_task == xTaskGetCurrentTaskHandle()) {
-        current_callback = nullptr;
-        callback_context = nullptr;
-        callback_task = nullptr;
-    }
+void echo_set_target(uint8_t target) {
+    echo_target_id = target;
+    relay_task = xTaskGetCurrentTaskHandle();
 }
 
 void echo(const char *format, ...) {
@@ -46,8 +40,8 @@ void echo(const char *format, ...) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
             printf("%s@%02x\n", &buffer[start], checksum);
-            if (current_callback && callback_task == xTaskGetCurrentTaskHandle()) {
-                current_callback(&buffer[start], callback_context);
+            if (echo_target_id != 0xff && relay_handler && relay_task == xTaskGetCurrentTaskHandle()) {
+                relay_handler(echo_target_id, &buffer[start]);
             }
             start = i + 1;
             checksum = 0;
