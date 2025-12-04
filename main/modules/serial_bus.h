@@ -7,6 +7,7 @@
 #include "module.h"
 #include "serial.h"
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 class SerialBus;
@@ -50,6 +51,7 @@ private:
     bool transmit_window_open = false;
     uint8_t window_requester = 0;
     unsigned long last_message_millis = 0;
+    ota::BusOtaSession ota_session;
 
     static void communicator_task_entry(void *param);
     [[noreturn]] void communicator_loop();

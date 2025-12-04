@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <string_view>
 #include <stdexcept>
 #include <string_view>
 extern void process_line(const char *line, const int len);
@@ -178,6 +179,12 @@ void SerialBus::step() {
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_message(message);
     }
+
+    ota::bus_tick(this->ota_session, millis(), this->name.c_str(),
+                  [this](uint8_t receiver, const char *payload, size_t length) {
+                      this->enqueue_message(receiver, payload, length);
+                  });
+
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
 }
@@ -365,6 +372,18 @@ bool SerialBus::parse_message(const char *line, IncomingMessage &message) const 
 
 void SerialBus::handle_message(const IncomingMessage &message) {
     if (message.length == 0) {
+        return;
+    }
+
+    // Check if this is an OTA frame
+    if (ota::bus_handle_frame(
+            this->ota_session,
+            message.sender,
+            std::string_view(message.payload, message.length),
+            this->name.c_str(),
+            [this](uint8_t receiver, const char *payload, size_t length) {
+                this->enqueue_message(receiver, payload, length);
+            })) {
         return;
     }
 
