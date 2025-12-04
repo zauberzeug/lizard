@@ -1,6 +1,7 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
+#include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"

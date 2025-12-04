@@ -1,14 +1,14 @@
 #pragma once
 
-#include "module.h"
-#include "serial.h"
+#include "../utils/ota.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "module.h"
+#include "serial.h"
 #include <cstdint>
 #include <string_view>
 #include <vector>
-#include "../utils/ota.h"
 
 class SerialBus;
 using SerialBus_ptr = std::shared_ptr<SerialBus>;
@@ -17,17 +17,14 @@ class SerialBus : public Module {
 public:
     static constexpr size_t PAYLOAD_CAPACITY = 256;
 
-    SerialBus(const std::string &name,
-              const ConstSerial_ptr serial,
-              const uint8_t node_id,
-              MessageHandler message_handler);
+    SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id);
 
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 
 private:
-    struct BusFrame {
+    struct IncomingMessage {
         uint8_t sender;
         uint8_t receiver;
         uint16_t length;
@@ -43,13 +40,12 @@ private:
     const uint8_t node_id;
     std::vector<uint8_t> peer_ids;
     bool coordinator = false;
-    MessageHandler message_handler;
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
     TaskHandle_t communicator_task = nullptr;
     bool waiting_for_done = false;
-    uint8_t current_poll_target = 0;
+    uint8_t current_poll_target = 0xff; // 0xff = BROADCAST_ID used as sentinel for "no target"
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
     bool transmit_window_open = false;
@@ -57,26 +53,14 @@ private:
     unsigned long last_message_millis = 0;
     ota::BusOtaSession ota_session;
 
-    void start_communicator();
-    static void communicator_task_trampoline(void *param);
+    static void communicator_task_entry(void *param);
     [[noreturn]] void communicator_loop();
     void communicator_process_uart();
-    bool flush_outgoing_queue();
-    void push_incoming_frame(const BusFrame &frame);
-    void drain_inbox();
+    bool send_outgoing_queue();
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
-    void send_frame(uint8_t receiver, const char *payload, size_t length) const;
-    void send_done(uint8_t receiver) const;
-    void send_response_line(uint8_t receiver, const char *line);
-    void execute_remote_command(uint8_t requester, const char *payload, size_t length);
-    static void echo_consumer_trampoline(const char *line, void *context);
-    bool parse_frame(const char *line, BusFrame &frame) const;
-    bool handle_control_payload(const BusFrame &frame);
-    void handle_frame(const BusFrame &frame);
-    void handle_poll_request(uint8_t sender);
-    void handle_done(uint8_t sender);
-    void coordinator_poll_step();
-    void check_poll_timeout();
-    bool is_coordinator() const;
-    void configure_coordinator(const std::vector<uint8_t> &peers);
+    void send_message(uint8_t receiver, const char *payload, size_t length) const;
+    void relay_output_line(uint8_t remote_sender, const char *line);
+    static void echo_relay_handler(uint8_t target, const char *line);
+    bool parse_message(const char *line, IncomingMessage &message) const;
+    void handle_message(const IncomingMessage &message);
 };
