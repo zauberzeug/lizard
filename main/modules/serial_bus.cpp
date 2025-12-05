@@ -1,6 +1,5 @@
 #include "serial_bus.h"
 
-#include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -9,7 +8,6 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
-#include <string_view>
 extern void process_line(const char *line, const int len);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;

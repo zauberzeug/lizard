@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../utils/ota.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
