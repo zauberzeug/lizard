@@ -57,8 +57,7 @@ private:
     bool send_outgoing_queue();
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
-    void relay_output_line(uint8_t remote_sender, const char *line);
-    static void echo_relay_handler(uint8_t target, const char *line);
+    static void relay_output_line(uint8_t remote_sender, const char *line);
     bool parse_message(const char *line, IncomingMessage &message) const;
     void handle_message(const IncomingMessage &message);
 };

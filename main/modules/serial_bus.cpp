@@ -69,7 +69,7 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 
     // Set up echo relay handler (assumes single bus instance per device)
     active_bus_instance = this;
-    echo_set_relay_handler(SerialBus::echo_relay_handler);
+    echo_set_relay_handler(SerialBus::relay_output_line);
 }
 
 void SerialBus::communicator_task_entry(void *param) {
@@ -305,26 +305,19 @@ void SerialBus::send_message(uint8_t receiver, const char *payload, size_t lengt
 }
 
 void SerialBus::relay_output_line(uint8_t remote_sender, const char *line) {
-    if (!line) {
+    if (!active_bus_instance || !line) {
         return;
     }
     char payload[PAYLOAD_CAPACITY];
     const int len = std::snprintf(payload, sizeof(payload), "%s:%s", RESPONSE_PREFIX, line);
     if (len < 0 || len >= static_cast<int>(sizeof(payload))) {
-        echo("warning: serial bus %s output relay truncated", this->name.c_str());
+        echo("warning: serial bus %s output relay truncated", active_bus_instance->name.c_str());
         return;
     }
     try {
-        this->enqueue_message(remote_sender, payload, len);
+        active_bus_instance->enqueue_message(remote_sender, payload, len);
     } catch (const std::runtime_error &e) {
-        echo("warning: serial bus %s could not relay output: %s", this->name.c_str(), e.what());
-    }
-}
-
-void SerialBus::echo_relay_handler(uint8_t target, const char *line) {
-    // Static handler that relays echo output to the specified target via the active bus
-    if (active_bus_instance && line) {
-        active_bus_instance->relay_output_line(target, line);
+        echo("warning: serial bus %s could not relay output: %s", active_bus_instance->name.c_str(), e.what());
     }
 }
 
@@ -398,9 +391,9 @@ void SerialBus::handle_message(const IncomingMessage &message) {
     try {
         process_line(message.payload, message.length);
     } catch (const std::exception &e) {
-        this->relay_output_line(message.sender, e.what());
+        relay_output_line(message.sender, e.what());
     } catch (...) {
-        this->relay_output_line(message.sender, "unknown error");
+        relay_output_line(message.sender, "unknown error");
     }
     echo_set_target(0xff);
 }
