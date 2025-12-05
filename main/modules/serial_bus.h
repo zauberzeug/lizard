@@ -8,9 +8,6 @@
 #include <cstdint>
 #include <vector>
 
-class SerialBus;
-using SerialBus_ptr = std::shared_ptr<SerialBus>;
-
 class SerialBus : public Module {
 public:
     static constexpr size_t PAYLOAD_CAPACITY = 256;
@@ -41,7 +38,7 @@ private:
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
-    TaskHandle_t communicator_task = nullptr;
+    TaskHandle_t communication_task = nullptr;
     bool waiting_for_done = false;
     uint8_t current_poll_target = 0xff; // 0xff = BROADCAST_ID used as sentinel for "no target"
     unsigned long poll_start_millis = 0;
@@ -50,13 +47,12 @@ private:
     uint8_t window_requester = 0;
     unsigned long last_message_millis = 0;
 
-    static void communicator_task_entry(void *param);
-    [[noreturn]] void communicator_loop();
+    [[noreturn]] static void communication_loop(void *param);
     void communicator_process_uart();
     bool send_outgoing_queue();
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
-    static void relay_output_line(uint8_t remote_sender, const char *line);
+    void relay_output_line(uint8_t remote_sender, const char *line);
     bool parse_message(const char *line, IncomingMessage &message) const;
     void handle_message(const IncomingMessage &message);
 };
