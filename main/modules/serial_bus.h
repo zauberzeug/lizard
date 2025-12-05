@@ -47,12 +47,15 @@ private:
     uint8_t window_requester = 0;
     unsigned long last_message_millis = 0;
 
+    // Echo callback state: tracks which target should receive relayed output
+    uint8_t echo_target_id = 0xff; // 0xff = no relay, else = target ID
+
     [[noreturn]] static void communication_loop(void *param);
     void communicator_process_uart();
     bool send_outgoing_queue();
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
-    void relay_output_line(uint8_t remote_sender, const char *line);
+    void on_echo_callback(const char *line);
     bool parse_message(const char *line, IncomingMessage &message) const;
     void handle_message(const IncomingMessage &message);
 };

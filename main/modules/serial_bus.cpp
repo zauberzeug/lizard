@@ -17,6 +17,12 @@ static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static constexpr const char RESPONSE_PREFIX[] = "__BUS_RESPONSE__";
 
+#define LOG_QUEUE(msg, queue, format, ...)                                                    \
+    do {                                                                                      \
+        (msg).length = std::snprintf((msg).payload, PAYLOAD_CAPACITY, format, ##__VA_ARGS__); \
+        xQueueSend(queue, &(msg), 0);                                                         \
+    } while (0)
+
 REGISTER_MODULE_DEFAULTS(SerialBus)
 
 const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
@@ -49,19 +55,18 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
         throw std::runtime_error("failed to create serial bus communicator task");
     }
 
-    // Set up echo relay handler with lambda capturing this instance
-    echo_set_relay_handler([this](auto remote_sender, auto line) { this->relay_output_line(remote_sender, line); });
+    // Set up echo callback with lambda capturing this instance
+    echo_register_callback([this](const char *line) { this->on_echo_callback(line); });
 }
 
 [[noreturn]] void SerialBus::communication_loop(void *param) {
-    // FreeRTOS task entry point: converts void* param to SerialBus* and calls the instance method
     SerialBus *bus = static_cast<SerialBus *>(param);
+    IncomingMessage log_msg{bus->node_id, bus->node_id};
     while (true) {
         bus->communicator_process_uart();
         if (bus->coordinator) {
             if (!bus->waiting_for_done) {
                 if (!bus->send_outgoing_queue()) {
-                    // Poll next peer in round-robin fashion, when coordinator's queue is empty
                     if (!bus->peer_ids.empty()) {
                         bus->current_poll_target = bus->peer_ids[bus->poll_index];
                         bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
@@ -71,13 +76,10 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
                         bus->poll_start_millis = millis();
                     }
                 }
-            } else {
-                // Check if poll timeout expired
-                if (millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                    echo("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->current_poll_target);
-                    bus->waiting_for_done = false;
-                    bus->current_poll_target = BROADCAST_ID;
-                }
+            } else if (millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
+                LOG_QUEUE(log_msg, bus->inbound_queue, "warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->current_poll_target);
+                bus->waiting_for_done = false;
+                bus->current_poll_target = BROADCAST_ID;
             }
         } else if (bus->transmit_window_open) {
             try {
@@ -85,7 +87,7 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
                 static constexpr char done_cmd[] = "__DONE__";
                 bus->send_message(bus->window_requester, done_cmd, sizeof(done_cmd) - 1);
             } catch (const std::exception &e) {
-                echo("warning: serial bus %s error during transmit window: %s", bus->name.c_str(), e.what());
+                LOG_QUEUE(log_msg, bus->inbound_queue, "warning: serial bus %s error during transmit window: %s", bus->name.c_str(), e.what());
             }
             bus->transmit_window_open = false;
         }
@@ -95,19 +97,20 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 
 void SerialBus::communicator_process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
+    IncomingMessage log_msg{this->node_id, this->node_id};
     while (this->serial->has_buffered_lines()) {
         int len = 0;
         try {
             len = this->serial->read_line(buffer, sizeof(buffer));
             len = check(buffer, len);
         } catch (const std::runtime_error &e) {
-            echo("warning: serial bus %s dropped line: %s", this->name.c_str(), e.what());
+            LOG_QUEUE(log_msg, this->inbound_queue, "warning: serial bus %s dropped line: %s", this->name.c_str(), e.what());
             continue;
         }
 
         IncomingMessage message;
         if (!this->parse_message(buffer, message)) {
-            echo("warning: serial bus %s received malformed message: %s", this->name.c_str(), buffer);
+            LOG_QUEUE(log_msg, this->inbound_queue, "warning: serial bus %s received malformed message: %s", this->name.c_str(), buffer);
             continue;
         }
 
@@ -131,10 +134,10 @@ void SerialBus::communicator_process_uart() {
             }
             continue;
         }
-        if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
-            echo("warning: serial bus %s inbound queue overflow", this->name.c_str());
-        } else {
+        if (xQueueSend(this->inbound_queue, &message, 0) == pdTRUE) {
             this->last_message_millis = millis();
+        } else {
+            LOG_QUEUE(log_msg, this->inbound_queue, "warning: serial bus %s inbound queue overflow", this->name.c_str());
         }
     }
 }
@@ -280,8 +283,9 @@ void SerialBus::send_message(uint8_t receiver, const char *payload, size_t lengt
     this->serial->write_checked_line(buffer, header_len + length);
 }
 
-void SerialBus::relay_output_line(uint8_t remote_sender, const char *line) {
-    if (!line) {
+void SerialBus::on_echo_callback(const char *line) {
+    // Only relay if target is set
+    if (!line || this->echo_target_id == 0xff) {
         return;
     }
     char payload[PAYLOAD_CAPACITY];
@@ -291,7 +295,7 @@ void SerialBus::relay_output_line(uint8_t remote_sender, const char *line) {
         return;
     }
     try {
-        this->enqueue_message(remote_sender, payload, len);
+        this->enqueue_message(this->echo_target_id, payload, len);
     } catch (const std::runtime_error &e) {
         echo("warning: serial bus %s could not relay output: %s", this->name.c_str(), e.what());
     }
@@ -337,6 +341,12 @@ void SerialBus::handle_message(const IncomingMessage &message) {
         return;
     }
 
+    // Log messages from communication task (sender == receiver == node_id)
+    if (message.sender == this->node_id && message.receiver == this->node_id) {
+        echo("%s", message.payload);
+        return;
+    }
+
     // Display output that was relayed back from a remote node
     const size_t prefix_len = sizeof(RESPONSE_PREFIX) - 1;
     if (message.length >= prefix_len && std::strncmp(message.payload, RESPONSE_PREFIX, prefix_len) == 0) {
@@ -363,13 +373,13 @@ void SerialBus::handle_message(const IncomingMessage &message) {
     }
 
     // Regular commands: process locally and relay any echo() output back to sender
-    echo_set_target(message.sender);
+    this->echo_target_id = message.sender;
     try {
         process_line(message.payload, message.length);
     } catch (const std::exception &e) {
-        relay_output_line(message.sender, e.what());
+        echo("%s", e.what());
     } catch (...) {
-        relay_output_line(message.sender, "unknown error");
+        echo("unknown error");
     }
-    echo_set_target(0xff);
+    this->echo_target_id = 0xff;
 }

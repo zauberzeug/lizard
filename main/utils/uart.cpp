@@ -1,26 +1,17 @@
 #include "uart.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include <algorithm>
 #include <cstdarg>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
 
-static EchoRelayHandler relay_handler = nullptr;
-static uint8_t echo_target_id = 0xff; // 0xff = normal echo, else = relay to target
-static TaskHandle_t relay_task = nullptr;
+static std::vector<EchoCallback> echo_callbacks;
 
-// Simple redirect system: when target is set to a valid ID (not 0xff), echo output
-// is relayed to that target via the handler. Task-scoped for safety.
+// Echo callback system: registered callbacks are called for each echo output.
+// Each callback decides internally if it should process the output.
 
-void echo_set_relay_handler(EchoRelayHandler handler) {
-    relay_handler = handler;
-}
-
-void echo_set_target(uint8_t target) {
-    echo_target_id = target;
-    relay_task = xTaskGetCurrentTaskHandle();
+void echo_register_callback(EchoCallback handler) {
+    echo_callbacks.push_back(handler);
 }
 
 void echo(const char *format, ...) {
@@ -40,8 +31,8 @@ void echo(const char *format, ...) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
             printf("%s@%02x\n", &buffer[start], checksum);
-            if (echo_target_id != 0xff && relay_handler && relay_task == xTaskGetCurrentTaskHandle()) {
-                relay_handler(echo_target_id, &buffer[start]);
+            for (const auto &callback : echo_callbacks) {
+                callback(&buffer[start]);
             }
             start = i + 1;
             checksum = 0;
