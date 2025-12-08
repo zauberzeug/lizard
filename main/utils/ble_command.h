@@ -19,7 +19,7 @@ auto init(const std::string_view &deviceName,
 /* Sends data to the first connected device via notification.
  * Returns 0 on success, NimBLE error code otherwise. */
 auto send(const std::string_view &data) -> int;
-auto fini() -> void;
+auto finalize() -> void;
 /* Disable security enforcement (pairing/PIN), allowing unencrypted, unauthenticated access. */
 auto deactivate_pin() -> void;
 /* Remove all bonded devices from NimBLE store (NVS). */
