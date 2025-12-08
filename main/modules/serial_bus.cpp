@@ -17,12 +17,6 @@ static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static constexpr const char RESPONSE_PREFIX[] = "__BUS_RESPONSE__";
 
-#define LOG_QUEUE(msg, queue, format, ...)                                                    \
-    do {                                                                                      \
-        (msg).length = std::snprintf((msg).payload, PAYLOAD_CAPACITY, format, ##__VA_ARGS__); \
-        xQueueSend(queue, &(msg), 0);                                                         \
-    } while (0)
-
 REGISTER_MODULE_DEFAULTS(SerialBus)
 
 const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
@@ -61,7 +55,6 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 
 [[noreturn]] void SerialBus::communication_loop(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
-    IncomingMessage log_msg{bus->node_id, bus->node_id};
     while (true) {
         bus->communicator_process_uart();
         if (bus->coordinator) {
@@ -77,7 +70,7 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
                     }
                 }
             } else if (millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                LOG_QUEUE(log_msg, bus->inbound_queue, "warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->current_poll_target);
+                bus->echo_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->current_poll_target);
                 bus->waiting_for_done = false;
                 bus->current_poll_target = BROADCAST_ID;
             }
@@ -87,7 +80,7 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
                 static constexpr char done_cmd[] = "__DONE__";
                 bus->send_message(bus->window_requester, done_cmd, sizeof(done_cmd) - 1);
             } catch (const std::exception &e) {
-                LOG_QUEUE(log_msg, bus->inbound_queue, "warning: serial bus %s error during transmit window: %s", bus->name.c_str(), e.what());
+                bus->echo_queue("warning: serial bus %s error during transmit window: %s", bus->name.c_str(), e.what());
             }
             bus->transmit_window_open = false;
         }
@@ -97,20 +90,19 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 
 void SerialBus::communicator_process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
-    IncomingMessage log_msg{this->node_id, this->node_id};
     while (this->serial->has_buffered_lines()) {
         int len = 0;
         try {
             len = this->serial->read_line(buffer, sizeof(buffer));
             len = check(buffer, len);
         } catch (const std::runtime_error &e) {
-            LOG_QUEUE(log_msg, this->inbound_queue, "warning: serial bus %s dropped line: %s", this->name.c_str(), e.what());
+            this->echo_queue("warning: serial bus %s dropped line: %s", this->name.c_str(), e.what());
             continue;
         }
 
         IncomingMessage message;
         if (!this->parse_message(buffer, message)) {
-            LOG_QUEUE(log_msg, this->inbound_queue, "warning: serial bus %s received malformed message: %s", this->name.c_str(), buffer);
+            this->echo_queue("warning: serial bus %s received malformed message: %s", this->name.c_str(), buffer);
             continue;
         }
 
@@ -137,9 +129,18 @@ void SerialBus::communicator_process_uart() {
         if (xQueueSend(this->inbound_queue, &message, 0) == pdTRUE) {
             this->last_message_millis = millis();
         } else {
-            LOG_QUEUE(log_msg, this->inbound_queue, "warning: serial bus %s inbound queue overflow", this->name.c_str());
+            this->echo_queue("warning: serial bus %s inbound queue overflow", this->name.c_str());
         }
     }
+}
+
+void SerialBus::echo_queue(const char *format, ...) const {
+    IncomingMessage message{this->node_id, this->node_id, 0, {}};
+    va_list args;
+    va_start(args, format);
+    message.length = std::vsnprintf(message.payload, PAYLOAD_CAPACITY, format, args);
+    va_end(args);
+    xQueueSend(this->inbound_queue, &message, 0);
 }
 
 bool SerialBus::send_outgoing_queue() {

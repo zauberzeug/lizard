@@ -58,4 +58,5 @@ private:
     void on_echo_callback(const char *line);
     bool parse_message(const char *line, IncomingMessage &message) const;
     void handle_message(const IncomingMessage &message);
+    void echo_queue(const char *format, ...) const;
 };
