@@ -34,12 +34,10 @@ private:
     const ConstSerial_ptr serial;
     const uint8_t node_id;
     std::vector<uint8_t> peer_ids;
-    bool coordinator = false;
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
     TaskHandle_t communication_task = nullptr;
-    bool waiting_for_done = false;
     uint8_t current_poll_target = 0xff; // 0xff = BROADCAST_ID used as sentinel for "no target"
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
@@ -51,12 +49,13 @@ private:
     uint8_t echo_target_id = 0xff; // 0xff = no relay, else = target ID
 
     [[noreturn]] static void communication_loop(void *param);
-    void communicator_process_uart();
+    void process_uart();
     bool send_outgoing_queue();
     void enqueue_message(uint8_t receiver, const char *payload, size_t length);
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
-    void on_echo_callback(const char *line);
+    void handle_echo(const char *line);
     bool parse_message(const char *line, IncomingMessage &message) const;
     void handle_message(const IncomingMessage &message);
     void echo_queue(const char *format, ...) const;
+    bool is_coordinator() const { return !this->peer_ids.empty(); }
 };

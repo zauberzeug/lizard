@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
+
 extern void process_line(const char *line, const int len);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
@@ -21,8 +22,6 @@ REGISTER_MODULE_DEFAULTS(SerialBus)
 
 const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
     return {
-        {"is_coordinator", std::make_shared<BooleanVariable>(false)},
-        {"peer_count", std::make_shared<IntegerVariable>(0)},
         {"last_message_age", std::make_shared<IntegerVariable>(0)},
     };
 }
@@ -30,8 +29,6 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
     : Module(serial_bus, name), serial(serial), node_id(node_id) {
     this->properties = SerialBus::get_defaults();
-    this->properties.at("is_coordinator")->boolean_value = this->coordinator;
-    this->properties.at("peer_count")->integer_value = this->peer_ids.size();
     this->serial->enable_line_detection();
 
     if (!(this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage)))) {
@@ -46,49 +43,48 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
             SerialBus::communication_loop, "serial_bus_comm", 4096, this, 5, &this->communication_task, 1) != pdPASS) {
         vQueueDelete(this->outbound_queue);
         vQueueDelete(this->inbound_queue);
-        throw std::runtime_error("failed to create serial bus communicator task");
+        throw std::runtime_error("failed to create serial bus communication task");
     }
 
-    // Set up echo callback with lambda capturing this instance
-    echo_register_callback([this](const char *line) { this->on_echo_callback(line); });
+    register_echo_callback([this](const char *line) { this->handle_echo(line); });
 }
 
 [[noreturn]] void SerialBus::communication_loop(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
     while (true) {
-        bus->communicator_process_uart();
-        if (bus->coordinator) {
-            if (!bus->waiting_for_done) {
-                if (!bus->send_outgoing_queue()) {
-                    if (!bus->peer_ids.empty()) {
-                        bus->current_poll_target = bus->peer_ids[bus->poll_index];
-                        bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
-                        static constexpr char poll_cmd[] = "__POLL__";
-                        bus->send_message(bus->current_poll_target, poll_cmd, sizeof(poll_cmd) - 1);
-                        bus->waiting_for_done = true;
-                        bus->poll_start_millis = millis();
-                    }
-                }
-            } else if (millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
+        bus->process_uart();
+        if (bus->is_coordinator()) {
+            // poll next peer
+            if (bus->current_poll_target == BROADCAST_ID && !bus->send_outgoing_queue()) {
+                bus->current_poll_target = bus->peer_ids[bus->poll_index];
+                bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
+                static constexpr char poll_cmd[] = "__POLL__";
+                bus->send_message(bus->current_poll_target, poll_cmd, sizeof(poll_cmd) - 1);
+                bus->poll_start_millis = millis();
+            }
+            // handle poll timeout
+            if (bus->current_poll_target != BROADCAST_ID && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
                 bus->echo_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->current_poll_target);
-                bus->waiting_for_done = false;
                 bus->current_poll_target = BROADCAST_ID;
             }
-        } else if (bus->transmit_window_open) {
-            try {
-                bus->send_outgoing_queue();
-                static constexpr char done_cmd[] = "__DONE__";
-                bus->send_message(bus->window_requester, done_cmd, sizeof(done_cmd) - 1);
-            } catch (const std::exception &e) {
-                bus->echo_queue("warning: serial bus %s error during transmit window: %s", bus->name.c_str(), e.what());
+        } else {
+            // respond to poll
+            if (bus->transmit_window_open) {
+                try {
+                    bus->send_outgoing_queue();
+                    static constexpr char done_cmd[] = "__DONE__";
+                    bus->send_message(bus->window_requester, done_cmd, sizeof(done_cmd) - 1);
+                } catch (const std::exception &e) {
+                    bus->echo_queue("warning: serial bus %s error during transmit window: %s", bus->name.c_str(), e.what());
+                }
+                bus->transmit_window_open = false;
             }
-            bus->transmit_window_open = false;
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
-void SerialBus::communicator_process_uart() {
+void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
     while (this->serial->has_buffered_lines()) {
         int len = 0;
@@ -112,7 +108,7 @@ void SerialBus::communicator_process_uart() {
 
         if (message.length == 8 && std::strncmp(message.payload, "__POLL__", message.length) == 0) {
             // Open transmit window for peer when coordinator polls
-            if (!this->coordinator) {
+            if (!this->is_coordinator()) {
                 this->window_requester = message.sender;
                 this->transmit_window_open = true;
             }
@@ -120,8 +116,7 @@ void SerialBus::communicator_process_uart() {
         }
         if (message.length == 8 && std::strncmp(message.payload, "__DONE__", message.length) == 0) {
             // Coordinator receives done signal from peer
-            if (this->coordinator && this->waiting_for_done && message.sender == this->current_poll_target) {
-                this->waiting_for_done = false;
+            if (this->is_coordinator() && message.sender == this->current_poll_target) {
                 this->current_poll_target = BROADCAST_ID;
             }
             continue;
@@ -189,13 +184,9 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         }
 
         // Configure this node as coordinator with given peer list
-        this->coordinator = true;
         this->peer_ids = peers;
         this->poll_index = 0;
-        this->waiting_for_done = false;
         this->current_poll_target = BROADCAST_ID;
-        this->properties.at("is_coordinator")->boolean_value = true;
-        this->properties.at("peer_count")->integer_value = this->peer_ids.size();
     } else if (method_name == "configure") {
         Module::expect(arguments, 2, integer, string);
         const int receiver = arguments[0]->evaluate_integer();
@@ -284,7 +275,7 @@ void SerialBus::send_message(uint8_t receiver, const char *payload, size_t lengt
     this->serial->write_checked_line(buffer, header_len + length);
 }
 
-void SerialBus::on_echo_callback(const char *line) {
+void SerialBus::handle_echo(const char *line) {
     // Only relay if target is set
     if (!line || this->echo_target_id == 0xff) {
         return;

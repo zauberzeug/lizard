@@ -7,11 +7,8 @@
 
 static std::vector<EchoCallback> echo_callbacks;
 
-// Echo callback system: registered callbacks are called for each echo output.
-// Each callback decides internally if it should process the output.
-
-void echo_register_callback(EchoCallback handler) {
-    echo_callbacks.push_back(handler);
+void register_echo_callback(const EchoCallback &callback) {
+    echo_callbacks.push_back(callback);
 }
 
 void echo(const char *format, ...) {

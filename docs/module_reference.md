@@ -87,8 +87,6 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 
 | Properties             | Description                                        | Data type |
 | ---------------------- | -------------------------------------------------- | --------- |
-| `bus.is_coordinator`   | Whether this node is acting as bus coordinator     | `bool`    |
-| `bus.peer_count`       | Number of peer nodes the coordinator will poll     | `int`     |
 | `bus.last_message_age` | Milliseconds since the last bus frame was received | `int`     |
 
 | Methods                            | Description                                                                                    | Arguments    |

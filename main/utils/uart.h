@@ -6,6 +6,6 @@
 
 void echo(const char *fmt, ...);
 typedef std::function<void(const char *line)> EchoCallback;
-void echo_register_callback(EchoCallback handler);
+void register_echo_callback(const EchoCallback &callback);
 int strip(char *buffer, int len);
 int check(char *buffer, int len);
