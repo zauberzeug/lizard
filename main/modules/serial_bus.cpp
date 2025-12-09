@@ -85,14 +85,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
     while (this->serial->has_buffered_lines()) {
-        int len = 0;
-        try {
-            len = this->serial->read_line(buffer, sizeof(buffer));
-            len = check(buffer, len);
-        } catch (const std::runtime_error &e) {
-            this->echo_queue("warning: serial bus %s dropped line: %s", this->name.c_str(), e.what());
-            continue;
-        }
+        int len = this->serial->read_line(buffer, sizeof(buffer));
+        check(buffer, len);
 
         IncomingMessage message;
         if (!this->parse_message(buffer, message)) {
