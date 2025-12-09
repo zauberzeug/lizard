@@ -16,6 +16,8 @@ static constexpr unsigned long POLL_TIMEOUT_MS = 250;
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static constexpr const char RESPONSE_PREFIX[] = "__BUS_RESPONSE__";
+static constexpr const char POLL_CMD[] = "__POLL__";
+static constexpr const char DONE_CMD[] = "__DONE__";
 
 REGISTER_MODULE_DEFAULTS(SerialBus)
 
@@ -56,8 +58,7 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
             // poll next peer
             if (!bus->is_polling && !bus->send_outgoing_queue()) {
                 bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
-                static constexpr char poll_cmd[] = "__POLL__";
-                bus->send_message(bus->peer_ids[bus->poll_index], poll_cmd, sizeof(poll_cmd) - 1);
+                bus->send_message(bus->peer_ids[bus->poll_index], POLL_CMD, sizeof(POLL_CMD) - 1);
                 bus->poll_start_millis = millis();
             }
             // handle poll timeout
@@ -70,8 +71,7 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
             if (bus->transmit_window_open) {
                 try {
                     bus->send_outgoing_queue();
-                    static constexpr char done_cmd[] = "__DONE__";
-                    bus->send_message(bus->window_requester, done_cmd, sizeof(done_cmd) - 1);
+                    bus->send_message(bus->window_requester, DONE_CMD, sizeof(DONE_CMD) - 1);
                 } catch (const std::exception &e) {
                     bus->echo_queue("warning: serial bus %s error during transmit window: %s", bus->name.c_str(), e.what());
                 }
@@ -104,7 +104,7 @@ void SerialBus::process_uart() {
             continue;
         }
 
-        if (message.length == 8 && std::strncmp(message.payload, "__POLL__", message.length) == 0) {
+        if (message.length == 8 && std::strncmp(message.payload, POLL_CMD, message.length) == 0) {
             // Open transmit window for peer when coordinator polls
             if (!this->is_coordinator()) {
                 this->window_requester = message.sender;
@@ -112,7 +112,7 @@ void SerialBus::process_uart() {
             }
             continue;
         }
-        if (message.length == 8 && std::strncmp(message.payload, "__DONE__", message.length) == 0) {
+        if (message.length == 8 && std::strncmp(message.payload, DONE_CMD, message.length) == 0) {
             // Coordinator receives done signal from peer
             if (this->is_coordinator() && message.sender == this->peer_ids[this->poll_index]) {
                 this->is_polling = false;
@@ -164,9 +164,9 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         }
         const std::string payload = arguments[1]->evaluate_string();
         this->enqueue_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
-    } else if (method_name == "set_coordinator") {
+    } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
-            throw std::runtime_error("set_coordinator expects at least one peer ID");
+            throw std::runtime_error("make_coordinator expects at least one peer ID");
         }
         std::vector<uint8_t> peers;
         peers.reserve(arguments.size());

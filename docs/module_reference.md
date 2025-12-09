@@ -89,11 +89,11 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ---------------------- | -------------------------------------------------- | --------- |
 | `bus.last_message_age` | Milliseconds since the last bus frame was received | `int`     |
 
-| Methods                            | Description                                                                                    | Arguments    |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------- | ------------ |
-| `bus.send(receiver, payload)`      | Send a payload to a peer `receiver` (0-255); payload must not contain newlines                 | `int`, `str` |
-| `bus.configure(receiver, script)`  | Send a multi-line setup script to a peer and restart it (`!-`/`!+` framing is handled for you) | `int`, `str` |
-| `bus.set_coordinator(peer_ids...)` | Mark this node as coordinator and set the list of peer IDs to poll in round-robin order        | `int`...     |
+| Methods                             | Description                                                                                    | Arguments    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- | ------------ |
+| `bus.send(receiver, payload)`       | Send a payload to a peer `receiver` (0-255); payload must not contain newlines                 | `int`, `str` |
+| `bus.configure(receiver, script)`   | Send a multi-line setup script to a peer and restart it (`!-`/`!+` framing is handled for you) | `int`, `str` |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                     | `int`s       |
 
 Use `bus.configure()` to push startup scripts line by line;
 it wraps the required framing and finishes with a restart so peers boot with the new configuration.
