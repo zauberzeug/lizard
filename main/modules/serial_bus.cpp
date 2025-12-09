@@ -159,36 +159,33 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
     if (method_name == "send") {
         Module::expect(arguments, 2, integer, string);
         const int receiver = arguments[0]->evaluate_integer();
-        if (receiver < 0 || receiver > 255) {
-            throw std::runtime_error("receiver id must be between 0 and 255");
+        if (receiver <= 0 || receiver >= 255) {
+            throw std::runtime_error("receiver ID must be between 0 and 255");
         }
         const std::string payload = arguments[1]->evaluate_string();
         this->enqueue_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "set_coordinator") {
         if (arguments.empty()) {
-            throw std::runtime_error("set_coordinator expects at least one peer id");
+            throw std::runtime_error("set_coordinator expects at least one peer ID");
         }
         std::vector<uint8_t> peers;
         peers.reserve(arguments.size());
         for (const auto &argument : arguments) {
             if ((argument->type & integer) == 0) {
-                throw std::runtime_error("peer ids must be integers");
+                throw std::runtime_error("peer IDs must be integers");
             }
             const long peer_value = argument->evaluate_integer();
-            if (peer_value < 0 || peer_value > 255) {
-                throw std::runtime_error("peer ids must be between 0 and 255");
+            if (peer_value <= 0 || peer_value >= 255) {
+                throw std::runtime_error("peer IDs must be between 0 and 255");
             }
             peers.push_back(static_cast<uint8_t>(peer_value));
         }
-
-        // Configure this node as coordinator with given peer list
         this->peer_ids = peers;
-        this->poll_index = 0;
     } else if (method_name == "configure") {
         Module::expect(arguments, 2, integer, string);
         const int receiver = arguments[0]->evaluate_integer();
-        if (receiver < 0 || receiver > 255) {
-            throw std::runtime_error("receiver id must be between 0 and 255");
+        if (receiver <= 0 || receiver >= 255) {
+            throw std::runtime_error("receiver ID must be between 0 and 255");
         }
         const uint8_t target = static_cast<uint8_t>(receiver);
         const std::string script = arguments[1]->evaluate_string();
