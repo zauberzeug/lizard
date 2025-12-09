@@ -41,8 +41,7 @@ private:
     bool is_polling = false;
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
-    bool transmit_window_open = false;
-    uint8_t window_requester = 0;
+    uint8_t requesting_node = 0;
     unsigned long last_message_millis = 0;
 
     // Echo callback state: tracks which target should receive relayed output

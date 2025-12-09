@@ -68,14 +68,14 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
             }
         } else {
             // respond to poll
-            if (bus->transmit_window_open) {
+            if (bus->requesting_node) {
                 try {
                     bus->send_outgoing_queue();
-                    bus->send_message(bus->window_requester, DONE_CMD, sizeof(DONE_CMD) - 1);
+                    bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
                 } catch (const std::exception &e) {
                     bus->echo_queue("warning: serial bus %s error during transmit window: %s", bus->name.c_str(), e.what());
                 }
-                bus->transmit_window_open = false;
+                bus->requesting_node = 0;
             }
         }
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -107,8 +107,7 @@ void SerialBus::process_uart() {
         if (message.length == 8 && std::strncmp(message.payload, POLL_CMD, message.length) == 0) {
             // Open transmit window for peer when coordinator polls
             if (!this->is_coordinator()) {
-                this->window_requester = message.sender;
-                this->transmit_window_open = true;
+                this->requesting_node = message.sender;
             }
             continue;
         }
