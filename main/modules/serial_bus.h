@@ -38,7 +38,7 @@ private:
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
     TaskHandle_t communication_task = nullptr;
-    uint8_t current_poll_target = 0xff; // 0xff = BROADCAST_ID used as sentinel for "no target"
+    bool is_polling = false;
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
     bool transmit_window_open = false;

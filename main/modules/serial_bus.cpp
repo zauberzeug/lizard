@@ -12,7 +12,6 @@
 extern void process_line(const char *line, const int len);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
-static constexpr uint8_t BROADCAST_ID = 0xff;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
@@ -55,17 +54,16 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
         bus->process_uart();
         if (bus->is_coordinator()) {
             // poll next peer
-            if (bus->current_poll_target == BROADCAST_ID && !bus->send_outgoing_queue()) {
-                bus->current_poll_target = bus->peer_ids[bus->poll_index];
+            if (!bus->is_polling && !bus->send_outgoing_queue()) {
                 bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
                 static constexpr char poll_cmd[] = "__POLL__";
-                bus->send_message(bus->current_poll_target, poll_cmd, sizeof(poll_cmd) - 1);
+                bus->send_message(bus->peer_ids[bus->poll_index], poll_cmd, sizeof(poll_cmd) - 1);
                 bus->poll_start_millis = millis();
             }
             // handle poll timeout
-            if (bus->current_poll_target != BROADCAST_ID && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                bus->echo_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->current_poll_target);
-                bus->current_poll_target = BROADCAST_ID;
+            if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
+                bus->echo_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->peer_ids[bus->poll_index]);
+                bus->is_polling = false;
             }
         } else {
             // respond to poll
@@ -102,7 +100,7 @@ void SerialBus::process_uart() {
             continue;
         }
 
-        if (message.receiver != this->node_id && message.receiver != BROADCAST_ID) {
+        if (message.receiver != this->node_id) {
             continue;
         }
 
@@ -116,8 +114,8 @@ void SerialBus::process_uart() {
         }
         if (message.length == 8 && std::strncmp(message.payload, "__DONE__", message.length) == 0) {
             // Coordinator receives done signal from peer
-            if (this->is_coordinator() && message.sender == this->current_poll_target) {
-                this->current_poll_target = BROADCAST_ID;
+            if (this->is_coordinator() && message.sender == this->peer_ids[this->poll_index]) {
+                this->is_polling = false;
             }
             continue;
         }
@@ -186,7 +184,6 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         // Configure this node as coordinator with given peer list
         this->peer_ids = peers;
         this->poll_index = 0;
-        this->current_poll_target = BROADCAST_ID;
     } else if (method_name == "configure") {
         Module::expect(arguments, 2, integer, string);
         const int receiver = arguments[0]->evaluate_integer();
