@@ -204,8 +204,17 @@ static int handle_gap_event(struct ble_gap_event *event, void * /* arg */) {
                 const uint8_t *addr = desc.peer_id_addr.val;
                 ESP_LOGI(TAG, "Connected to %02x:%02x:%02x:%02x:%02x:%02x",
                          addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
+
+                // iOS requires peripheral to initiate encryption on reconnect for bonded devices.
+                // Check if peer is bonded and if so, proactively start security procedure.
+                if (desc.sec_state.bonded) {
+                    ESP_LOGI(TAG, "Bonded peer reconnected - initiating encryption");
+                    int rc = ble_gap_security_initiate(event->connect.conn_handle);
+                    if (rc != 0) {
+                        ESP_LOGW(TAG, "Failed to initiate security; rc=%d", rc);
+                    }
+                }
             }
-            // Let the phone initiate security when it accesses the encrypted characteristic
         } else {
             advertise();
         }
