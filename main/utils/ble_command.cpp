@@ -85,6 +85,29 @@ static void handle_idle_timeout(TimerHandle_t /* timer */) {
     }
 }
 
+// NimBLE store status callback - handles bond storage overflow by evicting oldest bond
+static int handle_store_status(struct ble_store_status_event *event, void * /* arg */) {
+    if (event->event_code == BLE_STORE_EVENT_FULL) {
+        ESP_LOGW(TAG, "Bond storage full - evicting oldest bond");
+
+        // Get list of bonded peers
+        ble_addr_t bonded_peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+        int num_peers = 0;
+        int rc = ble_store_util_bonded_peers(bonded_peers, &num_peers, MYNEWT_VAL(BLE_STORE_MAX_BONDS));
+
+        if (rc == 0 && num_peers > 0) {
+            // Delete the first (oldest) bond to make room
+            ESP_LOGI(TAG, "Removing bond for %02x:%02x:%02x:%02x:%02x:%02x",
+                     bonded_peers[0].val[5], bonded_peers[0].val[4],
+                     bonded_peers[0].val[3], bonded_peers[0].val[2],
+                     bonded_peers[0].val[1], bonded_peers[0].val[0]);
+            ble_gap_unpair(&bonded_peers[0]);
+            return 0; // Tell NimBLE to retry storing
+        }
+    }
+    return BLE_HS_EUNKNOWN;
+}
+
 static bool parse_uuid128(const char *str, ble_uuid128_t *uuid) {
     if (!str || strlen(str) != UUID_STRING_LENGTH) {
         return false;
@@ -202,13 +225,14 @@ static int handle_gap_event(struct ble_gap_event *event, void * /* arg */) {
             struct ble_gap_conn_desc desc;
             if (ble_gap_conn_find(event->connect.conn_handle, &desc) == 0) {
                 const uint8_t *addr = desc.peer_id_addr.val;
-                ESP_LOGI(TAG, "Connected to %02x:%02x:%02x:%02x:%02x:%02x",
-                         addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
+                ESP_LOGI(TAG, "Connected to %02x:%02x:%02x:%02x:%02x:%02x (bonded=%d)",
+                         addr[5], addr[4], addr[3], addr[2], addr[1], addr[0],
+                         desc.sec_state.bonded);
 
-                // iOS requires peripheral to initiate encryption on reconnect for bonded devices.
-                // Check if peer is bonded and if so, proactively start security procedure.
+                // For bonded devices: initiate encryption (required by iOS reconnection)
+                // For new devices: let phone initiate pairing when accessing encrypted characteristic
                 if (desc.sec_state.bonded) {
-                    ESP_LOGI(TAG, "Bonded peer reconnected - initiating encryption");
+                    ESP_LOGI(TAG, "Bonded peer - initiating encryption");
                     int rc = ble_gap_security_initiate(event->connect.conn_handle);
                     if (rc != 0) {
                         ESP_LOGW(TAG, "Failed to initiate security; rc=%d", rc);
@@ -222,6 +246,14 @@ static int handle_gap_event(struct ble_gap_event *event, void * /* arg */) {
 
     case BLE_GAP_EVENT_DISCONNECT:
         ESP_LOGI(TAG, "Disconnected; reason=%d", event->disconnect.reason);
+
+        // Detect bond mismatch: disconnect before encryption with reason 531 (0x213)
+        // means phone has old keys but ESP32 doesn't (e.g. after reset_bonds)
+        if (!l_authenticated && event->disconnect.reason == 0x213) {
+            ESP_LOGW(TAG, "Bond mismatch detected - phone needs to forget device in Bluetooth settings");
+            echo("BLE: Bond mismatch - phone must forget device in Bluetooth settings");
+        }
+
         if (event->disconnect.conn.conn_handle == l_currentCon) {
             l_currentCon = BLE_HS_CONN_HANDLE_NONE;
             l_authenticated = false;
@@ -272,20 +304,54 @@ static int handle_gap_event(struct ble_gap_event *event, void * /* arg */) {
         if (event->enc_change.status == 0) {
             l_authenticated = true;
 
+            // Enforce bond limit - remove oldest bonds if over limit
+            constexpr int max_bonds = CONFIG_BT_NIMBLE_MAX_BONDS;
+            ble_addr_t bonded_peers[max_bonds + 1];
+            int num_peers = 0;
+            if (ble_store_util_bonded_peers(bonded_peers, &num_peers, max_bonds + 1) == 0) {
+                ESP_LOGI(TAG, "Current bonds: %d (max: %d)", num_peers, max_bonds);
+                while (num_peers > max_bonds) {
+                    ESP_LOGW(TAG, "Bond limit exceeded - removing oldest bond %02x:%02x:%02x:%02x:%02x:%02x",
+                             bonded_peers[0].val[5], bonded_peers[0].val[4],
+                             bonded_peers[0].val[3], bonded_peers[0].val[2],
+                             bonded_peers[0].val[1], bonded_peers[0].val[0]);
+                    ble_gap_unpair(&bonded_peers[0]);
+                    // Re-fetch after removal
+                    ble_store_util_bonded_peers(bonded_peers, &num_peers, max_bonds + 1);
+                }
+            }
+
             ESP_LOGI(TAG, "Starting idle timeout (%lu ms)", (unsigned long)IDLE_TIMEOUT_MS);
             if (l_idleTimer && !l_appActive) {
                 xTimerStart(l_idleTimer, 0);
             }
         } else {
-            // Encryption failed - likely key mismatch after reset_bonds
-            ESP_LOGW(TAG, "Encryption failed (status=%d) - clearing peer bond and disconnecting",
-                     event->enc_change.status);
             struct ble_gap_conn_desc desc;
+            bool was_bonded = false;
             if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) == 0) {
-                ble_store_util_delete_peer(&desc.peer_id_addr);
+                was_bonded = desc.sec_state.bonded;
             }
-            const uint16_t conn_handle = event->enc_change.conn_handle;
-            ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+
+            if (was_bonded) {
+                // Bonded device with key mismatch - likely after reset_bonds on one side
+                // Send error notification before disconnecting
+                ESP_LOGW(TAG, "Encryption failed (status=%d) - bond key mismatch, notifying and disconnecting",
+                         event->enc_change.status);
+
+                constexpr const char *bond_err = "!bond_error\n";
+                struct os_mbuf *om = ble_hs_mbuf_from_flat(bond_err, strlen(bond_err));
+                if (om) {
+                    ble_gattc_notify_custom(event->enc_change.conn_handle, l_sendChrValHandle, om);
+                }
+                ble_store_util_delete_peer(&desc.peer_id_addr);
+            } else {
+                // Fresh pairing failed (e.g., DHKey check error 1035)
+                // Just disconnect cleanly - next attempt should work
+                ESP_LOGW(TAG, "Fresh pairing failed (status=%d) - disconnecting, please retry",
+                         event->enc_change.status);
+            }
+
+            ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
         }
         return 0;
 
@@ -451,6 +517,7 @@ auto init(const std::string_view &deviceName, CommandCallback onCommand) -> void
 
     ble_hs_cfg.reset_cb = handle_reset;
     ble_hs_cfg.sync_cb = handle_sync;
+    ble_hs_cfg.store_status_cb = handle_store_status;
 
     // Display-only device: we show PIN, phone enters it
     ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_DISP_ONLY;
@@ -512,12 +579,28 @@ auto deactivate_pin() -> void {
 auto reset_bonds() -> void {
     ESP_LOGI(TAG, "Resetting all bonds...");
 
+    // Disconnect any active connection first
     if (l_currentCon != BLE_HS_CONN_HANDLE_NONE) {
         ble_gap_terminate(l_currentCon, BLE_ERR_REM_USER_CONN_TERM);
         l_currentCon = BLE_HS_CONN_HANDLE_NONE;
     }
 
-    int rc = ble_store_clear();
+    // Stop advertising during reset
+    ble_gap_adv_stop();
+
+    // Get all bonded peers and unpair them (clears in-memory security state)
+    ble_addr_t bonded_peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+    int num_peers = 0;
+    int rc = ble_store_util_bonded_peers(bonded_peers, &num_peers, MYNEWT_VAL(BLE_STORE_MAX_BONDS));
+    if (rc == 0 && num_peers > 0) {
+        ESP_LOGI(TAG, "Unpairing %d bonded peer(s)", num_peers);
+        for (int i = 0; i < num_peers; i++) {
+            ble_gap_unpair(&bonded_peers[i]);
+        }
+    }
+
+    // Clear persistent storage
+    rc = ble_store_clear();
     if (rc != 0) {
         ESP_LOGW(TAG, "ble_store_clear failed: %d, trying NVS fallback", rc);
 
@@ -534,7 +617,9 @@ auto reset_bonds() -> void {
         eraseNamespace("nimble_cccd");
     }
 
-    ble_gap_adv_stop();
+    // Small delay to let NimBLE fully process the unpair/clear
+    vTaskDelay(pdMS_TO_TICKS(100));
+
     advertise();
 
     ESP_LOGI(TAG, "Bonds cleared - all peers must re-pair");
