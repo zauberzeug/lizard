@@ -22,12 +22,12 @@ private:
     struct IncomingMessage {
         uint8_t sender;
         uint8_t receiver;
-        uint16_t length;
+        size_t length;
         char payload[PAYLOAD_CAPACITY];
     };
     struct OutgoingMessage {
         uint8_t receiver;
-        uint16_t length;
+        size_t length;
         char payload[PAYLOAD_CAPACITY];
     };
 
@@ -48,12 +48,13 @@ private:
 
     [[noreturn]] static void communication_loop(void *param);
     void process_uart();
-    bool send_outgoing_queue();
-    void enqueue_message(uint8_t receiver, const char *payload, size_t length);
-    void send_message(uint8_t receiver, const char *payload, size_t length) const;
-    void handle_echo(const char *line);
     bool parse_message(const char *line, IncomingMessage &message) const;
-    void handle_message(const IncomingMessage &message);
-    void echo_queue(const char *format, ...) const;
+    void handle_incoming_message(const IncomingMessage &message);
+    void enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length);
+    bool send_outgoing_queue();
+    void send_message(uint8_t receiver, const char *payload, size_t length) const;
+
+    void print_to_incoming_queue(const char *format, ...) const;
+    void handle_echo(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
 };

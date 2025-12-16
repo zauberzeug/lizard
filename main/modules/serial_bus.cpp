@@ -48,100 +48,10 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     register_echo_callback([this](const char *line) { this->handle_echo(line); });
 }
 
-[[noreturn]] void SerialBus::communication_loop(void *param) {
-    SerialBus *bus = static_cast<SerialBus *>(param);
-    while (true) {
-        bus->process_uart();
-        if (bus->is_coordinator()) {
-            // poll next peer
-            if (!bus->is_polling && !bus->send_outgoing_queue()) {
-                bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
-                bus->send_message(bus->peer_ids[bus->poll_index], POLL_CMD, sizeof(POLL_CMD) - 1);
-                bus->poll_start_millis = millis();
-            }
-            // handle poll timeout
-            if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                bus->echo_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->peer_ids[bus->poll_index]);
-                bus->is_polling = false;
-            }
-        } else {
-            // respond to poll
-            if (bus->requesting_node) {
-                try {
-                    bus->send_outgoing_queue();
-                    bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
-                } catch (const std::exception &e) {
-                    bus->echo_queue("warning: serial bus %s error while responding to poll: %s", bus->name.c_str(), e.what());
-                }
-                bus->requesting_node = 0;
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(1));
-    }
-}
-
-void SerialBus::process_uart() {
-    static char buffer[FRAME_BUFFER_SIZE];
-    while (this->serial->has_buffered_lines()) {
-        const int len = this->serial->read_line(buffer, sizeof(buffer));
-        check(buffer, len);
-
-        // parse message
-        IncomingMessage message;
-        if (!this->parse_message(buffer, message)) {
-            this->echo_queue("warning: serial bus %s could not parse message: %s", this->name.c_str(), buffer);
-            continue;
-        }
-
-        // ignore messages not for this node
-        if (message.receiver != this->node_id) {
-            continue;
-        }
-
-        // handle poll command
-        if (std::strcmp(message.payload, POLL_CMD) == 0) {
-            this->requesting_node = message.sender;
-            continue;
-        }
-
-        // handle done command
-        if (std::strcmp(message.payload, DONE_CMD) == 0) {
-            if (message.sender == this->peer_ids[this->poll_index]) {
-                this->is_polling = false;
-            }
-            continue;
-        }
-
-        // enqueue message in inbound queue
-        if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
-            this->echo_queue("warning: serial bus %s could not enqueue message: %s", this->name.c_str(), buffer);
-        }
-    }
-}
-
-void SerialBus::echo_queue(const char *format, ...) const {
-    IncomingMessage message{this->node_id, this->node_id, 0, {}};
-    va_list args;
-    va_start(args, format);
-    message.length = std::vsnprintf(message.payload, PAYLOAD_CAPACITY, format, args);
-    va_end(args);
-    xQueueSend(this->inbound_queue, &message, 0);
-}
-
-bool SerialBus::send_outgoing_queue() {
-    bool sent = false;
-    OutgoingMessage message;
-    while (xQueueReceive(this->outbound_queue, &message, 0) == pdTRUE) {
-        this->send_message(message.receiver, message.payload, message.length);
-        sent = true;
-    }
-    return sent;
-}
-
 void SerialBus::step() {
     IncomingMessage message;
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
-        this->handle_message(message);
+        this->handle_incoming_message(message);
     }
     Module::step();
 }
@@ -154,7 +64,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             throw std::runtime_error("receiver ID must be between 0 and 255");
         }
         const std::string payload = arguments[1]->evaluate_string();
-        this->enqueue_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
+        this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
             throw std::runtime_error("make_coordinator expects at least one peer ID");
@@ -180,7 +90,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         }
         const uint8_t target = static_cast<uint8_t>(receiver);
         const std::string script = arguments[1]->evaluate_string();
-        this->enqueue_message(target, "!-", 2);
+        this->enqueue_outgoing_message(target, "!-", 2);
 
         std::string current;
         auto flush_line = [&]() {
@@ -195,7 +105,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             }
             if (end > start) {
                 std::string cmd = "!+" + current.substr(start, end - start);
-                this->enqueue_message(target, cmd.c_str(), cmd.size());
+                this->enqueue_outgoing_message(target, cmd.c_str(), cmd.size());
             }
             current.clear();
         };
@@ -217,64 +127,82 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         }
         flush_line();
 
-        this->enqueue_message(target, "!.", 2);
+        this->enqueue_outgoing_message(target, "!.", 2);
         const char restart_cmd[] = "core.restart()";
-        this->enqueue_message(target, restart_cmd, sizeof(restart_cmd) - 1);
+        this->enqueue_outgoing_message(target, restart_cmd, sizeof(restart_cmd) - 1);
     } else {
         Module::call(method_name, arguments);
     }
 }
 
-void SerialBus::enqueue_message(uint8_t receiver, const char *payload, size_t length) {
-    if (length == 0) {
-        throw std::runtime_error("payload must not be empty");
-    }
-    if (length >= PAYLOAD_CAPACITY) {
-        throw std::runtime_error("payload is too large for serial bus");
-    }
-    for (size_t i = 0; i < length; ++i) {
-        if (payload[i] == '\n') {
-            throw std::runtime_error("payload must not contain newline characters");
+[[noreturn]] void SerialBus::communication_loop(void *param) {
+    SerialBus *bus = static_cast<SerialBus *>(param);
+    while (true) {
+        bus->process_uart();
+        if (bus->is_coordinator()) {
+            // poll next peer
+            if (!bus->is_polling && !bus->send_outgoing_queue()) {
+                bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
+                bus->send_message(bus->peer_ids[bus->poll_index], POLL_CMD, sizeof(POLL_CMD) - 1);
+                bus->poll_start_millis = millis();
+            }
+            // handle poll timeout
+            if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
+                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->peer_ids[bus->poll_index]);
+                bus->is_polling = false;
+            }
+        } else {
+            // respond to poll
+            if (bus->requesting_node) {
+                try {
+                    bus->send_outgoing_queue();
+                    bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
+                } catch (const std::exception &e) {
+                    bus->print_to_incoming_queue("warning: serial bus %s error while responding to poll: %s", bus->name.c_str(), e.what());
+                }
+                bus->requesting_node = 0;
+            }
         }
-    }
-    OutgoingMessage message{};
-    message.receiver = receiver;
-    message.length = length;
-    memcpy(message.payload, payload, length);
-    message.payload[length] = '\0';
-    if (xQueueSend(this->outbound_queue, &message, pdMS_TO_TICKS(50)) != pdTRUE) {
-        throw std::runtime_error("serial bus transmit queue is full");
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
-void SerialBus::send_message(uint8_t receiver, const char *payload, size_t length) const {
+void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
-    const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver);
-    if (header_len < 0) {
-        throw std::runtime_error("could not format bus header");
-    }
-    if (length + header_len >= sizeof(buffer)) {
-        throw std::runtime_error("serial bus payload is too large");
-    }
-    memcpy(buffer + header_len, payload, length);
-    this->serial->write_checked_line(buffer, header_len + length);
-}
+    while (this->serial->has_buffered_lines()) {
+        const int len = this->serial->read_line(buffer, sizeof(buffer));
+        check(buffer, len);
 
-void SerialBus::handle_echo(const char *line) {
-    // Only relay if target is set
-    if (!line || this->echo_target_id == 0xff) {
-        return;
-    }
-    char payload[PAYLOAD_CAPACITY];
-    const int len = std::snprintf(payload, sizeof(payload), "%s:%s", RESPONSE_PREFIX, line);
-    if (len < 0 || len >= static_cast<int>(sizeof(payload))) {
-        echo("warning: serial bus %s output relay truncated", this->name.c_str());
-        return;
-    }
-    try {
-        this->enqueue_message(this->echo_target_id, payload, len);
-    } catch (const std::runtime_error &e) {
-        echo("warning: serial bus %s could not relay output: %s", this->name.c_str(), e.what());
+        // parse message
+        IncomingMessage message;
+        if (!this->parse_message(buffer, message)) {
+            this->print_to_incoming_queue("warning: serial bus %s could not parse message: %s", this->name.c_str(), buffer);
+            continue;
+        }
+
+        // ignore messages not for this node
+        if (message.receiver != this->node_id) {
+            continue;
+        }
+
+        // handle poll command
+        if (std::strcmp(message.payload, POLL_CMD) == 0) {
+            this->requesting_node = message.sender;
+            continue;
+        }
+
+        // handle done command
+        if (std::strcmp(message.payload, DONE_CMD) == 0) {
+            if (message.sender == this->peer_ids[this->poll_index]) {
+                this->is_polling = false;
+            }
+            continue;
+        }
+
+        // enqueue message in inbound queue
+        if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
+            this->print_to_incoming_queue("warning: serial bus %s could not enqueue message: %s", this->name.c_str(), buffer);
+        }
     }
 }
 
@@ -313,11 +241,7 @@ bool SerialBus::parse_message(const char *line, IncomingMessage &message) const 
     return true;
 }
 
-void SerialBus::handle_message(const IncomingMessage &message) {
-    if (message.length == 0) {
-        return;
-    }
-
+void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     // Log messages from communication task (sender == receiver == node_id)
     if (message.sender == this->node_id && message.receiver == this->node_id) {
         echo("%s", message.payload);
@@ -359,4 +283,71 @@ void SerialBus::handle_message(const IncomingMessage &message) {
         echo("unknown error");
     }
     this->echo_target_id = 0xff;
+}
+
+void SerialBus::enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length) {
+    if (length >= PAYLOAD_CAPACITY) {
+        throw std::runtime_error("payload is too large for serial bus");
+    }
+    for (size_t i = 0; i < length; ++i) {
+        if (payload[i] == '\n') {
+            throw std::runtime_error("payload must not contain newline characters");
+        }
+    }
+    OutgoingMessage message{receiver, length, {}};
+    memcpy(message.payload, payload, length);
+    message.payload[length] = '\0';
+    if (xQueueSend(this->outbound_queue, &message, pdMS_TO_TICKS(50)) != pdTRUE) {
+        throw std::runtime_error("serial bus transmit queue is full");
+    }
+}
+
+bool SerialBus::send_outgoing_queue() {
+    bool sent = false;
+    OutgoingMessage message;
+    while (xQueueReceive(this->outbound_queue, &message, 0) == pdTRUE) {
+        this->send_message(message.receiver, message.payload, message.length);
+        sent = true;
+    }
+    return sent;
+}
+
+void SerialBus::send_message(uint8_t receiver, const char *payload, size_t length) const {
+    static char buffer[FRAME_BUFFER_SIZE];
+    const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver);
+    if (header_len < 0) {
+        throw std::runtime_error("could not format bus header");
+    }
+    if (length + header_len >= sizeof(buffer)) {
+        throw std::runtime_error("serial bus payload is too large");
+    }
+    memcpy(buffer + header_len, payload, length);
+    this->serial->write_checked_line(buffer, header_len + length);
+}
+
+void SerialBus::print_to_incoming_queue(const char *format, ...) const {
+    IncomingMessage message{this->node_id, this->node_id, 0, {}};
+    va_list args;
+    va_start(args, format);
+    message.length = std::vsnprintf(message.payload, PAYLOAD_CAPACITY, format, args);
+    va_end(args);
+    xQueueSend(this->inbound_queue, &message, 0);
+}
+
+void SerialBus::handle_echo(const char *line) {
+    // Only relay if target is set
+    if (!line || this->echo_target_id == 0xff) {
+        return;
+    }
+    char payload[PAYLOAD_CAPACITY];
+    const int len = std::snprintf(payload, sizeof(payload), "%s:%s", RESPONSE_PREFIX, line);
+    if (len < 0 || len >= static_cast<int>(sizeof(payload))) {
+        echo("warning: serial bus %s output relay truncated", this->name.c_str());
+        return;
+    }
+    try {
+        this->enqueue_outgoing_message(this->echo_target_id, payload, len);
+    } catch (const std::runtime_error &e) {
+        echo("warning: serial bus %s could not relay output: %s", this->name.c_str(), e.what());
+    }
 }
