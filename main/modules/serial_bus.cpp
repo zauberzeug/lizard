@@ -82,54 +82,6 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             peers.push_back(static_cast<uint8_t>(peer_value));
         }
         this->peer_ids = peers;
-    } else if (method_name == "configure") {
-        Module::expect(arguments, 2, integer, string);
-        const int receiver = arguments[0]->evaluate_integer();
-        if (receiver <= 0 || receiver >= 255) {
-            throw std::runtime_error("receiver ID must be between 0 and 255");
-        }
-        const uint8_t target = static_cast<uint8_t>(receiver);
-        const std::string script = arguments[1]->evaluate_string();
-        this->enqueue_outgoing_message(target, "!-", 2);
-
-        std::string current;
-        auto flush_line = [&]() {
-            // Trim whitespace and send line if non-empty
-            size_t start = 0;
-            while (start < current.size() && std::isspace(static_cast<unsigned char>(current[start]))) {
-                start++;
-            }
-            size_t end = current.size();
-            while (end > start && std::isspace(static_cast<unsigned char>(current[end - 1]))) {
-                end--;
-            }
-            if (end > start) {
-                std::string cmd = "!+" + current.substr(start, end - start);
-                this->enqueue_outgoing_message(target, cmd.c_str(), cmd.size());
-            }
-            current.clear();
-        };
-
-        for (char c : script) {
-            if (c == '\r') {
-                continue;
-            }
-            if (c == '\n') {
-                flush_line();
-                continue;
-            }
-            if (c == ';') {
-                current.push_back(';');
-                flush_line();
-                continue;
-            }
-            current.push_back(c);
-        }
-        flush_line();
-
-        this->enqueue_outgoing_message(target, "!.", 2);
-        const char restart_cmd[] = "core.restart()";
-        this->enqueue_outgoing_message(target, restart_cmd, sizeof(restart_cmd) - 1);
     } else {
         Module::call(method_name, arguments);
     }
