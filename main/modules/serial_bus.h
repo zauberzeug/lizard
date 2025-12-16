@@ -48,7 +48,7 @@ private:
 
     [[noreturn]] static void communication_loop(void *param);
     void process_uart();
-    bool parse_message(const char *line, IncomingMessage &message) const;
+    bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
     void enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length);
     bool send_outgoing_queue();

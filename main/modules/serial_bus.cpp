@@ -158,38 +158,39 @@ void SerialBus::process_uart() {
     }
 }
 
-bool SerialBus::parse_message(const char *line, IncomingMessage &message) const {
-    const std::string message_line(line);
-    if (!starts_with(message_line, "$$")) {
+bool SerialBus::parse_message(const char *message_line, IncomingMessage &message) const {
+    // format: $$sender:receiver$$payload
+    const std::string line(message_line);
+    const size_t header_start = line.find("$$");
+    if (header_start == std::string::npos || header_start != 0) {
         return false;
     }
-    const size_t header_end = message_line.find("$$", 2);
+    const size_t header_end = line.find("$$", 2);
     if (header_end == std::string::npos) {
         return false;
     }
-    const std::string header = message_line.substr(2, header_end - 2);
-    const size_t colon = header.find(':');
-    if (colon == std::string::npos) {
+    const size_t colon_pos = line.find(':', 2);
+    if (colon_pos == std::string::npos || colon_pos >= header_end) {
         return false;
     }
     try {
-        const int sender = std::stoi(header.substr(0, colon));
-        const int receiver = std::stoi(header.substr(colon + 1));
+        const int sender = std::stoi(line.substr(2, colon_pos - 2));
+        const int receiver = std::stoi(line.substr(colon_pos + 1, header_end - (colon_pos + 1)));
         if (sender < 0 || sender > 255 || receiver < 0 || receiver > 255) {
-            return false;
-        }
-        const size_t payload_len = message_line.size() - (header_end + 2);
-        if (payload_len >= PAYLOAD_CAPACITY) {
             return false;
         }
         message.sender = static_cast<uint8_t>(sender);
         message.receiver = static_cast<uint8_t>(receiver);
-        message.length = payload_len;
-        memcpy(message.payload, message_line.c_str() + header_end + 2, payload_len);
-        message.payload[payload_len] = '\0';
     } catch (...) {
         return false;
     }
+    const size_t payload_len = line.size() - (header_end + 2);
+    if (payload_len >= PAYLOAD_CAPACITY) {
+        return false;
+    }
+    message.length = payload_len;
+    memcpy(message.payload, line.c_str() + header_end + 2, payload_len);
+    message.payload[payload_len] = '\0';
     return true;
 }
 
