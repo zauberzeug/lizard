@@ -42,9 +42,7 @@ private:
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
     uint8_t requesting_node = 0;
-
-    // Echo callback state: tracks which target should receive relayed output
-    uint8_t echo_target_id = 0xff; // 0xff = no relay, else = target ID
+    uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
 
     [[noreturn]] static void communication_loop(void *param);
     void process_uart();

@@ -15,7 +15,7 @@ static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
-static constexpr const char RESPONSE_PREFIX[] = "__BUS_RESPONSE__";
+static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
 
@@ -195,84 +195,72 @@ bool SerialBus::parse_message(const char *message_line, IncomingMessage &message
 }
 
 void SerialBus::handle_incoming_message(const IncomingMessage &message) {
-    // Log messages from communication task (sender == receiver == node_id)
-    if (message.sender == this->node_id && message.receiver == this->node_id) {
+    // echo messages from communication task (node_id == sender == receiver)
+    if (this->node_id == message.sender && this->node_id == message.receiver) {
         echo("%s", message.payload);
         return;
     }
 
-    // Display output that was relayed back from a remote node
-    const size_t prefix_len = sizeof(RESPONSE_PREFIX) - 1;
-    if (message.length >= prefix_len && std::strncmp(message.payload, RESPONSE_PREFIX, prefix_len) == 0) {
-        const char *msg = message.payload + prefix_len;
-        size_t len = message.length - prefix_len;
-        if (len > 0 && msg[0] == ':') {
-            msg++;
-            len--;
-        }
-        if (len > 0) {
-            static char buffer[PAYLOAD_CAPACITY];
-            const size_t copy_len = std::min(len, static_cast<size_t>(sizeof(buffer) - 1));
-            memcpy(buffer, msg, copy_len);
-            buffer[copy_len] = '\0';
-            echo("bus[%u]: %s", message.sender, buffer);
-        }
+    // echo incoming messages from peers
+    const size_t prefix_len = sizeof(ECHO_CMD) - 1;
+    if (std::strncmp(message.payload, ECHO_CMD, prefix_len) == 0) {
+        static char buffer[PAYLOAD_CAPACITY];
+        const size_t copy_len = std::min(message.length - prefix_len, static_cast<size_t>(sizeof(buffer) - 1));
+        memcpy(buffer, message.payload + prefix_len, copy_len);
+        buffer[copy_len] = '\0';
+        echo("bus[%u]: %s", message.sender, buffer);
         return;
     }
 
-    // Configuration commands starting with '!' are processed silently (no output relay)
+    // process control commands starting with "!" silently
     if (message.payload[0] == '!') {
         process_line(message.payload, message.length);
         return;
     }
 
-    // Regular commands: process locally and relay any echo() output back to sender
+    // process regular commands and relay any echo() output back to sender
     this->echo_target_id = message.sender;
     try {
         process_line(message.payload, message.length);
     } catch (const std::exception &e) {
-        echo("%s", e.what());
-    } catch (...) {
-        echo("unknown error");
+        echo("error processing command: %s", e.what());
     }
-    this->echo_target_id = 0xff;
+    this->echo_target_id = 0;
 }
 
 void SerialBus::enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length) {
     if (length >= PAYLOAD_CAPACITY) {
-        throw std::runtime_error("payload is too large for serial bus");
+        throw std::runtime_error("serial bus: payload is too large for serial bus");
     }
-    for (size_t i = 0; i < length; ++i) {
-        if (payload[i] == '\n') {
-            throw std::runtime_error("payload must not contain newline characters");
-        }
+    if (std::strchr(payload, '\n') != nullptr) {
+        throw std::runtime_error("serial bus: payload must not contain newline characters");
     }
     OutgoingMessage message{receiver, length, {}};
     memcpy(message.payload, payload, length);
     message.payload[length] = '\0';
     if (xQueueSend(this->outbound_queue, &message, pdMS_TO_TICKS(50)) != pdTRUE) {
-        throw std::runtime_error("serial bus transmit queue is full");
+        throw std::runtime_error("serial bus: could not enqueue outgoing message");
     }
 }
 
 bool SerialBus::send_outgoing_queue() {
-    bool sent = false;
+    bool sent_any = false;
     OutgoingMessage message;
     while (xQueueReceive(this->outbound_queue, &message, 0) == pdTRUE) {
         this->send_message(message.receiver, message.payload, message.length);
-        sent = true;
+        sent_any = true;
     }
-    return sent;
+    return sent_any;
 }
 
 void SerialBus::send_message(uint8_t receiver, const char *payload, size_t length) const {
     static char buffer[FRAME_BUFFER_SIZE];
     const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver);
     if (header_len < 0) {
-        throw std::runtime_error("could not format bus header");
+        throw std::runtime_error("serial bus: could not format bus header");
     }
-    if (length + header_len >= sizeof(buffer)) {
-        throw std::runtime_error("serial bus payload is too large");
+    if (header_len + length >= sizeof(buffer)) {
+        throw std::runtime_error("serial bus: payload is too large");
     }
     memcpy(buffer + header_len, payload, length);
     this->serial->write_checked_line(buffer, header_len + length);
@@ -288,19 +276,18 @@ void SerialBus::print_to_incoming_queue(const char *format, ...) const {
 }
 
 void SerialBus::handle_echo(const char *line) {
-    // Only relay if target is set
-    if (!line || this->echo_target_id == 0xff) {
+    if (this->echo_target_id) {
         return;
     }
     char payload[PAYLOAD_CAPACITY];
-    const int len = std::snprintf(payload, sizeof(payload), "%s:%s", RESPONSE_PREFIX, line);
-    if (len < 0 || len >= static_cast<int>(sizeof(payload))) {
-        echo("warning: serial bus %s output relay truncated", this->name.c_str());
+    const int len = std::snprintf(payload, sizeof(payload), "%s%s", ECHO_CMD, line);
+    if (len < 0 || len >= sizeof(payload)) {
+        echo("warning: serial bus %s failed to relay output", this->name.c_str());
         return;
     }
     try {
         this->enqueue_outgoing_message(this->echo_target_id, payload, len);
     } catch (const std::runtime_error &e) {
-        echo("warning: serial bus %s could not relay output: %s", this->name.c_str(), e.what());
+        echo("warning: serial bus %s failed to relay output: %s", this->name.c_str(), e.what());
     }
 }
