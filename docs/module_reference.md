@@ -85,10 +85,6 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------- | ---------------------------------------------- | --------------- |
 | `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
 
-| Properties             | Description                                        | Data type |
-| ---------------------- | -------------------------------------------------- | --------- |
-| `bus.last_message_age` | Milliseconds since the last bus frame was received | `int`     |
-
 | Methods                             | Description                                                                                    | Arguments    |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------- | ------------ |
 | `bus.send(receiver, payload)`       | Send a payload to a peer `receiver` (0-255); payload must not contain newlines                 | `int`, `str` |

@@ -22,9 +22,7 @@ static constexpr const char DONE_CMD[] = "__DONE__";
 REGISTER_MODULE_DEFAULTS(SerialBus)
 
 const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
-    return {
-        {"last_message_age", std::make_shared<IntegerVariable>(0)},
-    };
+    return {};
 }
 
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
@@ -73,7 +71,7 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
                     bus->send_outgoing_queue();
                     bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
                 } catch (const std::exception &e) {
-                    bus->echo_queue("warning: serial bus %s error during transmit window: %s", bus->name.c_str(), e.what());
+                    bus->echo_queue("warning: serial bus %s error while responding to poll: %s", bus->name.c_str(), e.what());
                 }
                 bus->requesting_node = 0;
             }
@@ -85,37 +83,38 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
     while (this->serial->has_buffered_lines()) {
-        int len = this->serial->read_line(buffer, sizeof(buffer));
+        const int len = this->serial->read_line(buffer, sizeof(buffer));
         check(buffer, len);
 
+        // parse message
         IncomingMessage message;
         if (!this->parse_message(buffer, message)) {
-            this->echo_queue("warning: serial bus %s received malformed message: %s", this->name.c_str(), buffer);
+            this->echo_queue("warning: serial bus %s could not parse message: %s", this->name.c_str(), buffer);
             continue;
         }
 
+        // ignore messages not for this node
         if (message.receiver != this->node_id) {
             continue;
         }
 
-        if (message.length == 8 && std::strncmp(message.payload, POLL_CMD, message.length) == 0) {
-            // Open transmit window for peer when coordinator polls
-            if (!this->is_coordinator()) {
-                this->requesting_node = message.sender;
-            }
+        // handle poll command
+        if (std::strcmp(message.payload, POLL_CMD) == 0) {
+            this->requesting_node = message.sender;
             continue;
         }
-        if (message.length == 8 && std::strncmp(message.payload, DONE_CMD, message.length) == 0) {
-            // Coordinator receives done signal from peer
-            if (this->is_coordinator() && message.sender == this->peer_ids[this->poll_index]) {
+
+        // handle done command
+        if (std::strcmp(message.payload, DONE_CMD) == 0) {
+            if (message.sender == this->peer_ids[this->poll_index]) {
                 this->is_polling = false;
             }
             continue;
         }
-        if (xQueueSend(this->inbound_queue, &message, 0) == pdTRUE) {
-            this->last_message_millis = millis();
-        } else {
-            this->echo_queue("warning: serial bus %s inbound queue overflow", this->name.c_str());
+
+        // enqueue message in inbound queue
+        if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
+            this->echo_queue("warning: serial bus %s could not enqueue message: %s", this->name.c_str(), buffer);
         }
     }
 }
@@ -144,7 +143,6 @@ void SerialBus::step() {
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_message(message);
     }
-    this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
 }
 
