@@ -1,6 +1,7 @@
 #include "uart.h"
 #include <algorithm>
 #include <cstdarg>
+#include <cstdint>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
@@ -51,8 +52,9 @@ int strip(char *buffer, int len) {
     return len;
 }
 
-int check(char *buffer, int len) {
+int check(char *buffer, int len, bool *checksum_ok) {
     len = strip(buffer, len);
+    bool ok = true;
     if (len >= 3 && buffer[len - 3] == '@') {
         uint8_t checksum = 0;
         for (int i = 0; i < len - 3; ++i) {
@@ -60,10 +62,12 @@ int check(char *buffer, int len) {
         }
         const std::string hex_number(&buffer[len - 2], 2);
         if (std::stoi(hex_number, 0, 16) != checksum) {
-            throw std::runtime_error("checksum mismatch");
+            ok = false;
+        } else {
+            len -= 3;
         }
-        len -= 3;
     }
     buffer[len] = 0;
+    *checksum_ok = ok;
     return len;
 }
