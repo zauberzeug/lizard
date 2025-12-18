@@ -97,6 +97,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
                 bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
                 bus->send_message(bus->peer_ids[bus->poll_index], POLL_CMD, sizeof(POLL_CMD) - 1);
                 bus->poll_start_millis = millis();
+                bus->is_polling = true;
             }
             // handle poll timeout
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
@@ -123,7 +124,10 @@ void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
     while (this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
-        check(buffer, len);
+        if (bool ok; (check(buffer, len, &ok), !ok)) {
+            this->print_to_incoming_queue("warning: serial bus %s checksum mismatch: %s", this->name.c_str(), buffer);
+            continue;
+        }
 
         // parse message
         IncomingMessage message;
@@ -276,7 +280,7 @@ void SerialBus::print_to_incoming_queue(const char *format, ...) const {
 }
 
 void SerialBus::handle_echo(const char *line) {
-    if (this->echo_target_id) {
+    if (!this->echo_target_id) {
         return;
     }
     char payload[PAYLOAD_CAPACITY];
