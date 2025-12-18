@@ -1,9 +1,16 @@
 #include "uart.h"
+#include <algorithm>
 #include <cstdarg>
 #include <cstdint>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
+
+static std::vector<EchoCallback> echo_callbacks;
+
+void register_echo_callback(const EchoCallback &callback) {
+    echo_callbacks.push_back(callback);
+}
 
 void echo(const char *format, ...) {
     static char buffer[1024];
@@ -22,6 +29,9 @@ void echo(const char *format, ...) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
             printf("%s@%02x\n", &buffer[start], checksum);
+            for (const auto &callback : echo_callbacks) {
+                callback(&buffer[start]);
+            }
             start = i + 1;
             checksum = 0;
         } else {

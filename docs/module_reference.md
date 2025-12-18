@@ -77,6 +77,19 @@ When a fifth connects, the oldest entry is removed.
 
 To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
 
+## Serial Bus
+
+The serial bus module lets multiple ESP32s share a UART link with a coordinator that polls peers in turn.
+
+| Constructor                   | Description                                    | Arguments       |
+| ----------------------------- | ---------------------------------------------- | --------------- |
+| `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
+
+| Methods                             | Description                                                | Arguments    |
+| ----------------------------------- | ---------------------------------------------------------- | ------------ |
+| `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
+
 ## Input
 
 The input module is associated with a digital input pin that is be connected to a pushbutton, sensor or other input signal.
