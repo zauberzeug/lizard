@@ -1,19 +1,33 @@
 #!/usr/bin/env python3
+import re
 import subprocess
 import sys
-
-import argparse
-from typing import Any, Generator, Tuple
 import time
-import gpiod
 from contextlib import contextmanager
+from typing import Generator
+from pathlib import Path
+import argparse
+import gpiod
+
+
+JETPACK: int | None = None
+path = Path('/etc/nv_tegra_release')
+if path.exists() and (match := re.search(r'R(\d+)', path.read_text(encoding='utf-8'))):
+    major = int(match.group(1))
+    if major >= 36:
+        JETPACK = 6
+    if major >= 35:
+        JETPACK = 5
+DEFAULT_DEVICE = {
+    5: '/dev/ttyTHS1',
+    6: '/dev/ttyTHS0',
+    None: '/dev/tty.SLAB_USBtoUART',
+}
 
 parser = argparse.ArgumentParser(description='Flash and control an ESP32 microcontroller from a Jetson board')
 
 parser.add_argument('command', choices=['flash', 'enable', 'disable', 'reset', 'erase', 'release_pins'],
                     help='Command to execute')
-parser.add_argument('-p', '--port', '/dev/ttyTHS1',
-                    help='Serial port path (usually /dev/ttyTHS1 for JetPack 6 or /dev/ttyTHS0 for JetPack 5)')
 parser.add_argument('--nand', action='store_true', help='Board has NAND gates')
 parser.add_argument('--bootloader', default='build/bootloader/bootloader.bin', help='Path to bootloader')
 parser.add_argument('--partition-table', default='build/partition_table/partition-table.bin',
@@ -21,91 +35,76 @@ parser.add_argument('--partition-table', default='build/partition_table/partitio
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
-parser.add_argument('device', nargs='?', default='/dev/tty.SLAB_USBtoUART',
-                    help='Serial device path (overwritten by --jetson)')
+parser.add_argument('device', nargs='?', default=DEFAULT_DEVICE, help='Serial device path (auto-detected on Jetson)')
 
 args = parser.parse_args()
-GPIO_EN = 'PR.04'
-GPIO_G0 = 'PAC.06'
-DEVICE = args.port
 ON = 1 if args.nand else 0
 OFF = 0 if args.nand else 1
 DRY_RUN = args.dry_run
-FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}.get(args.chip, '40m')
-BOOTLOADER_OFFSET = {'esp32': '0x1000', 'esp32s3': '0x0'}.get(args.chip, '0x1000')
+CHIP = args.chip
+DEVICE = args.device
+FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}.get(CHIP, '40m')
+BOOTLOADER_OFFSET = {'esp32': '0x1000', 'esp32s3': '0x0'}.get(CHIP, '0x1000')
+BOOTLOADER = args.bootloader
+PARTITION_TABLE = args.partition_table
+FIRMWARE = args.firmware
 
-
-_chip: gpiod.Chip | None = None
-_line_en: gpiod.Line | None = None
-_line_g0: gpiod.Line | None = None
-
-
-def _get_chip_and_lines() -> Tuple[gpiod.Chip, Any, Any]:
-    """Get the GPIO chip and lines for EN and G0 pins."""
+if JETPACK:
     chip = gpiod.Chip('gpiochip0')
-    line_en = chip.find_line(GPIO_EN)
-    line_g0 = chip.find_line(GPIO_G0)
-    return (chip, line_en, line_g0)
+    en_line = chip.find_line('PR.04')
+    g0_line = chip.find_line('PAC.06')
 
 
 @contextmanager
 def _pin_config() -> Generator[None, None, None]:
     """Configure the EN and G0 pins to control the microcontroller."""
-    global _chip, _line_en, _line_g0
-    if not args.jetson:
-        yield
-        return
-    print_bold('Configuring EN and G0 pins...')
-    _chip, _line_en, _line_g0 = _get_chip_and_lines()
-    _line_en.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
-    _line_g0.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
-    time.sleep(0.5)
+    if JETPACK:
+        print_bold('Configuring EN and G0 pins...')
+        en_line.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
+        g0_line.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
+        time.sleep(0.5)
     yield
-    _release_pins()
+    if JETPACK:
+        _release_pins()
 
 
 def _release_pins() -> None:
     """Release pins."""
-    global _line_en, _line_g0
-    if _line_en is not None:
-        _line_en.release()
-        _line_en = None
-    if _line_g0 is not None:
-        _line_g0.release()
-        _line_g0 = None
+    if JETPACK:
+        en_line.release()
+        g0_line.release()
 
 
 @contextmanager
 def _flash_mode() -> Generator[None, None, None]:
     """Bring the microcontroller into flash mode."""
-    if not args.jetson:
-        yield
-        return
-    print_bold('Bringing the microcontroller into flash mode...')
-    set_gpio_value(_line_en, ON)
-    time.sleep(0.5)
-    set_gpio_value(_line_g0, ON)
-    time.sleep(0.5)
-    set_gpio_value(_line_en, OFF)
-    time.sleep(0.5)
+    if JETPACK:
+        print_bold('Bringing the microcontroller into flash mode...')
+        set_en(ON)
+        time.sleep(0.5)
+        set_g0(ON)
+        time.sleep(0.5)
+        set_en(OFF)
+        time.sleep(0.5)
     yield
-    _reset()
+    if JETPACK:
+        _reset()
 
 
 def enable() -> None:
     """Enable the microcontroller."""
     print_bold('Enabling the microcontroller...')
     with _pin_config():
-        set_gpio_value(_line_g0, OFF)
+        set_g0(OFF)
         time.sleep(0.5)
-        set_gpio_value(_line_en, OFF)
+        set_en(OFF)
 
 
 def disable() -> None:
     """Disable the microcontroller."""
     print_bold('Disabling the microcontroller...')
     with _pin_config():
-        set_gpio_value(_line_en, ON)
+        set_en(ON)
 
 
 def reset() -> None:
@@ -117,11 +116,11 @@ def reset() -> None:
 
 def _reset() -> None:
     """Set pins to reset the microcontroller."""
-    set_gpio_value(_line_g0, OFF)
+    set_g0(OFF)
     time.sleep(0.5)
-    set_gpio_value(_line_en, ON)
+    set_en(ON)
     time.sleep(0.5)
-    set_gpio_value(_line_en, OFF)
+    set_en(OFF)
 
 
 def erase() -> None:
@@ -131,7 +130,7 @@ def erase() -> None:
         with _flash_mode():
             success = run(
                 'esptool.py',
-                '--chip', args.chip,
+                '--chip', CHIP,
                 '--port', DEVICE,
                 '--baud', '921600',
                 '--before', 'default_reset',
@@ -149,7 +148,7 @@ def flash() -> None:
         with _flash_mode():
             success = run(
                 'esptool.py',
-                '--chip', args.chip,
+                '--chip', CHIP,
                 '--port', DEVICE,
                 '--baud', '921600',
                 '--before', 'default_reset',
@@ -159,9 +158,9 @@ def flash() -> None:
                 '--flash_mode', 'dio',
                 '--flash_freq', FLASH_FREQ,
                 '--flash_size', 'detect',
-                BOOTLOADER_OFFSET, args.bootloader,
-                '0x8000', args.partition_table,
-                '0x20000', args.firmware,
+                BOOTLOADER_OFFSET, BOOTLOADER,
+                '0x8000', PARTITION_TABLE,
+                '0x20000', FIRMWARE,
             )
             if not success:
                 raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
@@ -176,15 +175,16 @@ def run(*run_args: str) -> bool:
     return result.returncode == 0
 
 
-def set_gpio_value(line: gpiod.Line | None, value: int) -> None:
-    """Set a GPIO line value."""
-    if line is None:
-        return
-    pin_name = 'EN' if line == _line_en else 'G0'
-    print(f'set {pin_name} pin to {value}')
-    if DRY_RUN:
-        return
-    line.set_value(value)
+def set_en(value: int) -> None:
+    print(f'  Setting EN pin to {value}')
+    if not DRY_RUN:
+        en_line.set_value(value)
+
+
+def set_g0(value: int) -> None:
+    print(f'  Setting G0 pin to {value}')
+    if not DRY_RUN:
+        g0_line.set_value(value)
 
 
 def print_ok(message: str) -> None:
