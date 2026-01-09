@@ -51,8 +51,8 @@ FIRMWARE = args.firmware
 
 if JETPACK:
     chip = gpiod.Chip('gpiochip0')
-    en_line = chip.find_line('PR.04')
-    g0_line = chip.find_line('PAC.06')
+    en = chip.find_line('PR.04')
+    g0 = chip.find_line('PAC.06')
 
 
 @contextmanager
@@ -60,8 +60,8 @@ def _pin_config() -> Generator[None, None, None]:
     """Configure the EN and G0 pins to control the microcontroller."""
     if JETPACK:
         print_bold('Configuring EN and G0 pins...')
-        en_line.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
-        g0_line.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
+        en.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
+        g0.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
         time.sleep(0.5)
     yield
     if JETPACK:
@@ -71,8 +71,8 @@ def _pin_config() -> Generator[None, None, None]:
 def _release_pins() -> None:
     """Release pins."""
     if JETPACK:
-        en_line.release()
-        g0_line.release()
+        en.release()
+        g0.release()
 
 
 @contextmanager
@@ -178,13 +178,13 @@ def run(*run_args: str) -> bool:
 def set_en(value: int) -> None:
     print(f'  Setting EN pin to {value}')
     if not DRY_RUN:
-        en_line.set_value(value)
+        en.set_value(value)
 
 
 def set_g0(value: int) -> None:
     print(f'  Setting G0 pin to {value}')
     if not DRY_RUN:
-        g0_line.set_value(value)
+        g0.set_value(value)
 
 
 def print_ok(message: str) -> None:
