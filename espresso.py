@@ -7,7 +7,11 @@ from contextlib import contextmanager
 from typing import Generator
 from pathlib import Path
 import argparse
-import gpiod
+try:
+    import gpiod
+except ImportError:
+    gpiod = None  # type: ignore[assignment]
+    print('gpiod module not found. Please install it using "pip install gpiod". Ignore this error if you are not on a Jetson board.')
 
 
 JETPACK: int | None = None
