@@ -4,7 +4,7 @@ import subprocess
 import sys
 import time
 from contextlib import contextmanager
-from typing import Generator
+from typing import Generator, Optional
 from pathlib import Path
 import argparse
 try:
@@ -14,17 +14,17 @@ except ImportError:
     print('gpiod module not found. Please install it using "pip install gpiod". Ignore this error if you are not on a Jetson board.')
 
 
-JETPACK: int | None = None
+JETPACK: Optional[int] = None
 path = Path('/etc/nv_tegra_release')
 if path.exists() and (match := re.search(r'R(\d+)', path.read_text(encoding='utf-8'))):
     major = int(match.group(1))
     if major >= 36:
         JETPACK = 6
-    if major >= 35:
+    elif major >= 35:
         JETPACK = 5
 DEFAULT_DEVICE = {
-    5: '/dev/ttyTHS1',
-    6: '/dev/ttyTHS0',
+    5: '/dev/ttyTHS0',
+    6: '/dev/ttyTHS1',
     None: '/dev/tty.SLAB_USBtoUART',
 }
 
@@ -39,7 +39,8 @@ parser.add_argument('--partition-table', default='build/partition_table/partitio
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
-parser.add_argument('device', nargs='?', default=DEFAULT_DEVICE, help='Serial device path (auto-detected on Jetson)')
+parser.add_argument('--device', nargs='?', default=DEFAULT_DEVICE.get(
+    JETPACK), help='Serial device path (auto-detected on Jetson)')
 
 args = parser.parse_args()
 ON = 1 if args.nand else 0
