@@ -11,7 +11,7 @@ try:
     import gpiod
 except ImportError:
     gpiod = None  # type: ignore[assignment]
-    print('gpiod module not found. Please install it using "pip install gpiod". Ignore this error if you are not on a Jetson board.')
+    print('gpiod module not found. Please install it using "sudo apt install python3-gpiod". Ignore this error if you are not on a Jetson board.')
 
 
 JETPACK: Optional[int] = None
