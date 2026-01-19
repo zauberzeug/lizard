@@ -103,7 +103,7 @@ static bool parse_uuid128(const char *str, ble_uuid128_t *uuid) {
     return true;
 }
 
-// _ENC flags make NimBLE require encryption/pairing automatically
+// Security is checked manually in on_chr_access to allow runtime toggle via deactivate_pin()
 static const struct ble_gatt_svc_def gatt_svcs[] = {
     {
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
@@ -111,12 +111,12 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
         .includes = NULL,
         .characteristics = (struct ble_gatt_chr_def[]){
             {
-                // Command characteristic - requires encryption to write
+                // Command characteristic - auth checked in callback
                 .uuid = &cmd_chr_uuid.u,
                 .access_cb = on_chr_access,
                 .arg = NULL,
                 .descriptors = NULL,
-                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_ENC | BLE_GATT_CHR_F_WRITE_AUTHEN,
+                .flags = BLE_GATT_CHR_F_WRITE,
                 .min_key_size = 0,
                 .val_handle = NULL,
                 .cpfd = NULL,
@@ -231,6 +231,17 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
 
     case BLE_GAP_EVENT_ENC_CHANGE:
         if (event->enc_change.status == 0) {
+            struct ble_gap_conn_desc desc;
+            if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) == 0) {
+                // Reject bonds from "Just Works" pairing when PIN is now required
+                if (!deactivated && !desc.sec_state.authenticated) {
+                    echo("BLE: rejecting unauthenticated bond - forget device in phone settings and re-pair");
+                    ble_store_util_delete_peer(&desc.peer_id_addr);
+                    ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+                    return 0;
+                }
+            }
+
             authenticated = true;
             echo("BLE: authenticated");
 
@@ -297,10 +308,22 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
     }
 }
 
-static int on_chr_access(uint16_t /* conn_handle */, uint16_t /* attr_handle */,
+static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
                          struct ble_gatt_access_ctxt *ctxt, void * /* arg */) {
     if (ble_uuid_cmp(ctxt->chr->uuid, &cmd_chr_uuid.u) == 0) {
         if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
+            // Check authentication unless PIN is deactivated
+            if (!deactivated) {
+                struct ble_gap_conn_desc desc;
+                if (ble_gap_conn_find(conn_handle, &desc) != 0) {
+                    return BLE_ATT_ERR_UNLIKELY;
+                }
+                if (!desc.sec_state.encrypted || !desc.sec_state.authenticated) {
+                    echo("BLE: rejected unauthenticated write");
+                    return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
+                }
+            }
+
             if (!app_active) {
                 app_active = true;
                 if (idle_timer) {
@@ -436,6 +459,9 @@ void finalize() {
 
 void deactivate_pin() {
     deactivated = true;
+    // Disable MITM requirement - allows "Just Works" pairing without PIN
+    ble_hs_cfg.sm_mitm = 0;
+    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
 }
 
 void reset_bonds() {
