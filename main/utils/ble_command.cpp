@@ -272,7 +272,8 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
                  event->subscribe.cur_indicate);
 
         // Send wake-up notification when app subscribes to help apps that wait for data
-        if (event->subscribe.cur_notify && event->subscribe.attr_handle == send_chr_val_handle) {
+        // Note: We only have one notify characteristic (send_chr), so any notify subscription is for it
+        if (event->subscribe.cur_notify) {
             ESP_LOGI(TAG, "App subscribed to notify - sending wake-up");
             struct os_mbuf *om = ble_hs_mbuf_from_flat("\n", 1);
             if (om)
@@ -542,7 +543,8 @@ void reset_bonds() {
 
     if (current_con != BLE_HS_CONN_HANDLE_NONE) {
         ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
-        current_con = BLE_HS_CONN_HANDLE_NONE;
+        // Don't set current_con = NONE here - let disconnect event handler do it
+        // so it also resets authenticated/app_active flags properly
     }
 
     ble_gap_adv_stop();
