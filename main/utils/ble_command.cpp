@@ -80,28 +80,6 @@ static void on_idle_timeout(TimerHandle_t /* timer */) {
     }
 }
 
-// Handles bond storage overflow by evicting oldest bond
-static int on_store_status(struct ble_store_status_event *event, void * /* arg */) {
-    if (event->event_code == BLE_STORE_EVENT_FULL) {
-        ESP_LOGW(TAG, "Bond storage full - evicting oldest bond");
-
-        ble_addr_t bonded_peers[CONFIG_BT_NIMBLE_MAX_BONDS];
-        int num_peers = 0;
-        int rc = ble_store_util_bonded_peers(bonded_peers, &num_peers, CONFIG_BT_NIMBLE_MAX_BONDS);
-
-        if (rc == 0 && num_peers > 0) {
-            // Delete the first (oldest) bond to make room
-            ESP_LOGI(TAG, "Removing bond for %02x:%02x:%02x:%02x:%02x:%02x",
-                     bonded_peers[0].val[5], bonded_peers[0].val[4],
-                     bonded_peers[0].val[3], bonded_peers[0].val[2],
-                     bonded_peers[0].val[1], bonded_peers[0].val[0]);
-            ble_gap_unpair(&bonded_peers[0]);
-            return 0; // Tell NimBLE to retry storing
-        }
-    }
-    return BLE_HS_EUNKNOWN;
-}
-
 static bool parse_uuid128(const char *str, ble_uuid128_t *uuid) {
     if (!str || strlen(str) != UUID_STRING_LENGTH) {
         return false;
@@ -271,8 +249,7 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
                  event->subscribe.cur_notify,
                  event->subscribe.cur_indicate);
 
-        // Send wake-up notification when app subscribes to help apps that wait for data
-        // Note: We only have one notify characteristic (send_chr), so any notify subscription is for it
+        // Send newline on subscribe to signal connection readiness to apps waiting for data
         if (event->subscribe.cur_notify) {
             ESP_LOGI(TAG, "App subscribed to notify - sending wake-up");
             struct os_mbuf *om = ble_hs_mbuf_from_flat("\n", 1);
@@ -475,7 +452,6 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
 
     ble_hs_cfg.reset_cb = on_reset;
     ble_hs_cfg.sync_cb = on_sync;
-    ble_hs_cfg.store_status_cb = on_store_status;
 
     // Display-only device: we show PIN, phone enters it
     ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_DISP_ONLY;
