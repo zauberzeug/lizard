@@ -91,9 +91,9 @@ static int handle_store_status(struct ble_store_status_event *event, void * /* a
         ESP_LOGW(TAG, "Bond storage full - evicting oldest bond");
 
         // Get list of bonded peers
-        ble_addr_t bonded_peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+        ble_addr_t bonded_peers[CONFIG_BT_NIMBLE_MAX_BONDS];
         int num_peers = 0;
-        int rc = ble_store_util_bonded_peers(bonded_peers, &num_peers, MYNEWT_VAL(BLE_STORE_MAX_BONDS));
+        int rc = ble_store_util_bonded_peers(bonded_peers, &num_peers, CONFIG_BT_NIMBLE_MAX_BONDS);
 
         if (rc == 0 && num_peers > 0) {
             // Delete the first (oldest) bond to make room
@@ -211,7 +211,6 @@ static void advertise() {
     }
 }
 
-// NimBLE callback that processes connection, encryption, and pairing events
 static int handle_gap_event(struct ble_gap_event *event, void * /* arg */) {
     switch (event->type) {
     case BLE_GAP_EVENT_CONNECT:
@@ -404,7 +403,6 @@ static int handle_gap_event(struct ble_gap_event *event, void * /* arg */) {
     }
 }
 
-// NimBLE callback that handles writes to command characteristic and reads from send characteristic
 // Security is enforced by NimBLE via _ENC flags - no manual check needed
 static int handle_chr_access(uint16_t /* conn_handle */, uint16_t /* attr_handle */,
                              struct ble_gatt_access_ctxt *ctxt, void * /* arg */) {
@@ -443,7 +441,6 @@ static int handle_chr_access(uint16_t /* conn_handle */, uint16_t /* attr_handle
     return BLE_ATT_ERR_UNLIKELY;
 }
 
-// FreeRTOS task entry point that runs NimBLE host stack
 static void run_host_task(void * /* param */) {
     ESP_LOGI(TAG, "BLE Host task started");
     nimble_port_run();
@@ -471,7 +468,6 @@ static void handle_sync() {
     advertise();
 }
 
-// NimBLE callback that logs reset reason for debugging
 static void handle_reset(int reason) {
     ESP_LOGW(TAG, "BLE Host reset; reason=%d", reason);
 }
@@ -589,9 +585,9 @@ auto reset_bonds() -> void {
     ble_gap_adv_stop();
 
     // Get all bonded peers and unpair them (clears in-memory security state)
-    ble_addr_t bonded_peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+    ble_addr_t bonded_peers[CONFIG_BT_NIMBLE_MAX_BONDS];
     int num_peers = 0;
-    int rc = ble_store_util_bonded_peers(bonded_peers, &num_peers, MYNEWT_VAL(BLE_STORE_MAX_BONDS));
+    int rc = ble_store_util_bonded_peers(bonded_peers, &num_peers, CONFIG_BT_NIMBLE_MAX_BONDS);
     if (rc == 0 && num_peers > 0) {
         ESP_LOGI(TAG, "Unpairing %d bonded peer(s)", num_peers);
         for (int i = 0; i < num_peers; i++) {
