@@ -280,12 +280,6 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
             pk.action = BLE_SM_IOACT_DISP;
             pk.passkey = pin;
             return ble_sm_inject_io(event->passkey.conn_handle, &pk);
-
-        } else if (event->passkey.params.action == BLE_SM_IOACT_NUMCMP) {
-            struct ble_sm_io pk = {};
-            pk.action = BLE_SM_IOACT_NUMCMP;
-            pk.numcmp_accept = 1;
-            return ble_sm_inject_io(event->passkey.conn_handle, &pk);
         }
         return 0;
     }
@@ -369,9 +363,8 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
         return;
     }
 
-    if (esp_err_t ret = nvs_flash_init(); ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        nvs_flash_erase();
-        nvs_flash_init();
+    if (esp_err_t ret = nvs_flash_init(); ret != ESP_OK) {
+        echo("BLE: nvs_flash_init issue (%s) - NVS should be initialized in main", esp_err_to_name(ret));
     }
 
     esp_err_t ret = nimble_port_init();
