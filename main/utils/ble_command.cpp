@@ -448,28 +448,20 @@ void deactivate_pin() {
 void reset_bonds() {
     if (current_con != BLE_HS_CONN_HANDLE_NONE) {
         ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 
     ble_gap_adv_stop();
 
-    // Use ble_store_clear() which clears bonds without the IRK removal error
-    int rc = ble_store_clear();
-    if (rc != 0) {
-        // Fallback to direct NVS clearing
-        auto eraseNamespace = [](const char *ns) {
-            nvs_handle_t h{};
-            if (nvs_open(ns, NVS_READWRITE, &h) == ESP_OK) {
-                nvs_erase_all(h);
-                nvs_commit(h);
-                nvs_close(h);
-            }
-        };
-        eraseNamespace("nimble_bond");
-        eraseNamespace("nimble_cccd");
+    ble_addr_t bonded_peers[CONFIG_BT_NIMBLE_MAX_BONDS];
+    int num_peers = 0;
+    if (ble_store_util_bonded_peers(bonded_peers, &num_peers, CONFIG_BT_NIMBLE_MAX_BONDS) == 0) {
+        for (int i = 0; i < num_peers; i++) {
+            ble_store_util_delete_peer(&bonded_peers[i]);
+        }
     }
 
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(500));
     advertise();
 }
 
