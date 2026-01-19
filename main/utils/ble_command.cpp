@@ -11,7 +11,6 @@
 #include <cassert>
 #include <cstring>
 
-#include <esp_log.h>
 #include <nvs.h>
 #include <nvs_flash.h>
 
@@ -40,8 +39,6 @@
 #include "sdkconfig.h"
 
 namespace ZZ::BleCommand {
-
-static constexpr const char *TAG = "BleCommand";
 
 static constexpr uint32_t IDLE_TIMEOUT_MS = 15000; // Kick clients that don't send app command
 static constexpr size_t MAX_DEVICE_NAME_LEN = 30;
@@ -75,7 +72,6 @@ extern "C" void ble_store_config_init(void);
 
 static void on_idle_timeout(TimerHandle_t /* timer */) {
     if (current_con != BLE_HS_CONN_HANDLE_NONE && !app_active) {
-        ESP_LOGW(TAG, "Idle timeout - no app activity, disconnecting");
         ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
     }
 }
@@ -153,9 +149,7 @@ static void advertise() {
     fields.tx_pwr_lvl_is_present = 1;
     fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
 
-    int rc = ble_gap_adv_set_fields(&fields);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "Failed to set advertising fields; rc=%d", rc);
+    if (ble_gap_adv_set_fields(&fields) != 0) {
         return;
     }
 
@@ -164,9 +158,7 @@ static void advertise() {
     rsp_fields.name_len = strlen(ble_device_name.data());
     rsp_fields.name_is_complete = 1;
 
-    rc = ble_gap_adv_rsp_set_fields(&rsp_fields);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "Failed to set scan response; rc=%d", rc);
+    if (ble_gap_adv_rsp_set_fields(&rsp_fields) != 0) {
         return;
     }
 
@@ -174,38 +166,24 @@ static void advertise() {
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
 
-    rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
-                           &adv_params, on_gap_event, NULL);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "Failed to start advertising; rc=%d", rc);
-    }
+    ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv_params, on_gap_event, NULL);
 }
 
 static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
     switch (event->type) {
     case BLE_GAP_EVENT_CONNECT:
-        ESP_LOGI(TAG, "Connection %s; status=%d",
-                 event->connect.status == 0 ? "established" : "failed",
-                 event->connect.status);
-
         if (event->connect.status == 0) {
             current_con = event->connect.conn_handle;
 
             struct ble_gap_conn_desc desc;
             if (ble_gap_conn_find(event->connect.conn_handle, &desc) == 0) {
                 const uint8_t *addr = desc.peer_id_addr.val;
-                ESP_LOGI(TAG, "Connected to %02x:%02x:%02x:%02x:%02x:%02x (bonded=%d)",
-                         addr[5], addr[4], addr[3], addr[2], addr[1], addr[0],
-                         desc.sec_state.bonded);
+                echo("BLE: connected %02x:%02x:%02x:%02x:%02x:%02x",
+                     addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
 
                 // For bonded devices: initiate encryption (required by iOS reconnection)
-                // For new devices: let phone initiate pairing when accessing encrypted characteristic
                 if (desc.sec_state.bonded) {
-                    ESP_LOGI(TAG, "Bonded peer - initiating encryption");
-                    int rc = ble_gap_security_initiate(event->connect.conn_handle);
-                    if (rc != 0) {
-                        ESP_LOGW(TAG, "Failed to initiate security; rc=%d", rc);
-                    }
+                    ble_gap_security_initiate(event->connect.conn_handle);
                 }
             }
         } else {
@@ -213,14 +191,17 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         }
         return 0;
 
-    case BLE_GAP_EVENT_DISCONNECT:
-        ESP_LOGI(TAG, "Disconnected; reason=%d", event->disconnect.reason);
+    case BLE_GAP_EVENT_DISCONNECT: {
+        const uint8_t *addr = event->disconnect.conn.peer_id_addr.val;
+        int reason = event->disconnect.reason;
 
-        // Detect bond mismatch: disconnect before encryption with reason 531 (0x213)
-        // means phone has old keys but ESP32 doesn't (e.g. after reset_bonds)
-        if (!authenticated && event->disconnect.reason == 0x213) {
-            ESP_LOGW(TAG, "Bond mismatch detected - phone needs to forget device in Bluetooth settings");
-            echo("BLE: Bond mismatch - phone must forget device in Bluetooth settings");
+        // Bond mismatch: disconnect before encryption with reason 0x213
+        if (!authenticated && reason == 0x213) {
+            echo("BLE: disconnected %02x:%02x:%02x:%02x:%02x:%02x (bond mismatch - forget device in phone settings)",
+                 addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
+        } else {
+            echo("BLE: disconnected %02x:%02x:%02x:%02x:%02x:%02x (reason=%d)",
+                 addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], reason);
         }
 
         if (event->disconnect.conn.conn_handle == current_con) {
@@ -233,95 +214,59 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         }
         advertise();
         return 0;
+    }
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
         advertise();
         return 0;
 
-    case BLE_GAP_EVENT_MTU:
-        ESP_LOGI(TAG, "MTU updated: %d", event->mtu.value);
-        return 0;
-
     case BLE_GAP_EVENT_SUBSCRIBE:
-        ESP_LOGI(TAG, "Subscribe event: conn=%d attr=%d notify=%d indicate=%d",
-                 event->subscribe.conn_handle,
-                 event->subscribe.attr_handle,
-                 event->subscribe.cur_notify,
-                 event->subscribe.cur_indicate);
-
         // Send newline on subscribe to signal connection readiness to apps waiting for data
         if (event->subscribe.cur_notify) {
-            ESP_LOGI(TAG, "App subscribed to notify - sending wake-up");
             struct os_mbuf *om = ble_hs_mbuf_from_flat("\n", 1);
             if (om)
                 ble_gattc_notify_custom(event->subscribe.conn_handle, send_chr_val_handle, om);
         }
         return 0;
 
-    case BLE_GAP_EVENT_NOTIFY_TX:
-        ESP_LOGI(TAG, "Notify TX complete: conn=%d status=%d",
-                 event->notify_tx.conn_handle,
-                 event->notify_tx.status);
-        return 0;
-
     case BLE_GAP_EVENT_ENC_CHANGE:
-        ESP_LOGI(TAG, "Encryption change; status=%d", event->enc_change.status);
         if (event->enc_change.status == 0) {
             authenticated = true;
+            echo("BLE: authenticated");
 
             // Enforce bond limit - remove oldest bonds if over limit
             constexpr int max_bonds = CONFIG_BT_NIMBLE_MAX_BONDS;
             ble_addr_t bonded_peers[max_bonds + 1];
             int num_peers = 0;
             if (ble_store_util_bonded_peers(bonded_peers, &num_peers, max_bonds + 1) == 0) {
-                ESP_LOGI(TAG, "Current bonds: %d (max: %d)", num_peers, max_bonds);
                 while (num_peers > max_bonds) {
-                    ESP_LOGW(TAG, "Bond limit exceeded - removing oldest bond %02x:%02x:%02x:%02x:%02x:%02x",
-                             bonded_peers[0].val[5], bonded_peers[0].val[4],
-                             bonded_peers[0].val[3], bonded_peers[0].val[2],
-                             bonded_peers[0].val[1], bonded_peers[0].val[0]);
                     ble_gap_unpair(&bonded_peers[0]);
                     ble_store_util_bonded_peers(bonded_peers, &num_peers, max_bonds + 1);
                 }
             }
 
-            ESP_LOGI(TAG, "Starting idle timeout (%lu ms)", (unsigned long)IDLE_TIMEOUT_MS);
             if (idle_timer && !app_active) {
                 xTimerStart(idle_timer, 0);
             }
         } else {
             struct ble_gap_conn_desc desc;
-            bool was_bonded = false;
-            if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) == 0) {
-                was_bonded = desc.sec_state.bonded;
-            }
-
-            if (was_bonded) {
-                // Bonded device with key mismatch - send error notification before disconnecting
-                ESP_LOGW(TAG, "Encryption failed (status=%d) - bond key mismatch", event->enc_change.status);
+            if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) == 0 && desc.sec_state.bonded) {
                 struct os_mbuf *om = ble_hs_mbuf_from_flat("!bond_error\n", 12);
                 if (om)
                     ble_gattc_notify_custom(event->enc_change.conn_handle, send_chr_val_handle, om);
                 ble_store_util_delete_peer(&desc.peer_id_addr);
-            } else {
-                // Fresh pairing failed - next attempt should work
-                ESP_LOGW(TAG, "Fresh pairing failed (status=%d) - please retry", event->enc_change.status);
             }
-
             ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
         }
         return 0;
 
     case BLE_GAP_EVENT_PASSKEY_ACTION: {
         if (deactivated) {
-            ESP_LOGW(TAG, "Security deactivated - auto-accepting");
             struct ble_sm_io pk = {};
             pk.action = event->passkey.params.action;
             pk.passkey = 0;
             return ble_sm_inject_io(event->passkey.conn_handle, &pk);
         }
-
-        ESP_LOGI(TAG, "Passkey action: %d", event->passkey.params.action);
 
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
             uint32_t user_pin = 0;
@@ -329,7 +274,6 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
             const bool has_user_pin = Storage::get_user_pin(user_pin);
             const uint32_t pin = has_user_pin ? user_pin : dev_pin;
 
-            ESP_LOGI(TAG, "Displaying PIN: %06lu", (unsigned long)pin);
             echo("BLE PIN: %06lu", (unsigned long)pin);
 
             struct ble_sm_io pk = {};
@@ -338,7 +282,6 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
             return ble_sm_inject_io(event->passkey.conn_handle, &pk);
 
         } else if (event->passkey.params.action == BLE_SM_IOACT_NUMCMP) {
-            ESP_LOGI(TAG, "Numeric comparison: %06lu", (unsigned long)event->passkey.params.numcmp);
             struct ble_sm_io pk = {};
             pk.action = BLE_SM_IOACT_NUMCMP;
             pk.numcmp_accept = 1;
@@ -348,7 +291,6 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
     }
 
     case BLE_GAP_EVENT_REPEAT_PAIRING: {
-        ESP_LOGI(TAG, "Repeat pairing requested");
         struct ble_gap_conn_desc desc;
         if (ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc) == 0) {
             ble_store_util_delete_peer(&desc.peer_id_addr);
@@ -361,7 +303,6 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
     }
 }
 
-// Security enforced by NimBLE via _ENC flags
 static int on_chr_access(uint16_t /* conn_handle */, uint16_t /* attr_handle */,
                          struct ble_gatt_access_ctxt *ctxt, void * /* arg */) {
     if (ble_uuid_cmp(ctxt->chr->uuid, &cmd_chr_uuid.u) == 0) {
@@ -371,7 +312,6 @@ static int on_chr_access(uint16_t /* conn_handle */, uint16_t /* attr_handle */,
                 if (idle_timer) {
                     xTimerStop(idle_timer, 0);
                 }
-                ESP_LOGI(TAG, "App activity detected - connection kept alive");
             }
 
             const uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
@@ -379,7 +319,7 @@ static int on_chr_access(uint16_t /* conn_handle */, uint16_t /* attr_handle */,
                 char *buf = (char *)malloc(len + 1);
                 if (buf && ble_hs_mbuf_to_flat(ctxt->om, buf, len, NULL) == 0) {
                     buf[len] = '\0';
-                    ESP_LOGI(TAG, "Command: %.*s", (int)len, buf);
+                    echo("BLE rx: %s", buf);
                     client_callback(std::string_view(buf, len));
                 }
                 free(buf);
@@ -396,32 +336,24 @@ static int on_chr_access(uint16_t /* conn_handle */, uint16_t /* attr_handle */,
 }
 
 static void run_host_task(void * /* param */) {
-    ESP_LOGI(TAG, "BLE Host task started");
     nimble_port_run();
     nimble_port_deinit();
-    ESP_LOGI(TAG, "BLE Host task stopped");
 }
 
-// Called when BLE stack is ready - initializes address and starts advertising
 static void on_sync() {
     if (ble_hs_util_ensure_addr(0) != 0 || ble_hs_id_infer_auto(0, &own_addr_type) != 0) {
-        ESP_LOGE(TAG, "Failed to initialize BLE address");
+        echo("BLE: failed to initialize address");
         return;
     }
-    ESP_LOGI(TAG, "BLE synced, address type=%d", own_addr_type);
     advertise();
 }
 
 static void on_reset(int reason) {
-    ESP_LOGW(TAG, "BLE Host reset; reason=%d", reason);
+    echo("BLE: host reset (reason=%d)", reason);
 }
 
 void init(const std::string_view &device_name, CommandCallback on_command) {
-    ESP_LOGI(TAG, "Initializing BLE with device name: %.*s",
-             (int)device_name.length(), device_name.data());
-
     if (running) {
-        ESP_LOGW(TAG, "BLE already running");
         return;
     }
 
@@ -433,7 +365,7 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
     if (!parse_uuid128(CONFIG_ZZ_BLE_COM_SVC_UUID, &svc_uuid) ||
         !parse_uuid128(CONFIG_ZZ_BLE_COM_CHR_UUID, &cmd_chr_uuid) ||
         !parse_uuid128(CONFIG_ZZ_BLE_COM_SEND_CHR_UUID, &send_chr_uuid)) {
-        ESP_LOGE(TAG, "Failed to parse UUIDs");
+        echo("BLE: failed to parse UUIDs");
         return;
     }
 
@@ -444,7 +376,7 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
 
     esp_err_t ret = nimble_port_init();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "nimble_port_init failed: %s", esp_err_to_name(ret));
+        echo("BLE: nimble_port_init failed (%s)", esp_err_to_name(ret));
         return;
     }
 
@@ -479,7 +411,6 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
     nimble_port_freertos_init(run_host_task);
 
     running = true;
-    ESP_LOGI(TAG, "BLE initialized (idle timeout: %lums)", (unsigned long)IDLE_TIMEOUT_MS);
 }
 
 int send(const std::string_view &data) {
@@ -492,6 +423,7 @@ int send(const std::string_view &data) {
         return BLE_HS_ENOMEM;
     }
 
+    echo("BLE tx: %.*s", (int)data.length(), data.data());
     return ble_gattc_notify_custom(current_con, send_chr_val_handle, om);
 }
 
@@ -511,34 +443,20 @@ void finalize() {
 
 void deactivate_pin() {
     deactivated = true;
-    ESP_LOGW(TAG, "Bluetooth security deactivated");
 }
 
 void reset_bonds() {
-    ESP_LOGI(TAG, "Resetting all bonds...");
-
     if (current_con != BLE_HS_CONN_HANDLE_NONE) {
         ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
-        // Don't set current_con = NONE here - let disconnect event handler do it
-        // so it also resets authenticated/app_active flags properly
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 
     ble_gap_adv_stop();
 
-    ble_addr_t bonded_peers[CONFIG_BT_NIMBLE_MAX_BONDS];
-    int num_peers = 0;
-    int rc = ble_store_util_bonded_peers(bonded_peers, &num_peers, CONFIG_BT_NIMBLE_MAX_BONDS);
-    if (rc == 0 && num_peers > 0) {
-        ESP_LOGI(TAG, "Unpairing %d bonded peer(s)", num_peers);
-        for (int i = 0; i < num_peers; i++) {
-            ble_gap_unpair(&bonded_peers[i]);
-        }
-    }
-
-    rc = ble_store_clear();
+    // Use ble_store_clear() which clears bonds without the IRK removal error
+    int rc = ble_store_clear();
     if (rc != 0) {
-        ESP_LOGW(TAG, "ble_store_clear failed: %d, trying NVS fallback", rc);
-
+        // Fallback to direct NVS clearing
         auto eraseNamespace = [](const char *ns) {
             nvs_handle_t h{};
             if (nvs_open(ns, NVS_READWRITE, &h) == ESP_OK) {
@@ -551,12 +469,8 @@ void reset_bonds() {
         eraseNamespace("nimble_cccd");
     }
 
-    // Small delay to let NimBLE fully process the unpair/clear
     vTaskDelay(pdMS_TO_TICKS(100));
-
     advertise();
-
-    ESP_LOGI(TAG, "Bonds cleared - all peers must re-pair");
 }
 
 } // namespace ZZ::BleCommand
