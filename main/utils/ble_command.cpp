@@ -6,6 +6,7 @@
 
 #include "ble_command.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstring>
@@ -166,8 +167,6 @@ static void advertise() {
         return;
     }
 
-    int rc;
-
     struct ble_hs_adv_fields fields = {};
     fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
     fields.uuids16 = &alert_uuid;
@@ -176,7 +175,7 @@ static void advertise() {
     fields.tx_pwr_lvl_is_present = 1;
     fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
 
-    rc = ble_gap_adv_set_fields(&fields);
+    int rc = ble_gap_adv_set_fields(&fields);
     if (rc != 0) {
         ESP_LOGE(TAG, "Failed to set advertising fields; rc=%d", rc);
         return;
@@ -273,15 +272,11 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
                  event->subscribe.cur_indicate);
 
         // Send wake-up notification when app subscribes to help apps that wait for data
-        if (event->subscribe.cur_notify &&
-            event->subscribe.attr_handle == send_chr_val_handle) {
+        if (event->subscribe.cur_notify && event->subscribe.attr_handle == send_chr_val_handle) {
             ESP_LOGI(TAG, "App subscribed to notify - sending wake-up");
-            constexpr const char *wake = "\n";
-            constexpr size_t wake_len = 1;
-            struct os_mbuf *om = ble_hs_mbuf_from_flat(wake, wake_len);
-            if (om) {
+            struct os_mbuf *om = ble_hs_mbuf_from_flat("\n", 1);
+            if (om)
                 ble_gattc_notify_custom(event->subscribe.conn_handle, send_chr_val_handle, om);
-            }
         }
         return 0;
 
@@ -324,22 +319,15 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
             }
 
             if (was_bonded) {
-                // Bonded device with key mismatch - likely after reset_bonds on one side
-                // Send error notification before disconnecting
-                ESP_LOGW(TAG, "Encryption failed (status=%d) - bond key mismatch, notifying and disconnecting",
-                         event->enc_change.status);
-
-                constexpr const char *bond_err = "!bond_error\n";
-                struct os_mbuf *om = ble_hs_mbuf_from_flat(bond_err, strlen(bond_err));
-                if (om) {
+                // Bonded device with key mismatch - send error notification before disconnecting
+                ESP_LOGW(TAG, "Encryption failed (status=%d) - bond key mismatch", event->enc_change.status);
+                struct os_mbuf *om = ble_hs_mbuf_from_flat("!bond_error\n", 12);
+                if (om)
                     ble_gattc_notify_custom(event->enc_change.conn_handle, send_chr_val_handle, om);
-                }
                 ble_store_util_delete_peer(&desc.peer_id_addr);
             } else {
-                // Fresh pairing failed (e.g., DHKey check error 1035)
-                // Just disconnect cleanly - next attempt should work
-                ESP_LOGW(TAG, "Fresh pairing failed (status=%d) - disconnecting, please retry",
-                         event->enc_change.status);
+                // Fresh pairing failed - next attempt should work
+                ESP_LOGW(TAG, "Fresh pairing failed (status=%d) - please retry", event->enc_change.status);
             }
 
             ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
@@ -408,19 +396,15 @@ static int on_chr_access(uint16_t /* conn_handle */, uint16_t /* attr_handle */,
                 ESP_LOGI(TAG, "App activity detected - connection kept alive");
             }
 
-            const uint16_t om_len = OS_MBUF_PKTLEN(ctxt->om);
-            if (om_len > 0 && client_callback) {
-                constexpr size_t null_terminator_size = 1;
-                char *buf = (char *)malloc(om_len + null_terminator_size);
-                if (buf) {
-                    const int rc = ble_hs_mbuf_to_flat(ctxt->om, buf, om_len, NULL);
-                    if (rc == 0) {
-                        buf[om_len] = '\0';
-                        ESP_LOGI(TAG, "Command: %.*s", (int)om_len, buf);
-                        client_callback(std::string_view(buf, om_len));
-                    }
-                    free(buf);
+            const uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
+            if (len > 0 && client_callback) {
+                char *buf = (char *)malloc(len + 1);
+                if (buf && ble_hs_mbuf_to_flat(ctxt->om, buf, len, NULL) == 0) {
+                    buf[len] = '\0';
+                    ESP_LOGI(TAG, "Command: %.*s", (int)len, buf);
+                    client_callback(std::string_view(buf, len));
                 }
+                free(buf);
             }
             return 0;
         }
@@ -442,20 +426,10 @@ static void run_host_task(void * /* param */) {
 
 // Called when BLE stack is ready - initializes address and starts advertising
 static void on_sync() {
-    int rc;
-
-    rc = ble_hs_util_ensure_addr(0);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "Failed to ensure address; rc=%d", rc);
+    if (ble_hs_util_ensure_addr(0) != 0 || ble_hs_id_infer_auto(0, &own_addr_type) != 0) {
+        ESP_LOGE(TAG, "Failed to initialize BLE address");
         return;
     }
-
-    rc = ble_hs_id_infer_auto(0, &own_addr_type);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "Failed to infer address type; rc=%d", rc);
-        return;
-    }
-
     ESP_LOGI(TAG, "BLE synced, address type=%d", own_addr_type);
     advertise();
 }
@@ -474,9 +448,7 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
     }
 
     client_callback = on_command;
-    const size_t name_len = device_name.length() < (MAX_DEVICE_NAME_LEN - 1)
-                                ? device_name.length()
-                                : (MAX_DEVICE_NAME_LEN - 1);
+    const size_t name_len = std::min(device_name.length(), MAX_DEVICE_NAME_LEN - 1);
     memcpy(ble_device_name.data(), device_name.data(), name_len);
     ble_device_name[name_len] = '\0';
 
@@ -487,13 +459,12 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
         return;
     }
 
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    if (esp_err_t ret = nvs_flash_init(); ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
 
-    ret = nimble_port_init();
+    esp_err_t ret = nimble_port_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "nimble_port_init failed: %s", esp_err_to_name(ret));
         return;
@@ -525,7 +496,7 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
 
     if (!idle_timer) {
         idle_timer = xTimerCreate("ble_idle", pdMS_TO_TICKS(IDLE_TIMEOUT_MS),
-                                   pdFALSE, nullptr, on_idle_timeout);
+                                  pdFALSE, nullptr, on_idle_timeout);
     }
 
     nimble_port_freertos_init(run_host_task);
