@@ -57,7 +57,7 @@ void SerialBus::step() {
 
     ota::bus_tick(this->ota_session, millis(), this->name.c_str(),
                   [this](uint8_t receiver, const char *payload, size_t length) {
-                      this->enqueue_message(receiver, payload, length);
+                      this->enqueue_outgoing_message(receiver, payload, length);
                   });
 
     Module::step();

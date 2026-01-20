@@ -11,26 +11,20 @@
 
 namespace ota {
 
-namespace {
-
-bool starts_with(std::string_view text, const char *prefix) {
+static bool starts_with(std::string_view text, const char *prefix) {
     const size_t prefix_len = std::strlen(prefix);
     return text.size() >= prefix_len && text.compare(0, prefix_len, prefix) == 0;
 }
 
-bool is_decimal(std::string_view value) {
+static bool is_decimal(std::string_view value) {
     if (value.empty()) {
         return false;
     }
-    for (char c : value) {
-        if (!std::isdigit(static_cast<unsigned char>(c))) {
-            return false;
-        }
-    }
-    return true;
+    return std::all_of(value.begin(), value.end(),
+                       [](char c) { return std::isdigit(static_cast<unsigned char>(c)); });
 }
 
-bool split_once(std::string_view input, char delimiter, std::string_view &head, std::string_view &tail) {
+static bool split_once(std::string_view input, char delimiter, std::string_view &head, std::string_view &tail) {
     const size_t pos = input.find(delimiter);
     if (pos == std::string_view::npos) {
         return false;
@@ -40,27 +34,14 @@ bool split_once(std::string_view input, char delimiter, std::string_view &head, 
     return true;
 }
 
-bool decode_base64_chunk(std::string_view input, std::array<uint8_t, BUS_OTA_BUFFER_SIZE> &output, size_t &out_len) {
+static bool decode_base64_chunk(std::string_view input, std::array<uint8_t, BUS_OTA_BUFFER_SIZE> &output, size_t &out_len) {
     auto decode_char = [](char c) -> int {
-        if (c >= 'A' && c <= 'Z') {
-            return c - 'A';
-        }
-        if (c >= 'a' && c <= 'z') {
-            return c - 'a' + 26;
-        }
-        if (c >= '0' && c <= '9') {
-            return c - '0' + 52;
-        }
-        if (c == '+') {
-            return 62;
-        }
-        if (c == '/') {
-            return 63;
-        }
-        if (c == '=') {
-            return -1;
-        }
-        return -2;
+        return (c >= 'A' && c <= 'Z') ? c - 'A' : (c >= 'a' && c <= 'z') ? c - 'a' + 26
+                                              : (c >= '0' && c <= '9')   ? c - '0' + 52
+                                              : (c == '+')               ? 62
+                                              : (c == '/')               ? 63
+                                              : (c == '=')               ? -1
+                                                                         : -2;
     };
 
     out_len = 0;
@@ -99,7 +80,7 @@ bool decode_base64_chunk(std::string_view input, std::array<uint8_t, BUS_OTA_BUF
     return true;
 }
 
-void send_status(const SendCallback &send_cb, uint8_t receiver, const char *status, uint32_t seq, size_t bytes) {
+static void send_status(const SendCallback &send_cb, uint8_t receiver, const char *status, uint32_t seq, size_t bytes) {
     char payload[BUS_OTA_BUFFER_SIZE];
     const int len =
         std::snprintf(payload, sizeof(payload), "%s:%lu:%lu", status, static_cast<unsigned long>(seq),
@@ -109,7 +90,7 @@ void send_status(const SendCallback &send_cb, uint8_t receiver, const char *stat
     }
 }
 
-void send_error(const SendCallback &send_cb, uint8_t receiver, const char *reason) {
+static void send_error(const SendCallback &send_cb, uint8_t receiver, const char *reason) {
     char payload[BUS_OTA_BUFFER_SIZE];
     const int len = std::snprintf(payload, sizeof(payload), "%s:%s", OTA_ERROR_PREFIX, reason);
     if (len > 0 && len < static_cast<int>(sizeof(payload))) {
@@ -117,10 +98,16 @@ void send_error(const SendCallback &send_cb, uint8_t receiver, const char *reaso
     }
 }
 
-} // namespace
+static bool fail(BusOtaSession &session, const SendCallback &send_cb, uint8_t receiver, const char *reason, bool reset = true) {
+    send_error(send_cb, receiver, reason);
+    if (reset) {
+        bus_reset_session(session);
+    }
+    return true;
+}
 
 void bus_reset_session(BusOtaSession &session, bool abort_flash) {
-    if (session.active && abort_flash) {
+    if (session.handle != 0 && abort_flash) {
         esp_ota_abort(session.handle);
     }
     session = {};
@@ -136,9 +123,8 @@ bool bus_handle_frame(BusOtaSession &session,
     }
 
     if (starts_with(payload, OTA_BEGIN_PREFIX)) {
-        if (session.active) {
-            send_error(send_cb, sender, "busy");
-            return true;
+        if (session.handle != 0) {
+            return fail(session, send_cb, sender, "busy", false);
         }
 
         std::string_view size_view;
@@ -149,26 +135,22 @@ bool bus_handle_frame(BusOtaSession &session,
         unsigned long declared_size = 0;
         if (!size_view.empty()) {
             if (!is_decimal(size_view)) {
-                send_error(send_cb, sender, "size_invalid");
-                return true;
+                return fail(session, send_cb, sender, "size_invalid", false);
             }
             declared_size = std::strtoul(std::string(size_view).c_str(), nullptr, 10);
         }
 
         const esp_partition_t *partition = esp_ota_get_next_update_partition(nullptr);
         if (!partition) {
-            send_error(send_cb, sender, "no_partition");
-            return true;
+            return fail(session, send_cb, sender, "no_partition", false);
         }
 
         esp_ota_handle_t handle = 0;
         const esp_err_t result = esp_ota_begin(partition, OTA_SIZE_UNKNOWN, &handle);
         if (result != ESP_OK) {
-            send_error(send_cb, sender, "begin_failed");
-            return true;
+            return fail(session, send_cb, sender, "begin_failed", false);
         }
 
-        session.active = true;
         session.sender = sender;
         session.handle = handle;
         session.partition = partition;
@@ -183,39 +165,24 @@ bool bus_handle_frame(BusOtaSession &session,
     }
 
     if (starts_with(payload, OTA_ABORT_PREFIX)) {
-        if (!session.active || session.sender != sender) {
-            send_error(send_cb, sender, "no_session");
-            return true;
+        if (session.handle == 0 || session.sender != sender) {
+            return fail(session, send_cb, sender, "no_session", false);
         }
-        send_error(send_cb, sender, "aborted");
-        bus_reset_session(session);
-        return true;
+        return fail(session, send_cb, sender, "aborted");
     }
 
     if (starts_with(payload, OTA_COMMIT_PREFIX)) {
-        if (!session.active || session.sender != sender) {
-            send_error(send_cb, sender, "no_session");
-            return true;
+        if (session.handle == 0 || session.sender != sender) {
+            return fail(session, send_cb, sender, "no_session", false);
         }
-
         if (session.declared_size > 0 && session.bytes_written != session.declared_size) {
-            send_error(send_cb, sender, "size_mismatch");
-            bus_reset_session(session);
-            return true;
+            return fail(session, send_cb, sender, "size_mismatch");
         }
-
-        esp_err_t result = esp_ota_end(session.handle);
-        if (result != ESP_OK) {
-            send_error(send_cb, sender, "end_failed");
-            bus_reset_session(session);
-            return true;
+        if (esp_ota_end(session.handle) != ESP_OK) {
+            return fail(session, send_cb, sender, "end_failed");
         }
-
-        result = esp_ota_set_boot_partition(session.partition);
-        if (result != ESP_OK) {
-            send_error(send_cb, sender, "boot_failed");
-            bus_reset_session(session);
-            return true;
+        if (esp_ota_set_boot_partition(session.partition) != ESP_OK) {
+            return fail(session, send_cb, sender, "boot_failed");
         }
 
         echo("serial bus %s ota finished (%lu bytes)", bus_name, session.bytes_written);
@@ -225,59 +192,39 @@ bool bus_handle_frame(BusOtaSession &session,
     }
 
     if (starts_with(payload, OTA_CHUNK_PREFIX)) {
-        if (!session.active || session.sender != sender) {
-            send_error(send_cb, sender, "no_session");
-            return true;
+        if (session.handle == 0 || session.sender != sender) {
+            return fail(session, send_cb, sender, "no_session", false);
         }
 
         std::string_view rest = payload.substr(std::strlen(OTA_CHUNK_PREFIX));
         if (rest.empty() || rest.front() != ':') {
-            send_error(send_cb, sender, "chunk_format");
-            bus_reset_session(session);
-            return true;
+            return fail(session, send_cb, sender, "chunk_format");
         }
         rest.remove_prefix(1);
 
-        std::string_view seq_view;
-        std::string_view data_view;
+        std::string_view seq_view, data_view;
         if (!split_once(rest, ':', seq_view, data_view)) {
-            send_error(send_cb, sender, "chunk_parts");
-            bus_reset_session(session);
-            return true;
+            return fail(session, send_cb, sender, "chunk_parts");
         }
-
         if (!is_decimal(seq_view)) {
-            send_error(send_cb, sender, "chunk_seq");
-            bus_reset_session(session);
-            return true;
+            return fail(session, send_cb, sender, "chunk_seq");
         }
 
         const unsigned long seq = std::strtoul(std::string(seq_view).c_str(), nullptr, 10);
         if (seq != session.next_seq || data_view.empty()) {
-            send_error(send_cb, sender, "chunk_order");
-            bus_reset_session(session);
-            return true;
+            return fail(session, send_cb, sender, "chunk_order");
         }
 
         std::array<uint8_t, BUS_OTA_BUFFER_SIZE> buffer{};
         size_t decoded_len = 0;
         if (!decode_base64_chunk(data_view, buffer, decoded_len) || decoded_len == 0) {
-            send_error(send_cb, sender, "chunk_decode");
-            bus_reset_session(session);
-            return true;
+            return fail(session, send_cb, sender, "chunk_decode");
         }
-
         if (session.declared_size > 0 && session.bytes_written + decoded_len > session.declared_size) {
-            send_error(send_cb, sender, "size_overrun");
-            bus_reset_session(session);
-            return true;
+            return fail(session, send_cb, sender, "size_overrun");
         }
-
-        const esp_err_t result = esp_ota_write(session.handle, buffer.data(), decoded_len);
-        if (result != ESP_OK) {
-            send_error(send_cb, sender, "write_failed");
-            bus_reset_session(session);
-            return true;
+        if (esp_ota_write(session.handle, buffer.data(), decoded_len) != ESP_OK) {
+            return fail(session, send_cb, sender, "write_failed");
         }
 
         session.bytes_written += decoded_len;
@@ -296,14 +243,9 @@ void bus_tick(BusOtaSession &session,
               unsigned long now_ms,
               const char *bus_name,
               const SendCallback &send_cb) {
-    if (!session.active) {
-        return;
-    }
-
-    if (now_ms - session.last_activity > BUS_OTA_SESSION_TIMEOUT_MS) {
+    if (session.handle != 0 && now_ms - session.last_activity > BUS_OTA_SESSION_TIMEOUT_MS) {
         echo("warning: serial bus %s ota timed out", bus_name);
-        send_error(send_cb, session.sender, "timeout");
-        bus_reset_session(session);
+        fail(session, send_cb, session.sender, "timeout");
     }
 }
 

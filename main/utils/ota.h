@@ -22,7 +22,6 @@ constexpr size_t BUS_OTA_BUFFER_SIZE = 256;
 constexpr unsigned long BUS_OTA_SESSION_TIMEOUT_MS = 10000;
 
 struct BusOtaSession {
-    bool active = false;
     uint8_t sender = 0;
     esp_ota_handle_t handle = 0;
     const esp_partition_t *partition = nullptr;
