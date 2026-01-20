@@ -1,26 +1,15 @@
 #include "uart.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include <algorithm>
 #include <cstdarg>
+#include <cstdint>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
 
-static EchoRelayHandler relay_handler = nullptr;
-static uint8_t echo_target_id = 0xff; // 0xff = normal echo, else = relay to target
-static TaskHandle_t relay_task = nullptr;
+static std::vector<EchoCallback> echo_callbacks;
 
-// Simple redirect system: when target is set to a valid ID (not 0xff), echo output
-// is relayed to that target via the handler. Task-scoped for safety.
-
-void echo_set_relay_handler(EchoRelayHandler handler) {
-    relay_handler = handler;
-}
-
-void echo_set_target(uint8_t target) {
-    echo_target_id = target;
-    relay_task = xTaskGetCurrentTaskHandle();
+void register_echo_callback(const EchoCallback &callback) {
+    echo_callbacks.push_back(callback);
 }
 
 void echo(const char *format, ...) {
@@ -40,8 +29,8 @@ void echo(const char *format, ...) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
             printf("%s@%02x\n", &buffer[start], checksum);
-            if (echo_target_id != 0xff && relay_handler && relay_task == xTaskGetCurrentTaskHandle()) {
-                relay_handler(echo_target_id, &buffer[start]);
+            for (const auto &callback : echo_callbacks) {
+                callback(&buffer[start]);
             }
             start = i + 1;
             checksum = 0;
@@ -63,8 +52,9 @@ int strip(char *buffer, int len) {
     return len;
 }
 
-int check(char *buffer, int len) {
+int check(char *buffer, int len, bool *checksum_ok) {
     len = strip(buffer, len);
+    bool ok = true;
     if (len >= 3 && buffer[len - 3] == '@') {
         uint8_t checksum = 0;
         for (int i = 0; i < len - 3; ++i) {
@@ -72,10 +62,12 @@ int check(char *buffer, int len) {
         }
         const std::string hex_number(&buffer[len - 2], 2);
         if (std::stoi(hex_number, 0, 16) != checksum) {
-            throw std::runtime_error("checksum mismatch");
+            ok = false;
+        } else {
+            len -= 3;
         }
-        len -= 3;
     }
     buffer[len] = 0;
+    *checksum_ok = ok;
     return len;
 }

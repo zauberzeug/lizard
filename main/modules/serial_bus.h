@@ -7,11 +7,8 @@
 #include "module.h"
 #include "serial.h"
 #include <cstdint>
-#include <string_view>
 #include <vector>
 
-class SerialBus;
-using SerialBus_ptr = std::shared_ptr<SerialBus>;
 
 class SerialBus : public Module {
 public:
@@ -27,40 +24,38 @@ private:
     struct IncomingMessage {
         uint8_t sender;
         uint8_t receiver;
-        uint16_t length;
+        size_t length;
         char payload[PAYLOAD_CAPACITY];
     };
     struct OutgoingMessage {
         uint8_t receiver;
-        uint16_t length;
+        size_t length;
         char payload[PAYLOAD_CAPACITY];
     };
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
     std::vector<uint8_t> peer_ids;
-    bool coordinator = false;
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
-    TaskHandle_t communicator_task = nullptr;
-    bool waiting_for_done = false;
-    uint8_t current_poll_target = 0xff; // 0xff = BROADCAST_ID used as sentinel for "no target"
+    TaskHandle_t communication_task = nullptr;
+    bool is_polling = false;
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
-    bool transmit_window_open = false;
-    uint8_t window_requester = 0;
-    unsigned long last_message_millis = 0;
+    uint8_t requesting_node = 0;
+    uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     ota::BusOtaSession ota_session;
 
-    static void communicator_task_entry(void *param);
-    [[noreturn]] void communicator_loop();
-    void communicator_process_uart();
+    [[noreturn]] static void communication_loop(void *param);
+    void process_uart();
+    bool parse_message(const char *message_line, IncomingMessage &message) const;
+    void handle_incoming_message(const IncomingMessage &message);
+    void enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length);
     bool send_outgoing_queue();
-    void enqueue_message(uint8_t receiver, const char *payload, size_t length);
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
-    void relay_output_line(uint8_t remote_sender, const char *line);
-    static void echo_relay_handler(uint8_t target, const char *line);
-    bool parse_message(const char *line, IncomingMessage &message) const;
-    void handle_message(const IncomingMessage &message);
+
+    void print_to_incoming_queue(const char *format, ...) const;
+    void handle_echo(const char *line);
+    bool is_coordinator() const { return !this->peer_ids.empty(); }
 };

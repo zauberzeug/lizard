@@ -79,23 +79,10 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------- | ---------------------------------------------- | --------------- |
 | `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
 
-| Properties             | Description                                        | Data type |
-| ---------------------- | -------------------------------------------------- | --------- |
-| `bus.is_coordinator`   | Whether this node is acting as bus coordinator     | `bool`    |
-| `bus.peer_count`       | Number of peer nodes the coordinator will poll     | `int`     |
-| `bus.last_message_age` | Milliseconds since the last bus frame was received | `int`     |
-
-| Methods                            | Description                                                                                    | Arguments    |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------- | ------------ |
-| `bus.send(receiver, payload)`      | Send a payload to a peer `receiver` (0-255); payload must not contain newlines                 | `int`, `str` |
-| `bus.configure(receiver, script)`  | Send a multi-line setup script to a peer and restart it (`!-`/`!+` framing is handled for you) | `int`, `str` |
-| `bus.set_coordinator(peer_ids...)` | Mark this node as coordinator and set the list of peer IDs to poll in round-robin order        | `int`...     |
-
-Use `bus.configure()` to push startup scripts line by line;
-it wraps the required framing and finishes with a restart so peers boot with the new configuration.
-
-To push firmware over the bus use helper script `serial_bus_ota.py`.
-It automatically controlls the OTA flow and can handle serial bus connected to an expander: `./serial_bus_ota.py --port /dev/ttyUSB0 --id 1 [--expander p0] build/firmware.bin`.
+| Methods                             | Description                                                | Arguments    |
+| ----------------------------------- | ---------------------------------------------------------- | ------------ |
+| `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
 
 ## Input
 
@@ -406,19 +393,25 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | --------------------------------------------- | ------------------------------- | ------------------------ |
 | `motor = ODriveMotor(can, can_id[, version])` | CAN module, node ID and version | CAN module, `int`, `int` |
 
-The `version` parameter is an optional integer indicating the patch number of the ODrive firmware (4, 5 or 6; default: 4 for version "0.5.4"). Version 0.5.6 allows to read the motor error flag.
+The `version` parameter is an optional integer indicating the patch number of the ODrive firmware (4, 5 or 6; default: 4 for version "0.5.4").
+Version 0.5.6 allows to read the motor error flag.
 
-| Properties          | Description                               | Data type |
-| ------------------- | ----------------------------------------- | --------- |
-| `motor.position`    | Motor position (meters)                   | `float`   |
-| `motor.speed`       | Motor speed (m/s)                         | `float`   |
-| `motor.tick_offset` | Encoder tick offset                       | `float`   |
-| `motor.m_per_tick`  | Meters per encoder tick                   | `float`   |
-| `motor.reversed`    | Reverse motor direction                   | `bool`    |
-| `motor.axis_state`  | State of the motor axis                   | `int`     |
-| `motor.axis_error`  | Error code of the axis                    | `int`     |
-| `motor.motor_error` | Motor error flat (requires version 0.5.6) | `int`     |
-| `motor.enabled`     | Whether the motor is enabled              | `bool`    |
+| Properties                | Description                               | Data type |
+| ------------------------- | ----------------------------------------- | --------- |
+| `motor.position`          | Motor position (meters)                   | `float`   |
+| `motor.speed`             | Motor speed (m/s)                         | `float`   |
+| `motor.tick_offset`       | Encoder tick offset                       | `float`   |
+| `motor.m_per_tick`        | Meters per encoder tick                   | `float`   |
+| `motor.reversed`          | Reverse motor direction                   | `bool`    |
+| `motor.axis_state`        | State of the motor axis                   | `int`     |
+| `motor.axis_error`        | Error code of the axis                    | `int`     |
+| `motor.motor_error`       | Motor error flat (requires version 0.5.6) | `int`     |
+| `motor.enabled`           | Whether the motor is enabled              | `bool`    |
+| `motor.motor_temperature` | Motor temperature (°C)                    | `float`   |
+
+The `motor_temperature` will only update if the firmware generated from the
+[zauberzeug/ODrive](https://github.com/zauberzeug/ODrive) fork is installed on the ODrive.
+Otherwise, the `motor_temperature` property will remain at 0.
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |

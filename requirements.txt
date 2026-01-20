@@ -1,5 +1,6 @@
 esp-coredump
 esptool
+gpiod
 mkdocs
 mkdocs-material
 mdx-include

@@ -69,7 +69,12 @@ void Expander::check_boot_progress() {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
-        check(buffer, len);
+        bool checksum_ok = true;
+        check(buffer, len, &checksum_ok);
+        if (!checksum_ok) {
+            echo("%s: Checksum mismatch while checking boot progress", this->name.c_str());
+            continue;
+        }
         this->last_message_millis = millis();
         echo("%s: %s", this->name.c_str(), buffer);
         if (strcmp("Ready.", buffer) == 0) {
@@ -115,7 +120,14 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer, sizeof(buffer));
-        check(buffer, len);
+        bool checksum_ok = true;
+        len = check(buffer, len, &checksum_ok);
+        if (!checksum_ok) {
+            echo("%s: Checksum mismatch while handling messages", this->name.c_str());
+            this->last_message_millis = millis();
+            this->ping_pending = false;
+            continue;
+        }
         if (check_for_strapping_pins) {
             this->check_strapping_pins(buffer);
         }

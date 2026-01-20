@@ -102,11 +102,10 @@ Module_ptr Module::create(const std::string type,
             throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
         }
         const ConstSerial_ptr serial_module = std::static_pointer_cast<const Serial>(module);
-        const long node_id_value = arguments[1]->evaluate_integer();
-        if (node_id_value < 0 || node_id_value > 255) {
-            throw std::runtime_error("serial bus ID must be between 0 and 255");
+        const long node_id = arguments[1]->evaluate_integer();
+        if (node_id <= 0 || node_id >= 255) {
+            throw std::runtime_error("node ID must be between 0 and 255");
         }
-        const uint8_t node_id = static_cast<uint8_t>(node_id_value);
         return std::make_shared<SerialBus>(name, serial_module, node_id);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
