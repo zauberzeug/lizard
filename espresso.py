@@ -38,6 +38,7 @@ parser.add_argument('--nand', action='store_true', help='Board has NAND gates')
 parser.add_argument('--bootloader', default='build/bootloader/bootloader.bin', help='Path to bootloader')
 parser.add_argument('--partition-table', default='build/partition_table/partition-table.bin',
                     help='Path to partition table')
+parser.add_argument('--swapped', action='store_true', help='Swap En and G0 pins for piggyboard version lower than v0.5')
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
@@ -47,6 +48,7 @@ args = parser.parse_args()
 ON = 1 if args.nand else 0
 OFF = 0 if args.nand else 1
 DRY_RUN = args.dry_run
+SWAPPED = args.swapped
 CHIP = args.chip
 DEVICE = args.device
 FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}.get(CHIP, '40m')
@@ -57,8 +59,12 @@ FIRMWARE = args.firmware
 
 if JETPACK:
     chip = gpiod.Chip('gpiochip0')
-    en = chip.find_line('PR.04')
-    g0 = chip.find_line('PAC.06')
+    if SWAPPED:
+        en = chip.find_line('PAC.06')
+        g0 = chip.find_line('PR.04')
+    else:
+        en = chip.find_line('PR.04')
+        g0 = chip.find_line('PAC.06')
 
 
 @contextmanager
@@ -104,6 +110,7 @@ def enable() -> None:
         set_g0(OFF)
         time.sleep(0.5)
         set_en(OFF)
+        time.sleep(0.5)
 
 
 def disable() -> None:
@@ -111,6 +118,7 @@ def disable() -> None:
     print_bold('Disabling the microcontroller...')
     with _pin_config():
         set_en(ON)
+        time.sleep(0.5)
 
 
 def reset() -> None:
@@ -127,6 +135,7 @@ def _reset() -> None:
     set_en(ON)
     time.sleep(0.5)
     set_en(OFF)
+    # time.sleep(0.5)
 
 
 def erase() -> None:
