@@ -93,11 +93,8 @@ def _flash_mode() -> Generator[None, None, None]:
     if JETPACK:
         print_bold('Bringing the microcontroller into flash mode...')
         set_en(ON)
-        time.sleep(0.5)
         set_g0(ON)
-        time.sleep(0.5)
         set_en(OFF)
-        time.sleep(0.5)
     yield
     if JETPACK:
         _reset()
@@ -108,9 +105,7 @@ def enable() -> None:
     print_bold('Enabling the microcontroller...')
     with _pin_config():
         set_g0(OFF)
-        time.sleep(0.5)
         set_en(OFF)
-        time.sleep(0.5)
 
 
 def disable() -> None:
@@ -118,7 +113,6 @@ def disable() -> None:
     print_bold('Disabling the microcontroller...')
     with _pin_config():
         set_en(ON)
-        time.sleep(0.5)
 
 
 def reset() -> None:
@@ -131,11 +125,8 @@ def reset() -> None:
 def _reset() -> None:
     """Set pins to reset the microcontroller."""
     set_g0(OFF)
-    time.sleep(0.5)
     set_en(ON)
-    time.sleep(0.5)
     set_en(OFF)
-    # time.sleep(0.5)
 
 
 def erase() -> None:
@@ -194,12 +185,14 @@ def set_en(value: int) -> None:
     print(f'  Setting EN pin to {value}')
     if not DRY_RUN:
         en.set_value(value)
+        time.sleep(0.5)
 
 
 def set_g0(value: int) -> None:
     print(f'  Setting G0 pin to {value}')
     if not DRY_RUN:
         g0.set_value(value)
+        time.sleep(0.5)
 
 
 def print_ok(message: str) -> None:
