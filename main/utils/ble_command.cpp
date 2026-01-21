@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cstring>
 
@@ -31,6 +32,8 @@
 #undef max
 #endif
 
+#include <esp_zeug/ble/uuid.h>
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/timers.h>
 
@@ -38,27 +41,38 @@
 #include "../utils/uart.h"
 #include "sdkconfig.h"
 
+#ifndef ZZ_BLE_DEBUG
+#define ZZ_BLE_DEBUG 0
+#endif
+
 namespace ZZ::BleCommand {
 
 static constexpr uint32_t IDLE_TIMEOUT_MS = 15000; // Kick clients that don't send app command
 static constexpr size_t MAX_DEVICE_NAME_LEN = 30;
-static constexpr size_t UUID_STRING_LENGTH = 36; // 8-4-4-4-12 hex digits
-static constexpr size_t UUID_BYTE_COUNT = 16;
+static constexpr uint16_t TX_DATA_LENGTH = 0xFB;
+static constexpr uint16_t TX_DATA_TIME = 0x0848;
+static constexpr int BLE_DISCONNECT_BOND_MISMATCH = 0x213;
+
+constexpr ble_uuid128_t uuid128_from_str(const char *str) {
+    ble_uuid128_t result{BLE_UUID_TYPE_128, {}};
+    Ble::Uuid::parse(std::string_view{str}, result.value, 16);
+    return result;
+}
+
+static constexpr ble_uuid128_t svc_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_SVC_UUID);
+static constexpr ble_uuid128_t cmd_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CHR_UUID);
+static constexpr ble_uuid128_t send_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_SEND_CHR_UUID);
 
 static CommandCallback client_callback{};
 static std::array<char, MAX_DEVICE_NAME_LEN> ble_device_name{};
-static uint16_t current_con = BLE_HS_CONN_HANDLE_NONE;
+static std::atomic<uint16_t> current_con{BLE_HS_CONN_HANDLE_NONE};
 static uint16_t send_chr_val_handle = 0;
 static uint8_t own_addr_type = 0;
 static bool running = false;
 static bool deactivated = false;
-static bool authenticated = false;
-static bool app_active = false;
+static std::atomic<bool> authenticated{false};
+static std::atomic<bool> app_active{false};
 static TimerHandle_t idle_timer = nullptr;
-
-static ble_uuid128_t svc_uuid;
-static ble_uuid128_t cmd_chr_uuid;
-static ble_uuid128_t send_chr_uuid;
 
 // 16-bit Alert Notification Service UUID for app filtering
 static const ble_uuid16_t alert_uuid = BLE_UUID16_INIT(0x1811);
@@ -76,33 +90,6 @@ static void on_idle_timeout(TimerHandle_t /* timer */) {
     }
 }
 
-static bool parse_uuid128(const char *str, ble_uuid128_t *uuid) {
-    if (!str || strlen(str) != UUID_STRING_LENGTH) {
-        return false;
-    }
-
-    uint8_t tmp[UUID_BYTE_COUNT];
-    int ret = sscanf(str,
-                     "%02hhx%02hhx%02hhx%02hhx-"
-                     "%02hhx%02hhx-"
-                     "%02hhx%02hhx-"
-                     "%02hhx%02hhx-"
-                     "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
-                     &tmp[15], &tmp[14], &tmp[13], &tmp[12],
-                     &tmp[11], &tmp[10],
-                     &tmp[9], &tmp[8],
-                     &tmp[7], &tmp[6],
-                     &tmp[5], &tmp[4], &tmp[3], &tmp[2], &tmp[1], &tmp[0]);
-
-    if (ret != UUID_BYTE_COUNT) {
-        return false;
-    }
-
-    uuid->u.type = BLE_UUID_TYPE_128;
-    memcpy(uuid->value, tmp, UUID_BYTE_COUNT);
-    return true;
-}
-
 // Security is checked manually in on_chr_access to allow runtime toggle via deactivate_pin()
 static const struct ble_gatt_svc_def gatt_svcs[] = {
     {
@@ -116,7 +103,7 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
                 .access_cb = on_chr_access,
                 .arg = NULL,
                 .descriptors = NULL,
-                .flags = BLE_GATT_CHR_F_WRITE,
+                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
                 .min_key_size = 0,
                 .val_handle = NULL,
                 .cpfd = NULL,
@@ -175,6 +162,8 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         if (event->connect.status == 0) {
             current_con = event->connect.conn_handle;
 
+            ble_gap_set_data_len(event->connect.conn_handle, TX_DATA_LENGTH, TX_DATA_TIME);
+
             struct ble_gap_conn_desc desc;
             if (ble_gap_conn_find(event->connect.conn_handle, &desc) == 0) {
                 const uint8_t *addr = desc.peer_id_addr.val;
@@ -195,8 +184,7 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         const uint8_t *addr = event->disconnect.conn.peer_id_addr.val;
         int reason = event->disconnect.reason;
 
-        // Bond mismatch: disconnect before encryption with reason 0x213
-        if (!authenticated && reason == 0x213) {
+        if (!authenticated && reason == BLE_DISCONNECT_BOND_MISMATCH) {
             echo("BLE: disconnected %02x:%02x:%02x:%02x:%02x:%02x (bond mismatch - forget device in phone settings)",
                  addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
         } else {
@@ -336,7 +324,9 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
                 char *buf = (char *)malloc(len + 1);
                 if (buf && ble_hs_mbuf_to_flat(ctxt->om, buf, len, NULL) == 0) {
                     buf[len] = '\0';
+#if ZZ_BLE_DEBUG
                     echo("BLE rx: %s", buf);
+#endif
                     client_callback(std::string_view(buf, len));
                 }
                 free(buf);
@@ -379,13 +369,6 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
     memcpy(ble_device_name.data(), device_name.data(), name_len);
     ble_device_name[name_len] = '\0';
 
-    if (!parse_uuid128(CONFIG_ZZ_BLE_COM_SVC_UUID, &svc_uuid) ||
-        !parse_uuid128(CONFIG_ZZ_BLE_COM_CHR_UUID, &cmd_chr_uuid) ||
-        !parse_uuid128(CONFIG_ZZ_BLE_COM_SEND_CHR_UUID, &send_chr_uuid)) {
-        echo("BLE: failed to parse UUIDs");
-        return;
-    }
-
     if (esp_err_t ret = nvs_flash_init(); ret != ESP_OK) {
         echo("BLE: nvs_flash_init issue (%s) - NVS should be initialized in main", esp_err_to_name(ret));
     }
@@ -419,12 +402,12 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
 
     ble_svc_gap_device_name_set(ble_device_name.data());
 
+    nimble_port_freertos_init(run_host_task);
+
     if (!idle_timer) {
         idle_timer = xTimerCreate("ble_idle", pdMS_TO_TICKS(IDLE_TIMEOUT_MS),
                                   pdFALSE, nullptr, on_idle_timeout);
     }
-
-    nimble_port_freertos_init(run_host_task);
 
     running = true;
 }
@@ -439,7 +422,9 @@ int send(const std::string_view &data) {
         return BLE_HS_ENOMEM;
     }
 
+#if ZZ_BLE_DEBUG
     echo("BLE tx: %.*s", (int)data.length(), data.data());
+#endif
     return ble_gattc_notify_custom(current_con, send_chr_val_handle, om);
 }
 
