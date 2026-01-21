@@ -54,8 +54,8 @@ static constexpr uint16_t TX_DATA_TIME = 0x0848;
 static constexpr int BLE_DISCONNECT_BOND_MISMATCH = 0x213;
 
 constexpr ble_uuid128_t uuid128_from_str(const char *str) {
-    ble_uuid128_t result{BLE_UUID_TYPE_128, {}};
-    Ble::Uuid::parse(std::string_view{str}, result.value, 16);
+    ble_uuid128_t result{BLE_UUID_TYPE_128, {0}};
+    ZZ::Ble::Uuid::parse(std::string_view{str}, result.value, 16);
     return result;
 }
 
@@ -175,6 +175,10 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
                     ble_gap_security_initiate(event->connect.conn_handle);
                 }
             }
+
+            if (idle_timer) {
+                xTimerStart(idle_timer, 0);
+            }
         } else {
             advertise();
         }
@@ -245,7 +249,7 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
             }
 
             if (idle_timer && !app_active) {
-                xTimerStart(idle_timer, 0);
+                xTimerReset(idle_timer, 0);
             }
         } else {
             struct ble_gap_conn_desc desc;
@@ -452,7 +456,7 @@ void deactivate_pin() {
 void reset_bonds() {
     if (current_con != BLE_HS_CONN_HANDLE_NONE) {
         ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     ble_gap_adv_stop();
