@@ -59,12 +59,10 @@ FIRMWARE = args.firmware
 
 if JETPACK:
     chip = gpiod.Chip('gpiochip0')
+    en = chip.find_line('PAC.06')
+    g0 = chip.find_line('PR.04')
     if SWAPPED:
-        en = chip.find_line('PAC.06')
-        g0 = chip.find_line('PR.04')
-    else:
-        en = chip.find_line('PR.04')
-        g0 = chip.find_line('PAC.06')
+        en, g0 = g0, en
 
 
 @contextmanager
