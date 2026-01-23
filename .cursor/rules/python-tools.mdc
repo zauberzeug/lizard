@@ -1,0 +1,53 @@
+---
+globs: "*.py"
+---
+
+# Python Tooling Rules
+
+Python scripts in this project are **build/flash/monitor tools**, not the main application.
+
+## Style
+
+- Use **single quotes** for strings
+- 120 character line length
+- Use `argparse` for CLI arguments
+- Use `subprocess.run()` for shell commands
+- Use `pathlib.Path` for file operations
+
+## Key Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `build.py` | Build for ESP32/ESP32-S3 (wraps `idf.py build`) |
+| `flash.py` | Flash firmware to device |
+| `monitor.py` | Serial monitor |
+| `espresso.py` | OTA deployment tool |
+| `configure.py` | Project configuration |
+| `core_dumper.py` | Analyze core dumps |
+
+## Pattern
+
+```python
+#!/usr/bin/env python3
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description='Tool description')
+    # args...
+    args = parser.parse_args()
+    
+    # Implementation
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
+```
+
+## ESP-IDF Integration
+
+These scripts wrap ESP-IDF tools. Ensure `IDF_PATH` is set and ESP-IDF is activated before running.
