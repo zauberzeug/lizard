@@ -15,16 +15,16 @@ Lizard follows the [ESP-IDF Style Guide](https://docs.espressif.com/projects/esp
 
 ### C++ Naming Conventions
 
-| Element | Style | Example |
-|---------|-------|---------|
-| Classes/Structs | `CamelCase` | `Module`, `ODriveMotor` |
-| Member variables/methods | `snake_case` | `get_output()`, `shadow_modules` |
-| Local variables | `snake_case` | `motor_id`, `can_name` |
-| Static variables | `s_` prefix | `s_instance_count` |
-| Type aliases | `snake_case` with `_ptr` or `_t` | `Module_ptr`, `signed_32_bit_t` |
-| Enums | `snake_case` values | `ModuleType::odrive_motor` |
-| Namespaces | `snake_case` | `compilation` |
-| Constants/Macros | `UPPER_SNAKE_CASE` | `DEFAULT_SDA_PIN` |
+| Element                  | Style                            | Example                          |
+| ------------------------ | -------------------------------- | -------------------------------- |
+| Classes/Structs          | `CamelCase`                      | `Module`, `ODriveMotor`          |
+| Member variables/methods | `snake_case`                     | `get_output()`, `shadow_modules` |
+| Local variables          | `snake_case`                     | `motor_id`, `can_name`           |
+| Static variables         | `s_` prefix                      | `s_instance_count`               |
+| Type aliases             | `snake_case` with `_ptr` or `_t` | `Module_ptr`, `signed_32_bit_t`  |
+| Enums                    | `snake_case` values              | `ModuleType::odrive_motor`       |
+| Namespaces               | `snake_case`                     | `compilation`                    |
+| Constants/Macros         | `UPPER_SNAKE_CASE`               | `DEFAULT_SDA_PIN`                |
 
 ### File Naming
 
@@ -47,12 +47,11 @@ Use `#pragma once` for include guards:
 
 ### Braces
 
-- Function definitions: opening brace on separate line
+- Function definitions: opening brace on same line
 - Conditionals/loops: opening brace on same line
 
 ```cpp
-void function(int arg)
-{
+void function(int arg) {
     if (condition) {
         do_something();
     } else {

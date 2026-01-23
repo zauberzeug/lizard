@@ -12,7 +12,7 @@
 
 Lizard is a **domain-specific language (DSL)** for defining and controlling hardware behavior on ESP32 microcontrollers. It acts as a "lizard brain" for robots – handling time-critical actions, basic safety, and hardware communication while a higher-level system (ROS, RoSys) handles complex logic.
 
-**Tech Stack**: C++23 on ESP-IDF, with Python tooling for build/flash.
+**Tech Stack**: C++17 on ESP-IDF, with Python tooling for build/flash.
 
 **Related Projects**:
 - [RoSys](https://github.com/zauberzeug/rosys) – Robot System framework (Python, uses Lizard)
@@ -51,6 +51,8 @@ end
 
 # Routines (reusable action sequences)
 let blink do
+    int t
+    t = core.millis
     led.on()
     await core.millis > t + 500
     led.off()
@@ -88,7 +90,7 @@ lizard/
 │   ├── main.cpp            # Entry point (app_main), main loop, UART processing
 │   ├── global.cpp/h        # Global state (modules, variables, routines, rules)
 │   ├── storage.cpp/h       # Non-volatile storage for startup scripts
-│   ├── parser.c            # Generated parser (from language.owl via gen_parser.sh)
+│   ├── parser.h            # Generated parser (from language.owl via gen_parser.sh)
 │   ├── compilation/        # DSL compilation (expressions, variables, routines, rules)
 │   ├── modules/            # Hardware modules (motors, sensors, I/O, CAN, etc.)
 │   └── utils/              # Utilities (UART, OTA, timing, string helpers)
@@ -180,7 +182,7 @@ public:
 #include "my_module.h"
 
 MyModule::MyModule(const std::string name, /* args */)
-    : Module(ModuleType::my_module, name) {
+    : Module(my_module, name) {
     // Initialize properties
     this->properties["some_property"] = std::make_shared<NumberVariable>(0.0);
 }

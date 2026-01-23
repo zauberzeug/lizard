@@ -39,7 +39,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description='Tool description')
     # args...
     args = parser.parse_args()
-    
+
     # Implementation
     return 0
 

@@ -19,7 +19,7 @@ Every module must:
 
 ```cpp
 MyModule::MyModule(const std::string name, /* args */)
-    : Module(ModuleType::my_module, name) {
+    : Module(my_module, name) {
     // Initialize properties map
     this->properties["my_prop"] = std::make_shared<NumberVariable>(0.0);
 }

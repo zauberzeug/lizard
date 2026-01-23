@@ -11,7 +11,7 @@ When working on the Lizard DSL compilation infrastructure:
 ```
 language.owl          → Grammar definition (Owl parser generator)
     ↓ gen_parser.sh
-parser.c              → Generated parser (DO NOT EDIT)
+parser.h              → Generated parser (DO NOT EDIT)
     ↓
 main.cpp              → process_tree() compiles AST to runtime objects
     ↓
@@ -42,6 +42,6 @@ compilation/*.cpp     → Expression, Variable, Action, Routine, Rule classes
 
 ## IMPORTANT
 
-- **Never edit `parser.c`** – it's generated from `language.owl`
+- **Never edit `parser.h`** – it's generated from `language.owl`
 - **Always regenerate parser** after grammar changes: `./gen_parser.sh`
 - **Test grammar changes** thoroughly – they affect all Lizard scripts
