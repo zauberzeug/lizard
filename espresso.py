@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 import re
 import subprocess
 import sys
@@ -19,7 +17,7 @@ else:
 
 
 class GpioController:
-    def __init__(self, line_names: dict[str, str]) -> None:
+    def __init__(self, en: str, g0: str) -> None:
         pass
 
     def request_outputs(self, consumer: str) -> None:
@@ -100,7 +98,7 @@ parser.add_argument('--nand', action='store_true', help='Board has NAND gates')
 parser.add_argument('--bootloader', default='build/bootloader/bootloader.bin', help='Path to bootloader')
 parser.add_argument('--partition-table', default='build/partition_table/partition-table.bin',
                     help='Path to partition table')
-parser.add_argument('--swapped', action='store_true', help='Swap En and G0 pins for piggyboard version lower than v0.5')
+parser.add_argument('--swap', action='store_true', help='Swap En and G0 pins for piggyboard version lower than v0.5')
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
@@ -110,7 +108,7 @@ args = parser.parse_args()
 ON = 1 if args.nand else 0
 OFF = 0 if args.nand else 1
 DRY_RUN = args.dry_run
-SWAPPED = args.swapped
+SWAP = args.swap
 CHIP = args.chip
 DEVICE = args.device
 FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}.get(CHIP, '40m')
@@ -121,7 +119,7 @@ FIRMWARE = args.firmware
 
 EN = 'PR.04'
 G0 = 'PAC.06'
-if SWAPPED:
+if SWAP:
     EN, G0 = G0, EN
 gpio = {
     None: GpioController,
@@ -239,14 +237,14 @@ def run(*run_args: str) -> bool:
 
 def set_en(value: int) -> None:
     print(f'  Setting EN pin to {value}')
-    if not DRY_RUN and gpio:
+    if not DRY_RUN:
         gpio.set_value('en', value)
         time.sleep(0.5)
 
 
 def set_g0(value: int) -> None:
     print(f'  Setting G0 pin to {value}')
-    if not DRY_RUN and gpio:
+    if not DRY_RUN:
         gpio.set_value('g0', value)
         time.sleep(0.5)
 
