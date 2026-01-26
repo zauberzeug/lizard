@@ -6,32 +6,40 @@ import subprocess
 import sys
 import time
 from contextlib import contextmanager
-from typing import Generator, Optional
+from typing import Generator
 from pathlib import Path
 import argparse
+
 try:
     import gpiod
-    GPIOD_V2 = hasattr(gpiod, 'request_lines')
-    if GPIOD_V2:
-        from gpiod.line import Direction, Value
-    else:
-        Direction = None  # type: ignore[misc,assignment]
-        Value = None  # type: ignore[misc,assignment]
 except ImportError:
-    gpiod = None  # type: ignore[assignment]
-    GPIOD_V2 = False
-    Direction = None  # type: ignore[misc,assignment]
-    Value = None  # type: ignore[misc,assignment]
-    print('gpiod module not found. Please install it using "sudo apt install python3-libgpiod". '
-          'Ignore this error if you are not on a Jetson board.')
+    GPIOD_VERSION = None
+else:
+    GPIOD_VERSION = 2 if hasattr(gpiod, 'request_lines') else 1
 
 
-class GpioControllerV1:
-    """GPIO controller using gpiod v1 API."""
+class GpioController:
+    def __init__(self, line_names: dict[str, str]) -> None:
+        pass
 
-    def __init__(self, chip_path: str, line_names: dict[str, str]) -> None:
-        chip = gpiod.Chip(chip_path.replace('/dev/', ''))
-        self._lines = {key: chip.find_line(name) for key, name in line_names.items()}
+    def request_outputs(self, consumer: str) -> None:
+        """Request output lines."""
+
+    def set_value(self, key: str, value: int) -> None:
+        """Set the value of a line."""
+
+    def release(self) -> None:
+        """Release the lines."""
+
+
+class GpioControllerV1(GpioController):
+
+    def __init__(self, en: str, g0: str) -> None:
+        chip = gpiod.Chip('gpiochip0')
+        self._lines = {
+            'en': chip.find_line(en),
+            'g0': chip.find_line(g0),
+        }
 
     def request_outputs(self, consumer: str) -> None:
         for line in self._lines.values():
@@ -45,21 +53,25 @@ class GpioControllerV1:
             line.release()
 
 
-class GpioControllerV2:
-    """GPIO controller using gpiod v2 API."""
+class GpioControllerV2(GpioController):
+    CHIP_PATH = '/dev/gpiochip0'
 
-    def __init__(self, chip_path: str, line_names: dict[str, str]) -> None:
-        self._chip_path = chip_path if chip_path.startswith('/dev/') else f'/dev/{chip_path}'
-        chip = gpiod.Chip(self._chip_path)
-        self._offsets = {key: chip.line_offset_from_id(name) for key, name in line_names.items()}
+    def __init__(self, en: str, g0: str) -> None:
+        chip = gpiod.Chip(self.CHIP_PATH)
+        self._offsets = {
+            'en': chip.line_offset_from_id(en),
+            'g0': chip.line_offset_from_id(g0),
+        }
         chip.close()
         self._request = None
 
     def request_outputs(self, consumer: str) -> None:
+        from gpiod.line import Direction  # pylint: disable=import-outside-toplevel
         config = {offset: gpiod.LineSettings(direction=Direction.OUTPUT) for offset in self._offsets.values()}
-        self._request = gpiod.request_lines(self._chip_path, consumer=consumer, config=config)
+        self._request = gpiod.request_lines(self.CHIP_PATH, consumer=consumer, config=config)
 
     def set_value(self, key: str, value: int) -> None:
+        from gpiod.line import Value  # pylint: disable=import-outside-toplevel
         if self._request:
             self._request.set_value(self._offsets[key], Value.ACTIVE if value else Value.INACTIVE)
 
@@ -69,27 +81,16 @@ class GpioControllerV2:
             self._request = None
 
 
-def create_gpio_controller(chip_path: str, line_names: dict[str, str]) -> GpioControllerV1 | GpioControllerV2:
-    return GpioControllerV2(chip_path, line_names) if GPIOD_V2 else GpioControllerV1(chip_path, line_names)
-
-
-gpio: Optional[GpioControllerV1 | GpioControllerV2] = None
-
-JETPACK: Optional[int] = None
+DEFAULT_DEVICE = '/dev/tty.SLAB_USBtoUART'
 path = Path('/etc/nv_tegra_release')
 if path.exists() and (match := re.search(r'R(\d+)', path.read_text(encoding='utf-8'))):
     major = int(match.group(1))
     if major == 35:
-        JETPACK = 5
+        DEFAULT_DEVICE = '/dev/ttyTHS0'
     elif major == 36:
-        JETPACK = 6
+        DEFAULT_DEVICE = '/dev/ttyTHS1'
     else:
         raise RuntimeError(f'Unsupported L4T (Linux for Tegra) version: {major}')
-DEFAULT_DEVICE = {
-    5: '/dev/ttyTHS0',
-    6: '/dev/ttyTHS1',
-    None: '/dev/tty.SLAB_USBtoUART',
-}[JETPACK]
 
 parser = argparse.ArgumentParser(description='Flash and control an ESP32 microcontroller from a Jetson board')
 
@@ -118,40 +119,41 @@ BOOTLOADER = args.bootloader
 PARTITION_TABLE = args.partition_table
 FIRMWARE = args.firmware
 
-if JETPACK and gpiod:
-    line_names = {'en': 'PAC.06', 'g0': 'PR.04'} if SWAPPED else {'en': 'PR.04', 'g0': 'PAC.06'}
-    gpio = create_gpio_controller('gpiochip0', line_names)
+EN = 'PR.04'
+G0 = 'PAC.06'
+if SWAPPED:
+    EN, G0 = G0, EN
+gpio = {
+    None: GpioController,
+    1: GpioControllerV1,
+    2: GpioControllerV2,
+}[GPIOD_VERSION](EN, G0)
 
 
 @contextmanager
 def _pin_config() -> Generator[None, None, None]:
     """Configure the EN and G0 pins to control the microcontroller."""
-    if JETPACK and gpio:
-        print_bold('Configuring EN and G0 pins...')
-        gpio.request_outputs(consumer='espresso')
-        time.sleep(0.5)
+    print_bold('Configuring EN and G0 pins...')
+    gpio.request_outputs(consumer='espresso')
+    time.sleep(0.5)
     yield
-    if JETPACK and gpiod:
-        _release_pins()
+    _release_pins()
 
 
 def _release_pins() -> None:
     """Release pins."""
-    if JETPACK and gpio:
-        gpio.release()
+    gpio.release()
 
 
 @contextmanager
 def _flash_mode() -> Generator[None, None, None]:
     """Bring the microcontroller into flash mode."""
-    if JETPACK:
-        print_bold('Bringing the microcontroller into flash mode...')
-        set_en(ON)
-        set_g0(ON)
-        set_en(OFF)
+    print_bold('Bringing the microcontroller into flash mode...')
+    set_en(ON)
+    set_g0(ON)
+    set_en(OFF)
     yield
-    if JETPACK:
-        _reset()
+    _reset()
 
 
 def enable() -> None:
@@ -263,6 +265,8 @@ def print_fail(message: str) -> None:
 
 def main(command: str) -> None:
     print_ok('Espresso dry-running...' if DRY_RUN else 'Espresso running...')
+    if GPIOD_VERSION is None and not DRY_RUN:
+        print_fail('Module gpiod not found. Espresso is not able to control the EN and G0 pins.')
     if command == 'enable':
         enable()
     elif command == 'disable':
