@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import re
 import subprocess
 import sys
@@ -9,10 +11,69 @@ from pathlib import Path
 import argparse
 try:
     import gpiod
+    GPIOD_V2 = hasattr(gpiod, 'request_lines')
+    if GPIOD_V2:
+        from gpiod.line import Direction, Value
+    else:
+        Direction = None  # type: ignore[misc,assignment]
+        Value = None  # type: ignore[misc,assignment]
 except ImportError:
     gpiod = None  # type: ignore[assignment]
-    print('gpiod module not found. Please install it using "sudo apt install python3-gpiod". Ignore this error if you are not on a Jetson board.')
+    GPIOD_V2 = False
+    Direction = None  # type: ignore[misc,assignment]
+    Value = None  # type: ignore[misc,assignment]
+    print('gpiod module not found. Please install it using "sudo apt install python3-libgpiod". '
+          'Ignore this error if you are not on a Jetson board.')
 
+
+class GpioControllerV1:
+    """GPIO controller using gpiod v1 API."""
+
+    def __init__(self, chip_path: str, line_names: dict[str, str]) -> None:
+        chip = gpiod.Chip(chip_path.replace('/dev/', ''))
+        self._lines = {key: chip.find_line(name) for key, name in line_names.items()}
+
+    def request_outputs(self, consumer: str) -> None:
+        for line in self._lines.values():
+            line.request(consumer=consumer, type=gpiod.LINE_REQ_DIR_OUT)
+
+    def set_value(self, key: str, value: int) -> None:
+        self._lines[key].set_value(value)
+
+    def release(self) -> None:
+        for line in self._lines.values():
+            line.release()
+
+
+class GpioControllerV2:
+    """GPIO controller using gpiod v2 API."""
+
+    def __init__(self, chip_path: str, line_names: dict[str, str]) -> None:
+        self._chip_path = chip_path if chip_path.startswith('/dev/') else f'/dev/{chip_path}'
+        chip = gpiod.Chip(self._chip_path)
+        self._offsets = {key: chip.line_offset_from_id(name) for key, name in line_names.items()}
+        chip.close()
+        self._request = None
+
+    def request_outputs(self, consumer: str) -> None:
+        config = {offset: gpiod.LineSettings(direction=Direction.OUTPUT) for offset in self._offsets.values()}
+        self._request = gpiod.request_lines(self._chip_path, consumer=consumer, config=config)
+
+    def set_value(self, key: str, value: int) -> None:
+        if self._request:
+            self._request.set_value(self._offsets[key], Value.ACTIVE if value else Value.INACTIVE)
+
+    def release(self) -> None:
+        if self._request:
+            self._request.release()
+            self._request = None
+
+
+def create_gpio_controller(chip_path: str, line_names: dict[str, str]) -> GpioControllerV1 | GpioControllerV2:
+    return GpioControllerV2(chip_path, line_names) if GPIOD_V2 else GpioControllerV1(chip_path, line_names)
+
+
+gpio: Optional[GpioControllerV1 | GpioControllerV2] = None
 
 JETPACK: Optional[int] = None
 path = Path('/etc/nv_tegra_release')
@@ -57,32 +118,27 @@ BOOTLOADER = args.bootloader
 PARTITION_TABLE = args.partition_table
 FIRMWARE = args.firmware
 
-if JETPACK:
-    chip = gpiod.Chip('gpiochip0')
-    en = chip.find_line('PR.04')
-    g0 = chip.find_line('PAC.06')
-    if SWAPPED:
-        en, g0 = g0, en
+if JETPACK and gpiod:
+    line_names = {'en': 'PAC.06', 'g0': 'PR.04'} if SWAPPED else {'en': 'PR.04', 'g0': 'PAC.06'}
+    gpio = create_gpio_controller('gpiochip0', line_names)
 
 
 @contextmanager
 def _pin_config() -> Generator[None, None, None]:
     """Configure the EN and G0 pins to control the microcontroller."""
-    if JETPACK:
+    if JETPACK and gpio:
         print_bold('Configuring EN and G0 pins...')
-        en.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
-        g0.request(consumer='espresso', type=gpiod.LINE_REQ_DIR_OUT)
+        gpio.request_outputs(consumer='espresso')
         time.sleep(0.5)
     yield
-    if JETPACK:
+    if JETPACK and gpiod:
         _release_pins()
 
 
 def _release_pins() -> None:
     """Release pins."""
-    if JETPACK:
-        en.release()
-        g0.release()
+    if JETPACK and gpio:
+        gpio.release()
 
 
 @contextmanager
@@ -181,15 +237,15 @@ def run(*run_args: str) -> bool:
 
 def set_en(value: int) -> None:
     print(f'  Setting EN pin to {value}')
-    if not DRY_RUN:
-        en.set_value(value)
+    if not DRY_RUN and gpio:
+        gpio.set_value('en', value)
         time.sleep(0.5)
 
 
 def set_g0(value: int) -> None:
     print(f'  Setting G0 pin to {value}')
-    if not DRY_RUN:
-        g0.set_value(value)
+    if not DRY_RUN and gpio:
+        gpio.set_value('g0', value)
         time.sleep(0.5)
 
 
