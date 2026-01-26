@@ -49,6 +49,7 @@ enum ModuleType {
     temperature_sensor,
     proxy,
     rmd_axis,
+    serial_bus,
 };
 
 class Module;

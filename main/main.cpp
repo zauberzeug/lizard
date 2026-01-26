@@ -364,12 +364,17 @@ void process_line(const char *line, const int len) {
 void process_uart() {
     static char input[BUFFER_SIZE];
     while (true) {
-        int pos = uart_pattern_pop_pos(UART_NUM_0);
+        const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        len = check(input, len);
+        bool checksum_ok = true;
+        len = check(input, len, &checksum_ok);
+        if (!checksum_ok) {
+            echo("warning: Checksum mismatch while processing UART0");
+            continue;
+        }
         process_line(input, len);
     }
 }
