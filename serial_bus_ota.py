@@ -7,7 +7,7 @@ from pathlib import Path
 
 import serial
 
-CHUNK_SIZE = 165
+CHUNK_SIZE = 174
 WINDOW = 12
 READY_TIMEOUT = 10.0
 ACK_TIMEOUT = 8.0
@@ -111,7 +111,8 @@ def perform_ota(dev: serial.Serial, firmware: Path, target: int, expander: str |
             print(f'OTA did not complete cleanly: {done}')
             return False
 
-        print(f'OTA finished in {time.time() - started:.1f}s')
+        print(f'OTA finished in {time.time() - started:.1f}s, restarting node...')
+        send(dev, f'bus.send({target},"core.restart()")')
         return True
     finally:
         if expander:

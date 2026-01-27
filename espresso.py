@@ -202,16 +202,35 @@ def erase() -> None:
                 raise RuntimeError('Failed to erase flash.')
 
 
+def parse_ota_partition() -> tuple[str, str]:
+    """Parse partitions.csv to find the OTA data partition offset and size."""
+    partitions_path = Path(__file__).parent / 'partitions.csv'
+    if partitions_path.exists():
+        for line in partitions_path.read_text().splitlines():
+            line = line.split('#')[0].strip()
+            if not line:
+                continue
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) >= 5 and parts[1] == 'data' and parts[2] == 'ota':
+                offset = parts[3]
+                size = parts[4]
+                if size.endswith('K'):
+                    size = hex(int(size[:-1]) * 1024)
+                return offset, size
+    return '0xf000', '0x2000'
+
+
 def reset_ota_partition() -> None:
     """Reset the OTA partition to the default state."""
     print_bold('Resetting OTA partition to OTA 0...')
+    offset, size = parse_ota_partition()
     success = run(
         'esptool.py',
         '--chip', args.chip,
         '--port', DEVICE,
         '--baud', '115200',
         'erase_region',
-        '0xf000', '0x2000',
+        offset, size,
     )
     if not success:
         raise RuntimeError('Failed to reset OTA partition.')
