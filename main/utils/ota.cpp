@@ -97,7 +97,6 @@ void bus_reset_session(BusOtaSession &session, bool abort_flash) {
     session.partition = nullptr;
     session.next_seq = 0;
     session.bytes_written = 0;
-    session.declared_size = 0;
     session.last_activity = 0;
 }
 
@@ -111,27 +110,13 @@ bool bus_handle_frame(BusOtaSession &session, uint8_t sender, std::string_view p
             return fail(session, "busy", false);
         }
 
-        std::string_view size_view;
-        if (payload.size() > std::strlen(OTA_BEGIN_PREFIX) && payload[std::strlen(OTA_BEGIN_PREFIX)] == ':') {
-            size_view = payload.substr(std::strlen(OTA_BEGIN_PREFIX) + 1);
-        }
-
-        unsigned long declared_size = 0;
-        if (!size_view.empty()) {
-            if (!is_decimal(size_view)) {
-                return fail(session, "size_invalid", false);
-            }
-            declared_size = std::strtoul(std::string(size_view).c_str(), nullptr, 10);
-        }
-
         const esp_partition_t *partition = esp_ota_get_next_update_partition(nullptr);
         if (!partition) {
             return fail(session, "no_partition", false);
         }
 
         esp_ota_handle_t handle = 0;
-        const esp_err_t result = esp_ota_begin(partition, OTA_SIZE_UNKNOWN, &handle);
-        if (result != ESP_OK) {
+        if (esp_ota_begin(partition, OTA_SIZE_UNKNOWN, &handle) != ESP_OK) {
             return fail(session, "begin_failed", false);
         }
 
@@ -140,10 +125,9 @@ bool bus_handle_frame(BusOtaSession &session, uint8_t sender, std::string_view p
         session.partition = partition;
         session.next_seq = 1;
         session.bytes_written = 0;
-        session.declared_size = declared_size;
         session.last_activity = millis();
 
-        echo("serial bus %s ota start from %u, size %lu", session.bus_name, sender, declared_size);
+        echo("serial bus %s ota start from %u", session.bus_name, sender);
         set_response(session, OTA_READY_PREFIX, session.next_seq, BUS_OTA_CHUNK_SIZE);
         return true;
     }
@@ -158,9 +142,6 @@ bool bus_handle_frame(BusOtaSession &session, uint8_t sender, std::string_view p
     if (starts_with(payload, OTA_COMMIT_PREFIX)) {
         if (session.handle == 0 || session.sender != sender) {
             return fail(session, "no_session", false);
-        }
-        if (session.declared_size > 0 && session.bytes_written != session.declared_size) {
-            return fail(session, "size_mismatch");
         }
         if (esp_ota_end(session.handle) != ESP_OK) {
             return fail(session, "end_failed");
@@ -205,9 +186,6 @@ bool bus_handle_frame(BusOtaSession &session, uint8_t sender, std::string_view p
         size_t decoded_len = 0;
         if (!decode_base64_chunk(data_view, buffer, decoded_len) || decoded_len == 0) {
             return fail(session, "chunk_decode");
-        }
-        if (session.declared_size > 0 && session.bytes_written + decoded_len > session.declared_size) {
-            return fail(session, "size_overrun");
         }
         if (esp_ota_write(session.handle, buffer.data(), decoded_len) != ESP_OK) {
             return fail(session, "write_failed");

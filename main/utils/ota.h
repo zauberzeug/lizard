@@ -28,7 +28,6 @@ struct BusOtaSession {
     const esp_partition_t *partition = nullptr;
     uint32_t next_seq = 0;
     size_t bytes_written = 0;
-    size_t declared_size = 0;
     unsigned long last_activity = 0;
     const char *bus_name = nullptr;
     char response[OTA_RESPONSE_SIZE] = {};

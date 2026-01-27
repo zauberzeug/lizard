@@ -52,7 +52,7 @@ def perform_ota(dev: serial.Serial, firmware: Path, target: int, expander: str |
         dev.reset_input_buffer()
 
     try:
-        send(dev, f'bus.send({target},"__OTA_BEGIN__:{file_size}")')
+        send(dev, f'bus.send({target},"__OTA_BEGIN__")')
         ready = wait_for_status(dev, '__OTA_READY__', READY_TIMEOUT)
         if not ready or ready.startswith('__OTA_ERROR__'):
             print(f'Device rejected OTA: {ready}')
