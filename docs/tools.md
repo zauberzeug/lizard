@@ -41,12 +41,26 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 `serial_bus_ota.py` pushes firmware to a peer over a `SerialBus` coordinator.
 
 ```bash
-./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--chunk-size 162] [--window 12] [--expander p0]
+./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--expander <name>]
 ```
 
-- Chunk size: defaults to 162 bytes so OTA payloads survive expander hops; peers may advertise a higher cap (up to 174) in `__OTA_READY__`, and the host clamps to whatever they report.
-- Window: defaults to 12 for expander chains; only raise it if you have a clean single-hop link and need extra throughput.
-- Expander hop: pass `--expander <name>` (e.g. `p0`) when the coordinator sits behind an expander; the script pauses broadcasts on that expander via `core.pause_broadcasts()` before the transfer and resumes afterwards to keep the UART link clear.
+| Argument              | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `firmware`            | Path to the firmware binary (e.g. `build/lizard.bin`) |
+| `--port`              | Serial port (default: `/dev/ttyUSB0`)                |
+| `--baud`              | Baudrate (default: `115200`)                         |
+| `--id`                | Bus ID of the target node (required)                 |
+| `--expander`          | Expander name when coordinator is behind an expander |
+
+**Expander chains:** When the SerialBus coordinator sits behind an expander (e.g. `p0`), pass `--expander p0`. The script will pause broadcasts on that expander via `core.pause_broadcasts()` before the transfer and resume them afterwards to keep the UART link clear.
+
+**Example with expander:**
+
+```bash
+./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id 1 --expander p0
+```
+
+This flashes node 1 through expander `p0`. The target node will reboot with the new firmware after a successful transfer.
 
 ### Configure
 

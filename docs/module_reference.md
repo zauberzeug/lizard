@@ -84,6 +84,8 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
 
+**Firmware Updates:** Peers on the serial bus can be updated remotely via the coordinator. Use the `serial_bus_ota.py` tool to push new firmware to any peer node. See [Bus OTA](tools.md#bus-ota) for details.
+
 ## Input
 
 The input module is associated with a digital input pin that is be connected to a pushbutton, sensor or other input signal.
