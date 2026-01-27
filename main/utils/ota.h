@@ -3,7 +3,6 @@
 #include "esp_ota_ops.h"
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <string_view>
 
 namespace ota {
@@ -21,6 +20,8 @@ constexpr size_t BUS_OTA_CHUNK_SIZE = 174;
 constexpr size_t BUS_OTA_BUFFER_SIZE = 256;
 constexpr unsigned long BUS_OTA_SESSION_TIMEOUT_MS = 10000;
 
+constexpr size_t OTA_RESPONSE_SIZE = 64;
+
 struct BusOtaSession {
     uint8_t sender = 0;
     esp_ota_handle_t handle = 0;
@@ -29,21 +30,15 @@ struct BusOtaSession {
     size_t bytes_written = 0;
     size_t declared_size = 0;
     unsigned long last_activity = 0;
+    const char *bus_name = nullptr;
+    char response[OTA_RESPONSE_SIZE] = {};
+    size_t response_length = 0;
 };
-
-using SendCallback = std::function<void(uint8_t receiver, const char *payload, size_t length)>;
 
 void bus_reset_session(BusOtaSession &session, bool abort_flash = true);
 
-bool bus_handle_frame(BusOtaSession &session,
-                      uint8_t sender,
-                      std::string_view payload,
-                      const char *bus_name,
-                      const SendCallback &send_cb);
+bool bus_handle_frame(BusOtaSession &session, uint8_t sender, std::string_view payload);
 
-void bus_tick(BusOtaSession &session,
-              unsigned long now_ms,
-              const char *bus_name,
-              const SendCallback &send_cb);
+void bus_tick(BusOtaSession &session, unsigned long now_ms);
 
 } // namespace ota
