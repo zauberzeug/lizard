@@ -1,5 +1,6 @@
 #include "serial_bus.h"
 
+#include "../utils/bus_backup.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -46,6 +47,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     }
 
     register_echo_callback([this](const char *line) { this->handle_echo(line); });
+
+    bus_backup::save(serial->tx_pin, serial->rx_pin, serial->baud_rate, serial->uart_num, node_id);
 }
 
 void SerialBus::step() {

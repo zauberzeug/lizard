@@ -1,6 +1,7 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
+#include "../utils/bus_backup.h"
 #include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -163,6 +164,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             echo("Not a strapping pin");
             break;
         }
+    } else if (method_name == "delete_bus_backup") {
+        Module::expect(arguments, 0);
+        bus_backup::remove();
     } else {
         Module::call(method_name, arguments);
     }
