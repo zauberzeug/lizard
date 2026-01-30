@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../utils/ota.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -43,6 +44,7 @@ private:
     size_t poll_index = 0;
     uint8_t requesting_node = 0;
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
+    ota::BusOtaSession ota_session;
 
     [[noreturn]] static void communication_loop(void *param);
     void process_uart();

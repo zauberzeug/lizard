@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+import csv
 import re
 import subprocess
 import sys
 import time
 from contextlib import contextmanager
-from typing import Generator
 from pathlib import Path
+from typing import Generator
 import argparse
 
 try:
@@ -102,6 +103,7 @@ parser.add_argument('--swap', action='store_true', help='Swap En and G0 pins for
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
+parser.add_argument('--reset-ota', action='store_true', help='Erase OTA data/slot info after flashing')
 parser.add_argument('--device', nargs='?', default=DEFAULT_DEVICE, help='Serial device path (auto-detected on Jetson)')
 
 args = parser.parse_args()
@@ -201,6 +203,36 @@ def erase() -> None:
                 raise RuntimeError('Failed to erase flash.')
 
 
+def parse_ota_partition() -> tuple[str, str]:
+    """Parse partitions.csv to find the OTA data partition offset and size."""
+    partitions_path = Path(__file__).parent / 'partitions.csv'
+    if partitions_path.exists():
+        with partitions_path.open() as f:
+            for row in csv.reader(f, skipinitialspace=True):
+                if len(row) >= 5 and not row[0].startswith('#') and row[1] == 'data' and row[2] == 'ota':
+                    offset, size = row[3:5]
+                    if size.endswith('K'):
+                        size = hex(int(size[:-1]) * 1024)
+                    return offset, size
+    return '0xf000', '0x2000'
+
+
+def reset_ota_partition() -> None:
+    """Reset the OTA partition to the default state."""
+    print_bold('Resetting OTA partition to OTA 0...')
+    offset, size = parse_ota_partition()
+    success = run(
+        'esptool.py',
+        '--chip', args.chip,
+        '--port', DEVICE,
+        '--baud', '115200',
+        'erase_region',
+        offset, size,
+    )
+    if not success:
+        raise RuntimeError('Failed to reset OTA partition.')
+
+
 def flash() -> None:
     """Flash the microcontroller."""
     print_bold('Flashing...')
@@ -224,6 +256,8 @@ def flash() -> None:
             )
             if not success:
                 raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
+            if args.reset_ota:
+                reset_ota_partition()
 
 
 def run(*run_args: str) -> bool:

@@ -1,5 +1,6 @@
 #include "serial_bus.h"
 
+#include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -46,6 +47,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     }
 
     register_echo_callback([this](const char *line) { this->handle_echo(line); });
+
+    this->ota_session.bus_name = this->name.c_str();
 }
 
 void SerialBus::step() {
@@ -53,6 +56,17 @@ void SerialBus::step() {
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_incoming_message(message);
     }
+
+    if (this->ota_session.handle != 0) {
+        ota::bus_tick(this->ota_session, millis());
+        if (this->ota_session.response_length > 0) {
+            this->enqueue_outgoing_message(this->ota_session.sender,
+                                           this->ota_session.response,
+                                           this->ota_session.response_length);
+            this->ota_session.response_length = 0;
+        }
+    }
+
     Module::step();
 }
 
@@ -202,6 +216,19 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     // echo messages from communication task (node_id == sender == receiver)
     if (this->node_id == message.sender && this->node_id == message.receiver) {
         echo("%s", message.payload);
+        return;
+    }
+
+    // Handle OTA frames (check prefix first to avoid function call overhead for regular messages)
+    std::string_view payload_view(message.payload, message.length);
+    if (payload_view.substr(0, 6) == "__OTA_" &&
+        ota::bus_handle_frame(this->ota_session, message.sender, payload_view)) {
+        if (this->ota_session.response_length > 0) {
+            this->enqueue_outgoing_message(message.sender,
+                                           this->ota_session.response,
+                                           this->ota_session.response_length);
+            this->ota_session.response_length = 0;
+        }
         return;
     }
 

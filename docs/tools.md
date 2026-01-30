@@ -36,6 +36,36 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
+### Bus OTA
+
+`serial_bus_ota.py` pushes firmware to a peer over a `SerialBus` coordinator.
+
+```bash
+./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--expander <name>]
+```
+
+| Argument     | Description                                           |
+| ------------ | ----------------------------------------------------- |
+| `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`) |
+| `--port`     | Serial port (default: `/dev/ttyUSB0`)                 |
+| `--baud`     | Baudrate (default: `115200`)                          |
+| `--id`       | Bus ID of the target node (required)                  |
+| `--expander` | Expander name when coordinator is behind an expander  |
+
+**Expander chains:**
+When the SerialBus coordinator sits behind an expander (e.g. `p0`), pass `--expander p0`.
+The script will pause broadcasts on that expander via `core.pause_broadcasts()` before the transfer
+and resume them afterwards to keep the UART link clear.
+
+**Example with expander:**
+
+```bash
+./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id 1 --expander p0
+```
+
+This flashes node 1 through expander `p0`.
+The target node will reboot with the new firmware after a successful transfer.
+
 ### Configure
 
 Use the configure script to send a new startup script to the microcontroller.
