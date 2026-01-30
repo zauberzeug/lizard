@@ -35,9 +35,7 @@ struct BusOtaSession {
 };
 
 void bus_reset_session(BusOtaSession &session, bool abort_flash = true);
-
 bool bus_handle_frame(BusOtaSession &session, uint8_t sender, std::string_view payload);
-
 void bus_tick(BusOtaSession &session, unsigned long now_ms);
 
 } // namespace ota

@@ -20,19 +20,18 @@ static bool is_decimal(std::string_view value) {
     if (value.empty()) {
         return false;
     }
-    return std::all_of(value.begin(), value.end(),
-                       [](char c) { return std::isdigit(static_cast<unsigned char>(c)); });
+    return std::all_of(value.begin(), value.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); });
 }
-
 
 static bool decode_base64_chunk(std::string_view input, std::array<uint8_t, BUS_OTA_BUFFER_SIZE> &output, size_t &out_len) {
     auto decode_char = [](char c) -> int {
-        return (c >= 'A' && c <= 'Z') ? c - 'A' : (c >= 'a' && c <= 'z') ? c - 'a' + 26
-                                              : (c >= '0' && c <= '9')   ? c - '0' + 52
-                                              : (c == '+')               ? 62
-                                              : (c == '/')               ? 63
-                                              : (c == '=')               ? -1
-                                                                         : -2;
+        return (c >= 'A' && c <= 'Z')   ? c - 'A'
+               : (c >= 'a' && c <= 'z') ? c - 'a' + 26
+               : (c >= '0' && c <= '9') ? c - '0' + 52
+               : (c == '+')             ? 62
+               : (c == '/')             ? 63
+               : (c == '=')             ? -1
+                                        : -2;
     };
 
     out_len = 0;

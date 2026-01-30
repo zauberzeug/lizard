@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <vector>
 
-
 class SerialBus : public Module {
 public:
     static constexpr size_t PAYLOAD_CAPACITY = 256;

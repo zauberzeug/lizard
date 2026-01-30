@@ -143,6 +143,7 @@ void SerialBus::process_uart() {
             continue;
         }
 
+        // parse message
         IncomingMessage message;
         if (!this->parse_message(buffer, message)) {
             this->print_to_incoming_queue("warning: serial bus %s could not parse message: %s", this->name.c_str(), buffer);
@@ -282,7 +283,6 @@ bool SerialBus::send_outgoing_queue() {
     }
     return sent_any;
 }
-
 
 void SerialBus::send_message(uint8_t receiver, const char *payload, size_t length) const {
     static char buffer[FRAME_BUFFER_SIZE];
