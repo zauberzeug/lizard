@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+import csv
 import re
 import subprocess
 import sys
 import time
 from contextlib import contextmanager
-from typing import Generator
 from pathlib import Path
+from typing import Generator
 import argparse
 
 try:
@@ -206,17 +207,13 @@ def parse_ota_partition() -> tuple[str, str]:
     """Parse partitions.csv to find the OTA data partition offset and size."""
     partitions_path = Path(__file__).parent / 'partitions.csv'
     if partitions_path.exists():
-        for line in partitions_path.read_text().splitlines():
-            line = line.split('#')[0].strip()
-            if not line:
-                continue
-            parts = [p.strip() for p in line.split(',')]
-            if len(parts) >= 5 and parts[1] == 'data' and parts[2] == 'ota':
-                offset = parts[3]
-                size = parts[4]
-                if size.endswith('K'):
-                    size = hex(int(size[:-1]) * 1024)
-                return offset, size
+        with partitions_path.open() as f:
+            for row in csv.reader(f, skipinitialspace=True):
+                if len(row) >= 5 and not row[0].startswith('#') and row[1] == 'data' and row[2] == 'ota':
+                    offset, size = row[3:5]
+                    if size.endswith('K'):
+                        size = hex(int(size[:-1]) * 1024)
+                    return offset, size
     return '0xf000', '0x2000'
 
 
