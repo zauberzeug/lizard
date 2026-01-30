@@ -315,6 +315,34 @@ Note that the individual sensors need to be calibrated before the compensated an
 | Magnetometer  | Move the sensor in a figure-8 pattern in space         |
 | Gyroscope     | Keep the sensor still for a few seconds                |
 
+## IMU BNO085
+
+The IMU BNO085 module provides access to a Bosch BNO085 9-axis absolute orientation sensor over the shared I²C bus.
+This module uses the same API as the [IMU](#imu) module but offers improved fusion quality and additional reports.
+
+| Constructor                                                                         | Description | Arguments |
+| ----------------------------------------------------------------------------------- | ----------- | --------- |
+| `imu = ImuBno085([port[, sda[, scl[, int[, rst[, address[, clk]]]]]]])`             | See below   | `int`s    |
+
+The constructor expects up to seven arguments:
+
+- `port`: I²C port number (default: 0)
+- `sda`: SDA pin (default matches target, e.g. 21 on ESP32)
+- `scl`: SCL pin (default matches target, e.g. 22 on ESP32)
+- `int`: Interrupt pin (default: 26)
+- `rst`: Reset pin (default: 32)
+- `address`: I²C address (default: `0x4A`)
+- `clk`: I²C clock in Hz (default: `400000`)
+
+The properties and methods are identical to the [IMU](#imu) module, providing the same interface for compatibility.
+The BNO085 offers improved accuracy and better sensor fusion algorithms compared to the BNO055.
+
+| Methods              | Description                   | Arguments |
+| -------------------- | ----------------------------- | --------- |
+| `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
+
+The `mode` parameter supports the same modes as the [IMU](#imu) module.
+
 ## CAN interface
 
 The CAN module allows communicating with peripherals on the specified CAN bus.
