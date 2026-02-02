@@ -16,9 +16,13 @@
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 #define SPEED_MODE LEDC_LOW_SPEED_MODE
 #define SPEED_OUT_IDX LEDC_LS_SIG_OUT0_IDX
+#define DUTY_RESOLUTION LEDC_TIMER_2_BIT
+#define DUTY_VALUE 2  // 50% of max 3 with 2-bit resolution
 #else
 #define SPEED_MODE LEDC_HIGH_SPEED_MODE
 #define SPEED_OUT_IDX LEDC_HS_SIG_OUT0_IDX
+#define DUTY_RESOLUTION LEDC_TIMER_1_BIT
+#define DUTY_VALUE 1  // 50% of max 1 with 1-bit resolution
 #endif
 
 REGISTER_MODULE_DEFAULTS(StepperMotor)
@@ -70,13 +74,16 @@ StepperMotor::StepperMotor(const std::string name,
 
     ledc_timer_config_t timer_config = {
         .speed_mode = SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_1_BIT,
+        .duty_resolution = DUTY_RESOLUTION,
         .timer_num = this->ledc_timer,
         .freq_hz = 1000,
         .clk_cfg = LEDC_AUTO_CLK,
         .deconfigure = false,
     };
-    ledc_timer_config(&timer_config);
+    esp_err_t err = ledc_timer_config(&timer_config);
+    if (err != ESP_OK) {
+        throw std::runtime_error("failed to configure LEDC timer: " + std::string(esp_err_to_name(err)));
+    }
 
     ledc_channel_config_t channel_config = {
         .gpio_num = step_pin,
@@ -88,7 +95,10 @@ StepperMotor::StepperMotor(const std::string name,
         .hpoint = 0,
         .flags = {},
     };
-    ledc_channel_config(&channel_config);
+    err = ledc_channel_config(&channel_config);
+    if (err != ESP_OK) {
+        throw std::runtime_error("failed to configure LEDC channel: " + std::string(esp_err_to_name(err)));
+    }
 
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
@@ -113,7 +123,7 @@ void StepperMotor::set_state(StepperState new_state) {
     this->properties.at("idle")->boolean_value = (new_state == Idle);
 
     gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : SPEED_OUT_IDX + this->ledc_channel, 0, 0);
-    ledc_set_duty(SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
+    ledc_set_duty(SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : DUTY_VALUE);
     ledc_update_duty(SPEED_MODE, this->ledc_channel);
 }
 
