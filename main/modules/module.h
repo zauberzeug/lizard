@@ -66,9 +66,9 @@ protected:
     std::map<std::string, Variable_ptr> properties;
     bool output_on = false;
     bool broadcast = false;
-    static bool broadcast_paused;
 
 public:
+    static bool broadcast_paused;
     const ModuleType type;
     const std::string name;
 
@@ -78,8 +78,6 @@ public:
                              const std::string name,
                              const std::vector<ConstExpression_ptr> arguments,
                              MessageHandler message_handler);
-    static void set_broadcast_paused(bool paused);
-    static bool is_broadcast_paused();
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     static void register_defaults(const std::string &type_name, DefaultsFunction defaults_function);

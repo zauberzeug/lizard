@@ -457,14 +457,6 @@ void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *d
     throw std::runtime_error("CAN message handler is not implemented");
 }
 
-void Module::set_broadcast_paused(bool paused) {
-    Module::broadcast_paused = paused;
-}
-
-bool Module::is_broadcast_paused() {
-    return Module::broadcast_paused;
-}
-
 DefaultsRegistry &Module::get_defaults_registry() {
     static DefaultsRegistry defaults_registry;
     return defaults_registry;

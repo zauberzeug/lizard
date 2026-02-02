@@ -1,7 +1,6 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
-#include "../utils/ota.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -157,11 +156,11 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
     } else if (method_name == "pause_broadcasts") {
         Module::expect(arguments, 0);
-        Module::set_broadcast_paused(true);
+        Module::broadcast_paused = true;
         echo("broadcasts paused");
     } else if (method_name == "resume_broadcasts") {
         Module::expect(arguments, 0);
-        Module::set_broadcast_paused(false);
+        Module::broadcast_paused = false;
         echo("broadcasts resumed");
     } else {
         Module::call(method_name, arguments);

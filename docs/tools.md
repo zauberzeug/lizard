@@ -36,12 +36,12 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
-### Bus OTA
+### Bus OTB (Over The Bus)
 
-`serial_bus_ota.py` pushes firmware to a peer over a `SerialBus` coordinator.
+`serial_bus_ota.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB protocol.
 
 ```bash
-./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--expander <name>]
+./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--bus <name>] [--expander <name>]
 ```
 
 | Argument     | Description                                           |
@@ -50,6 +50,7 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 | `--port`     | Serial port (default: `/dev/ttyUSB0`)                 |
 | `--baud`     | Baudrate (default: `115200`)                          |
 | `--id`       | Bus ID of the target node (required)                  |
+| `--bus`      | Name of the SerialBus module (default: `bus`)         |
 | `--expander` | Expander name when coordinator is behind an expander  |
 
 **Expander chains:**
@@ -65,6 +66,44 @@ and resume them afterwards to keep the UART link clear.
 
 This flashes node 1 through expander `p0`.
 The target node will reboot with the new firmware after a successful transfer.
+
+**OTB Protocol:**
+
+The OTB (Over The Bus) protocol uses these message types:
+
+| Message                      | Direction     | Description                                    |
+| ---------------------------- | ------------- | ---------------------------------------------- |
+| `__OTB_BEGIN__`              | Host → Target | Start firmware update session                  |
+| `__OTB_CHUNK__:seq:data`     | Host → Target | Send base64-encoded firmware chunk             |
+| `__OTB_COMMIT__`             | Host → Target | Finalize update and set boot partition         |
+| `__OTB_ABORT__`              | Host → Target | Cancel the update session                      |
+| `__OTB_ACK__:seq:bytes`      | Target → Host | Acknowledge (contains sequence and byte count) |
+| `__OTB_ERROR__:reason`       | Target → Host | Error response with reason code                |
+
+**Protocol flow:**
+
+```
+Host                          Target
+  |                              |
+  |--- __OTB_BEGIN__ ----------->|
+  |<-- __OTB_ACK__:1:174 --------|  (next_seq=1, chunk_size=174)
+  |                              |
+  |--- __OTB_CHUNK__:1:... ----->|
+  |<-- __OTB_ACK__:1:174 --------|  (seq=1, bytes_written=174)
+  |                              |
+  |--- __OTB_CHUNK__:2:... ----->|
+  |<-- __OTB_ACK__:2:348 --------|  (seq=2, bytes_written=348)
+  |                              |
+  |        ... more chunks ...   |
+  |                              |
+  |--- __OTB_COMMIT__ ---------->|
+  |<-- __OTB_ACK__:N:total ------|  (final seq, total bytes)
+  |                              |
+```
+
+On error at any point, the target responds with `__OTB_ERROR__:reason` where reason can be:
+`busy`, `no_partition`, `begin_failed`, `no_session`, `aborted`, `end_failed`, `boot_failed`,
+`chunk_format`, `chunk_parts`, `chunk_seq`, `chunk_order`, `chunk_decode`, `write_failed`, `timeout`.
 
 ### Configure
 
