@@ -72,34 +72,42 @@ The target node will reboot with the new firmware after a successful transfer.
 
 The OTB (Over The Bus) protocol uses these message types:
 
-| Message                  | Direction     | Description                                    |
-| ------------------------ | ------------- | ---------------------------------------------- |
-| `__OTB_BEGIN__`          | Host → Target | Start firmware update session                  |
-| `__OTB_CHUNK__:seq:data` | Host → Target | Send base64-encoded firmware chunk             |
-| `__OTB_COMMIT__`         | Host → Target | Finalize update and set boot partition         |
-| `__OTB_ABORT__`          | Host → Target | Cancel the update session                      |
-| `__OTB_ACK__:seq:bytes`  | Host ← Target | Acknowledge (contains sequence and byte count) |
-| `__OTB_ERROR__:reason`   | Host ← Target | Error response with reason code                |
+| Host → Target              |
+| -------------------------- | ---------------------------------------------------------- |
+| `__OTB_BEGIN__`            | Begin firmware update session                              |
+| `__OTB_CHUNK_<seq>__:data` | Send base64-encoded firmware chunk (incl. sequence number) |
+| `__OTB_COMMIT__`           | Commit update and set boot partition                       |
+| `__OTB_ABORT__`            | Cancel the update session                                  |
+
+| Host ← Target                  | Description                               |
+| ------------------------------ | ----------------------------------------- |
+| `__OTB_ACK_BEGIN__`            | Acknowledge begin                         |
+| `__OTB_ACK_CHUNK_<seq>__:data` | Acknowledge chunk (incl. sequence number) |
+| `__OTB_ACK_COMMIT__`           | Acknowledge commit                        |
+| `__OTB_ERROR__:reason`         | Error response with reason code           |
 
 **Protocol flow:**
 
 ```
-Host                          Target
-  |                              |
-  |--- __OTB_BEGIN__ ----------->|
-  |<-- __OTB_ACK__:1:174 --------|  (next_seq=1, chunk_size=174)
-  |                              |
-  |--- __OTB_CHUNK__:1:... ----->|
-  |<-- __OTB_ACK__:1:174 --------|  (seq=1, bytes_written=174)
-  |                              |
-  |--- __OTB_CHUNK__:2:... ----->|
-  |<-- __OTB_ACK__:2:348 --------|  (seq=2, bytes_written=348)
-  |                              |
-  |        ... more chunks ...   |
-  |                              |
-  |--- __OTB_COMMIT__ ---------->|
-  |<-- __OTB_ACK__:N:total ------|  (final seq, total bytes)
-  |                              |
+Host                            Target
+  |                                |
+  |--- __OTB_BEGIN__ ------------->|
+  |<-- __OTB_ACK_BEGIN__ ----------|
+  |                                |
+  |--- __OTB_CHUNK_<0>__:... ----->|
+  |<-- __OTB_ACK_<0>__ ------------|
+  |                                |
+  |--- __OTB_CHUNK_<1>__:... ----->|
+  |<-- __OTB_ACK_<1>__ ------------|
+  |                                |
+  |       ... more chunks ...      |
+  |                                |
+  |--- __OTB_CHUNK_<N-1>__:... --->|
+  |<-- __OTB_ACK_<N-1>__ ----------|
+  |                                |
+  |--- __OTB_COMMIT__ ------------>|
+  |<-- __OTB_ACK_COMMIT -----------|
+  |                                |
 ```
 
 On error at any point, the target responds with `__OTB_ERROR__:reason` where reason can be:
