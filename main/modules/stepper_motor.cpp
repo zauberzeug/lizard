@@ -9,6 +9,12 @@
 
 #define MIN_SPEED 490
 
+static void check_error(esp_err_t err, const char *msg) {
+    if (err != ESP_OK) {
+        throw std::runtime_error(std::string(msg) + ": " + esp_err_to_name(err));
+    }
+}
+
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 #define SPEED_MODE LEDC_LOW_SPEED_MODE
 #define SPEED_OUT_IDX LEDC_LS_SIG_OUT0_IDX
@@ -50,18 +56,12 @@ StepperMotor::StepperMotor(const std::string name,
     pcnt_unit_config_t unit_config = {};
     unit_config.high_limit = 30000;
     unit_config.low_limit = -30000;
-    esp_err_t err = pcnt_new_unit(&unit_config, &this->pcnt_unit);
-    if (err != ESP_OK) {
-        throw std::runtime_error("failed to create PCNT unit: " + std::string(esp_err_to_name(err)));
-    }
+    check_error(pcnt_new_unit(&unit_config, &this->pcnt_unit), "failed to create PCNT unit");
 
     pcnt_chan_config_t chan_config = {};
     chan_config.edge_gpio_num = step_pin;
     chan_config.level_gpio_num = dir_pin;
-    err = pcnt_new_channel(this->pcnt_unit, &chan_config, &this->pcnt_channel);
-    if (err != ESP_OK) {
-        throw std::runtime_error("failed to create PCNT channel: " + std::string(esp_err_to_name(err)));
-    }
+    check_error(pcnt_new_channel(this->pcnt_unit, &chan_config, &this->pcnt_channel), "failed to create PCNT channel");
 
     pcnt_channel_set_edge_action(this->pcnt_channel,
                                  PCNT_CHANNEL_EDGE_ACTION_INCREASE,
@@ -83,10 +83,7 @@ StepperMotor::StepperMotor(const std::string name,
         .clk_cfg = LEDC_AUTO_CLK,
         .deconfigure = false,
     };
-    err = ledc_timer_config(&timer_config);
-    if (err != ESP_OK) {
-        throw std::runtime_error("failed to configure LEDC timer: " + std::string(esp_err_to_name(err)));
-    }
+    check_error(ledc_timer_config(&timer_config), "failed to configure LEDC timer");
 
     ledc_channel_config_t channel_config = {
         .gpio_num = step_pin,
@@ -98,10 +95,7 @@ StepperMotor::StepperMotor(const std::string name,
         .hpoint = 0,
         .flags = {},
     };
-    err = ledc_channel_config(&channel_config);
-    if (err != ESP_OK) {
-        throw std::runtime_error("failed to configure LEDC channel: " + std::string(esp_err_to_name(err)));
-    }
+    check_error(ledc_channel_config(&channel_config), "failed to configure LEDC channel");
 
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
