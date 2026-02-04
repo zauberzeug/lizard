@@ -54,6 +54,7 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 | `--expander` | Expander name when coordinator is behind an expander  |
 
 **Expander chains:**
+
 When the SerialBus coordinator sits behind an expander (e.g. `p0`), pass `--expander p0`.
 The script will pause broadcasts on that expander via `core.pause_broadcasts()` before the transfer
 and resume them afterwards to keep the UART link clear.
@@ -77,8 +78,8 @@ The OTB (Over The Bus) protocol uses these message types:
 | `__OTB_CHUNK__:seq:data` | Host → Target | Send base64-encoded firmware chunk             |
 | `__OTB_COMMIT__`         | Host → Target | Finalize update and set boot partition         |
 | `__OTB_ABORT__`          | Host → Target | Cancel the update session                      |
-| `__OTB_ACK__:seq:bytes`  | Target → Host | Acknowledge (contains sequence and byte count) |
-| `__OTB_ERROR__:reason`   | Target → Host | Error response with reason code                |
+| `__OTB_ACK__:seq:bytes`  | Host ← Target | Acknowledge (contains sequence and byte count) |
+| `__OTB_ERROR__:reason`   | Host ← Target | Error response with reason code                |
 
 **Protocol flow:**
 
