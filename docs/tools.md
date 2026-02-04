@@ -36,12 +36,12 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
-### Bus OTB (Over The Bus)
+### OTB Update
 
-`serial_bus_ota.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB protocol.
+`otb_update.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB protocol.
 
 ```bash
-./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--bus <name>] [--expander <name>]
+./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--bus <name>] [--expander <name>]
 ```
 
 | Argument     | Description                                           |
@@ -61,7 +61,7 @@ and resume them afterwards to keep the UART link clear.
 **Example with expander:**
 
 ```bash
-./serial_bus_ota.py build/lizard.bin --port /dev/ttyUSB0 --id 1 --expander p0
+./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --id 1 --expander p0
 ```
 
 This flashes node 1 through expander `p0`.
@@ -71,14 +71,14 @@ The target node will reboot with the new firmware after a successful transfer.
 
 The OTB (Over The Bus) protocol uses these message types:
 
-| Message                      | Direction     | Description                                    |
-| ---------------------------- | ------------- | ---------------------------------------------- |
-| `__OTB_BEGIN__`              | Host → Target | Start firmware update session                  |
-| `__OTB_CHUNK__:seq:data`     | Host → Target | Send base64-encoded firmware chunk             |
-| `__OTB_COMMIT__`             | Host → Target | Finalize update and set boot partition         |
-| `__OTB_ABORT__`              | Host → Target | Cancel the update session                      |
-| `__OTB_ACK__:seq:bytes`      | Target → Host | Acknowledge (contains sequence and byte count) |
-| `__OTB_ERROR__:reason`       | Target → Host | Error response with reason code                |
+| Message                  | Direction     | Description                                    |
+| ------------------------ | ------------- | ---------------------------------------------- |
+| `__OTB_BEGIN__`          | Host → Target | Start firmware update session                  |
+| `__OTB_CHUNK__:seq:data` | Host → Target | Send base64-encoded firmware chunk             |
+| `__OTB_COMMIT__`         | Host → Target | Finalize update and set boot partition         |
+| `__OTB_ABORT__`          | Host → Target | Cancel the update session                      |
+| `__OTB_ACK__:seq:bytes`  | Target → Host | Acknowledge (contains sequence and byte count) |
+| `__OTB_ERROR__:reason`   | Target → Host | Error response with reason code                |
 
 **Protocol flow:**
 

@@ -102,8 +102,8 @@ parser.add_argument('--partition-table', default='build/partition_table/partitio
 parser.add_argument('--swap', action='store_true', help='Swap En and G0 pins for piggyboard version lower than v0.5')
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
+parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
-parser.add_argument('--reset-ota', action='store_true', help='Erase OTA data/slot info after flashing')
 parser.add_argument('--device', nargs='?', default=DEFAULT_DEVICE, help='Serial device path (auto-detected on Jetson)')
 
 args = parser.parse_args()
@@ -217,9 +217,9 @@ def parse_ota_partition() -> tuple[str, str]:
     return '0xf000', '0x2000'
 
 
-def reset_ota_partition() -> None:
+def reset_partition() -> None:
     """Reset the OTA partition to the default state."""
-    print_bold('Resetting OTA partition to OTA 0...')
+    print_bold('Resetting partition to "ota_0"...')
     offset, size = parse_ota_partition()
     success = run(
         'esptool.py',
@@ -256,8 +256,8 @@ def flash() -> None:
             )
             if not success:
                 raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
-            if args.reset_ota:
-                reset_ota_partition()
+            if args.reset_partition:
+                reset_partition()
 
 
 def run(*run_args: str) -> bool:
