@@ -48,6 +48,7 @@ enum ModuleType {
     temperature_sensor,
     proxy,
     serial_bus,
+    mks_servo_motor,
 };
 
 class Module;

@@ -19,6 +19,7 @@
 #include "input.h"
 #include "linear_motor.h"
 #include "mcp23017.h"
+#include "mks_servo_motor.h"
 #include "motor_axis.h"
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
@@ -380,6 +381,13 @@ Module_ptr Module::create(const std::string type,
         Module::expect(arguments, 1, integer);
         const uint8_t unit_id = arguments[0]->evaluate_integer();
         return std::make_shared<AnalogUnit>(name, unit_id);
+    } else if (type == "MksServoMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const uint8_t motor_can_id = arguments[1]->evaluate_integer();
+        MksServoMotor_ptr motor = std::make_shared<MksServoMotor>(name, can_module, motor_can_id);
+        motor->subscribe_to_can();
+        return motor;
     } else {
         throw std::runtime_error("unknown module type \"" + type + "\"");
     }
