@@ -1,5 +1,6 @@
 #include "serial_bus.h"
 
+#include "../utils/otb.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -46,6 +47,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     }
 
     register_echo_callback([this](const char *line) { this->handle_echo(line); });
+
+    this->otb_session.bus_name = this->name.c_str();
 }
 
 void SerialBus::step() {
@@ -53,6 +56,17 @@ void SerialBus::step() {
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_incoming_message(message);
     }
+
+    if (this->otb_session.handle != 0) {
+        otb::bus_tick(this->otb_session, millis());
+        if (this->otb_session.response_length > 0) {
+            this->enqueue_outgoing_message(this->otb_session.sender,
+                                           this->otb_session.response,
+                                           this->otb_session.response_length);
+            this->otb_session.response_length = 0;
+        }
+    }
+
     Module::step();
 }
 
@@ -202,6 +216,20 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     // echo messages from communication task (node_id == sender == receiver)
     if (this->node_id == message.sender && this->node_id == message.receiver) {
         echo("%s", message.payload);
+        return;
+    }
+
+    // Handle OTB frames (check prefix first to avoid function call overhead for regular messages)
+    std::string_view payload_view(message.payload, message.length);
+    constexpr size_t otb_prefix_len = sizeof(otb::OTB_MSG_PREFIX) - 1;
+    if (payload_view.substr(0, otb_prefix_len) == otb::OTB_MSG_PREFIX &&
+        otb::bus_handle_frame(this->otb_session, message.sender, payload_view)) {
+        if (this->otb_session.response_length > 0) {
+            this->enqueue_outgoing_message(message.sender,
+                                           this->otb_session.response,
+                                           this->otb_session.response_length);
+            this->otb_session.response_length = 0;
+        }
         return;
     }
 

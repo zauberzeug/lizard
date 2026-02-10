@@ -68,6 +68,7 @@ protected:
     bool broadcast = false;
 
 public:
+    static bool broadcast_paused;
     const ModuleType type;
     const std::string name;
 
