@@ -8,6 +8,7 @@ from pathlib import Path
 import serial
 
 CHUNK_SIZE = 174
+WINDOW = 8
 
 parser = argparse.ArgumentParser(description='Push firmware via SerialBus OTB')
 parser.add_argument('firmware', help='Path to firmware binary')
@@ -35,22 +36,22 @@ class OtbError(Exception):
     pass
 
 
-def transact(message: str, expected_ack: str = '', *, timeout: float = 10.0) -> None:
-    """Send command and wait for ACK (if expected_ack is given). Raise OtbError on failure."""
-    dev.write(f'{args.bus}.send({args.target},"{message}")\n'.encode())
-    dev.flush()
-    if not expected_ack:
-        return
+def wait_ack(prefix: str, timeout: float = 10.0) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         if raw := dev.readline():
             line = raw.decode(errors='ignore')
-            word = line.split()[1 if line.startswith(b'otb[') else 0]  # handle lines starting with "otb[<sender_id>] "
-            if word.startswith('__OTB_ERROR__'):
+            if '__OTB_ERROR__' in line:
                 raise OtbError(line)
-            if word.startswith(expected_ack):
+            if prefix in line:
                 return
-    raise OtbError('Timeout waiting for response')
+    raise OtbError('Timeout')
+
+
+def transact(msg: str, ack: str = '') -> None:
+    dev.write(f'{args.bus}.send({args.target},"{msg}")\n'.encode())
+    if ack:
+        wait_ack(ack)
 
 
 try:
@@ -66,10 +67,13 @@ try:
     seq = 0
     with firmware.open('rb') as fh:
         while chunk := fh.read(CHUNK_SIZE):
-            base64_chunk = base64.b64encode(chunk).decode()
-            print(f'\rSending chunk {seq} of {number_of_chunks}...', end='')
-            transact(f'__OTB_CHUNK_{seq}__:{base64_chunk}', f'__OTB_ACK_CHUNK_{seq}__')
+            transact(f'__OTB_CHUNK_{seq}__:{base64.b64encode(chunk).decode()}')
             seq += 1
+            if seq >= WINDOW:
+                wait_ack('__OTB_ACK_CHUNK_')
+            print(f'\rSending chunk {seq}/{number_of_chunks}...', end='')
+    for _ in range(min(seq, WINDOW - 1)):
+        wait_ack('__OTB_ACK_CHUNK_')
 
     print('\nCommitting image...')
     transact('__OTB_COMMIT__', '__OTB_ACK_COMMIT__')

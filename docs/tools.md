@@ -41,7 +41,7 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 `otb_update.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB protocol.
 
 ```bash
-./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --id <peer_id> [--bus <name>] [--expander <name>]
+./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target <peer_id> [--bus <name>] [--expander <name>]
 ```
 
 | Argument     | Description                                           |
@@ -49,7 +49,7 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 | `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`) |
 | `--port`     | Serial port (default: `/dev/ttyUSB0`)                 |
 | `--baud`     | Baudrate (default: `115200`)                          |
-| `--id`       | Bus ID of the target node (required)                  |
+| `--target`   | Bus ID of the target node (required)                  |
 | `--bus`      | Name of the SerialBus module (default: `bus`)         |
 | `--expander` | Expander name when coordinator is behind an expander  |
 
@@ -62,7 +62,7 @@ and resume them afterwards to keep the UART link clear.
 **Example with expander:**
 
 ```bash
-./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --id 1 --expander p0
+./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target 1 --expander p0
 ```
 
 This flashes node 1 through expander `p0`.
@@ -79,12 +79,12 @@ The OTB (Over The Bus) protocol uses these message types:
 | `__OTB_COMMIT__`           | Commit update and set boot partition                       |
 | `__OTB_ABORT__`            | Cancel the update session                                  |
 
-| Host ← Target                  | Description                               |
-| ------------------------------ | ----------------------------------------- |
-| `__OTB_ACK_BEGIN__`            | Acknowledge begin                         |
-| `__OTB_ACK_CHUNK_<seq>__:data` | Acknowledge chunk (incl. sequence number) |
-| `__OTB_ACK_COMMIT__`           | Acknowledge commit                        |
-| `__OTB_ERROR__:reason`         | Error response with reason code           |
+| Host ← Target              | Description                               |
+| -------------------------- | ----------------------------------------- |
+| `__OTB_ACK_BEGIN__`        | Acknowledge begin                         |
+| `__OTB_ACK_CHUNK_<seq>__`  | Acknowledge chunk (incl. sequence number) |
+| `__OTB_ACK_COMMIT__`       | Acknowledge commit                        |
+| `__OTB_ERROR__:reason`     | Error response with reason code           |
 
 **Protocol flow:**
 
@@ -95,15 +95,15 @@ Host                            Target
   |<-- __OTB_ACK_BEGIN__ ----------|
   |                                |
   |--- __OTB_CHUNK_<0>__:... ----->|
-  |<-- __OTB_ACK_<0>__ ------------|
+  |<-- __OTB_ACK_CHUNK_<0>__ ------|
   |                                |
   |--- __OTB_CHUNK_<1>__:... ----->|
-  |<-- __OTB_ACK_<1>__ ------------|
+  |<-- __OTB_ACK_CHUNK_<1>__ ------|
   |                                |
   |       ... more chunks ...      |
   |                                |
   |--- __OTB_CHUNK_<N-1>__:... --->|
-  |<-- __OTB_ACK_<N-1>__ ----------|
+  |<-- __OTB_ACK_CHUNK_<N-1>__ ----|
   |                                |
   |--- __OTB_COMMIT__ ------------>|
   |<-- __OTB_ACK_COMMIT -----------|
@@ -111,8 +111,7 @@ Host                            Target
 ```
 
 On error at any point, the target responds with `__OTB_ERROR__:reason` where reason can be:
-`busy`, `no_partition`, `begin_failed`, `no_session`, `aborted`, `end_failed`, `boot_failed`,
-`chunk_format`, `chunk_parts`, `chunk_seq`, `chunk_order`, `chunk_decode`, `write_failed`, `timeout`.
+`busy`, `begin_failed`, `no_session`, `aborted`, `commit_failed`, `format`, `seq`, `decode`, `write`, `timeout`.
 
 ### Configure
 

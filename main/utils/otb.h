@@ -10,10 +10,12 @@ namespace otb {
 // OTB (Over The Bus) protocol message prefixes
 constexpr const char OTB_MSG_PREFIX[] = "__OTB_";
 constexpr const char OTB_BEGIN_PREFIX[] = "__OTB_BEGIN__";
-constexpr const char OTB_CHUNK_PREFIX[] = "__OTB_CHUNK__";
+constexpr const char OTB_CHUNK_PREFIX[] = "__OTB_CHUNK_";
 constexpr const char OTB_COMMIT_PREFIX[] = "__OTB_COMMIT__";
 constexpr const char OTB_ABORT_PREFIX[] = "__OTB_ABORT__";
-constexpr const char OTB_ACK_PREFIX[] = "__OTB_ACK__";
+constexpr const char OTB_ACK_BEGIN[] = "__OTB_ACK_BEGIN__";
+constexpr const char OTB_ACK_CHUNK_PREFIX[] = "__OTB_ACK_CHUNK_";
+constexpr const char OTB_ACK_COMMIT[] = "__OTB_ACK_COMMIT__";
 constexpr const char OTB_ERROR_PREFIX[] = "__OTB_ERROR__";
 
 constexpr size_t BUS_OTB_CHUNK_SIZE = 174;

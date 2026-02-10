@@ -1,96 +1,153 @@
 #include "otb.h"
 #include "timing.h"
 #include "uart.h"
-#include <algorithm>
-#include <array>
-#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <string>
 
 namespace otb {
 
-static bool starts_with(std::string_view text, const char *prefix) {
-    const size_t prefix_len = std::strlen(prefix);
-    return text.size() >= prefix_len && text.compare(0, prefix_len, prefix) == 0;
-}
-
-static bool is_decimal(std::string_view value) {
-    if (value.empty()) {
+static bool decode_base64(std::string_view input, uint8_t *output, size_t max_len, size_t &out_len) {
+    out_len = 0;
+    if (input.empty() || input.size() % 4 != 0) {
         return false;
     }
-    return std::all_of(value.begin(), value.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); });
-}
 
-static bool decode_base64_chunk(std::string_view input, std::array<uint8_t, BUS_OTB_BUFFER_SIZE> &output, size_t &out_len) {
     auto decode_char = [](char c) -> int {
-        return (c >= 'A' && c <= 'Z')   ? c - 'A'
-               : (c >= 'a' && c <= 'z') ? c - 'a' + 26
-               : (c >= '0' && c <= '9') ? c - '0' + 52
-               : (c == '+')             ? 62
-               : (c == '/')             ? 63
-               : (c == '=')             ? -1
-                                        : -2;
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        if (c == '=') return -1;
+        return -2;
     };
 
-    out_len = 0;
-    if (input.empty() || (input.size() % 4) != 0) {
-        return false;
-    }
-
     for (size_t i = 0; i < input.size(); i += 4) {
-        const int c0 = decode_char(input[i]);
-        const int c1 = decode_char(input[i + 1]);
-        const int c2 = decode_char(input[i + 2]);
-        const int c3 = decode_char(input[i + 3]);
-        if (c0 < 0 || c1 < 0 || c2 == -2 || c3 == -2) {
+        int c0 = decode_char(input[i]);
+        int c1 = decode_char(input[i + 1]);
+        int c2 = decode_char(input[i + 2]);
+        int c3 = decode_char(input[i + 3]);
+        if (c0 < 0 || c1 < 0 || c2 == -2 || c3 == -2 || (c2 == -1 && c3 >= 0)) {
             return false;
         }
-
-        if (out_len + 3 > output.size()) {
+        if (out_len >= max_len) {
             return false;
         }
-
-        output[out_len++] = static_cast<uint8_t>((c0 << 2) | (c1 >> 4));
-        if (c2 >= 0) {
-            output[out_len++] = static_cast<uint8_t>((c1 << 4) | (c2 >> 2));
+        output[out_len++] = (c0 << 2) | (c1 >> 4);
+        if (c2 >= 0 && out_len < max_len) {
+            output[out_len++] = (c1 << 4) | (c2 >> 2);
         }
-        if (c2 == -1 && c3 >= 0) {
-            return false;
+        if (c3 >= 0 && out_len < max_len) {
+            output[out_len++] = (c2 << 6) | c3;
         }
-        if (c3 >= 0) {
-            output[out_len++] = static_cast<uint8_t>((c2 << 6) | c3);
-        }
-    }
-
-    if (out_len > BUS_OTB_CHUNK_SIZE) {
-        return false;
     }
     return true;
 }
 
-static void set_response(BusOtbSession &session, const char *status, uint32_t seq, size_t bytes) {
-    session.response_length = std::snprintf(session.response, sizeof(session.response),
-                                            "%s:%lu:%lu", status,
-                                            static_cast<unsigned long>(seq),
-                                            static_cast<unsigned long>(bytes));
+static void respond(BusOtbSession &session, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    session.response_length = vsnprintf(session.response, sizeof(session.response), fmt, args);
+    va_end(args);
 }
 
-static bool fail(BusOtbSession &session, const char *reason, bool reset = true) {
-    session.response_length = std::snprintf(session.response, sizeof(session.response),
-                                            "%s:%s", OTB_ERROR_PREFIX, reason);
-    if (reset) {
-        bus_reset_session(session);
+static bool fail(BusOtbSession &session, const char *reason) {
+    respond(session, "%s:%s", OTB_ERROR_PREFIX, reason);
+    bus_reset_session(session);
+    return true;
+}
+
+bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view msg) {
+    if (std::strncmp(msg.data(), OTB_MSG_PREFIX, strlen(OTB_MSG_PREFIX)) != 0) {
+        return false;
     }
+
+    // __OTB_BEGIN__
+    if (msg == OTB_BEGIN_PREFIX) {
+        if (session.handle) {
+            respond(session, "%s:busy", OTB_ERROR_PREFIX);
+            return true;
+        }
+        const esp_partition_t *part = esp_ota_get_next_update_partition(nullptr);
+        if (!part || esp_ota_begin(part, OTA_SIZE_UNKNOWN, &session.handle) != ESP_OK) {
+            respond(session, "%s:begin_failed", OTB_ERROR_PREFIX);
+            return true;
+        }
+        session.sender = sender;
+        session.partition = part;
+        session.next_seq = 0;
+        session.bytes_written = 0;
+        session.last_activity = millis();
+        echo("serial bus %s otb start from %u", session.bus_name, sender);
+        respond(session, OTB_ACK_BEGIN);
+        return true;
+    }
+
+    // __OTB_ABORT__
+    if (msg == OTB_ABORT_PREFIX) {
+        return session.handle && session.sender == sender ? fail(session, "aborted") : true;
+    }
+
+    // __OTB_COMMIT__
+    if (msg == OTB_COMMIT_PREFIX) {
+        if (!session.handle || session.sender != sender) {
+            respond(session, "%s:no_session", OTB_ERROR_PREFIX);
+            return true;
+        }
+        if (esp_ota_end(session.handle) != ESP_OK || esp_ota_set_boot_partition(session.partition) != ESP_OK) {
+            return fail(session, "commit_failed");
+        }
+        echo("serial bus %s otb finished (%lu bytes)", session.bus_name, static_cast<unsigned long>(session.bytes_written));
+        respond(session, OTB_ACK_COMMIT);
+        bus_reset_session(session, false);
+        return true;
+    }
+
+    // __OTB_CHUNK_{seq}__:{base64}
+    if (std::strncmp(msg.data(), OTB_CHUNK_PREFIX, strlen(OTB_CHUNK_PREFIX)) == 0) {
+        if (!session.handle || session.sender != sender) {
+            respond(session, "%s:no_session", OTB_ERROR_PREFIX);
+            return true;
+        }
+
+        std::string_view rest = msg.substr(strlen(OTB_CHUNK_PREFIX));
+        size_t sep = rest.find("__:");
+        if (sep == std::string_view::npos) {
+            return fail(session, "format");
+        }
+
+        char *end;
+        unsigned long seq = std::strtoul(rest.data(), &end, 10);
+        if (end != rest.data() + sep || seq != session.next_seq) {
+            return fail(session, "seq");
+        }
+
+        std::string_view b64 = rest.substr(sep + 3);
+        uint8_t buf[BUS_OTB_BUFFER_SIZE];
+        size_t len;
+        if (!decode_base64(b64, buf, sizeof(buf), len) || len == 0 || len > BUS_OTB_CHUNK_SIZE) {
+            return fail(session, "decode");
+        }
+        if (esp_ota_write(session.handle, buf, len) != ESP_OK) {
+            return fail(session, "write");
+        }
+
+        session.bytes_written += len;
+        session.next_seq++;
+        session.last_activity = millis();
+        respond(session, "%s%lu__", OTB_ACK_CHUNK_PREFIX, seq);
+        return true;
+    }
+
+    echo("otb[%u] %.*s", sender, static_cast<int>(msg.size()), msg.data());
     return true;
 }
 
 void bus_reset_session(BusOtbSession &session, bool abort_flash) {
-    if (session.handle != 0 && abort_flash) {
+    if (session.handle && abort_flash) {
         esp_ota_abort(session.handle);
     }
-    // Clear OTB state but preserve bus_name (config) and response (for caller to send)
     session.sender = 0;
     session.handle = 0;
     session.partition = nullptr;
@@ -99,111 +156,8 @@ void bus_reset_session(BusOtbSession &session, bool abort_flash) {
     session.last_activity = 0;
 }
 
-bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view payload) {
-    if (!starts_with(payload, OTB_MSG_PREFIX)) {
-        return false;
-    }
-
-    if (starts_with(payload, OTB_BEGIN_PREFIX)) {
-        if (session.handle != 0) {
-            return fail(session, "busy", false);
-        }
-
-        const esp_partition_t *partition = esp_ota_get_next_update_partition(nullptr);
-        if (!partition) {
-            return fail(session, "no_partition", false);
-        }
-
-        esp_ota_handle_t handle = 0;
-        if (esp_ota_begin(partition, OTA_SIZE_UNKNOWN, &handle) != ESP_OK) {
-            return fail(session, "begin_failed", false);
-        }
-
-        session.sender = sender;
-        session.handle = handle;
-        session.partition = partition;
-        session.next_seq = 1;
-        session.bytes_written = 0;
-        session.last_activity = millis();
-
-        echo("serial bus %s otb start from %u", session.bus_name, sender);
-        set_response(session, OTB_ACK_PREFIX, session.next_seq, BUS_OTB_CHUNK_SIZE);
-        return true;
-    }
-
-    if (starts_with(payload, OTB_ABORT_PREFIX)) {
-        if (session.handle == 0 || session.sender != sender) {
-            return fail(session, "no_session", false);
-        }
-        return fail(session, "aborted");
-    }
-
-    if (starts_with(payload, OTB_COMMIT_PREFIX)) {
-        if (session.handle == 0 || session.sender != sender) {
-            return fail(session, "no_session", false);
-        }
-        if (esp_ota_end(session.handle) != ESP_OK) {
-            return fail(session, "end_failed");
-        }
-        if (esp_ota_set_boot_partition(session.partition) != ESP_OK) {
-            return fail(session, "boot_failed");
-        }
-
-        echo("serial bus %s otb finished (%lu bytes)", session.bus_name, static_cast<unsigned long>(session.bytes_written));
-        set_response(session, OTB_ACK_PREFIX, session.next_seq, session.bytes_written);
-        bus_reset_session(session, false);
-        return true;
-    }
-
-    if (starts_with(payload, OTB_CHUNK_PREFIX)) {
-        if (session.handle == 0 || session.sender != sender) {
-            return fail(session, "no_session", false);
-        }
-
-        std::string_view rest = payload.substr(std::strlen(OTB_CHUNK_PREFIX));
-        if (rest.empty() || rest.front() != ':') {
-            return fail(session, "chunk_format");
-        }
-        rest.remove_prefix(1);
-
-        const size_t colon_pos = rest.find(':');
-        if (colon_pos == std::string_view::npos) {
-            return fail(session, "chunk_parts");
-        }
-        std::string_view seq_view = rest.substr(0, colon_pos);
-        std::string_view data_view = rest.substr(colon_pos + 1);
-        if (!is_decimal(seq_view)) {
-            return fail(session, "chunk_seq");
-        }
-
-        const unsigned long seq = std::strtoul(std::string(seq_view).c_str(), nullptr, 10);
-        if (seq != session.next_seq || data_view.empty()) {
-            return fail(session, "chunk_order");
-        }
-
-        std::array<uint8_t, BUS_OTB_BUFFER_SIZE> buffer{};
-        size_t decoded_len = 0;
-        if (!decode_base64_chunk(data_view, buffer, decoded_len) || decoded_len == 0) {
-            return fail(session, "chunk_decode");
-        }
-        if (esp_ota_write(session.handle, buffer.data(), decoded_len) != ESP_OK) {
-            return fail(session, "write_failed");
-        }
-
-        session.bytes_written += decoded_len;
-        session.next_seq++;
-        session.last_activity = millis();
-        set_response(session, OTB_ACK_PREFIX, seq, session.bytes_written);
-        return true;
-    }
-
-    // Status messages from peers; let caller surface them if desired.
-    echo("otb[%u] %.*s", sender, static_cast<int>(payload.size()), payload.data());
-    return true;
-}
-
 void bus_tick(BusOtbSession &session, unsigned long now_ms) {
-    if (session.handle != 0 && now_ms - session.last_activity > BUS_OTB_SESSION_TIMEOUT_MS) {
+    if (session.handle && now_ms - session.last_activity > BUS_OTB_SESSION_TIMEOUT_MS) {
         echo("warning: serial bus %s otb timed out", session.bus_name);
         fail(session, "timeout");
     }
