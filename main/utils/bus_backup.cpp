@@ -22,6 +22,7 @@ void restore_if_needed() {
     // Load backup config from NVS
     nvs_handle handle;
     if (nvs_open(NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
+        echo("no serial bus found and no bus backup available");
         return;
     }
     int8_t tx, rx, uart, node;
@@ -33,6 +34,7 @@ void restore_if_needed() {
               nvs_get_i8(handle, "node", &node) == ESP_OK;
     nvs_close(handle);
     if (!ok) {
+        echo("bus backup: incomplete NVS data");
         return;
     }
 
@@ -40,10 +42,10 @@ void restore_if_needed() {
     Serial_ptr matching_serial;
     bool used_uarts[3] = {true, false, false}; // UART0 reserved for console
     for (const auto &[name, module] : Global::modules) {
-        const auto serial = std::dynamic_pointer_cast<Serial>(module);
-        if (!serial) {
+        if (module->type != serial) {
             continue;
         }
+        const auto serial = std::static_pointer_cast<Serial>(module);
         if (serial->tx_pin == tx && serial->rx_pin == rx) {
             matching_serial = serial;
         }
@@ -82,18 +84,26 @@ void restore_if_needed() {
     }
 }
 
-void save(const int tx_pin, const int rx_pin, const long baud_rate, const int uart_num, const int node_id) {
-    nvs_handle handle;
-    if (nvs_open(NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
+void save_if_present() {
+    for (const auto &[name, module] : Global::modules) {
+        if (module->type != serial_bus) {
+            continue;
+        }
+        const auto bus = std::static_pointer_cast<SerialBus>(module);
+        const auto serial = bus->serial;
+        nvs_handle handle;
+        if (nvs_open(NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
+            return;
+        }
+        nvs_set_i8(handle, "tx", serial->tx_pin);
+        nvs_set_i8(handle, "rx", serial->rx_pin);
+        nvs_set_i32(handle, "baud", serial->baud_rate);
+        nvs_set_i8(handle, "uart", serial->uart_num);
+        nvs_set_i8(handle, "node", bus->node_id);
+        nvs_commit(handle);
+        nvs_close(handle);
         return;
     }
-    nvs_set_i8(handle, "tx", tx_pin);
-    nvs_set_i8(handle, "rx", rx_pin);
-    nvs_set_i32(handle, "baud", baud_rate);
-    nvs_set_i8(handle, "uart", uart_num);
-    nvs_set_i8(handle, "node", node_id);
-    nvs_commit(handle);
-    nvs_close(handle);
 }
 
 void remove() {

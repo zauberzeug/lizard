@@ -12,6 +12,9 @@ class SerialBus : public Module {
 public:
     static constexpr size_t PAYLOAD_CAPACITY = 256;
 
+    const ConstSerial_ptr serial;
+    const uint8_t node_id;
+
     SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id);
 
     void step() override;
@@ -31,8 +34,6 @@ private:
         char payload[PAYLOAD_CAPACITY];
     };
 
-    const ConstSerial_ptr serial;
-    const uint8_t node_id;
     std::vector<uint8_t> peer_ids;
 
     QueueHandle_t outbound_queue = nullptr;

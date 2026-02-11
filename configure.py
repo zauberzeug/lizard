@@ -23,7 +23,7 @@ def send(line_: str) -> None:
 
 def configure(payload: str) -> None:
     if args.serial_bus is not None:
-        send(f'bus.send({args.serial_bus}, "{payload}")')
+        send(f"bus.send({args.serial_bus}, '{payload}')")
     else:
         send(payload)
 
@@ -36,8 +36,7 @@ with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
 
     configure('!-')
     for line in startup.splitlines():
-        if line.strip():
-            configure(f'!+{line}')
+        configure(f'!+{line}')
     configure('!.')
     configure('core.restart()')
 
@@ -92,12 +91,12 @@ with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
             # Strip checksum suffix if present (format: @XX at end)
             if len(line) > 3 and line[-3] == '@':
                 line = line[:-3]
-            if line.startswith(checksum_prefix):
-                received_checksum = int(line[len(checksum_prefix):], 16)
+            if checksum_prefix in line:
+                received_checksum = int(line[line.index(checksum_prefix) + len(checksum_prefix):], 16)
                 if received_checksum == checksum:
                     print(f'{target_name} checksum matches.')
                     break
                 else:
-                    raise ValueError(f'{target_name} checksum mismatch!')
+                    raise ValueError(f'{target_name} checksum mismatch! expected {checksum:#06x}, got {received_checksum:#06x}')
         else:
             raise TimeoutError(f'Timeout waiting for {target_name} checksum!')

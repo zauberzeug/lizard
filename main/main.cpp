@@ -421,6 +421,7 @@ void app_main() {
         echo("error while loading startup script: %s", e.what());
     }
 
+    bus_backup::save_if_present();
     bus_backup::restore_if_needed();
 
     try {
