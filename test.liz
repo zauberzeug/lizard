@@ -1,0 +1,14 @@
+rdyp = Output(15)
+en3 = Output(12)
+serial = Serial(26, 27, 115200, 1)
+p0 = Expander(serial, 25, 14)
+can = Can(32, 33, 500000)
+motor = MksServoMotor(can,1)
+core.output("core.millis")
+
+
+
+
+
+rdyp.on()
+en3.on()
