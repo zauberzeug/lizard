@@ -22,10 +22,19 @@ def send(line_: str) -> None:
 
 
 def configure(payload: str) -> None:
-    if args.serial_bus is not None:
+    if args.serial_bus:
         send(f"bus.send({args.serial_bus}, '{payload}')")
     else:
         send(payload)
+
+
+def read_lines(timeout: float):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            yield port.read_until(b'\r\n').decode().rstrip()
+        except UnicodeDecodeError:
+            continue
 
 
 with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
@@ -40,63 +49,41 @@ with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
     configure('!.')
     configure('core.restart()')
 
-    if args.serial_bus is None:
-        # Direct connection: wait for "Ready." then check checksum
-        timeout = 3.0 + 3.0 * startup.count('Expander')
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                line = port.read_until(b'\r\n').decode().rstrip()
-            except UnicodeDecodeError:
-                continue
+    reboot_timeout = 3.0 + 3.0 * startup.count('Expander')
+
+    if args.serial_bus:
+        target = f'node {args.serial_bus}'
+        prefix = f'bus[{args.serial_bus}]: checksum: '
+        print(f'Waiting {reboot_timeout:.1f}s for {target} to reboot...')
+        time.sleep(reboot_timeout)
+
+        configure('core.startup_checksum()')
+        for line in read_lines(5.0):
+            if len(line) > 3 and line[-3] == '@':
+                line = line[:-3]
+            if prefix in line:
+                received = int(line[line.index(prefix) + len(prefix):], 16)
+                if received == checksum:
+                    print(f'{target} checksum matches.')
+                    break
+                raise ValueError(f'{target} checksum mismatch! expected {checksum:#06x}, got {received:#06x}')
+        else:
+            raise TimeoutError(f'Timeout waiting for {target} checksum!')
+    else:
+        for line in read_lines(reboot_timeout):
             if line == 'Ready.':
                 print('ESP32 booted and sent "Ready."')
                 break
         else:
             raise TimeoutError('Timeout waiting for device to restart!')
 
-        # Immediately check checksum after ready
         send('core.startup_checksum()')
-        deadline = time.time() + 3.0
-        while time.time() < deadline:
-            try:
-                line = port.read_until(b'\r\n').decode().rstrip()
-            except UnicodeDecodeError:
-                continue
+        for line in read_lines(3.0):
             if line.startswith('checksum: '):
-                received = line.split()[1].split('@')[0]
-                if int(received, 16) == checksum:
+                received = int(line.split()[1].split('@')[0], 16)
+                if received == checksum:
                     print('Checksum matches.')
                     break
-                else:
-                    raise ValueError('Checksum mismatch!')
+                raise ValueError('Checksum mismatch!')
         else:
             raise TimeoutError('Timeout waiting for checksum!')
-    else:
-        # Serial bus: wait for reboot, then poll for checksum
-        checksum_prefix = f'bus[{args.serial_bus}]: checksum: '
-        target_name = f'node {args.serial_bus}'
-        reboot_timeout = 3.0 + 3.0 * startup.count('Expander')
-        print(f'Waiting {reboot_timeout:.1f}s for {target_name} to reboot...')
-        time.sleep(reboot_timeout)
-
-        # Poll for checksum response
-        configure('core.startup_checksum()')
-        deadline = time.time() + 5.0
-        while time.time() < deadline:
-            try:
-                line = port.read_until(b'\r\n').decode().rstrip()
-            except UnicodeDecodeError:
-                continue
-            # Strip checksum suffix if present (format: @XX at end)
-            if len(line) > 3 and line[-3] == '@':
-                line = line[:-3]
-            if checksum_prefix in line:
-                received_checksum = int(line[line.index(checksum_prefix) + len(checksum_prefix):], 16)
-                if received_checksum == checksum:
-                    print(f'{target_name} checksum matches.')
-                    break
-                else:
-                    raise ValueError(f'{target_name} checksum mismatch! expected {checksum:#06x}, got {received_checksum:#06x}')
-        else:
-            raise TimeoutError(f'Timeout waiting for {target_name} checksum!')

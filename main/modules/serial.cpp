@@ -27,6 +27,10 @@ Serial::Serial(const std::string name,
     this->initialize_uart();
 }
 
+Serial::~Serial() {
+    this->deinstall();
+}
+
 void Serial::initialize_uart() const {
     const uart_config_t uart_config = {
         .baud_rate = baud_rate,

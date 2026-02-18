@@ -7,22 +7,40 @@
 
 #include "nvs.h"
 
-#define NAMESPACE "bus_backup"
+#define NVS_NAMESPACE "bus_backup"
 
 namespace bus_backup {
 
+void save_if_present() {
+    for (const auto &[name, module] : Global::modules) {
+        if (module->type != serial_bus) {
+            continue;
+        }
+        const auto bus = std::static_pointer_cast<SerialBus>(module);
+        nvs_handle handle;
+        if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
+            return;
+        }
+        nvs_set_i8(handle, "tx", bus->serial->tx_pin);
+        nvs_set_i8(handle, "rx", bus->serial->rx_pin);
+        nvs_set_i32(handle, "baud", bus->serial->baud_rate);
+        nvs_set_i8(handle, "uart", bus->serial->uart_num);
+        nvs_set_i8(handle, "node", bus->node_id);
+        nvs_commit(handle);
+        nvs_close(handle);
+        return;
+    }
+}
+
 void restore_if_needed() {
-    // Already have a serial bus? Nothing to restore.
     for (const auto &[name, module] : Global::modules) {
         if (module->type == serial_bus) {
             return;
         }
     }
 
-    // Load backup config from NVS
     nvs_handle handle;
-    if (nvs_open(NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
-        echo("no serial bus found and no bus backup available");
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
         return;
     }
     int8_t tx, rx, uart, node;
@@ -34,81 +52,35 @@ void restore_if_needed() {
               nvs_get_i8(handle, "node", &node) == ESP_OK;
     nvs_close(handle);
     if (!ok) {
-        echo("bus backup: incomplete NVS data");
         return;
     }
 
-    // Find existing serial with matching pins, and track which UARTs are in use
-    Serial_ptr matching_serial;
-    bool used_uarts[3] = {true, false, false}; // UART0 reserved for console
-    for (const auto &[name, module] : Global::modules) {
-        if (module->type != serial) {
-            continue;
-        }
-        const auto serial = std::static_pointer_cast<Serial>(module);
-        if (serial->tx_pin == tx && serial->rx_pin == rx) {
-            matching_serial = serial;
-        }
-        if (serial->uart_num < 3) {
-            used_uarts[serial->uart_num] = true;
-        }
-    }
-
-    // Create serial bus using existing serial or a new one
-    echo("no serial bus found, restoring from backup");
+    echo("restoring serial bus from backup");
     try {
-        Serial_ptr backup_serial;
-        if (matching_serial) {
-            backup_serial = matching_serial;
-        } else {
-            int free_uart = -1;
-            if (!used_uarts[uart])
-                free_uart = uart;
-            else if (!used_uarts[1])
-                free_uart = 1;
-            else if (!used_uarts[2])
-                free_uart = 2;
-            if (free_uart < 0) {
-                echo("bus backup: no free uart available");
-                return;
+        std::vector<std::string> serials_to_remove;
+        for (const auto &[name, module] : Global::modules) {
+            if (module->type == serial) {
+                serials_to_remove.push_back(name);
             }
-            backup_serial = std::make_shared<Serial>(
-                "_backup_serial", static_cast<gpio_num_t>(rx), static_cast<gpio_num_t>(tx),
-                baud, static_cast<uart_port_t>(free_uart));
-            Global::add_module("_backup_serial", backup_serial);
         }
+        for (const std::string &name : serials_to_remove) {
+            Global::modules.erase(name);
+            Global::variables.erase(name);
+        }
+        Serial_ptr backup_serial = std::make_shared<Serial>(
+            "_backup_serial", static_cast<gpio_num_t>(rx), static_cast<gpio_num_t>(tx),
+            baud, static_cast<uart_port_t>(uart));
+        Global::add_module("_backup_serial", backup_serial);
         const auto bus = std::make_shared<SerialBus>("_backup_bus", backup_serial, node);
         Global::add_module("_backup_bus", bus);
     } catch (const std::runtime_error &e) {
-        echo("error restoring bus backup: %s", e.what());
-    }
-}
-
-void save_if_present() {
-    for (const auto &[name, module] : Global::modules) {
-        if (module->type != serial_bus) {
-            continue;
-        }
-        const auto bus = std::static_pointer_cast<SerialBus>(module);
-        const auto serial = bus->serial;
-        nvs_handle handle;
-        if (nvs_open(NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
-            return;
-        }
-        nvs_set_i8(handle, "tx", serial->tx_pin);
-        nvs_set_i8(handle, "rx", serial->rx_pin);
-        nvs_set_i32(handle, "baud", serial->baud_rate);
-        nvs_set_i8(handle, "uart", serial->uart_num);
-        nvs_set_i8(handle, "node", bus->node_id);
-        nvs_commit(handle);
-        nvs_close(handle);
-        return;
+        echo("bus backup error: %s", e.what());
     }
 }
 
 void remove() {
     nvs_handle handle;
-    if (nvs_open(NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
         return;
     }
     nvs_erase_all(handle);
