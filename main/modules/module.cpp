@@ -19,6 +19,7 @@
 #include "input.h"
 #include "linear_motor.h"
 #include "mcp23017.h"
+#include "mks_servo_motor.h"
 #include "motor_axis.h"
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
@@ -357,6 +358,13 @@ Module_ptr Module::create(const std::string type,
         const DunkerMotor_ptr left_motor = std::static_pointer_cast<DunkerMotor>(left_module);
         const DunkerMotor_ptr right_motor = std::static_pointer_cast<DunkerMotor>(right_module);
         return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
+    } else if (type == "MksServoMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t motor_id = arguments[1]->evaluate_integer();
+        MksServoMotor_ptr module = std::make_shared<MksServoMotor>(name, can_module, motor_id);
+        module->subscribe_to_can();
+        return module;
     } else if (type == "Analog") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");
