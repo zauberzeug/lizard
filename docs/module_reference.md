@@ -604,8 +604,8 @@ When the wheels are disabled, they will stop and ignore movement commands.
 The stepper motor module controls a stepper motor via "step" and "direction" pins.
 It uses the ESP LED Control API to generate pulses with sufficiently high frequencies and the Pulse Counter API to count steps.
 
-| Constructor                               | Description             | Arguments |
-| ----------------------------------------- | ----------------------- | --------- |
+| Constructor                                   | Description             | Arguments  |
+| --------------------------------------------- | ----------------------- | ---------- |
 | `motor = StepperMotor(step, dir[, lt[, lc]])` | Step and direction pins | 2–4x `int` |
 
 The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
