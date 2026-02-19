@@ -63,17 +63,19 @@ StepperMotor::StepperMotor(const std::string name,
     chan_config.level_gpio_num = dir_pin;
     check_error(pcnt_new_channel(this->pcnt_unit, &chan_config, &this->pcnt_channel), "failed to create PCNT channel");
 
-    pcnt_channel_set_edge_action(this->pcnt_channel,
-                                 PCNT_CHANNEL_EDGE_ACTION_INCREASE,
-                                 PCNT_CHANNEL_EDGE_ACTION_HOLD);
+    check_error(pcnt_channel_set_edge_action(this->pcnt_channel,
+                                             PCNT_CHANNEL_EDGE_ACTION_INCREASE,
+                                             PCNT_CHANNEL_EDGE_ACTION_HOLD),
+                "failed to set PCNT edge action");
 
-    pcnt_channel_set_level_action(this->pcnt_channel,
-                                  PCNT_CHANNEL_LEVEL_ACTION_KEEP,
-                                  PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+    check_error(pcnt_channel_set_level_action(this->pcnt_channel,
+                                              PCNT_CHANNEL_LEVEL_ACTION_KEEP,
+                                              PCNT_CHANNEL_LEVEL_ACTION_INVERSE),
+                "failed to set PCNT level action");
 
-    pcnt_unit_enable(this->pcnt_unit);
-    pcnt_unit_clear_count(this->pcnt_unit);
-    pcnt_unit_start(this->pcnt_unit);
+    check_error(pcnt_unit_enable(this->pcnt_unit), "failed to enable PCNT unit");
+    check_error(pcnt_unit_clear_count(this->pcnt_unit), "failed to clear PCNT count");
+    check_error(pcnt_unit_start(this->pcnt_unit), "failed to start PCNT unit");
 
     ledc_timer_config_t timer_config = {
         .speed_mode = SPEED_MODE,
