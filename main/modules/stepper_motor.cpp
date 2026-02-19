@@ -5,6 +5,7 @@
 #include "soc/gpio_sig_map.h"
 #include <algorithm>
 #include <driver/ledc.h>
+#include <driver/pulse_cnt.h>
 #include <stdexcept>
 
 #define MIN_SPEED 490
