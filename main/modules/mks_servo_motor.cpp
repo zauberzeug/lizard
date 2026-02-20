@@ -51,8 +51,8 @@ void MksServoMotor::send_working_current(int64_t ma) {
     if (ma < 0) {
         ma = 0;
     }
-    if (ma > 3000) {
-        ma = 3000;
+    if (ma > MAX_WORKING_CURRENT_MA) {
+        ma = MAX_WORKING_CURRENT_MA;
     }
     uint16_t val = (uint16_t)ma;
     uint8_t data[] = {0x83, (uint8_t)(val >> 8), (uint8_t)(val & 0xFF)};
@@ -65,8 +65,8 @@ void MksServoMotor::send_holding_current(int64_t pct) {
     if (ratio < 0) {
         ratio = 0;
     }
-    if (ratio > 9) {
-        ratio = 9;
+    if (ratio > MAX_HOLDING_RATIO) {
+        ratio = MAX_HOLDING_RATIO;
     }
     uint8_t data[] = {0x9B, (uint8_t)ratio};
     this->send(data, 2);
@@ -76,8 +76,8 @@ void MksServoMotor::send_run_internal(int64_t direction, int64_t speed, int64_t 
     if (speed < 0) {
         speed = 0;
     }
-    if (speed > 4095) {
-        speed = 4095;
+    if (speed > MAX_RUN_SPEED) {
+        speed = MAX_RUN_SPEED;
     }
     if (direction < 0) {
         direction = 0;
@@ -88,8 +88,8 @@ void MksServoMotor::send_run_internal(int64_t direction, int64_t speed, int64_t 
     if (acc < 0) {
         acc = 0;
     }
-    if (acc > 255) {
-        acc = 255;
+    if (acc > MAX_ACC) {
+        acc = MAX_ACC;
     }
     uint8_t byte1 = (uint8_t)((direction << 7) | ((speed >> 8) & 0x0F));
     uint8_t byte2 = (uint8_t)(speed & 0xFF);
@@ -101,8 +101,8 @@ void MksServoMotor::send_stop_internal(int64_t acc) {
     if (acc < 0) {
         acc = 0;
     }
-    if (acc > 255) {
-        acc = 255;
+    if (acc > MAX_ACC) {
+        acc = MAX_ACC;
     }
     uint8_t data[] = {0xF6, 0x00, 0x00, (uint8_t)acc};
     this->send(data, 4);
@@ -112,14 +112,14 @@ void MksServoMotor::send_rotate_counts(int32_t counts, int64_t speed, int64_t ac
     if (speed < 0) {
         speed = 0;
     }
-    if (speed > 65535) {
-        speed = 65535;
+    if (speed > MAX_ROTATE_SPEED) {
+        speed = MAX_ROTATE_SPEED;
     }
     if (acc < 0) {
         acc = 0;
     }
-    if (acc > 255) {
-        acc = 255;
+    if (acc > MAX_ACC) {
+        acc = MAX_ACC;
     }
     if (counts > INT24_MAX) {
         counts = INT24_MAX;
@@ -190,11 +190,11 @@ void MksServoMotor::step_precision_zero() {
     case PZ_WAIT_ERROR:
         if (this->angle_error_read_received) {
             int32_t abs_error = this->angle_error_value < 0 ? -this->angle_error_value : this->angle_error_value;
-            double error_degrees = (double)abs_error * 360.0 / 51200.0;
+            double error_degrees = (double)abs_error * 360.0 / ANGLE_ERROR_COUNTS_PER_TURN;
             double corrected = this->pz_target_degrees - error_degrees;
             this->send_rotate(corrected, this->pz_speed, this->pz_acc);
             this->pz_phase_start = millis();
-            this->pz_state = PZ_CORRECT_ROTATE;
+            this->pz_state = PZ_WAIT_CORRECT_ROTATE;
         } else if (millis_since(this->angle_error_read_sent_at) > 200) {
             if (this->angle_error_read_retries < 5) {
                 this->angle_error_read_retries++;
@@ -204,10 +204,6 @@ void MksServoMotor::step_precision_zero() {
                 this->properties.at("homing_state")->integer_value = PZ_FAILED;
             }
         }
-        break;
-    case PZ_CORRECT_ROTATE:
-        this->pz_state = PZ_WAIT_CORRECT_ROTATE;
-        this->pz_phase_start = millis();
         break;
     case PZ_WAIT_CORRECT_ROTATE:
         if (millis_since(this->pz_phase_start) >= this->pz_correct_wait_ms) {
@@ -275,12 +271,12 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         this->properties.at("speed")->integer_value = 0;
     } else if (method_name == "grip") {
         Module::expect(arguments, 0);
-        this->send_rotate(5.0, 3000, 3000);
+        this->send_rotate(5.0, 3000, MAX_ACC);
         this->properties.at("position")->number_value = 5.0;
         this->properties.at("speed")->integer_value = 3000;
     } else if (method_name == "release") {
         Module::expect(arguments, 0);
-        this->send_rotate(-40.0, 3000, 3000);
+        this->send_rotate(-40.0, 3000, MAX_ACC);
         this->properties.at("position")->number_value = -40.0;
         this->properties.at("speed")->integer_value = 3000;
     } else if (method_name == "rotate") {

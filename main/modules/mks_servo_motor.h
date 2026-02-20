@@ -11,7 +11,6 @@ enum PrecisionZeroState {
     PZ_WAIT_FIRST_ROTATE,
     PZ_READ_ERROR,
     PZ_WAIT_ERROR,
-    PZ_CORRECT_ROTATE,
     PZ_WAIT_CORRECT_ROTATE,
     PZ_SET_ZERO,
     PZ_WAIT_AFTER_ZERO,
@@ -63,8 +62,14 @@ private:
 public:
     static constexpr int32_t COUNTS_PER_TURN = 16384;
     static constexpr double COUNTS_PER_DEG = 16384.0 / 360.0;
+    static constexpr double ANGLE_ERROR_COUNTS_PER_TURN = 51200.0;
     static constexpr int32_t INT24_MIN = -8388608;
     static constexpr int32_t INT24_MAX = 8388607;
+    static constexpr int64_t MAX_WORKING_CURRENT_MA = 3000;
+    static constexpr int64_t MAX_HOLDING_RATIO = 9;
+    static constexpr int64_t MAX_RUN_SPEED = 4095;
+    static constexpr int64_t MAX_ROTATE_SPEED = 65535;
+    static constexpr int64_t MAX_ACC = 255;
 
     MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id);
     void subscribe_to_can();
