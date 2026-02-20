@@ -666,7 +666,7 @@ The `run()` method accepts a speed (0-4095), direction (0 or 1) and acceleration
 
 The `rotate()` method moves the motor by a relative number of degrees with a given speed (0-65535) and acceleration (0-255).
 
-The `precision_zero()` method performs a multi-step zeroing sequence: it rotates to a target angle, reads the angle error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
+The `precision_zero()` method performs a multi-step zeroing sequence specific to the Feldfreund gripper: it rotates to a target angle, reads the angle error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
 
 ## Motor Axis
 
