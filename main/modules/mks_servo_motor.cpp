@@ -1,6 +1,6 @@
 #include "mks_servo_motor.h"
 #include "../utils/uart.h"
-#include <cstring>
+#include <algorithm>
 
 REGISTER_MODULE_DEFAULTS(MksServoMotor)
 
@@ -48,12 +48,7 @@ void MksServoMotor::send_set_vfoc() {
 }
 
 void MksServoMotor::send_working_current(int64_t ma) {
-    if (ma < 0) {
-        ma = 0;
-    }
-    if (ma > MAX_WORKING_CURRENT_MA) {
-        ma = MAX_WORKING_CURRENT_MA;
-    }
+    ma = std::clamp(ma, (int64_t)0, MAX_WORKING_CURRENT_MA);
     uint16_t val = (uint16_t)ma;
     uint8_t data[] = {0x83, (uint8_t)(val >> 8), (uint8_t)(val & 0xFF)};
     this->send(data, 3);
@@ -61,36 +56,15 @@ void MksServoMotor::send_working_current(int64_t ma) {
 }
 
 void MksServoMotor::send_holding_current(int64_t pct) {
-    int64_t ratio = (pct / 10) - 1;
-    if (ratio < 0) {
-        ratio = 0;
-    }
-    if (ratio > MAX_HOLDING_RATIO) {
-        ratio = MAX_HOLDING_RATIO;
-    }
+    int64_t ratio = std::clamp((pct / 10) - 1, (int64_t)0, MAX_HOLDING_RATIO);
     uint8_t data[] = {0x9B, (uint8_t)ratio};
     this->send(data, 2);
 }
 
 void MksServoMotor::send_run_internal(int64_t direction, int64_t speed, int64_t acc) {
-    if (speed < 0) {
-        speed = 0;
-    }
-    if (speed > MAX_RUN_SPEED) {
-        speed = MAX_RUN_SPEED;
-    }
-    if (direction < 0) {
-        direction = 0;
-    }
-    if (direction > 1) {
-        direction = 1;
-    }
-    if (acc < 0) {
-        acc = 0;
-    }
-    if (acc > MAX_ACC) {
-        acc = MAX_ACC;
-    }
+    speed = std::clamp(speed, (int64_t)0, MAX_RUN_SPEED);
+    direction = std::clamp(direction, (int64_t)0, (int64_t)1);
+    acc = std::clamp(acc, (int64_t)0, MAX_ACC);
     uint8_t byte1 = (uint8_t)((direction << 7) | ((speed >> 8) & 0x0F));
     uint8_t byte2 = (uint8_t)(speed & 0xFF);
     uint8_t data[] = {0xF6, byte1, byte2, (uint8_t)acc};
@@ -98,35 +72,15 @@ void MksServoMotor::send_run_internal(int64_t direction, int64_t speed, int64_t 
 }
 
 void MksServoMotor::send_stop_internal(int64_t acc) {
-    if (acc < 0) {
-        acc = 0;
-    }
-    if (acc > MAX_ACC) {
-        acc = MAX_ACC;
-    }
+    acc = std::clamp(acc, (int64_t)0, MAX_ACC);
     uint8_t data[] = {0xF6, 0x00, 0x00, (uint8_t)acc};
     this->send(data, 4);
 }
 
 void MksServoMotor::send_rotate_counts(int32_t counts, int64_t speed, int64_t acc) {
-    if (speed < 0) {
-        speed = 0;
-    }
-    if (speed > MAX_ROTATE_SPEED) {
-        speed = MAX_ROTATE_SPEED;
-    }
-    if (acc < 0) {
-        acc = 0;
-    }
-    if (acc > MAX_ACC) {
-        acc = MAX_ACC;
-    }
-    if (counts > INT24_MAX) {
-        counts = INT24_MAX;
-    }
-    if (counts < INT24_MIN) {
-        counts = INT24_MIN;
-    }
+    speed = std::clamp(speed, (int64_t)0, MAX_ROTATE_SPEED);
+    acc = std::clamp(acc, (int64_t)0, MAX_ACC);
+    counts = std::clamp(counts, INT24_MIN, INT24_MAX);
     uint32_t raw = (uint32_t)counts;
     uint8_t p2 = (raw >> 16) & 0xFF;
     uint8_t p1 = (raw >> 8) & 0xFF;
