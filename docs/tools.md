@@ -72,7 +72,7 @@ The target node will reboot with the new firmware after a successful transfer.
 
 The OTB (Over The Bus) protocol uses these message types:
 
-| Host → Target              |
+| Host → Target              | Description                                                |
 | -------------------------- | ---------------------------------------------------------- |
 | `__OTB_BEGIN__`            | Begin firmware update session                              |
 | `__OTB_CHUNK_<seq>__:data` | Send base64-encoded firmware chunk (incl. sequence number) |

@@ -86,7 +86,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.
-Use the `serial_bus_ota.py` tool to push new firmware to any peer node.
+Use the `otb_update.py` tool to push new firmware to any peer node.
 See [OTB Update](tools.md#otb-update) for details.
 
 ## Input
