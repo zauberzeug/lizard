@@ -21,11 +21,14 @@ void save_if_present() {
         if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
             return;
         }
-        nvs_set_i8(handle, "tx", bus->serial->tx_pin);
-        nvs_set_i8(handle, "rx", bus->serial->rx_pin);
-        nvs_set_i32(handle, "baud", bus->serial->baud_rate);
-        nvs_set_i8(handle, "uart", bus->serial->uart_num);
-        nvs_set_i8(handle, "node", bus->node_id);
+        bool ok = nvs_set_i8(handle, "tx", bus->serial->tx_pin) == ESP_OK &&
+                  nvs_set_i8(handle, "rx", bus->serial->rx_pin) == ESP_OK &&
+                  nvs_set_i32(handle, "baud", bus->serial->baud_rate) == ESP_OK &&
+                  nvs_set_i8(handle, "uart", bus->serial->uart_num) == ESP_OK &&
+                  nvs_set_i8(handle, "node", bus->node_id) == ESP_OK;
+        if (!ok) {
+            echo("error saving bus backup to NVS");
+        }
         nvs_commit(handle);
         nvs_close(handle);
         return;
