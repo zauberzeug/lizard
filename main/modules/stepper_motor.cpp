@@ -57,12 +57,15 @@ StepperMotor::StepperMotor(const std::string name,
     pcnt_unit_config_t unit_config = {
         .low_limit = -30000,
         .high_limit = 30000,
+        .intr_priority = 0,
+        .flags = {},
     };
     check_error(pcnt_new_unit(&unit_config, &this->pcnt_unit), "failed to create PCNT unit");
 
     pcnt_chan_config_t chan_config = {
         .edge_gpio_num = step_pin,
         .level_gpio_num = dir_pin,
+        .flags = {},
     };
     check_error(pcnt_new_channel(this->pcnt_unit, &chan_config, &this->pcnt_channel), "failed to create PCNT channel");
 
