@@ -251,7 +251,7 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     this->echo_target_id = 0;
 }
 
-void SerialBus::enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length) {
+void SerialBus::enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length) {
     if (length >= PAYLOAD_CAPACITY) {
         throw std::runtime_error("serial bus: payload is too large for serial bus");
     }
@@ -276,7 +276,7 @@ bool SerialBus::send_outgoing_queue() {
     return sent_any;
 }
 
-void SerialBus::send_message(uint8_t receiver, const char *payload, size_t length) const {
+void SerialBus::send_message(const uint8_t receiver, const char *payload, const size_t length) const {
     static char buffer[FRAME_BUFFER_SIZE];
     const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver);
     if (header_len < 0) {

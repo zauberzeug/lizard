@@ -50,9 +50,9 @@ private:
     void process_uart();
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
-    void enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length);
+    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
     bool send_outgoing_queue();
-    void send_message(uint8_t receiver, const char *payload, size_t length) const;
+    void send_message(const uint8_t receiver, const char *payload, const size_t length) const;
 
     void send_otb_response(const uint8_t sender);
     void print_to_incoming_queue(const char *format, ...) const;
