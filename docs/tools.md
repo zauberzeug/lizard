@@ -106,7 +106,7 @@ Host                            Target
   |<-- __OTB_ACK_CHUNK_<N-1>__ ----|
   |                                |
   |--- __OTB_COMMIT__ ------------>|
-  |<-- __OTB_ACK_COMMIT -----------|
+  |<-- __OTB_ACK_COMMIT__ ----------|
   |                                |
 ```
 

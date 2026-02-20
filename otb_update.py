@@ -7,7 +7,7 @@ from pathlib import Path
 
 import serial
 
-CHUNK_SIZE = 174
+CHUNK_SIZE = 174  # must match BUS_OTB_CHUNK_SIZE in main/utils/otb.h
 WINDOW = 8
 
 parser = argparse.ArgumentParser(description='Push firmware via SerialBus OTB')
@@ -88,6 +88,7 @@ except OtbError as e:
 
 except KeyboardInterrupt:
     print('\nInterrupted')
+    transact('__OTB_ABORT__')
     sys.exit(1)
 
 finally:

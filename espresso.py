@@ -211,8 +211,8 @@ def reset_partition() -> None:
         '--port', DEVICE,
         '--baud', '115200',
         'erase_region',
-        '0xf000',
-        '0x2000',
+        '0xf000',  # otadata partition offset (default ESP-IDF partition table)
+        '0x2000',  # otadata partition size (default ESP-IDF partition table)
     )
     if not success:
         raise RuntimeError('Failed to reset OTA partition.')

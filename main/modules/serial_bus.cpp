@@ -58,13 +58,9 @@ void SerialBus::step() {
     }
 
     if (this->otb_session.handle != 0) {
+        uint8_t sender = this->otb_session.sender; // save before bus_tick may reset it on timeout
         otb::bus_tick(this->otb_session, millis());
-        if (this->otb_session.response_length > 0) {
-            this->enqueue_outgoing_message(this->otb_session.sender,
-                                           this->otb_session.response,
-                                           this->otb_session.response_length);
-            this->otb_session.response_length = 0;
-        }
+        this->send_otb_response(sender);
     }
 
     Module::step();
@@ -224,12 +220,7 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     constexpr size_t otb_prefix_len = sizeof(otb::OTB_MSG_PREFIX) - 1;
     if (payload_view.substr(0, otb_prefix_len) == otb::OTB_MSG_PREFIX &&
         otb::bus_handle_frame(this->otb_session, message.sender, payload_view)) {
-        if (this->otb_session.response_length > 0) {
-            this->enqueue_outgoing_message(message.sender,
-                                           this->otb_session.response,
-                                           this->otb_session.response_length);
-            this->otb_session.response_length = 0;
-        }
+        this->send_otb_response(message.sender);
         return;
     }
 
@@ -296,6 +287,13 @@ void SerialBus::send_message(uint8_t receiver, const char *payload, size_t lengt
     }
     memcpy(buffer + header_len, payload, length);
     this->serial->write_checked_line(buffer, header_len + length);
+}
+
+void SerialBus::send_otb_response(const uint8_t sender) {
+    if (this->otb_session.response_length > 0) {
+        this->enqueue_outgoing_message(sender, this->otb_session.response, this->otb_session.response_length);
+        this->otb_session.response_length = 0;
+    }
 }
 
 void SerialBus::print_to_incoming_queue(const char *format, ...) const {
