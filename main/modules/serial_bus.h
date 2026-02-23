@@ -6,6 +6,8 @@
 #include "module.h"
 #include "serial.h"
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
 
 class SerialBus : public Module {
@@ -17,6 +19,7 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+    void subscribe(uint8_t node, const std::string &remote_path, const std::string &local_name);
 
 private:
     struct IncomingMessage {
@@ -30,10 +33,16 @@ private:
         size_t length;
         char payload[PAYLOAD_CAPACITY];
     };
+    struct Subscription {
+        uint8_t subscriber;
+        Variable_ptr property;
+        char local_name[64];
+    };
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
     std::vector<uint8_t> peer_ids;
+    std::vector<Subscription> subscriptions;
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
@@ -51,8 +60,11 @@ private:
     void enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length);
     bool send_outgoing_queue();
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
+    void send_subscription_updates();
 
     void print_to_incoming_queue(const char *format, ...) const;
     void handle_echo(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
 };
+
+using SerialBus_ptr = std::shared_ptr<SerialBus>;

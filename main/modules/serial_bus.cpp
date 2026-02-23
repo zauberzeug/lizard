@@ -1,5 +1,6 @@
 #include "serial_bus.h"
 
+#include "../global.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -18,6 +19,8 @@ static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
+static constexpr const char SUBSCRIBE_CMD[] = "__SUBSCRIBE__:";
+static constexpr const char UPDATE_CMD[] = "__UPDATE__:";
 
 REGISTER_MODULE_DEFAULTS(SerialBus)
 
@@ -53,6 +56,7 @@ void SerialBus::step() {
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_incoming_message(message);
     }
+    this->send_subscription_updates();
     Module::step();
 }
 
@@ -216,6 +220,36 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         return;
     }
 
+    // handle subscription request: "__SUBSCRIBE__:module.property:local_name"
+    const size_t sub_len = sizeof(SUBSCRIBE_CMD) - 1;
+    if (std::strncmp(message.payload, SUBSCRIBE_CMD, sub_len) == 0) {
+        const char *rest = message.payload + sub_len;
+        const char *dot = std::strchr(rest, '.');
+        const char *colon = std::strchr(rest, ':');
+        if (dot && colon && dot < colon) {
+            const std::string module_name(rest, dot);
+            const std::string property_name(dot + 1, colon);
+            Variable_ptr prop = Global::get_module(module_name)->get_property(property_name);
+            if (!std::any_of(subscriptions.begin(), subscriptions.end(),
+                             [&](const Subscription &s) { return s.subscriber == message.sender && s.property == prop; })) {
+                Subscription sub{message.sender, prop, {}};
+                std::strncpy(sub.local_name, colon + 1, sizeof(sub.local_name) - 1);
+                sub.local_name[sizeof(sub.local_name) - 1] = '\0';
+                subscriptions.push_back(sub);
+            }
+        }
+        return;
+    }
+
+    // handle subscription update: "__UPDATE__:local_name=value"
+    const size_t upd_len = sizeof(UPDATE_CMD) - 1;
+    if (std::strncmp(message.payload, UPDATE_CMD, upd_len) == 0) {
+        try {
+            process_line(message.payload + upd_len, message.length - upd_len);
+        } catch (...) {}
+        return;
+    }
+
     // process control commands starting with "!" silently
     if (message.payload[0] == '!') {
         process_line(message.payload, message.length);
@@ -268,6 +302,24 @@ void SerialBus::send_message(uint8_t receiver, const char *payload, size_t lengt
     }
     memcpy(buffer + header_len, payload, length);
     this->serial->write_checked_line(buffer, header_len + length);
+}
+
+void SerialBus::subscribe(uint8_t node, const std::string &remote_path, const std::string &local_name) {
+    char payload[PAYLOAD_CAPACITY];
+    const int len = csprintf(payload, sizeof(payload), "%s%s:%s", SUBSCRIBE_CMD, remote_path.c_str(), local_name.c_str());
+    if (len > 0)
+        this->enqueue_outgoing_message(node, payload, len);
+}
+
+void SerialBus::send_subscription_updates() {
+    for (const Subscription &sub : this->subscriptions) {
+        char payload[PAYLOAD_CAPACITY];
+        int len = csprintf(payload, sizeof(payload), "%s%s=", UPDATE_CMD, sub.local_name);
+        if (len <= 0)
+            continue;
+        len += sub.property->print_to_buffer(payload + len, sizeof(payload) - len);
+        this->enqueue_outgoing_message(sub.subscriber, payload, len);
+    }
 }
 
 void SerialBus::print_to_incoming_queue(const char *format, ...) const {
