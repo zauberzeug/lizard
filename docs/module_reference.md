@@ -90,6 +90,13 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
 
+| Subscriptions                                        | Description                    | Arguments    |
+| ---------------------------------------------------- | ------------------------------ | ------------ |
+| `local_var = bus.subscribe(node, "module.property")` | Subscribe to a remote property | `int`, `str` |
+
+Subscriptions let the coordinator monitor properties on peer nodes.
+The peer reads the property every cycle and sends its current value back to the coordinator, where it is written into the local variable.
+
 ## Input
 
 The input module is associated with a digital input pin that is be connected to a pushbutton, sensor or other input signal.
