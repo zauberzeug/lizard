@@ -89,11 +89,12 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------- |
 | `bus.send(receiver, payload)`                             | Send a single line of text to a peer `receiver` (0-255)                              | `int`, `str`          |
 | `bus.make_coordinator(peer_ids...)`                       | Set the list of peer IDs, making this node the coordinator                           | `int`s                |
-| `bus.subscribe(node, "module.property"[, "local_name"])` | Subscribe to a remote property | `int`, `str`[, `str`] |
+| `bus.subscribe(node, "module.property")` | Subscribe to a remote property | `int`, `str` |
 
 Subscriptions let the coordinator monitor properties on peer nodes.
 The peer reads the property every cycle and sends its current value back to the coordinator.
-The value is stored as a property on the bus module (e.g. `bus.module_property`, or `bus.local_name` if the optional third argument is given).
+The value is stored as `bus.module_property_node` (e.g. `bus.testi_level_1` for `"testi.level"` on node `1`).
+If the peer restarts, subscriptions are automatically re-sent on the next poll timeout.
 
 ## Input
 

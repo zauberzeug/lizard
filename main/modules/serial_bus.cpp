@@ -70,10 +70,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         const std::string payload = arguments[1]->evaluate_string();
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "subscribe") {
-        if (arguments.size() < 2 || arguments.size() > 3) {
-            throw std::runtime_error("subscribe expects 2 or 3 arguments: node_id, \"module.property\"[, \"local_name\"]");
-        }
-        Module::expect(arguments, -1, integer, string, string);
+        Module::expect(arguments, 2, integer, string);
         const int node_id = arguments[0]->evaluate_integer();
         if (node_id <= 0 || node_id >= 255) {
             throw std::runtime_error("node id must be between 1 and 254");
@@ -82,13 +79,9 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         if (remote_path.find('.') == std::string::npos) {
             throw std::runtime_error("property path must be \"module.property\"");
         }
-        std::string local_name;
-        if (arguments.size() == 3) {
-            local_name = arguments[2]->evaluate_string();
-        } else {
-            local_name = remote_path;
-            std::replace(local_name.begin(), local_name.end(), '.', '_');
-        }
+        std::string local_name = remote_path;
+        std::replace(local_name.begin(), local_name.end(), '.', '_');
+        local_name += "_" + std::to_string(node_id);
         if (!this->properties.count(local_name)) {
             this->properties[local_name] = std::make_shared<NumberVariable>();
         }
@@ -129,7 +122,20 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             }
             // handle poll timeout
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->peer_ids[bus->poll_index]);
+                const uint8_t timed_out_peer = bus->peer_ids[bus->poll_index];
+                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), timed_out_peer);
+                const std::string peer_suffix = "_" + std::to_string(timed_out_peer);
+                for (const auto &[name, prop] : bus->properties) {
+                    if (name.size() > peer_suffix.size() &&
+                        name.compare(name.size() - peer_suffix.size(), peer_suffix.size(), peer_suffix) == 0) {
+                        std::string remote = name.substr(0, name.size() - peer_suffix.size());
+                        const size_t dot_pos = remote.find('_');
+                        if (dot_pos != std::string::npos) {
+                            remote[dot_pos] = '.';
+                            bus->subscribe(timed_out_peer, remote, bus->name + "." + name);
+                        }
+                    }
+                }
                 bus->is_polling = false;
             }
         } else {
