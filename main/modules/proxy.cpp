@@ -2,6 +2,7 @@
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "driver/uart.h"
+#include <algorithm>
 #include <memory>
 
 Proxy::Proxy(const std::string name,
@@ -22,6 +23,21 @@ Proxy::Proxy(const std::string name,
 }
 
 void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+    if (method_name == "subscribe" && arguments.size() >= 2) {
+        try {
+            std::string local_name;
+            if (arguments.size() >= 3) {
+                local_name = arguments[2]->evaluate_string();
+            } else {
+                local_name = arguments[1]->evaluate_string();
+                std::replace(local_name.begin(), local_name.end(), '.', '_');
+            }
+            if (!this->properties.count(local_name)) {
+                this->properties[local_name] = std::make_shared<NumberVariable>();
+            }
+            this->expander->send_call(this->name, "broadcast", {});
+        } catch (...) {}
+    }
     this->expander->send_call(this->name, method_name, arguments);
 }
 

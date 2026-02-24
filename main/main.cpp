@@ -14,7 +14,6 @@
 #include "modules/core.h"
 #include "modules/expander.h"
 #include "modules/module.h"
-#include "modules/serial_bus.h"
 #include "proxy.h"
 #include "rom/gpio.h"
 #include "rom/uart.h"
@@ -209,31 +208,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                if (expander_module->type == serial_bus && module_type == "subscribe") {
-                    if (arguments.size() != 2) {
-                        throw std::runtime_error("bus.subscribe expects 2 arguments: node_id, \"module.property\"");
-                    }
-                    const int node_id = arguments[0]->evaluate_integer();
-                    if (node_id <= 0 || node_id >= 255) {
-                        throw std::runtime_error("node id must be between 1 and 254");
-                    }
-                    const std::string remote_path = arguments[1]->evaluate_string();
-                    if (remote_path.find('.') == std::string::npos) {
-                        throw std::runtime_error("property path must be \"module.property\"");
-                    }
-                    const SerialBus_ptr bus = std::static_pointer_cast<SerialBus>(expander_module);
-                    if (!Global::has_variable(module_name)) {
-                        Global::add_variable(module_name, std::make_shared<NumberVariable>());
-                    }
-                    bus->subscribe(static_cast<uint8_t>(node_id), remote_path, module_name);
-                } else {
-                    if (expander_module->type != expander) {
-                        throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
-                    }
-                    const Expander_ptr expander_ptr = std::static_pointer_cast<Expander>(expander_module);
-                    const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander_ptr, arguments);
-                    Global::add_module(module_name, proxy);
+                if (expander_module->type != expander) {
+                    throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
+                const Expander_ptr expander_ptr = std::static_pointer_cast<Expander>(expander_module);
+                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander_ptr, arguments);
+                Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
             const struct parsed_method_call method_call = parsed_method_call_get(statement.method_call);

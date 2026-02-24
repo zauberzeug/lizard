@@ -69,6 +69,30 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         }
         const std::string payload = arguments[1]->evaluate_string();
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
+    } else if (method_name == "subscribe") {
+        if (arguments.size() < 2 || arguments.size() > 3) {
+            throw std::runtime_error("subscribe expects 2 or 3 arguments: node_id, \"module.property\"[, \"local_name\"]");
+        }
+        Module::expect(arguments, -1, integer, string, string);
+        const int node_id = arguments[0]->evaluate_integer();
+        if (node_id <= 0 || node_id >= 255) {
+            throw std::runtime_error("node id must be between 1 and 254");
+        }
+        const std::string remote_path = arguments[1]->evaluate_string();
+        if (remote_path.find('.') == std::string::npos) {
+            throw std::runtime_error("property path must be \"module.property\"");
+        }
+        std::string local_name;
+        if (arguments.size() == 3) {
+            local_name = arguments[2]->evaluate_string();
+        } else {
+            local_name = remote_path;
+            std::replace(local_name.begin(), local_name.end(), '.', '_');
+        }
+        if (!this->properties.count(local_name)) {
+            this->properties[local_name] = std::make_shared<NumberVariable>();
+        }
+        this->subscribe(static_cast<uint8_t>(node_id), remote_path, this->name + "." + local_name);
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
             throw std::runtime_error("make_coordinator expects at least one peer ID");
@@ -241,7 +265,7 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         return;
     }
 
-    // handle subscription update: "__UPDATE__:local_name=value"
+    // handle subscription update: "__UPDATE__:module.property=value"
     const size_t upd_len = sizeof(UPDATE_CMD) - 1;
     if (std::strncmp(message.payload, UPDATE_CMD, upd_len) == 0) {
         try {
