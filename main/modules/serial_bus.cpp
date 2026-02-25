@@ -19,6 +19,7 @@ static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
 static constexpr const char SUBSCRIBE_CMD[] = "__SUBSCRIBE__:";
+static constexpr const char UNSUBSCRIBE_CMD[] = "__UNSUBSCRIBE__";
 static constexpr const char UPDATE_CMD[] = "__UPDATE__:";
 
 REGISTER_MODULE_DEFAULTS(SerialBus)
@@ -238,6 +239,15 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         return;
     }
 
+    // handle unsubscribe: clear all subscriptions to the sender
+    if (std::strcmp(message.payload, UNSUBSCRIBE_CMD) == 0) {
+        subscriptions.erase(
+            std::remove_if(subscriptions.begin(), subscriptions.end(),
+                           [&](const Subscription &s) { return s.node == message.sender; }),
+            subscriptions.end());
+        return;
+    }
+
     // handle subscription update: "__UPDATE__:property_node=value" (coordinator prepends its module name)
     const size_t upd_len = sizeof(UPDATE_CMD) - 1;
     if (std::strncmp(message.payload, UPDATE_CMD, upd_len) == 0) {
@@ -246,7 +256,14 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
             const int len = csprintf(full_line, sizeof(full_line), "%s.%s", this->name.c_str(), message.payload + upd_len);
             if (len > 0)
                 process_line(full_line, len);
-        } catch (...) {}
+        } catch (const std::exception &e) {
+            echo("warning: %s update from node %u: %s", this->name.c_str(), message.sender, e.what());
+            // resynch: unknown property means peer has stale subscriptions, clear and re-subscribe
+            this->enqueue_outgoing_message(message.sender, UNSUBSCRIBE_CMD, sizeof(UNSUBSCRIBE_CMD) - 1);
+            for (const Subscription &sub : this->subscriptions)
+                if (!sub.property && sub.node == message.sender)
+                    this->subscribe(sub.node, sub.path);
+        }
         return;
     }
 
