@@ -62,6 +62,18 @@ static void respond(BusOtbSession &session, uint8_t receiver, const char *fmt, .
     }
 }
 
+static void bus_reset_session(BusOtbSession &session, bool abort_flash = true) {
+    if (session.handle && abort_flash) {
+        esp_ota_abort(session.handle);
+    }
+    session.sender = 0;
+    session.handle = 0;
+    session.partition = nullptr;
+    session.next_seq = 0;
+    session.bytes_written = 0;
+    session.last_activity = 0;
+}
+
 static bool fail(BusOtbSession &session, uint8_t receiver, const char *reason) {
     respond(session, receiver, "%s:%s", OTB_ERROR_PREFIX, reason);
     bus_reset_session(session);
@@ -152,18 +164,6 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
 
     echo("otb[%u] %.*s", sender, static_cast<int>(msg.size()), msg.data());
     return true;
-}
-
-void bus_reset_session(BusOtbSession &session, bool abort_flash) {
-    if (session.handle && abort_flash) {
-        esp_ota_abort(session.handle);
-    }
-    session.sender = 0;
-    session.handle = 0;
-    session.partition = nullptr;
-    session.next_seq = 0;
-    session.bytes_written = 0;
-    session.last_activity = 0;
 }
 
 void bus_tick(BusOtbSession &session, unsigned long now_ms) {
