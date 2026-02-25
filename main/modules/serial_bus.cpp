@@ -61,7 +61,7 @@ void SerialBus::step() {
     }
 
     if (this->otb_session.handle != 0) {
-        otb::bus_tick(this->otb_session, millis());
+        otb::bus_tick(this->otb_session);
     }
 
     Module::step();

@@ -121,8 +121,8 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
     return true;
 }
 
-void bus_tick(BusOtbSession &session, unsigned long now_ms) {
-    if (session.handle && now_ms - session.last_activity > BUS_OTB_SESSION_TIMEOUT_MS) {
+void bus_tick(BusOtbSession &session) {
+    if (session.handle && millis() - session.last_activity > BUS_OTB_SESSION_TIMEOUT_MS) {
         echo("warning: serial bus %s otb timed out", session.bus_name);
         fail(session, session.sender, "timeout");
     }

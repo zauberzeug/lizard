@@ -39,6 +39,6 @@ struct BusOtbSession {
 };
 
 bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view payload);
-void bus_tick(BusOtbSession &session, unsigned long now_ms);
+void bus_tick(BusOtbSession &session);
 
 } // namespace otb
