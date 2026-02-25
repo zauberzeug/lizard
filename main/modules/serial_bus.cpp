@@ -57,8 +57,9 @@ void SerialBus::step() {
         this->handle_incoming_message(message);
     }
 
+    // check for OTB session timeout and send response if needed
     if (this->otb_session.handle != 0) {
-        uint8_t sender = this->otb_session.sender; // save before bus_tick may reset it on timeout
+        const uint8_t sender = this->otb_session.sender; // save sender before bus_tick timeout might resets it to 0
         otb::bus_tick(this->otb_session, millis());
         this->send_otb_response(sender);
     }
