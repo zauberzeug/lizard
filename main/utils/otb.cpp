@@ -113,7 +113,7 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
         return true;
     }
 
-    echo("otb[%u] %.*s", sender, static_cast<int>(msg.size()), msg.data());
+    respond(session, sender, "%s:unknown", OTB_ERROR_PREFIX);
     return true;
 }
 
