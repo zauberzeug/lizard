@@ -18,10 +18,7 @@ static void respond(BusOtbSession &session, uint8_t receiver, const char *fmt, .
     }
 }
 
-static void bus_reset_session(BusOtbSession &session, bool abort_flash = true) {
-    if (session.handle && abort_flash) {
-        esp_ota_abort(session.handle);
-    }
+static void bus_reset_session(BusOtbSession &session) {
     session.sender = 0;
     session.handle = 0;
     session.partition = nullptr;
@@ -32,6 +29,7 @@ static void bus_reset_session(BusOtbSession &session, bool abort_flash = true) {
 
 static bool fail(BusOtbSession &session, uint8_t receiver, const char *reason) {
     respond(session, receiver, "%s:%s", OTB_ERROR_PREFIX, reason);
+    esp_ota_abort(session.handle);
     bus_reset_session(session);
     return true;
 }
@@ -78,7 +76,7 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
         }
         echo("serial bus %s otb finished (%lu bytes)", session.bus_name, static_cast<unsigned long>(session.bytes_written));
         respond(session, sender, OTB_ACK_COMMIT);
-        bus_reset_session(session, false);
+        bus_reset_session(session);
         return true;
     }
 
