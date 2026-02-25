@@ -110,8 +110,7 @@ Host                            Target
   |                                |
 ```
 
-On error at any point, the target responds with `__OTB_ERROR__:reason` where reason can be:
-`busy`, `begin_failed`, `no_session`, `aborted`, `commit_failed`, `format`, `seq`, `decode`, `write`, `timeout`, `unknown`.
+On error at any point, the target responds with `__OTB_ERROR__:<message>` with a human-readable error message.
 
 ### Configure
 
