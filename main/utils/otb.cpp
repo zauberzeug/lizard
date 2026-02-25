@@ -87,19 +87,19 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
             return true;
         }
 
-        std::string_view rest = msg.substr(strlen(OTB_CHUNK_PREFIX));
-        size_t sep = rest.find("__:");
+        const std::string_view rest = msg.substr(strlen(OTB_CHUNK_PREFIX));
+        const size_t sep = rest.find("__:");
         if (sep == std::string_view::npos) {
             return fail(session, sender, "format");
         }
 
         char *end;
-        unsigned long seq = std::strtoul(rest.data(), &end, 10);
+        const unsigned long seq = std::strtoul(rest.data(), &end, 10);
         if (end != rest.data() + sep || seq != session.next_seq) {
             return fail(session, sender, "seq");
         }
 
-        std::string_view b64 = rest.substr(sep + 3);
+        const std::string_view b64 = rest.substr(sep + 3);
         uint8_t buf[BUS_OTB_BUFFER_SIZE];
         size_t len;
         const int err = mbedtls_base64_decode(buf, sizeof(buf), &len, reinterpret_cast<const unsigned char *>(b64.data()), b64.size());
