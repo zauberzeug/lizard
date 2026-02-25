@@ -35,10 +35,6 @@ static bool fail(BusOtbSession &session, uint8_t receiver, const char *reason) {
 }
 
 bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view msg) {
-    if (std::strncmp(msg.data(), OTB_MSG_PREFIX, strlen(OTB_MSG_PREFIX)) != 0) {
-        return false;
-    }
-
     // __OTB_BEGIN__
     if (msg == OTB_BEGIN_PREFIX) {
         if (session.handle) {
