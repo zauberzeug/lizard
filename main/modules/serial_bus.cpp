@@ -49,6 +49,9 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     register_echo_callback([this](const char *line) { this->handle_echo(line); });
 
     this->otb_session.bus_name = this->name.c_str();
+    this->otb_session.send_fn = [this](uint8_t receiver, const char *data, size_t len) {
+        this->enqueue_outgoing_message(receiver, data, len);
+    };
 }
 
 void SerialBus::step() {
@@ -57,11 +60,8 @@ void SerialBus::step() {
         this->handle_incoming_message(message);
     }
 
-    // check for OTB session timeout and send response if needed
     if (this->otb_session.handle != 0) {
-        const uint8_t sender = this->otb_session.sender; // save sender before bus_tick timeout might resets it to 0
         otb::bus_tick(this->otb_session, millis());
-        this->send_otb_response(sender);
     }
 
     Module::step();
@@ -221,7 +221,6 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     constexpr size_t otb_prefix_len = sizeof(otb::OTB_MSG_PREFIX) - 1;
     if (payload_view.substr(0, otb_prefix_len) == otb::OTB_MSG_PREFIX &&
         otb::bus_handle_frame(this->otb_session, message.sender, payload_view)) {
-        this->send_otb_response(message.sender);
         return;
     }
 
@@ -288,13 +287,6 @@ void SerialBus::send_message(const uint8_t receiver, const char *payload, const 
     }
     memcpy(buffer + header_len, payload, length);
     this->serial->write_checked_line(buffer, header_len + length);
-}
-
-void SerialBus::send_otb_response(const uint8_t sender) {
-    if (this->otb_session.response_length > 0) {
-        this->enqueue_outgoing_message(sender, this->otb_session.response, this->otb_session.response_length);
-        this->otb_session.response_length = 0;
-    }
 }
 
 void SerialBus::print_to_incoming_queue(const char *format, ...) const {

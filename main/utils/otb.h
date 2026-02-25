@@ -3,6 +3,7 @@
 #include "esp_ota_ops.h"
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string_view>
 
 namespace otb {
@@ -24,6 +25,8 @@ constexpr unsigned long BUS_OTB_SESSION_TIMEOUT_MS = 10000;
 
 constexpr size_t OTB_RESPONSE_SIZE = 64;
 
+using SendFn = std::function<void(uint8_t receiver, const char *data, size_t len)>;
+
 struct BusOtbSession {
     uint8_t sender = 0;
     esp_ota_handle_t handle = 0;
@@ -32,8 +35,7 @@ struct BusOtbSession {
     size_t bytes_written = 0;
     unsigned long last_activity = 0;
     const char *bus_name = nullptr;
-    char response[OTB_RESPONSE_SIZE] = {};
-    size_t response_length = 0;
+    SendFn send_fn;
 };
 
 void bus_reset_session(BusOtbSession &session, bool abort_flash = true);

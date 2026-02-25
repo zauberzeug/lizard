@@ -54,7 +54,6 @@ private:
     bool send_outgoing_queue();
     void send_message(const uint8_t receiver, const char *payload, const size_t length) const;
 
-    void send_otb_response(const uint8_t sender);
     void print_to_incoming_queue(const char *format, ...) const;
     void handle_echo(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
