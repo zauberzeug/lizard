@@ -38,7 +38,7 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 
 ### OTB Update
 
-`otb_update.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB protocol.
+`otb_update.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB (Over The Bus) protocol.
 
 ```bash
 ./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target <peer_id> [--bus <name>] [--expander <name>]
@@ -59,7 +59,7 @@ When the SerialBus coordinator sits behind an expander (e.g. `p0`), pass `--expa
 The script will pause broadcasts on that expander via `core.pause_broadcasts()` before the transfer
 and resume them afterwards to keep the UART link clear.
 
-**Example with expander:**
+Example:
 
 ```bash
 ./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target 1 --expander p0
@@ -79,14 +79,14 @@ The OTB (Over The Bus) protocol uses these message types:
 | `__OTB_COMMIT__`           | Commit update and set boot partition                       |
 | `__OTB_ABORT__`            | Cancel the update session                                  |
 
-| Host ← Target              | Description                               |
-| -------------------------- | ----------------------------------------- |
-| `__OTB_ACK_BEGIN__`        | Acknowledge begin                         |
-| `__OTB_ACK_CHUNK_<seq>__`  | Acknowledge chunk (incl. sequence number) |
-| `__OTB_ACK_COMMIT__`       | Acknowledge commit                        |
-| `__OTB_ERROR__:reason`     | Error response with reason code           |
+| Host ← Target             | Description                               |
+| ------------------------- | ----------------------------------------- |
+| `__OTB_ACK_BEGIN__`       | Acknowledge begin                         |
+| `__OTB_ACK_CHUNK_<seq>__` | Acknowledge chunk (incl. sequence number) |
+| `__OTB_ACK_COMMIT__`      | Acknowledge commit                        |
+| `__OTB_ERROR__:reason`    | Error response with reason code           |
 
-**Protocol flow:**
+Flow:
 
 ```
 Host                            Target
@@ -106,7 +106,7 @@ Host                            Target
   |<-- __OTB_ACK_CHUNK_<N-1>__ ----|
   |                                |
   |--- __OTB_COMMIT__ ------------>|
-  |<-- __OTB_ACK_COMMIT__ ----------|
+  |<-- __OTB_ACK_COMMIT__ ---------|
   |                                |
 ```
 
