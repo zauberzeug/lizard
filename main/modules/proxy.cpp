@@ -27,7 +27,7 @@ void Proxy::call(const std::string method_name, const std::vector<ConstExpressio
         try {
             std::string local_name = arguments[1]->evaluate_string();
             std::replace(local_name.begin(), local_name.end(), '.', '_');
-            local_name += "_" + arguments[0]->evaluate_string();
+            local_name += "_" + std::to_string(arguments[0]->evaluate_integer());
             if (!this->properties.count(local_name)) {
                 this->properties[local_name] = std::make_shared<NumberVariable>();
             }

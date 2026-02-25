@@ -5,7 +5,6 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -84,8 +83,9 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         local_name += "_" + std::to_string(node_id);
         if (!this->properties.count(local_name)) {
             this->properties[local_name] = std::make_shared<NumberVariable>();
+            this->subscriptions.push_back({static_cast<uint8_t>(node_id), nullptr, remote_path});
         }
-        this->subscribe(static_cast<uint8_t>(node_id), remote_path, this->name + "." + local_name);
+        this->subscribe(static_cast<uint8_t>(node_id), remote_path);
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
             throw std::runtime_error("make_coordinator expects at least one peer ID");
@@ -124,18 +124,9 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
                 const uint8_t timed_out_peer = bus->peer_ids[bus->poll_index];
                 bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), timed_out_peer);
-                const std::string peer_suffix = "_" + std::to_string(timed_out_peer);
-                for (const auto &[name, prop] : bus->properties) {
-                    if (name.size() > peer_suffix.size() &&
-                        name.compare(name.size() - peer_suffix.size(), peer_suffix.size(), peer_suffix) == 0) {
-                        std::string remote = name.substr(0, name.size() - peer_suffix.size());
-                        const size_t dot_pos = remote.find('_');
-                        if (dot_pos != std::string::npos) {
-                            remote[dot_pos] = '.';
-                            bus->subscribe(timed_out_peer, remote, bus->name + "." + name);
-                        }
-                    }
-                }
+                for (const Subscription &sub : bus->subscriptions)
+                    if (!sub.property && sub.node == timed_out_peer)
+                        bus->subscribe(sub.node, sub.path);
                 bus->is_polling = false;
             }
         } else {
@@ -196,39 +187,21 @@ void SerialBus::process_uart() {
     }
 }
 
-bool SerialBus::parse_message(const char *message_line, IncomingMessage &message) const {
+bool SerialBus::parse_message(const char *line, IncomingMessage &message) const {
     // format: $$sender:receiver$$payload
-    const std::string line(message_line);
-    const size_t header_start = line.find("$$");
-    if (header_start == std::string::npos || header_start != 0) {
+    unsigned int sender, receiver;
+    int header_end = 0;
+    if (sscanf(line, "$$%u:%u$$%n", &sender, &receiver, &header_end) < 2 || header_end == 0)
         return false;
-    }
-    const size_t header_end = line.find("$$", 2);
-    if (header_end == std::string::npos) {
+    if (sender > 255 || receiver > 255)
         return false;
-    }
-    const size_t colon_pos = line.find(':', 2);
-    if (colon_pos == std::string::npos || colon_pos >= header_end) {
+    const size_t payload_len = strlen(line + header_end);
+    if (payload_len >= PAYLOAD_CAPACITY)
         return false;
-    }
-    try {
-        const int sender = std::stoi(line.substr(2, colon_pos - 2));
-        const int receiver = std::stoi(line.substr(colon_pos + 1, header_end - (colon_pos + 1)));
-        if (sender < 0 || sender > 255 || receiver < 0 || receiver > 255) {
-            return false;
-        }
-        message.sender = static_cast<uint8_t>(sender);
-        message.receiver = static_cast<uint8_t>(receiver);
-    } catch (...) {
-        return false;
-    }
-    const size_t payload_len = line.size() - (header_end + 2);
-    if (payload_len >= PAYLOAD_CAPACITY) {
-        return false;
-    }
+    message.sender = static_cast<uint8_t>(sender);
+    message.receiver = static_cast<uint8_t>(receiver);
     message.length = payload_len;
-    memcpy(message.payload, line.c_str() + header_end + 2, payload_len);
-    message.payload[payload_len] = '\0';
+    memcpy(message.payload, line + header_end, payload_len + 1);
     return true;
 }
 
@@ -250,32 +223,29 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         return;
     }
 
-    // handle subscription request: "__SUBSCRIBE__:module.property:local_name"
+    // handle subscription request: "__SUBSCRIBE__:module.property"
     const size_t sub_len = sizeof(SUBSCRIBE_CMD) - 1;
     if (std::strncmp(message.payload, SUBSCRIBE_CMD, sub_len) == 0) {
-        const char *rest = message.payload + sub_len;
-        const char *dot = std::strchr(rest, '.');
-        const char *colon = std::strchr(rest, ':');
-        if (dot && colon && dot < colon) {
-            const std::string module_name(rest, dot);
-            const std::string property_name(dot + 1, colon);
-            Variable_ptr prop = Global::get_module(module_name)->get_property(property_name);
+        const char *path = message.payload + sub_len;
+        const char *dot = std::strchr(path, '.');
+        if (dot) {
+            Variable_ptr prop = Global::get_module(std::string(path, dot))->get_property(dot + 1);
             if (!std::any_of(subscriptions.begin(), subscriptions.end(),
-                             [&](const Subscription &s) { return s.subscriber == message.sender && s.property == prop; })) {
-                Subscription sub{message.sender, prop, {}};
-                std::strncpy(sub.local_name, colon + 1, sizeof(sub.local_name) - 1);
-                sub.local_name[sizeof(sub.local_name) - 1] = '\0';
-                subscriptions.push_back(sub);
+                             [&](const Subscription &s) { return s.node == message.sender && s.property == prop; })) {
+                subscriptions.push_back({message.sender, prop, path});
             }
         }
         return;
     }
 
-    // handle subscription update: "__UPDATE__:module.property=value"
+    // handle subscription update: "__UPDATE__:property_node=value" (coordinator prepends its module name)
     const size_t upd_len = sizeof(UPDATE_CMD) - 1;
     if (std::strncmp(message.payload, UPDATE_CMD, upd_len) == 0) {
         try {
-            process_line(message.payload + upd_len, message.length - upd_len);
+            char full_line[PAYLOAD_CAPACITY];
+            const int len = csprintf(full_line, sizeof(full_line), "%s.%s", this->name.c_str(), message.payload + upd_len);
+            if (len > 0)
+                process_line(full_line, len);
         } catch (...) {}
         return;
     }
@@ -334,21 +304,25 @@ void SerialBus::send_message(uint8_t receiver, const char *payload, size_t lengt
     this->serial->write_checked_line(buffer, header_len + length);
 }
 
-void SerialBus::subscribe(uint8_t node, const std::string &remote_path, const std::string &local_name) {
+void SerialBus::subscribe(uint8_t node, const std::string &path) {
     char payload[PAYLOAD_CAPACITY];
-    const int len = csprintf(payload, sizeof(payload), "%s%s:%s", SUBSCRIBE_CMD, remote_path.c_str(), local_name.c_str());
+    const int len = csprintf(payload, sizeof(payload), "%s%s", SUBSCRIBE_CMD, path.c_str());
     if (len > 0)
         this->enqueue_outgoing_message(node, payload, len);
 }
 
 void SerialBus::send_subscription_updates() {
     for (const Subscription &sub : this->subscriptions) {
+        if (!sub.property)
+            continue;
         char payload[PAYLOAD_CAPACITY];
-        int len = csprintf(payload, sizeof(payload), "%s%s=", UPDATE_CMD, sub.local_name);
+        std::string name = sub.path;
+        std::replace(name.begin(), name.end(), '.', '_');
+        int len = csprintf(payload, sizeof(payload), "%s%s_%u=", UPDATE_CMD, name.c_str(), this->node_id);
         if (len <= 0)
             continue;
         len += sub.property->print_to_buffer(payload + len, sizeof(payload) - len);
-        this->enqueue_outgoing_message(sub.subscriber, payload, len);
+        this->enqueue_outgoing_message(sub.node, payload, len);
     }
 }
 

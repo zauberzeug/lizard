@@ -19,7 +19,7 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
-    void subscribe(uint8_t node, const std::string &remote_path, const std::string &local_name);
+    void subscribe(uint8_t node, const std::string &path);
 
 private:
     struct IncomingMessage {
@@ -34,9 +34,9 @@ private:
         char payload[PAYLOAD_CAPACITY];
     };
     struct Subscription {
-        uint8_t subscriber;
-        Variable_ptr property;
-        char local_name[64];
+        uint8_t node;
+        Variable_ptr property; // null = coordinator-side, non-null = peer-side
+        std::string path;      // "module.prop" on both sides
     };
 
     const ConstSerial_ptr serial;
