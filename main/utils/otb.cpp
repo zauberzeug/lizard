@@ -58,7 +58,11 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
 
     // __OTB_ABORT__
     if (msg == OTB_ABORT_PREFIX) {
-        return session.handle && session.sender == sender ? fail(session, sender, "aborted") : true;
+        if (!session.handle || session.sender != sender) {
+            respond(session, sender, "%s:no_session", OTB_ERROR_PREFIX);
+            return true;
+        }
+        return fail(session, sender, "aborted");
     }
 
     // __OTB_COMMIT__
