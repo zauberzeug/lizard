@@ -1,55 +1,11 @@
 #include "otb.h"
+#include "mbedtls/base64.h"
 #include "timing.h"
 #include "uart.h"
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
 namespace otb {
-
-static bool decode_base64(std::string_view input, uint8_t *output, size_t max_len, size_t &out_len) {
-    out_len = 0;
-    if (input.empty() || input.size() % 4 != 0) {
-        return false;
-    }
-
-    auto decode_char = [](char c) -> int {
-        if (c >= 'A' && c <= 'Z')
-            return c - 'A';
-        if (c >= 'a' && c <= 'z')
-            return c - 'a' + 26;
-        if (c >= '0' && c <= '9')
-            return c - '0' + 52;
-        if (c == '+')
-            return 62;
-        if (c == '/')
-            return 63;
-        if (c == '=')
-            return -1;
-        return -2;
-    };
-
-    for (size_t i = 0; i < input.size(); i += 4) {
-        int c0 = decode_char(input[i]);
-        int c1 = decode_char(input[i + 1]);
-        int c2 = decode_char(input[i + 2]);
-        int c3 = decode_char(input[i + 3]);
-        if (c0 < 0 || c1 < 0 || c2 == -2 || c3 == -2 || (c2 == -1 && c3 >= 0)) {
-            return false;
-        }
-        if (out_len >= max_len) {
-            return false;
-        }
-        output[out_len++] = (c0 << 2) | (c1 >> 4);
-        if (c2 >= 0 && out_len < max_len) {
-            output[out_len++] = (c1 << 4) | (c2 >> 2);
-        }
-        if (c3 >= 0 && out_len < max_len) {
-            output[out_len++] = (c2 << 6) | c3;
-        }
-    }
-    return true;
-}
 
 static void respond(BusOtbSession &session, uint8_t receiver, const char *fmt, ...) {
     char buf[OTB_RESPONSE_SIZE];
@@ -148,7 +104,8 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
         std::string_view b64 = rest.substr(sep + 3);
         uint8_t buf[BUS_OTB_BUFFER_SIZE];
         size_t len;
-        if (!decode_base64(b64, buf, sizeof(buf), len) || len == 0 || len > BUS_OTB_CHUNK_SIZE) {
+        const int err = mbedtls_base64_decode(buf, sizeof(buf), &len, reinterpret_cast<const unsigned char *>(b64.data()), b64.size());
+        if (err != 0 || len == 0 || len > BUS_OTB_CHUNK_SIZE) {
             return fail(session, sender, "decode");
         }
         if (esp_ota_write(session.handle, buf, len) != ESP_OK) {
