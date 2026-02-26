@@ -631,6 +631,44 @@ The optional acceleration argument defaults to 0, which starts and stops pulsing
 
 When the motor is disabled, it will stop and ignore movement commands.
 
+## MKS Servo Motor
+
+The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/makerbase-mks) closed-loop stepper motor via CAN.
+
+| Constructor                                  | Description              | Arguments                |
+| -------------------------------------------- | ------------------------ | ------------------------ |
+| `motor = MksServoMotor(can, can_id)` | CAN module and CAN node ID | CAN module, `int` |
+
+| Properties              | Description                                 | Data type |
+| ----------------------- | ------------------------------------------- | --------- |
+| `motor.position`        | Motor position (degrees)                    | `float`   |
+| `motor.speed`           | Motor speed                                 | `int`     |
+| `motor.working_current` | Working current (mA, 0-3000, default: 1700) | `int`     |
+| `motor.enabled`         | Whether the motor is enabled                | `bool`    |
+| `motor.homing_state`    | Current state of the precision zero sequence | `int`    |
+| `motor.homing_active`   | Whether precision zero is in progress       | `bool`    |
+
+| Methods                                    | Description                                     | Arguments                     |
+| ------------------------------------------ | ----------------------------------------------- | ----------------------------- |
+| `motor.enable()`                           | Enable the motor                                |                               |
+| `motor.disable()`                          | Disable the motor                               |                               |
+| `motor.set_vfoc()`                         | Set VFOC mode                                   |                               |
+| `motor.zero()`                             | Set current position as zero                    |                               |
+| `motor.precision_zero()`                   | Start precision zeroing sequence                |                               |
+| `motor.set_working_current(ma)`            | Set working current (mA, 0-3000)                | `int`                         |
+| `motor.set_holding_current(pct)`           | Set holding current (percentage)                | `int`                         |
+| `motor.run(speed, direction, acc)`         | Run motor with speed, direction and acceleration | `int`, `int`, `int`          |
+| `motor.stop(acc)`                          | Stop motor with given deceleration              | `int`                         |
+| `motor.rotate(degrees, speed, acc)`        | Rotate by given degrees                         | `float`, `int`, `int`        |
+| `motor.grip()`                             | Grip (rotate 5 degrees at high speed)           |                               |
+| `motor.release()`                          | Release (rotate -40 degrees at high speed)      |                               |
+
+The `run()` method accepts a speed (0-4095), direction (0 or 1) and acceleration (0-255).
+
+The `rotate()` method moves the motor by a relative number of degrees with a given speed (0-65535) and acceleration (0-255).
+
+The `precision_zero()` method performs a multi-step zeroing sequence specific to the Feldfreund gripper: it rotates to a target angle, reads the angle error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
+
 ## Motor Axis
 
 The motor axis module wraps a motor and two limit switches.
