@@ -1,24 +1,31 @@
 #include "stepper_motor.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
-#include "esp32/rom/gpio.h"
+#include "rom/gpio.h"
 #include "soc/gpio_sig_map.h"
 #include <algorithm>
 #include <driver/ledc.h>
-#include <driver/pcnt.h>
-#include <esp_rom_gpio.h>
-#include <math.h>
-#include <memory>
+#include <driver/pulse_cnt.h>
 #include <stdexcept>
 
 #define MIN_SPEED 490
 
+static void check_error(esp_err_t err, const char *msg) {
+    if (err != ESP_OK) {
+        throw std::runtime_error(std::string(msg) + ": " + esp_err_to_name(err));
+    }
+}
+
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 #define SPEED_MODE LEDC_LOW_SPEED_MODE
 #define SPEED_OUT_IDX LEDC_LS_SIG_OUT0_IDX
+#define DUTY_RESOLUTION LEDC_TIMER_8_BIT
+#define DUTY_VALUE 128 // 50% of 256 with 8-bit resolution
 #else
 #define SPEED_MODE LEDC_HIGH_SPEED_MODE
 #define SPEED_OUT_IDX LEDC_HS_SIG_OUT0_IDX
+#define DUTY_RESOLUTION LEDC_TIMER_1_BIT
+#define DUTY_VALUE 1 // 50% of max 1 with 1-bit resolution
 #endif
 
 REGISTER_MODULE_DEFAULTS(StepperMotor)
@@ -35,15 +42,11 @@ const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
 StepperMotor::StepperMotor(const std::string name,
                            const gpio_num_t step_pin,
                            const gpio_num_t dir_pin,
-                           const pcnt_unit_t pcnt_unit,
-                           const pcnt_channel_t pcnt_channel,
                            const ledc_timer_t ledc_timer,
                            const ledc_channel_t ledc_channel)
     : Module(stepper_motor, name),
       step_pin(step_pin),
       dir_pin(dir_pin),
-      pcnt_unit(pcnt_unit),
-      pcnt_channel(pcnt_channel),
       ledc_timer(ledc_timer),
       ledc_channel(ledc_channel) {
     gpio_reset_pin(step_pin);
@@ -51,32 +54,44 @@ StepperMotor::StepperMotor(const std::string name,
 
     this->properties = StepperMotor::get_defaults();
 
-    pcnt_config_t pcnt_config = {
-        .pulse_gpio_num = step_pin,
-        .ctrl_gpio_num = dir_pin,
-        .lctrl_mode = PCNT_MODE_REVERSE,
-        .hctrl_mode = PCNT_MODE_KEEP,
-        .pos_mode = PCNT_COUNT_INC,
-        .neg_mode = PCNT_COUNT_DIS,
-        .counter_h_lim = 30000,
-        .counter_l_lim = -30000,
-        .unit = this->pcnt_unit,
-        .channel = this->pcnt_channel,
+    pcnt_unit_config_t unit_config = {
+        .low_limit = -30000,
+        .high_limit = 30000,
+        .intr_priority = 0,
+        .flags = {},
     };
-    pcnt_unit_config(&pcnt_config);
-    pcnt_counter_pause(this->pcnt_unit);
-    pcnt_counter_clear(this->pcnt_unit);
-    pcnt_counter_resume(this->pcnt_unit);
+    check_error(pcnt_new_unit(&unit_config, &this->pcnt_unit), "failed to create PCNT unit");
+
+    pcnt_chan_config_t chan_config = {
+        .edge_gpio_num = step_pin,
+        .level_gpio_num = dir_pin,
+        .flags = {},
+    };
+    check_error(pcnt_new_channel(this->pcnt_unit, &chan_config, &this->pcnt_channel), "failed to create PCNT channel");
+
+    check_error(pcnt_channel_set_edge_action(this->pcnt_channel,
+                                             PCNT_CHANNEL_EDGE_ACTION_INCREASE,
+                                             PCNT_CHANNEL_EDGE_ACTION_HOLD),
+                "failed to set PCNT edge action");
+
+    check_error(pcnt_channel_set_level_action(this->pcnt_channel,
+                                              PCNT_CHANNEL_LEVEL_ACTION_KEEP,
+                                              PCNT_CHANNEL_LEVEL_ACTION_INVERSE),
+                "failed to set PCNT level action");
+
+    check_error(pcnt_unit_enable(this->pcnt_unit), "failed to enable PCNT unit");
+    check_error(pcnt_unit_clear_count(this->pcnt_unit), "failed to clear PCNT count");
+    check_error(pcnt_unit_start(this->pcnt_unit), "failed to start PCNT unit");
 
     ledc_timer_config_t timer_config = {
         .speed_mode = SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_1_BIT,
+        .duty_resolution = DUTY_RESOLUTION,
         .timer_num = this->ledc_timer,
         .freq_hz = 1000,
         .clk_cfg = LEDC_AUTO_CLK,
         .deconfigure = false,
     };
-    ledc_timer_config(&timer_config);
+    check_error(ledc_timer_config(&timer_config), "failed to configure LEDC timer");
 
     ledc_channel_config_t channel_config = {
         .gpio_num = step_pin,
@@ -88,16 +103,16 @@ StepperMotor::StepperMotor(const std::string name,
         .hpoint = 0,
         .flags = {},
     };
-    ledc_channel_config(&channel_config);
+    check_error(ledc_channel_config(&channel_config), "failed to configure LEDC channel");
 
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
 }
 
 void StepperMotor::read_position() {
-    int16_t count;
-    pcnt_get_counter_value(this->pcnt_unit, &count);
-    int16_t d_count = count - this->last_count;
+    int count;
+    pcnt_unit_get_count(this->pcnt_unit, &count);
+    int d_count = count - this->last_count;
     if (d_count > 15000) {
         d_count -= 30000;
     }
@@ -113,7 +128,7 @@ void StepperMotor::set_state(StepperState new_state) {
     this->properties.at("idle")->boolean_value = (new_state == Idle);
 
     gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : SPEED_OUT_IDX + this->ledc_channel, 0, 0);
-    ledc_set_duty(SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : 1);
+    ledc_set_duty(SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : DUTY_VALUE);
     ledc_update_duty(SPEED_MODE, this->ledc_channel);
 }
 
