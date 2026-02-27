@@ -117,6 +117,18 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
         return true;
     }
 
+    // __OTB_ACK_*__
+    if (std::strncmp(msg.data(), OTB_ACK_PREFIX, strlen(OTB_ACK_PREFIX)) == 0) {
+        echo("otb[%u] %.*s", sender, static_cast<int>(msg.size()), msg.data());
+        return true;
+    }
+
+    // __OTB_ERROR__:*
+    if (std::strncmp(msg.data(), OTB_ERROR_PREFIX, strlen(OTB_ERROR_PREFIX)) == 0) {
+        echo("otb[%u] %.*s", sender, static_cast<int>(msg.size()), msg.data());
+        return true;
+    }
+
     respond(session, sender, "%s:unknown command", OTB_ERROR_PREFIX);
     return true;
 }

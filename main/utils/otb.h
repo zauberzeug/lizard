@@ -14,6 +14,7 @@ constexpr const char OTB_BEGIN_PREFIX[] = "__OTB_BEGIN__";
 constexpr const char OTB_CHUNK_PREFIX[] = "__OTB_CHUNK_";
 constexpr const char OTB_COMMIT_PREFIX[] = "__OTB_COMMIT__";
 constexpr const char OTB_ABORT_PREFIX[] = "__OTB_ABORT__";
+constexpr const char OTB_ACK_PREFIX[] = "__OTB_ACK_";
 constexpr const char OTB_ACK_BEGIN[] = "__OTB_ACK_BEGIN__";
 constexpr const char OTB_ACK_CHUNK_PREFIX[] = "__OTB_ACK_CHUNK_";
 constexpr const char OTB_ACK_COMMIT[] = "__OTB_ACK_COMMIT__";
