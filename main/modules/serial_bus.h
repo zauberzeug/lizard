@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../utils/otb.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -43,14 +44,15 @@ private:
     size_t poll_index = 0;
     uint8_t requesting_node = 0;
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
+    otb::BusOtbSession otb_session;
 
     [[noreturn]] static void communication_loop(void *param);
     void process_uart();
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
-    void enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length);
+    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
     bool send_outgoing_queue();
-    void send_message(uint8_t receiver, const char *payload, size_t length) const;
+    void send_message(const uint8_t receiver, const char *payload, const size_t length) const;
 
     void print_to_incoming_queue(const char *format, ...) const;
     void handle_echo(const char *line);

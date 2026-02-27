@@ -93,10 +93,10 @@ lizard/
 │   ├── parser.h            # Generated parser (from language.owl via gen_parser.sh)
 │   ├── compilation/        # DSL compilation (expressions, variables, routines, rules)
 │   ├── modules/            # Hardware modules (motors, sensors, I/O, CAN, etc.)
-│   └── utils/              # Utilities (UART, OTA, timing, string helpers)
+│   └── utils/              # Utilities (UART, OTB updates, timing, string helpers)
 ├── components/             # ESP-IDF components and submodules
 ├── docs/                   # MkDocs documentation
-├── examples/               # Usage examples (ROS integration, OTA, trajectories)
+├── examples/               # Usage examples (ROS integration, trajectories)
 ├── build.py               # Build script (wraps idf.py)
 ├── flash.py               # Flash script
 ├── monitor.py             # Serial monitor

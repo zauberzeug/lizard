@@ -36,6 +36,82 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
+### OTB Update
+
+`otb_update.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB (Over The Bus) protocol.
+
+```bash
+./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target <peer_id> [--bus <name>] [--expander <name>]
+```
+
+| Argument     | Description                                           |
+| ------------ | ----------------------------------------------------- |
+| `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`) |
+| `--port`     | Serial port (default: `/dev/ttyUSB0`)                 |
+| `--baud`     | Baudrate (default: `115200`)                          |
+| `--target`   | Bus ID of the target node (required)                  |
+| `--bus`      | Name of the SerialBus module (default: `bus`)         |
+| `--expander` | Expander name when coordinator is behind an expander  |
+
+**Expander chains:**
+
+When the SerialBus coordinator sits behind an expander (e.g. `p0`), pass `--expander p0`.
+The script will pause broadcasts on that expander via `core.pause_broadcasts()` before the transfer
+and resume them afterwards to keep the UART link clear.
+
+Example:
+
+```bash
+./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target 1 --expander p0
+```
+
+This flashes node 1 through expander `p0`.
+The target node will reboot with the new firmware after a successful transfer.
+
+**OTB Protocol:**
+
+The OTB (Over The Bus) protocol uses these message types:
+
+| Host → Target              | Description                                                |
+| -------------------------- | ---------------------------------------------------------- |
+| `__OTB_BEGIN__`            | Begin firmware update session                              |
+| `__OTB_CHUNK_<seq>__:data` | Send base64-encoded firmware chunk (incl. sequence number) |
+| `__OTB_COMMIT__`           | Commit update and set boot partition                       |
+| `__OTB_ABORT__`            | Cancel the update session                                  |
+
+| Host ← Target             | Description                               |
+| ------------------------- | ----------------------------------------- |
+| `__OTB_ACK_BEGIN__`       | Acknowledge begin                         |
+| `__OTB_ACK_CHUNK_<seq>__` | Acknowledge chunk (incl. sequence number) |
+| `__OTB_ACK_COMMIT__`      | Acknowledge commit                        |
+| `__OTB_ERROR__:reason`    | Error response with reason code           |
+
+Flow:
+
+```
+Host                            Target
+  |                                |
+  |--- __OTB_BEGIN__ ------------->|
+  |<-- __OTB_ACK_BEGIN__ ----------|
+  |                                |
+  |--- __OTB_CHUNK_<0>__:... ----->|
+  |<-- __OTB_ACK_CHUNK_<0>__ ------|
+  |                                |
+  |--- __OTB_CHUNK_<1>__:... ----->|
+  |<-- __OTB_ACK_CHUNK_<1>__ ------|
+  |                                |
+  |       ... more chunks ...      |
+  |                                |
+  |--- __OTB_CHUNK_<N-1>__:... --->|
+  |<-- __OTB_ACK_CHUNK_<N-1>__ ----|
+  |                                |
+  |--- __OTB_COMMIT__ ------------>|
+  |<-- __OTB_ACK_COMMIT__ ---------|
+  |                                |
+```
+
+On error at any point, the target responds with `__OTB_ERROR__:<message>` with a human-readable error message.
+
 ### Configure
 
 Use the configure script to send a new startup script to the microcontroller.

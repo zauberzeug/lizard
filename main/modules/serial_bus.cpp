@@ -1,5 +1,6 @@
 #include "serial_bus.h"
 
+#include "../utils/otb.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -46,6 +47,11 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     }
 
     register_echo_callback([this](const char *line) { this->handle_echo(line); });
+
+    this->otb_session.bus_name = this->name.c_str();
+    this->otb_session.send_fn = [this](uint8_t receiver, const char *data, size_t len) {
+        this->enqueue_outgoing_message(receiver, data, len);
+    };
 }
 
 void SerialBus::step() {
@@ -53,6 +59,11 @@ void SerialBus::step() {
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_incoming_message(message);
     }
+
+    if (this->otb_session.handle != 0) {
+        otb::bus_tick(this->otb_session);
+    }
+
     Module::step();
 }
 
@@ -205,6 +216,14 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         return;
     }
 
+    // Handle OTB frames (check prefix first to avoid function call overhead for regular messages)
+    std::string_view payload_view(message.payload, message.length);
+    constexpr size_t otb_prefix_len = sizeof(otb::OTB_MSG_PREFIX) - 1;
+    if (payload_view.substr(0, otb_prefix_len) == otb::OTB_MSG_PREFIX &&
+        otb::bus_handle_frame(this->otb_session, message.sender, payload_view)) {
+        return;
+    }
+
     // echo incoming messages from peers
     const size_t prefix_len = sizeof(ECHO_CMD) - 1;
     if (std::strncmp(message.payload, ECHO_CMD, prefix_len) == 0) {
@@ -232,7 +251,7 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     this->echo_target_id = 0;
 }
 
-void SerialBus::enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length) {
+void SerialBus::enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length) {
     if (length >= PAYLOAD_CAPACITY) {
         throw std::runtime_error("serial bus: payload is too large for serial bus");
     }
@@ -257,7 +276,7 @@ bool SerialBus::send_outgoing_queue() {
     return sent_any;
 }
 
-void SerialBus::send_message(uint8_t receiver, const char *payload, size_t length) const {
+void SerialBus::send_message(const uint8_t receiver, const char *payload, const size_t length) const {
     static char buffer[FRAME_BUFFER_SIZE];
     const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver);
     if (header_len < 0) {

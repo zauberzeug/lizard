@@ -4,8 +4,8 @@ import subprocess
 import sys
 import time
 from contextlib import contextmanager
-from typing import Generator
 from pathlib import Path
+from typing import Generator
 import argparse
 
 try:
@@ -101,6 +101,7 @@ parser.add_argument('--partition-table', default='build/partition_table/partitio
 parser.add_argument('--swap', action='store_true', help='Swap En and G0 pins for piggyboard version lower than v0.5')
 parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
 parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
+parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
 parser.add_argument('--device', nargs='?', default=DEFAULT_DEVICE, help='Serial device path (auto-detected on Jetson)')
 
@@ -201,6 +202,22 @@ def erase() -> None:
                 raise RuntimeError('Failed to erase flash.')
 
 
+def reset_partition() -> None:
+    """Reset the OTA partition to the default state."""
+    print_bold('Resetting partition to "ota_0"...')
+    success = run(
+        'esptool.py',
+        '--chip', args.chip,
+        '--port', DEVICE,
+        '--baud', '115200',
+        'erase_region',
+        '0xf000',  # otadata partition offset (default ESP-IDF partition table)
+        '0x2000',  # otadata partition size (default ESP-IDF partition table)
+    )
+    if not success:
+        raise RuntimeError('Failed to reset OTA partition.')
+
+
 def flash() -> None:
     """Flash the microcontroller."""
     print_bold('Flashing...')
@@ -224,6 +241,8 @@ def flash() -> None:
             )
             if not success:
                 raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
+            if args.reset_partition:
+                reset_partition()
 
 
 def run(*run_args: str) -> bool:
