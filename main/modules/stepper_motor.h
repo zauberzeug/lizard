@@ -2,7 +2,7 @@
 
 #include "driver/gpio.h"
 #include "driver/ledc.h"
-#include "driver/pcnt.h"
+#include "driver/pulse_cnt.h"
 #include "module.h"
 #include "motor.h"
 
@@ -19,13 +19,14 @@ class StepperMotor : public Module, virtual public Motor {
 private:
     const gpio_num_t step_pin;
     const gpio_num_t dir_pin;
-    const pcnt_unit_t pcnt_unit;
-    const pcnt_channel_t pcnt_channel;
     const ledc_timer_t ledc_timer;
     const ledc_channel_t ledc_channel;
 
+    pcnt_unit_handle_t pcnt_unit = nullptr;
+    pcnt_channel_handle_t pcnt_channel = nullptr;
+
     uint32_t last_micros = 0;
-    int16_t last_count = 0;
+    int last_count = 0;
 
     StepperState state = Idle;
     int32_t target_position = 0;
@@ -40,8 +41,6 @@ public:
     StepperMotor(const std::string name,
                  const gpio_num_t step_pin,
                  const gpio_num_t dir_pin,
-                 const pcnt_unit_t pcnt_unit,
-                 const pcnt_channel_t pcnt_channel,
                  const ledc_timer_t ledc_timer,
                  const ledc_channel_t ledc_channel);
     void step() override;

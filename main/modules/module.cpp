@@ -11,7 +11,6 @@
 #include "d1_motor.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
-#include "driver/pcnt.h"
 #include "dunker_motor.h"
 #include "dunker_wheels.h"
 #include "expander.h"
@@ -290,17 +289,15 @@ Module_ptr Module::create(const std::string type,
         const RoboClawMotor_ptr right_motor = get_module_paramter<RoboClawMotor>(arguments[1], roboclaw_motor, "roboclaw motor");
         return std::make_shared<RoboClawWheels>(name, left_motor, right_motor);
     } else if (type == "StepperMotor") {
-        if (arguments.size() < 2 || arguments.size() > 6) {
+        if (arguments.size() < 2 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, integer, integer, integer, integer, integer, integer);
+        Module::expect(arguments, -1, integer, integer, integer, integer);
         gpio_num_t step_pin = (gpio_num_t)arguments[0]->evaluate_integer();
         gpio_num_t dir_pin = (gpio_num_t)arguments[1]->evaluate_integer();
-        pcnt_unit_t pcnt_unit = arguments.size() > 2 ? (pcnt_unit_t)arguments[2]->evaluate_integer() : PCNT_UNIT_0;
-        pcnt_channel_t pcnt_channel = arguments.size() > 3 ? (pcnt_channel_t)arguments[3]->evaluate_integer() : PCNT_CHANNEL_0;
-        ledc_timer_t ledc_timer = arguments.size() > 4 ? (ledc_timer_t)arguments[4]->evaluate_integer() : LEDC_TIMER_0;
-        ledc_channel_t ledc_channel = arguments.size() > 5 ? (ledc_channel_t)arguments[5]->evaluate_integer() : LEDC_CHANNEL_0;
-        return std::make_shared<StepperMotor>(name, step_pin, dir_pin, pcnt_unit, pcnt_channel, ledc_timer, ledc_channel);
+        ledc_timer_t ledc_timer = arguments.size() > 2 ? (ledc_timer_t)arguments[2]->evaluate_integer() : LEDC_TIMER_0;
+        ledc_channel_t ledc_channel = arguments.size() > 3 ? (ledc_channel_t)arguments[3]->evaluate_integer() : LEDC_CHANNEL_0;
+        return std::make_shared<StepperMotor>(name, step_pin, dir_pin, ledc_timer, ledc_channel);
     } else if (type == "MotorAxis") {
         Module::expect(arguments, 3, identifier, identifier, identifier);
         const std::string name = arguments[0]->evaluate_identifier();
