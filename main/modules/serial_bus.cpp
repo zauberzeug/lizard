@@ -1,10 +1,10 @@
 #include "serial_bus.h"
 
+#include "../global.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -18,6 +18,9 @@ static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
+static constexpr const char SUBSCRIBE_CMD[] = "__SUBSCRIBE__:";
+static constexpr const char UNSUBSCRIBE_CMD[] = "__UNSUBSCRIBE__";
+static constexpr const char UPDATE_CMD[] = "__UPDATE__:";
 
 REGISTER_MODULE_DEFAULTS(SerialBus)
 
@@ -53,6 +56,7 @@ void SerialBus::step() {
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_incoming_message(message);
     }
+    this->send_subscription_updates();
     Module::step();
 }
 
@@ -65,6 +69,24 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         }
         const std::string payload = arguments[1]->evaluate_string();
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
+    } else if (method_name == "subscribe") {
+        Module::expect(arguments, 2, integer, string);
+        const int node_id = arguments[0]->evaluate_integer();
+        if (node_id <= 0 || node_id >= 255) {
+            throw std::runtime_error("node id must be between 1 and 254");
+        }
+        const std::string remote_path = arguments[1]->evaluate_string();
+        if (remote_path.find('.') == std::string::npos) {
+            throw std::runtime_error("property path must be \"module.property\"");
+        }
+        std::string local_name = remote_path;
+        std::replace(local_name.begin(), local_name.end(), '.', '_');
+        local_name += "_" + std::to_string(node_id);
+        if (!this->properties.count(local_name)) {
+            this->properties[local_name] = std::make_shared<NumberVariable>();
+            this->subscriptions.push_back({static_cast<uint8_t>(node_id), nullptr, remote_path});
+        }
+        this->subscribe(static_cast<uint8_t>(node_id), remote_path);
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
             throw std::runtime_error("make_coordinator expects at least one peer ID");
@@ -101,7 +123,11 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             }
             // handle poll timeout
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->peer_ids[bus->poll_index]);
+                const uint8_t timed_out_peer = bus->peer_ids[bus->poll_index];
+                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), timed_out_peer);
+                for (const Subscription &sub : bus->subscriptions)
+                    if (!sub.property && sub.node == timed_out_peer)
+                        bus->subscribe(sub.node, sub.path);
                 bus->is_polling = false;
             }
         } else {
@@ -162,39 +188,21 @@ void SerialBus::process_uart() {
     }
 }
 
-bool SerialBus::parse_message(const char *message_line, IncomingMessage &message) const {
+bool SerialBus::parse_message(const char *line, IncomingMessage &message) const {
     // format: $$sender:receiver$$payload
-    const std::string line(message_line);
-    const size_t header_start = line.find("$$");
-    if (header_start == std::string::npos || header_start != 0) {
+    unsigned int sender, receiver;
+    int header_end = 0;
+    if (sscanf(line, "$$%u:%u$$%n", &sender, &receiver, &header_end) < 2 || header_end == 0)
         return false;
-    }
-    const size_t header_end = line.find("$$", 2);
-    if (header_end == std::string::npos) {
+    if (sender > 255 || receiver > 255)
         return false;
-    }
-    const size_t colon_pos = line.find(':', 2);
-    if (colon_pos == std::string::npos || colon_pos >= header_end) {
+    const size_t payload_len = strlen(line + header_end);
+    if (payload_len >= PAYLOAD_CAPACITY)
         return false;
-    }
-    try {
-        const int sender = std::stoi(line.substr(2, colon_pos - 2));
-        const int receiver = std::stoi(line.substr(colon_pos + 1, header_end - (colon_pos + 1)));
-        if (sender < 0 || sender > 255 || receiver < 0 || receiver > 255) {
-            return false;
-        }
-        message.sender = static_cast<uint8_t>(sender);
-        message.receiver = static_cast<uint8_t>(receiver);
-    } catch (...) {
-        return false;
-    }
-    const size_t payload_len = line.size() - (header_end + 2);
-    if (payload_len >= PAYLOAD_CAPACITY) {
-        return false;
-    }
+    message.sender = static_cast<uint8_t>(sender);
+    message.receiver = static_cast<uint8_t>(receiver);
     message.length = payload_len;
-    memcpy(message.payload, line.c_str() + header_end + 2, payload_len);
-    message.payload[payload_len] = '\0';
+    memcpy(message.payload, line + header_end, payload_len + 1);
     return true;
 }
 
@@ -213,6 +221,49 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         memcpy(buffer, message.payload + prefix_len, copy_len);
         buffer[copy_len] = '\0';
         echo("bus[%u]: %s", message.sender, buffer);
+        return;
+    }
+
+    // handle subscription request: "__SUBSCRIBE__:module.property"
+    const size_t sub_len = sizeof(SUBSCRIBE_CMD) - 1;
+    if (std::strncmp(message.payload, SUBSCRIBE_CMD, sub_len) == 0) {
+        const char *path = message.payload + sub_len;
+        const char *dot = std::strchr(path, '.');
+        if (dot) {
+            Variable_ptr prop = Global::get_module(std::string(path, dot))->get_property(dot + 1);
+            if (!std::any_of(subscriptions.begin(), subscriptions.end(),
+                             [&](const Subscription &s) { return s.node == message.sender && s.property == prop; })) {
+                subscriptions.push_back({message.sender, prop, path});
+            }
+        }
+        return;
+    }
+
+    // handle unsubscribe: clear all subscriptions to the sender
+    if (std::strcmp(message.payload, UNSUBSCRIBE_CMD) == 0) {
+        subscriptions.erase(
+            std::remove_if(subscriptions.begin(), subscriptions.end(),
+                           [&](const Subscription &s) { return s.node == message.sender; }),
+            subscriptions.end());
+        return;
+    }
+
+    // handle subscription update: "__UPDATE__:property_node=value" (coordinator prepends its module name)
+    const size_t upd_len = sizeof(UPDATE_CMD) - 1;
+    if (std::strncmp(message.payload, UPDATE_CMD, upd_len) == 0) {
+        try {
+            char full_line[PAYLOAD_CAPACITY];
+            const int len = csprintf(full_line, sizeof(full_line), "%s.%s", this->name.c_str(), message.payload + upd_len);
+            if (len > 0)
+                process_line(full_line, len);
+        } catch (const std::exception &e) {
+            echo("warning: %s update from node %u: %s", this->name.c_str(), message.sender, e.what());
+            // resynch: unknown property means peer has stale subscriptions, clear and re-subscribe
+            this->enqueue_outgoing_message(message.sender, UNSUBSCRIBE_CMD, sizeof(UNSUBSCRIBE_CMD) - 1);
+            for (const Subscription &sub : this->subscriptions)
+                if (!sub.property && sub.node == message.sender)
+                    this->subscribe(sub.node, sub.path);
+        }
         return;
     }
 
@@ -268,6 +319,28 @@ void SerialBus::send_message(uint8_t receiver, const char *payload, size_t lengt
     }
     memcpy(buffer + header_len, payload, length);
     this->serial->write_checked_line(buffer, header_len + length);
+}
+
+void SerialBus::subscribe(uint8_t node, const std::string &path) {
+    char payload[PAYLOAD_CAPACITY];
+    const int len = csprintf(payload, sizeof(payload), "%s%s", SUBSCRIBE_CMD, path.c_str());
+    if (len > 0)
+        this->enqueue_outgoing_message(node, payload, len);
+}
+
+void SerialBus::send_subscription_updates() {
+    for (const Subscription &sub : this->subscriptions) {
+        if (!sub.property)
+            continue;
+        char payload[PAYLOAD_CAPACITY];
+        std::string name = sub.path;
+        std::replace(name.begin(), name.end(), '.', '_');
+        int len = csprintf(payload, sizeof(payload), "%s%s_%u=", UPDATE_CMD, name.c_str(), this->node_id);
+        if (len <= 0)
+            continue;
+        len += sub.property->print_to_buffer(payload + len, sizeof(payload) - len);
+        this->enqueue_outgoing_message(sub.node, payload, len);
+    }
 }
 
 void SerialBus::print_to_incoming_queue(const char *format, ...) const {

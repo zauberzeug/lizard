@@ -207,12 +207,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
+                const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 if (expander_module->type != expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
-                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
-                const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                const Expander_ptr expander_ptr = std::static_pointer_cast<Expander>(expander_module);
+                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander_ptr, arguments);
                 Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
