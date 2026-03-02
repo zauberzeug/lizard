@@ -5,6 +5,7 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -188,21 +189,39 @@ void SerialBus::process_uart() {
     }
 }
 
-bool SerialBus::parse_message(const char *line, IncomingMessage &message) const {
+bool SerialBus::parse_message(const char *message_line, IncomingMessage &message) const {
     // format: $$sender:receiver$$payload
-    unsigned int sender, receiver;
-    int header_end = 0;
-    if (sscanf(line, "$$%u:%u$$%n", &sender, &receiver, &header_end) < 2 || header_end == 0)
+    const std::string line(message_line);
+    const size_t header_start = line.find("$$");
+    if (header_start == std::string::npos || header_start != 0) {
         return false;
-    if (sender > 255 || receiver > 255)
+    }
+    const size_t header_end = line.find("$$", 2);
+    if (header_end == std::string::npos) {
         return false;
-    const size_t payload_len = strlen(line + header_end);
-    if (payload_len >= PAYLOAD_CAPACITY)
+    }
+    const size_t colon_pos = line.find(':', 2);
+    if (colon_pos == std::string::npos || colon_pos >= header_end) {
         return false;
-    message.sender = static_cast<uint8_t>(sender);
-    message.receiver = static_cast<uint8_t>(receiver);
+    }
+    try {
+        const int sender = std::stoi(line.substr(2, colon_pos - 2));
+        const int receiver = std::stoi(line.substr(colon_pos + 1, header_end - (colon_pos + 1)));
+        if (sender < 0 || sender > 255 || receiver < 0 || receiver > 255) {
+            return false;
+        }
+        message.sender = static_cast<uint8_t>(sender);
+        message.receiver = static_cast<uint8_t>(receiver);
+    } catch (...) {
+        return false;
+    }
+    const size_t payload_len = line.size() - (header_end + 2);
+    if (payload_len >= PAYLOAD_CAPACITY) {
+        return false;
+    }
     message.length = payload_len;
-    memcpy(message.payload, line + header_end, payload_len + 1);
+    memcpy(message.payload, line.c_str() + header_end + 2, payload_len);
+    message.payload[payload_len] = '\0';
     return true;
 }
 

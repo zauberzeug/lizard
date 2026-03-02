@@ -19,7 +19,6 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
-    void subscribe(uint8_t node, const std::string &path);
 
 private:
     struct IncomingMessage {
@@ -60,6 +59,7 @@ private:
     void enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length);
     bool send_outgoing_queue();
     void send_message(uint8_t receiver, const char *payload, size_t length) const;
+    void subscribe(uint8_t node, const std::string &path);
     void send_subscription_updates();
 
     void print_to_incoming_queue(const char *format, ...) const;

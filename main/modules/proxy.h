@@ -6,6 +6,7 @@
 class Proxy : public Module {
 private:
     const Expander_ptr expander;
+    const std::string module_type;
 
 public:
     Proxy(const std::string name,
