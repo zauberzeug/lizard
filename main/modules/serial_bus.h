@@ -32,16 +32,22 @@ private:
         size_t length;
         char payload[PAYLOAD_CAPACITY];
     };
-    struct Subscription {
+    struct RemoteSub {
         uint8_t node;
-        Variable_ptr property; // null = coordinator-side, non-null = peer-side
-        std::string path;      // "module.prop" on both sides
+        std::string var_name; // global variable to update
+        std::string path;     // "module.prop" on the peer
+    };
+    struct LocalSub {
+        uint8_t node;
+        Variable_ptr property;
+        std::string path; // "module.prop" locally
     };
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
     std::vector<uint8_t> peer_ids;
-    std::vector<Subscription> subscriptions;
+    std::vector<RemoteSub> remote_subs;  // coordinator: paths we subscribed to on peers
+    std::vector<LocalSub> local_subs;    // peer: local properties we forward to the coordinator
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
