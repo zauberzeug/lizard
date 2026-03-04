@@ -71,7 +71,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         const std::string payload = arguments[1]->evaluate_string();
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "subscribe") {
-        Module::expect(arguments, 3, integer, string, string);
+        Module::expect(arguments, 2, integer, string);
         const int node_id = arguments[0]->evaluate_integer();
         if (node_id <= 0 || node_id >= 255) {
             throw std::runtime_error("node id must be between 1 and 254");
@@ -80,11 +80,14 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         if (remote_path.find('.') == std::string::npos) {
             throw std::runtime_error("property path must be \"module.property\"");
         }
-        const std::string var_name = arguments[2]->evaluate_string();
-        Global::get_variable(var_name); // validate variable exists
-        const uint8_t node = static_cast<uint8_t>(node_id);
-        this->remote_subs.push_back({node, var_name, remote_path});
-        this->subscribe(node, remote_path);
+        std::string local_name = remote_path;
+        std::replace(local_name.begin(), local_name.end(), '.', '_');
+        local_name += "_" + std::to_string(node_id);
+        if (!this->properties.count(local_name)) {
+            this->properties[local_name] = std::make_shared<NumberVariable>();
+            this->subscriptions.push_back({static_cast<uint8_t>(node_id), nullptr, remote_path});
+        }
+        this->subscribe(static_cast<uint8_t>(node_id), remote_path);
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
             throw std::runtime_error("make_coordinator expects at least one peer ID");
@@ -123,9 +126,8 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
                 const uint8_t timed_out_peer = bus->peer_ids[bus->poll_index];
                 bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), timed_out_peer);
-                bus->enqueue_outgoing_message(timed_out_peer, UNSUBSCRIBE_CMD, sizeof(UNSUBSCRIBE_CMD) - 1);
-                for (const RemoteSub &sub : bus->remote_subs)
-                    if (sub.node == timed_out_peer)
+                for (const Subscription &sub : bus->subscriptions)
+                    if (!sub.property && sub.node == timed_out_peer)
                         bus->subscribe(sub.node, sub.path);
                 bus->is_polling = false;
             }
@@ -247,37 +249,35 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         const char *dot = std::strchr(path, '.');
         if (dot) {
             Variable_ptr prop = Global::get_module(std::string(path, dot))->get_property(dot + 1);
-            if (!std::any_of(local_subs.begin(), local_subs.end(),
-                             [&](const LocalSub &s) { return s.node == message.sender && s.property == prop; }))
-                local_subs.push_back({message.sender, prop, path});
+            if (!std::any_of(subscriptions.begin(), subscriptions.end(),
+                             [&](const Subscription &s) { return s.node == message.sender && s.property == prop; }))
+                subscriptions.push_back({message.sender, prop, path});
         }
         return;
     }
 
     // handle unsubscribe: clear all subscriptions from sender
     if (std::strcmp(message.payload, UNSUBSCRIBE_CMD) == 0) {
-        local_subs.erase(
-            std::remove_if(local_subs.begin(), local_subs.end(),
-                           [&](const LocalSub &s) { return s.node == message.sender; }),
-            local_subs.end());
+        subscriptions.erase(
+            std::remove_if(subscriptions.begin(), subscriptions.end(),
+                           [&](const Subscription &s) { return s.node == message.sender; }),
+            subscriptions.end());
         return;
     }
 
-    // handle subscription update: __UPD__module.property=value
+    // handle subscription update: __UPD__testi_level_1=value
     if (std::strncmp(message.payload, UPDATE_CMD, sizeof(UPDATE_CMD) - 1) == 0) {
-        const char *rest = message.payload + sizeof(UPDATE_CMD) - 1;
-        const char *eq = std::strchr(rest, '=');
-        if (eq) {
-            const std::string path(rest, eq);
-            for (const RemoteSub &sub : this->remote_subs) {
-                if (sub.node == message.sender && sub.path == path) {
-                    char line[PAYLOAD_CAPACITY];
-                    const int len = csprintf(line, sizeof(line), "%s%s", sub.var_name.c_str(), eq);
-                    if (len > 0)
-                        process_line(line, len);
-                    break;
-                }
-            }
+        try {
+            char line[PAYLOAD_CAPACITY];
+            const int len = csprintf(line, sizeof(line), "%s.%s", this->name.c_str(), message.payload + sizeof(UPDATE_CMD) - 1);
+            if (len > 0)
+                process_line(line, len);
+        } catch (const std::exception &e) {
+            echo("warning: %s update from node %u: %s", this->name.c_str(), message.sender, e.what());
+            this->enqueue_outgoing_message(message.sender, UNSUBSCRIBE_CMD, sizeof(UNSUBSCRIBE_CMD) - 1);
+            for (const Subscription &sub : this->subscriptions)
+                if (!sub.property && sub.node == message.sender)
+                    this->subscribe(sub.node, sub.path);
         }
         return;
     }
@@ -344,9 +344,13 @@ void SerialBus::subscribe(uint8_t node, const std::string &path) {
 }
 
 void SerialBus::send_subscription_updates() {
-    for (const LocalSub &sub : this->local_subs) {
+    for (const Subscription &sub : this->subscriptions) {
+        if (!sub.property)
+            continue;
         char payload[PAYLOAD_CAPACITY];
-        int len = csprintf(payload, sizeof(payload), "%s%s=", UPDATE_CMD, sub.path.c_str());
+        std::string name = sub.path;
+        std::replace(name.begin(), name.end(), '.', '_');
+        int len = csprintf(payload, sizeof(payload), "%s%s_%u=", UPDATE_CMD, name.c_str(), this->node_id);
         if (len <= 0)
             continue;
         len += sub.property->print_to_buffer(payload + len, sizeof(payload) - len);
