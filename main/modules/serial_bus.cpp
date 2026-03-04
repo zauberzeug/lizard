@@ -83,12 +83,13 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         std::string local_name = remote_path;
         std::replace(local_name.begin(), local_name.end(), '.', '_');
         local_name += "_" + std::to_string(node_id);
+        const std::string sub_key = remote_path + ":" + local_name;
         if (!this->properties.count(local_name)) {
             this->properties[local_name] = std::make_shared<Variable>(arguments[2]->type);
             this->properties[local_name]->assign(arguments[2]);
-            this->subscriptions.push_back({static_cast<uint8_t>(node_id), nullptr, remote_path});
+            this->subscriptions.push_back({static_cast<uint8_t>(node_id), nullptr, sub_key});
         }
-        this->subscribe(static_cast<uint8_t>(node_id), remote_path);
+        this->subscribe(static_cast<uint8_t>(node_id), sub_key);
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
             throw std::runtime_error("make_coordinator expects at least one peer ID");
@@ -245,19 +246,15 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         return;
     }
 
-    // handle subscription request: provider transforms name and stores pointer
+    // handle subscription request: __SUB__module.property:local_name
     if (std::strncmp(message.payload, SUBSCRIBE_CMD, sizeof(SUBSCRIBE_CMD) - 1) == 0) {
-        const char *path = message.payload + sizeof(SUBSCRIBE_CMD) - 1;
-        const char *dot = std::strchr(path, '.');
-        if (dot) {
-            Variable_ptr prop = Global::get_module(std::string(path, dot))->get_property(dot + 1);
-            std::string name(path);
-            std::replace(name.begin(), name.end(), '.', '_');
-            name += "_" + std::to_string(this->node_id);
-            if (!std::any_of(subscriptions.begin(), subscriptions.end(),
-                             [&](const Subscription &s) { return s.node == message.sender && s.property == prop; }))
-                subscriptions.push_back({message.sender, prop, name});
-        }
+        const char *rest = message.payload + sizeof(SUBSCRIBE_CMD) - 1;
+        const char *dot = std::strchr(rest, '.');
+        const char *sep = std::strchr(rest, ':');
+        Variable_ptr prop = Global::get_module(std::string(rest, dot))->get_property(std::string(dot + 1, sep));
+        if (!std::any_of(subscriptions.begin(), subscriptions.end(),
+                         [&](const Subscription &s) { return s.node == message.sender && s.property == prop; }))
+            subscriptions.push_back({message.sender, prop, std::string(sep + 1)});
         return;
     }
 
@@ -270,7 +267,7 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         return;
     }
 
-    // handle subscription update: __UPD__testi_level_1=value
+    // handle subscription update: __UPD__module_property_id=value
     if (std::strncmp(message.payload, UPDATE_CMD, sizeof(UPDATE_CMD) - 1) == 0) {
         try {
             char line[PAYLOAD_CAPACITY];
@@ -280,9 +277,6 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         } catch (const std::exception &e) {
             echo("warning: %s update from node %u: %s", this->name.c_str(), message.sender, e.what());
             this->enqueue_outgoing_message(message.sender, UNSUBSCRIBE_CMD, sizeof(UNSUBSCRIBE_CMD) - 1);
-            for (const Subscription &sub : this->subscriptions)
-                if (!sub.property && sub.node == message.sender)
-                    this->subscribe(sub.node, sub.path);
         }
         return;
     }
