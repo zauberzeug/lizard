@@ -67,5 +67,3 @@ private:
     void handle_echo(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
 };
-
-using SerialBus_ptr = std::shared_ptr<SerialBus>;
