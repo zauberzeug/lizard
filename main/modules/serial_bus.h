@@ -41,6 +41,7 @@ private:
     const ConstSerial_ptr serial;
     const uint8_t node_id;
     std::vector<uint8_t> peer_ids;
+    bool peer_timed_out[255] = {};
     std::vector<Subscription> subscriptions;
 
     QueueHandle_t outbound_queue = nullptr;

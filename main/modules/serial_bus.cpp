@@ -126,12 +126,8 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             }
             // handle poll timeout
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                const uint8_t timed_out_peer = bus->peer_ids[bus->poll_index];
-                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), timed_out_peer);
-                bus->enqueue_outgoing_message(timed_out_peer, UNSUBSCRIBE_CMD, sizeof(UNSUBSCRIBE_CMD) - 1);
-                for (const Subscription &sub : bus->subscriptions)
-                    if (!sub.property && sub.node == timed_out_peer)
-                        bus->subscribe(sub.node, sub.path);
+                bus->peer_timed_out[bus->peer_ids[bus->poll_index]] = true;
+                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->peer_ids[bus->poll_index]);
                 bus->is_polling = false;
             }
         } else {
@@ -181,6 +177,14 @@ void SerialBus::process_uart() {
         if (std::strcmp(message.payload, DONE_CMD) == 0) {
             if (message.sender == this->peer_ids[this->poll_index]) {
                 this->is_polling = false;
+
+                // if this peer had previously timed out, mark it as responsive again and resend any subscriptions
+                if (this->peer_timed_out[message.sender]) {
+                    this->peer_timed_out[message.sender] = false;
+                    for (const Subscription &sub : this->subscriptions)
+                        if (!sub.property && sub.node == message.sender)
+                            this->subscribe(sub.node, sub.path);
+                }
             }
             continue;
         }
@@ -272,10 +276,9 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         try {
             char line[PAYLOAD_CAPACITY];
             const int len = csprintf(line, sizeof(line), "%s.%s", this->name.c_str(), message.payload + sizeof(UPDATE_CMD) - 1);
-            if (len > 0)
-                process_line(line, len);
+            process_line(line, len);
         } catch (const std::exception &e) {
-            echo("warning: %s update from node %u: %s", this->name.c_str(), message.sender, e.what());
+            echo("warning: %s received unknown update from node %u. Unsubscribing", this->name.c_str(), message.sender);
             this->enqueue_outgoing_message(message.sender, UNSUBSCRIBE_CMD, sizeof(UNSUBSCRIBE_CMD) - 1);
         }
         return;
@@ -338,8 +341,7 @@ void SerialBus::send_message(uint8_t receiver, const char *payload, size_t lengt
 void SerialBus::subscribe(uint8_t node, const std::string &path) {
     char payload[PAYLOAD_CAPACITY];
     const int len = csprintf(payload, sizeof(payload), "%s%s", SUBSCRIBE_CMD, path.c_str());
-    if (len > 0)
-        this->enqueue_outgoing_message(node, payload, len);
+    this->enqueue_outgoing_message(node, payload, len);
 }
 
 void SerialBus::send_subscription_updates() {
@@ -348,8 +350,6 @@ void SerialBus::send_subscription_updates() {
             continue;
         char payload[PAYLOAD_CAPACITY];
         int len = csprintf(payload, sizeof(payload), "%s%s=", UPDATE_CMD, sub.path.c_str());
-        if (len <= 0)
-            continue;
         len += sub.property->print_to_buffer(payload + len, sizeof(payload) - len);
         this->enqueue_outgoing_message(sub.node, payload, len);
     }
