@@ -36,7 +36,7 @@ It is automatically created right after the boot sequence.
 | `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
 | `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
 | `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
-| `core.delete_bus_backup()`       | Clear the saved serial bus backup config from NVS  |              |
+| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -94,10 +94,11 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 ### Bus Backup
 
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
+If multiple SerialBus modules exist, only the first one is backed up.
 On boot, if the startup script does not create a SerialBus but a backup config exists, Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
 This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
 
-To clear the saved backup config, call `core.delete_bus_backup()`.
+To remove the saved configuration, call `core.forget_serial_bus()`.
 
 ## Input
 

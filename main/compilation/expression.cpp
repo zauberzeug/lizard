@@ -39,8 +39,8 @@ int Expression::print_to_buffer(char *buffer, size_t buffer_len) const {
         return csprintf(buffer, buffer_len, "%f", this->evaluate_number());
     case string:
         return csprintf(buffer, buffer_len,
-                         this->evaluate_string().find('"') != std::string::npos ? "'%s'" : "\"%s\"",
-                         this->evaluate_string().c_str());
+                        this->evaluate_string().find('"') != std::string::npos ? "'%s'" : "\"%s\"",
+                        this->evaluate_string().c_str());
     case identifier:
         return csprintf(buffer, buffer_len, "%s", this->evaluate_identifier().c_str());
     default:

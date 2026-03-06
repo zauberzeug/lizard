@@ -10,6 +10,8 @@ parser.add_argument('config_file', help='Path to the .liz configuration file')
 parser.add_argument('device_path', help='Serial device path (e.g., /dev/ttyUSB0)')
 parser.add_argument('--serial-bus', type=int, metavar='NODE_ID',
                     help='Send configuration via serial bus to the specified node ID')
+parser.add_argument('--bus-name', default='bus',
+                    help='Name of the SerialBus module (default: bus)')
 args = parser.parse_args()
 
 
@@ -23,7 +25,9 @@ def send(line_: str) -> None:
 
 def configure(payload: str) -> None:
     if args.serial_bus:
-        send(f"bus.send({args.serial_bus}, '{payload}')")
+        if "'" in payload:
+            raise ValueError(f"Payload contains single quote, which breaks bus forwarding: {payload}")
+        send(f"{args.bus_name}.send({args.serial_bus}, '{payload}')")
     else:
         send(payload)
 
@@ -53,23 +57,12 @@ with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
 
     if args.serial_bus:
         target = f'node {args.serial_bus}'
-        prefix = f'bus[{args.serial_bus}]: checksum: '
+        prefix = f'{args.bus_name}[{args.serial_bus}]: checksum: '
         print(f'Waiting {reboot_timeout:.1f}s for {target} to reboot...')
         time.sleep(reboot_timeout)
-
-        configure('core.startup_checksum()')
-        for line in read_lines(5.0):
-            if len(line) > 3 and line[-3] == '@':
-                line = line[:-3]
-            if prefix in line:
-                received = int(line[line.index(prefix) + len(prefix):], 16)
-                if received == checksum:
-                    print(f'{target} checksum matches.')
-                    break
-                raise ValueError(f'{target} checksum mismatch! expected {checksum:#06x}, got {received:#06x}')
-        else:
-            raise TimeoutError(f'Timeout waiting for {target} checksum!')
     else:
+        target = 'ESP32'
+        prefix = 'checksum: '
         for line in read_lines(reboot_timeout):
             if line == 'Ready.':
                 print('ESP32 booted and sent "Ready."')
@@ -77,13 +70,15 @@ with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
         else:
             raise TimeoutError('Timeout waiting for device to restart!')
 
-        send('core.startup_checksum()')
-        for line in read_lines(3.0):
-            if line.startswith('checksum: '):
-                received = int(line.split()[1].split('@')[0], 16)
-                if received == checksum:
-                    print('Checksum matches.')
-                    break
-                raise ValueError('Checksum mismatch!')
-        else:
-            raise TimeoutError('Timeout waiting for checksum!')
+    configure('core.startup_checksum()')
+    for line in read_lines(5.0):
+        if len(line) > 3 and line[-3] == '@':
+            line = line[:-3]
+        if prefix in line:
+            received = int(line[line.index(prefix) + len(prefix):], 16)
+            if received == checksum:
+                print(f'{target} checksum matches.')
+                break
+            raise ValueError(f'{target} checksum mismatch! expected {checksum:#06x}, got {received:#06x}')
+    else:
+        raise TimeoutError(f'Timeout waiting for {target} checksum!')

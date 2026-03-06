@@ -164,7 +164,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             echo("Not a strapping pin");
             break;
         }
-    } else if (method_name == "delete_bus_backup") {
+    } else if (method_name == "forget_serial_bus") {
         Module::expect(arguments, 0);
         bus_backup::remove();
     } else {

@@ -8,6 +8,9 @@
 #include <cstdint>
 #include <vector>
 
+class SerialBus;
+using SerialBus_ptr = std::shared_ptr<SerialBus>;
+
 class SerialBus : public Module {
 public:
     static constexpr size_t PAYLOAD_CAPACITY = 256;

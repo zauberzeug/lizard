@@ -74,7 +74,7 @@ void restore_if_needed() {
             "_backup_serial", static_cast<gpio_num_t>(rx), static_cast<gpio_num_t>(tx),
             baud, static_cast<uart_port_t>(uart));
         Global::add_module("_backup_serial", backup_serial);
-        const auto bus = std::make_shared<SerialBus>("_backup_bus", backup_serial, node);
+        SerialBus_ptr bus = std::make_shared<SerialBus>("_backup_bus", backup_serial, node);
         Global::add_module("_backup_bus", bus);
     } catch (const std::runtime_error &e) {
         echo("bus backup error: %s", e.what());
