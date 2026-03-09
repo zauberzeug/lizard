@@ -35,7 +35,7 @@ private:
     struct Subscription {
         uint8_t node;
         Variable_ptr property; // null = coordinator-side, non-null = peer-side
-        std::string path;      // "module.prop" on both sides
+        std::string path;      // coordinator: "module.prop:local_name", peer: "local_name"
     };
 
     const ConstSerial_ptr serial;
