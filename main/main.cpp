@@ -18,7 +18,6 @@
 #include "rom/gpio.h"
 #include "rom/uart.h"
 #include "storage.h"
-#include "utils/ota.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -418,12 +417,6 @@ void app_main() {
         process_lizard(Storage::startup.c_str());
     } catch (const std::runtime_error &e) {
         echo("error while loading startup script: %s", e.what());
-    }
-
-    try {
-        xTaskCreate(&ota::verify_task, "ota_verify_task", 8192, NULL, 5, NULL);
-    } catch (const std::runtime_error &e) {
-        echo("error while verifying OTA: %s", e.what());
     }
 
     printf("\nReady.\n");

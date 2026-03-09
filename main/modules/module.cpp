@@ -42,6 +42,8 @@
 #define DEFAULT_SCL_PIN GPIO_NUM_22
 #endif
 
+bool Module::broadcast_paused = false;
+
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
 }
 
@@ -389,7 +391,7 @@ void Module::step() {
             echo("%s %s", this->name.c_str(), output.c_str());
         }
     }
-    if (this->broadcast && !this->properties.empty()) {
+    if (!Module::broadcast_paused && this->broadcast && !this->properties.empty()) {
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "!!");
         for (auto const &[property_name, property] : this->properties) {
