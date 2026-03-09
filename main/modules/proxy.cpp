@@ -31,7 +31,8 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
         if (this->module_type != "SerialBus") // SerialBus dynamically creates properties, this prevents echoing unknown properties
             echo("%s: Unknown property \"%s\"", this->name.c_str(), property_name.c_str());
     }
-    if (!from_expander)
+    if (!from_expander) {
         this->expander->send_property(this->name, property_name, expression);
+    }
     Module::get_property(property_name)->assign(expression);
 }
