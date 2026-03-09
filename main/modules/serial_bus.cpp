@@ -81,7 +81,6 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             throw std::runtime_error("property path must be \"module.property\"");
         }
         std::string local_name = remote_path;
-        std::replace(local_name.begin(), local_name.end(), '.', '_');
         local_name += "_" + std::to_string(node_id);
         const std::string sub_key = remote_path + ":" + local_name;
         if (!this->properties.count(local_name)) {

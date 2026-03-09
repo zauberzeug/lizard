@@ -2,7 +2,6 @@
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "driver/uart.h"
-#include <algorithm>
 #include <memory>
 
 Proxy::Proxy(const std::string name,
@@ -26,7 +25,6 @@ void Proxy::call(const std::string method_name, const std::vector<ConstExpressio
     // create a local dynamic property for the serial bus subscription, so it can be used before the first update is received from the expander
     if (method_name == "subscribe" && arguments.size() >= 3) {
         std::string n = arguments[1]->evaluate_string();
-        std::replace(n.begin(), n.end(), '.', '_');
         n += "_" + std::to_string(arguments[0]->evaluate_integer());
         if (!this->properties.count(n))
             (this->properties[n] = std::make_shared<Variable>(arguments[2]->type))->assign(arguments[2]);

@@ -28,7 +28,7 @@ action =
 
 noop = ''
 constructor = identifier@module_name '=' (identifier@expander_name '.')? identifier@module_type [ '(' expression@argument{','} ')' ]
-property_assignment = identifier@module_name '.' identifier@property_name '=' expression
+property_assignment = identifier@module_name '.' identifier@property_name{'.', 1+} '=' expression
 variable_assignment = identifier@variable_name '=' expression
 variable_declaration = datatype identifier@variable_name ('=' expression)?
 rule_definition = 'when' expression@condition '\n'* [ 'then' actions 'end' ]
@@ -51,7 +51,7 @@ expression =
     integer : integer
     number : number
     identifier : variable
-    identifier@module_name '.' identifier@property_name : property
+    identifier@module_name '.' identifier@property_name{'.', 1+} : property
     [ '(' expression ')' ] : parentheses
   .operators infix left
     '**' : power

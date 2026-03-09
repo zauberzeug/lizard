@@ -48,6 +48,13 @@ std::string identifier_to_string(const struct owl_ref ref) {
     return std::string(identifier.identifier, identifier.length);
 }
 
+std::string property_path_to_string(const struct owl_ref ref) {
+    std::string result = identifier_to_string(ref);
+    for (struct owl_ref r = owl_next(ref); !r.empty; r = owl_next(r))
+        result += "." + identifier_to_string(r);
+    return result;
+}
+
 Expression_ptr compile_expression(const struct owl_ref ref);
 
 std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
@@ -77,7 +84,7 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
         return std::make_shared<VariableExpression>(Global::get_variable(identifier_to_string(expression.identifier)));
     case PARSED_PROPERTY:
         return std::make_shared<PropertyExpression>(Global::get_module(identifier_to_string(expression.module_name)),
-                                                    identifier_to_string(expression.property_name));
+                                                    property_path_to_string(expression.property_name));
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
@@ -150,7 +157,7 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
             const struct parsed_property_assignment property_assignment = parsed_property_assignment_get(action.property_assignment);
             const std::string module_name = identifier_to_string(property_assignment.module_name);
             const Module_ptr module = Global::get_module(module_name);
-            const std::string property_name = identifier_to_string(property_assignment.property_name);
+            const std::string property_name = property_path_to_string(property_assignment.property_name);
             const ConstExpression_ptr expression = compile_expression(property_assignment.expression);
             actions.push_back(std::make_shared<PropertyAssignment>(module, property_name, expression));
         } else if (!action.variable_assignment.empty) {
@@ -234,7 +241,7 @@ void process_tree(owl_tree *const tree, bool from_expander) {
             const struct parsed_property_assignment property_assignment = parsed_property_assignment_get(statement.property_assignment);
             const std::string module_name = identifier_to_string(property_assignment.module_name);
             const Module_ptr module = Global::get_module(module_name);
-            const std::string property_name = identifier_to_string(property_assignment.property_name);
+            const std::string property_name = property_path_to_string(property_assignment.property_name);
             const ConstExpression_ptr expression = compile_expression(property_assignment.expression);
             module->write_property(property_name, expression, from_expander);
         } else if (!statement.variable_assignment.empty) {
