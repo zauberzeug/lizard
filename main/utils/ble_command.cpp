@@ -278,35 +278,43 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
             echo("BLE rx: %s", buf);
 #endif
 
-            // If not authenticated, only accept AUTH command (unless PIN is deactivated)
-            if (!authenticated && !pin_deactivated) {
-                if (check_pin(buf, len)) {
+            // Handle AUTH command
+            if (len >= 5 && strncmp(buf, "AUTH ", 5) == 0) {
+                if (pin_deactivated || check_pin(buf, len)) {
                     authenticated = true;
                     if (idle_timer) {
                         xTimerStop(idle_timer, 0);
                     }
-                    echo("BLE: authenticated via app PIN");
+                    echo("BLE: authenticated%s", pin_deactivated ? " (PIN deactivated)" : " via app PIN");
                     send_notification(conn_handle, "POST /notification Connected\n");
-                } else if (len >= 5 && strncmp(buf, "AUTH ", 5) == 0) {
+                } else {
                     echo("BLE: wrong PIN");
                     send_notification(conn_handle, "AUTH_FAIL\n");
-                    free(buf);
-                    // Reset idle timer to give them another chance
                     if (idle_timer) {
                         xTimerReset(idle_timer, 0);
                     }
-                    return 0;
-                } else {
-                    echo("BLE: rejected command before authentication");
-                    send_notification(conn_handle, "AUTH_REQUIRED\n");
-                    free(buf);
-                    return 0;
                 }
                 free(buf);
                 return 0;
             }
 
-            // Authenticated or PIN deactivated - process command normally
+            // Reject non-AUTH commands before authentication (unless PIN is deactivated)
+            if (!authenticated && !pin_deactivated) {
+                echo("BLE: rejected command before authentication");
+                send_notification(conn_handle, "AUTH_REQUIRED\n");
+                free(buf);
+                return 0;
+            }
+
+            // Mark as authenticated on first command when PIN is deactivated
+            if (!authenticated && pin_deactivated) {
+                authenticated = true;
+                if (idle_timer) {
+                    xTimerStop(idle_timer, 0);
+                }
+            }
+
+            // Process command normally
             if (client_callback) {
                 client_callback(std::string_view(buf, len));
             }
