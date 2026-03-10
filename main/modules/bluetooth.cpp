@@ -46,10 +46,6 @@ void Bluetooth::call(const std::string method_name, const std::vector<ConstExpre
         expect(arguments, 0);
         Storage::remove_user_pin();
         echo("User PIN has been reset.");
-    } else if (method_name == "reset_bonds") {
-        expect(arguments, 0);
-        ZZ::BleCommand::reset_bonds();
-        echo("Bluetooth bonds reset and BLE restarted. All peers must re-pair.");
     } else if (method_name == "deactivate_pin") {
         expect(arguments, 0);
         ZZ::BleCommand::deactivate_pin();

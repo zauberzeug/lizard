@@ -17,7 +17,6 @@ void init(const std::string_view &device_name, CommandCallback on_command);
 int send(const std::string_view &data);
 void finalize();
 void deactivate_pin();
-void reset_bonds();
 
 } // namespace ZZ::BleCommand
 

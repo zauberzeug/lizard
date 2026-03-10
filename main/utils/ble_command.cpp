@@ -47,11 +47,10 @@
 
 namespace ZZ::BleCommand {
 
-static constexpr uint32_t IDLE_TIMEOUT_MS = 15000; // Kick clients that don't send app command
+static constexpr uint32_t IDLE_TIMEOUT_MS = 15000; // Kick clients that don't authenticate
 static constexpr size_t MAX_DEVICE_NAME_LEN = 30;
 static constexpr uint16_t TX_DATA_LENGTH = 0xFB;
 static constexpr uint16_t TX_DATA_TIME = 0x0848;
-static constexpr int BLE_DISCONNECT_BOND_MISMATCH = 0x213;
 
 constexpr ble_uuid128_t uuid128_from_str(const char *str) {
     ble_uuid128_t result{BLE_UUID_TYPE_128, {0}};
@@ -69,9 +68,8 @@ static std::atomic<uint16_t> current_con{BLE_HS_CONN_HANDLE_NONE};
 static uint16_t send_chr_val_handle = 0;
 static uint8_t own_addr_type = 0;
 static bool running = false;
-static bool deactivated = false;
+static bool pin_deactivated = false;
 static std::atomic<bool> authenticated{false};
-static std::atomic<bool> app_active{false};
 static TimerHandle_t idle_timer = nullptr;
 
 // 16-bit Alert Notification Service UUID for app filtering
@@ -84,13 +82,51 @@ static int on_chr_access(uint16_t conn_handle, uint16_t attr_handle,
 
 extern "C" void ble_store_config_init(void);
 
+static void send_notification(uint16_t conn_handle, const char *msg) {
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(msg, strlen(msg));
+    if (om)
+        ble_gattc_notify_custom(conn_handle, send_chr_val_handle, om);
+}
+
+static bool check_pin(const char *buf, uint16_t len) {
+    // Expect "AUTH <pin>" where pin is up to 6 digits
+    if (len < 5 || strncmp(buf, "AUTH ", 5) != 0) {
+        return false;
+    }
+
+    const char *pin_str = buf + 5;
+    const uint16_t pin_len = len - 5;
+    if (pin_len == 0 || pin_len > 6) {
+        return false;
+    }
+
+    // Parse PIN from message
+    uint32_t received_pin = 0;
+    for (uint16_t i = 0; i < pin_len; i++) {
+        if (pin_str[i] < '0' || pin_str[i] > '9') {
+            return false;
+        }
+        received_pin = received_pin * 10 + (pin_str[i] - '0');
+    }
+
+    // Check against stored or default PIN
+    uint32_t user_pin = 0;
+    const uint32_t dev_pin = CONFIG_ZZ_BLE_DEV_PIN;
+    const bool has_user_pin = Storage::get_user_pin(user_pin);
+    const uint32_t expected_pin = has_user_pin ? user_pin : dev_pin;
+
+    return received_pin == expected_pin;
+}
+
 static void on_idle_timeout(TimerHandle_t /* timer */) {
-    if (current_con != BLE_HS_CONN_HANDLE_NONE && !app_active) {
+    if (current_con != BLE_HS_CONN_HANDLE_NONE && !authenticated) {
+        echo("BLE: kicking unauthenticated client (timeout)");
         ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
     }
 }
 
-// Security is checked manually in on_chr_access to allow runtime toggle via deactivate_pin()
+
+// No BLE-level security - authentication is done at application level via AUTH command
 static const struct ble_gatt_svc_def gatt_svcs[] = {
     {
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
@@ -98,7 +134,7 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
         .includes = NULL,
         .characteristics = (struct ble_gatt_chr_def[]){
             {
-                // Command characteristic - auth checked in callback
+                // Command characteristic - app-level auth via AUTH command
                 .uuid = &cmd_chr_uuid.u,
                 .access_cb = on_chr_access,
                 .arg = NULL,
@@ -169,11 +205,14 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
                 const uint8_t *addr = desc.peer_id_addr.val;
                 echo("BLE: connected %02x:%02x:%02x:%02x:%02x:%02x",
                      addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
+            }
 
-                // For bonded devices: initiate encryption (required by iOS reconnection)
-                if (desc.sec_state.bonded) {
-                    ble_gap_security_initiate(event->connect.conn_handle);
-                }
+            if (!pin_deactivated) {
+                uint32_t user_pin = 0;
+                const uint32_t dev_pin = CONFIG_ZZ_BLE_DEV_PIN;
+                const bool has_user_pin = Storage::get_user_pin(user_pin);
+                const uint32_t pin = has_user_pin ? user_pin : dev_pin;
+                echo("BLE PIN: %06lu", (unsigned long)pin);
             }
 
             if (idle_timer) {
@@ -187,19 +226,12 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
     case BLE_GAP_EVENT_DISCONNECT: {
         const uint8_t *addr = event->disconnect.conn.peer_id_addr.val;
         int reason = event->disconnect.reason;
-
-        if (!authenticated && reason == BLE_DISCONNECT_BOND_MISMATCH) {
-            echo("BLE: disconnected %02x:%02x:%02x:%02x:%02x:%02x (bond mismatch - forget device in phone settings)",
-                 addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
-        } else {
-            echo("BLE: disconnected %02x:%02x:%02x:%02x:%02x:%02x (reason=%d)",
-                 addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], reason);
-        }
+        echo("BLE: disconnected %02x:%02x:%02x:%02x:%02x:%02x (reason=%d)",
+             addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], reason);
 
         if (event->disconnect.conn.conn_handle == current_con) {
             current_con = BLE_HS_CONN_HANDLE_NONE;
             authenticated = false;
-            app_active = false;
             if (idle_timer) {
                 xTimerStop(idle_timer, 0);
             }
@@ -221,80 +253,6 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         }
         return 0;
 
-    case BLE_GAP_EVENT_ENC_CHANGE:
-        if (event->enc_change.status == 0) {
-            struct ble_gap_conn_desc desc;
-            if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) == 0) {
-                // Reject bonds from "Just Works" pairing when PIN is now required
-                if (!deactivated && !desc.sec_state.authenticated) {
-                    echo("BLE: rejecting unauthenticated bond - forget device in phone settings and re-pair");
-                    ble_store_util_delete_peer(&desc.peer_id_addr);
-                    ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-                    return 0;
-                }
-            }
-
-            authenticated = true;
-            echo("BLE: authenticated");
-
-            // Enforce bond limit - remove oldest bonds if over limit
-            constexpr int max_bonds = CONFIG_BT_NIMBLE_MAX_BONDS;
-            ble_addr_t bonded_peers[max_bonds + 1];
-            int num_peers = 0;
-            if (ble_store_util_bonded_peers(bonded_peers, &num_peers, max_bonds + 1) == 0) {
-                while (num_peers > max_bonds) {
-                    ble_gap_unpair(&bonded_peers[0]);
-                    ble_store_util_bonded_peers(bonded_peers, &num_peers, max_bonds + 1);
-                }
-            }
-
-            if (idle_timer && !app_active) {
-                xTimerReset(idle_timer, 0);
-            }
-        } else {
-            struct ble_gap_conn_desc desc;
-            if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) == 0 && desc.sec_state.bonded) {
-                struct os_mbuf *om = ble_hs_mbuf_from_flat("!bond_error\n", 12);
-                if (om)
-                    ble_gattc_notify_custom(event->enc_change.conn_handle, send_chr_val_handle, om);
-                ble_store_util_delete_peer(&desc.peer_id_addr);
-            }
-            ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-        }
-        return 0;
-
-    case BLE_GAP_EVENT_PASSKEY_ACTION: {
-        if (deactivated) {
-            struct ble_sm_io pk = {};
-            pk.action = event->passkey.params.action;
-            pk.passkey = 0;
-            return ble_sm_inject_io(event->passkey.conn_handle, &pk);
-        }
-
-        if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
-            uint32_t user_pin = 0;
-            const uint32_t dev_pin = CONFIG_ZZ_BLE_DEV_PIN;
-            const bool has_user_pin = Storage::get_user_pin(user_pin);
-            const uint32_t pin = has_user_pin ? user_pin : dev_pin;
-
-            echo("BLE PIN: %06lu", (unsigned long)pin);
-
-            struct ble_sm_io pk = {};
-            pk.action = BLE_SM_IOACT_DISP;
-            pk.passkey = pin;
-            return ble_sm_inject_io(event->passkey.conn_handle, &pk);
-        }
-        return 0;
-    }
-
-    case BLE_GAP_EVENT_REPEAT_PAIRING: {
-        struct ble_gap_conn_desc desc;
-        if (ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc) == 0) {
-            ble_store_util_delete_peer(&desc.peer_id_addr);
-        }
-        return BLE_GAP_REPEAT_PAIRING_RETRY;
-    }
-
     default:
         return 0;
     }
@@ -304,37 +262,55 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
                          struct ble_gatt_access_ctxt *ctxt, void * /* arg */) {
     if (ble_uuid_cmp(ctxt->chr->uuid, &cmd_chr_uuid.u) == 0) {
         if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
-            // Check authentication unless PIN is deactivated
-            if (!deactivated) {
-                struct ble_gap_conn_desc desc;
-                if (ble_gap_conn_find(conn_handle, &desc) != 0) {
-                    return BLE_ATT_ERR_UNLIKELY;
-                }
-                if (!desc.sec_state.encrypted || !desc.sec_state.authenticated) {
-                    echo("BLE: rejected unauthenticated write");
-                    return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
-                }
-            }
-
-            if (!app_active) {
-                app_active = true;
-                if (idle_timer) {
-                    xTimerStop(idle_timer, 0);
-                }
-            }
-
             const uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
-            if (len > 0 && client_callback) {
-                char *buf = (char *)malloc(len + 1);
-                if (buf && ble_hs_mbuf_to_flat(ctxt->om, buf, len, NULL) == 0) {
-                    buf[len] = '\0';
+            if (len == 0) {
+                return 0;
+            }
+
+            char *buf = (char *)malloc(len + 1);
+            if (!buf || ble_hs_mbuf_to_flat(ctxt->om, buf, len, NULL) != 0) {
+                free(buf);
+                return BLE_ATT_ERR_UNLIKELY;
+            }
+            buf[len] = '\0';
+
 #if ZZ_BLE_DEBUG
-                    echo("BLE rx: %s", buf);
+            echo("BLE rx: %s", buf);
 #endif
-                    client_callback(std::string_view(buf, len));
+
+            // If not authenticated, only accept AUTH command (unless PIN is deactivated)
+            if (!authenticated && !pin_deactivated) {
+                if (check_pin(buf, len)) {
+                    authenticated = true;
+                    if (idle_timer) {
+                        xTimerStop(idle_timer, 0);
+                    }
+                    echo("BLE: authenticated via app PIN");
+                    send_notification(conn_handle, "POST /notification Connected\n");
+                } else if (len >= 5 && strncmp(buf, "AUTH ", 5) == 0) {
+                    echo("BLE: wrong PIN");
+                    send_notification(conn_handle, "AUTH_FAIL\n");
+                    free(buf);
+                    // Reset idle timer to give them another chance
+                    if (idle_timer) {
+                        xTimerReset(idle_timer, 0);
+                    }
+                    return 0;
+                } else {
+                    echo("BLE: rejected command before authentication");
+                    send_notification(conn_handle, "AUTH_REQUIRED\n");
+                    free(buf);
+                    return 0;
                 }
                 free(buf);
+                return 0;
             }
+
+            // Authenticated or PIN deactivated - process command normally
+            if (client_callback) {
+                client_callback(std::string_view(buf, len));
+            }
+            free(buf);
             return 0;
         }
     }
@@ -388,13 +364,11 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
     ble_hs_cfg.reset_cb = on_reset;
     ble_hs_cfg.sync_cb = on_sync;
 
-    // Display-only device: we show PIN, phone enters it
-    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_DISP_ONLY;
-    ble_hs_cfg.sm_bonding = 1;
-    ble_hs_cfg.sm_mitm = 1;
-    ble_hs_cfg.sm_sc = 1;
-    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
-    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+    // No BLE-level security - app-level PIN authentication instead
+    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
+    ble_hs_cfg.sm_bonding = 0;
+    ble_hs_cfg.sm_mitm = 0;
+    ble_hs_cfg.sm_sc = 0;
 
     ble_svc_gap_init();
     ble_svc_gatt_init();
@@ -447,30 +421,7 @@ void finalize() {
 }
 
 void deactivate_pin() {
-    deactivated = true;
-    // Disable MITM requirement - allows "Just Works" pairing without PIN
-    ble_hs_cfg.sm_mitm = 0;
-    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
-}
-
-void reset_bonds() {
-    if (current_con != BLE_HS_CONN_HANDLE_NONE) {
-        ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-
-    ble_gap_adv_stop();
-
-    ble_addr_t bonded_peers[CONFIG_BT_NIMBLE_MAX_BONDS];
-    int num_peers = 0;
-    if (ble_store_util_bonded_peers(bonded_peers, &num_peers, CONFIG_BT_NIMBLE_MAX_BONDS) == 0) {
-        for (int i = 0; i < num_peers; i++) {
-            ble_store_util_delete_peer(&bonded_peers[i]);
-        }
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(500));
-    advertise();
+    pin_deactivated = true;
 }
 
 } // namespace ZZ::BleCommand
