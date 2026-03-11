@@ -1,0 +1,80 @@
+---
+globs: main/modules/*.cpp, main/modules/*.h
+---
+
+# Module Development Rules
+
+When working on hardware modules in `main/modules/`:
+
+## Required Pattern
+
+Every module must:
+
+1. **Inherit from `Module`** with appropriate `ModuleType`
+2. **Call `Module::step()`** in derived `step()` for output/broadcast handling
+3. **Use `Module::expect()`** to validate arguments in constructors and methods
+4. **Delegate unknown methods** to `Module::call()` for base functionality (mute, unmute, shadow, broadcast)
+
+## Constructor Pattern
+
+```cpp
+MyModule::MyModule(const std::string name, /* args */)
+    : Module(my_module, name) {
+    // Initialize properties map
+    this->properties["my_prop"] = std::make_shared<NumberVariable>(0.0);
+}
+```
+
+## Method Call Pattern
+
+```cpp
+void MyModule::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+    if (method_name == "my_method") {
+        Module::expect(arguments, 1, numbery);  // Validate: 1 arg, numeric
+        // Implementation
+    } else {
+        Module::call(method_name, arguments);  // IMPORTANT: delegate to base
+    }
+}
+```
+
+## Registration & Documentation Checklist
+
+After creating a new module:
+
+- [ ] Add to `ModuleType` enum in `module.h`
+- [ ] Add creation logic in `Module::create()` in `module.cpp`
+- [ ] Include header in `module.cpp`
+- [ ] **Document in `docs/module_reference.md`**
+
+## Documentation Format
+
+Add a section to `docs/module_reference.md` following this format:
+
+```markdown
+## My Module
+
+Brief description of what the module does and when to use it.
+
+| Constructor                      | Description        | Arguments           |
+| -------------------------------- | ------------------ | ------------------- |
+| `my = MyModule(arg1, arg2)`      | Description        | `type1`, `type2`    |
+
+| Properties       | Description              | Data type |
+| ---------------- | ------------------------ | --------- |
+| `my.some_prop`   | What the property means  | `float`   |
+
+| Methods              | Description           | Arguments |
+| -------------------- | --------------------- | --------- |
+| `my.some_method(x)`  | What the method does  | `float`   |
+```
+
+See existing modules in `docs/module_reference.md` for examples.
+
+## Argument Types for `Module::expect()`
+
+- `integer` - int64_t
+- `numbery` - int or float (accepts both)
+- `string` - string literal
+- `identifier` - module/variable name
+- `-1` for variable argument count (validate types only)
