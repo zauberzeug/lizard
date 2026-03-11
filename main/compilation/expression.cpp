@@ -41,8 +41,9 @@ int Expression::print_to_buffer(char *buffer, size_t buffer_len) const {
         char escaped[buffer_len];
         int pos = 0;
         for (char c : this->evaluate_string()) {
-            if (c == '"' || c == '\\')
+            if (c == '"' || c == '\\') {
                 escaped[pos++] = '\\';
+            }
             escaped[pos++] = c;
         }
         escaped[pos] = '\0';
