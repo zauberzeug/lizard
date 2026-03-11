@@ -85,13 +85,12 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
 
-### Bus Backup
-
+**Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
 If multiple SerialBus modules exist, only the first one is backed up.
-On boot, if the startup script does not create a SerialBus but a backup config exists, Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
+On boot, if the startup script does not create a SerialBus but a backup config exists,
+Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
 This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
-
 To remove the saved configuration, call `core.forget_serial_bus()`.
 
 **Firmware Updates:**
