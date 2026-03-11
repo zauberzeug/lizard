@@ -9,7 +9,7 @@
 #include <string>
 
 #define NAMESPACE "storage"
-#define MAX_CHUNK_SIZE 0xf00
+#define MAX_CHUNK_SIZE 2000
 
 std::string Storage::startup;
 
@@ -60,9 +60,37 @@ std::string read(const std::string ns, const std::string key) {
     return result;
 }
 
+static void nvs_delete_key(const std::string &ns, const std::string &key) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    err = nvs_erase_key(handle, key.c_str());
+    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
+        throw std::runtime_error("could not erase key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit erase for key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    nvs_close(handle);
+}
+
 void Storage::put(const std::string value) {
+    // Remove old chunks first to free NVS space
+    try {
+        const int old_num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
+        for (int i = 0; i < old_num_chunks; i++) {
+            nvs_delete_key(NAMESPACE, "chunk" + std::to_string(i));
+        }
+    } catch (...) {
+        // No previous chunks to clean up
+    }
+
     int num_chunks = 0;
-    for (int pos = 0; pos < value.length(); pos += MAX_CHUNK_SIZE) {
+    for (size_t pos = 0; pos < value.length(); pos += MAX_CHUNK_SIZE) {
         num_chunks++;
         write(NAMESPACE, "chunk" + std::to_string(pos / MAX_CHUNK_SIZE), value.substr(pos, MAX_CHUNK_SIZE));
     }
@@ -142,24 +170,6 @@ bool Storage::get_user_pin(std::uint32_t &pin) {
         return true;
     }
     return false;
-}
-
-static void nvs_delete_key(const std::string &ns, const std::string &key) {
-    esp_err_t err;
-    nvs_handle handle;
-    if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
-        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    err = nvs_erase_key(handle, key.c_str());
-    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
-        nvs_close(handle);
-        throw std::runtime_error("could not erase key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    if ((err = nvs_commit(handle)) != ESP_OK) {
-        nvs_close(handle);
-        throw std::runtime_error("could not commit erase for key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    nvs_close(handle);
 }
 
 void Storage::remove_user_pin() {
