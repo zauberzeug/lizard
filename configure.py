@@ -47,7 +47,7 @@ with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
     send('!.')
     send('core.restart()')
 
-    reboot_timeout = 3.0 + 3.0 * startup.count('Expander')
+    reboot_timeout = 3.0 + 0.5 * len(startup.splitlines()) + 3.0 * startup.count('Expander')
 
     if args.serial_bus:
         target = f'node {args.serial_bus}'
