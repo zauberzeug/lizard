@@ -52,8 +52,13 @@ with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
     if args.serial_bus:
         target = f'node {args.serial_bus}'
         prefix = f'{args.bus_name}[{args.serial_bus}]: checksum: '
-        print(f'Waiting {reboot_timeout:.1f}s for {target} to reboot...')
-        time.sleep(reboot_timeout)
+        timeout_msg = f'poll to {args.serial_bus} timed out'
+        last_timeout = 0.0
+        for line in read(reboot_timeout):
+            if timeout_msg in line:
+                last_timeout = time.time()
+            elif last_timeout and time.time() - last_timeout > 1.0:
+                break
     else:
         target = 'ESP32'
         prefix = 'checksum: '
