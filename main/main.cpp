@@ -19,7 +19,6 @@
 #include "rom/uart.h"
 #include "storage.h"
 #include "utils/bus_backup.h"
-#include "utils/ota.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -423,12 +422,6 @@ void app_main() {
 
     bus_backup::save_if_present();
     bus_backup::restore_if_needed();
-
-    try {
-        xTaskCreate(&ota::verify_task, "ota_verify_task", 8192, NULL, 5, NULL);
-    } catch (const std::runtime_error &e) {
-        echo("error while verifying OTA: %s", e.what());
-    }
 
     printf("\nReady.\n");
 
