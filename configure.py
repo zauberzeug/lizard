@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import time
 from pathlib import Path
+from typing import Iterator
 
 import serial
 
@@ -15,7 +17,9 @@ parser.add_argument('--bus-name', default='bus',
 args = parser.parse_args()
 
 
-def send(line_: str) -> None:
+def send(payload: str) -> None:
+    """Send a payload string to the ESP32, optionally over a serial bus."""
+    line_ = f'{args.bus_name}.send({args.serial_bus}, {json.dumps(payload)})' if args.serial_bus else payload
     print(f'Sending: {line_}')
     checksum_ = 0
     for c in line_:
@@ -23,16 +27,8 @@ def send(line_: str) -> None:
     port.write((f'{line_}@{checksum_:02x}\n').encode())
 
 
-def configure(payload: str) -> None:
-    if args.serial_bus:
-        if "'" in payload:
-            raise ValueError(f"Payload contains single quote, which breaks bus forwarding: {payload}")
-        send(f"{args.bus_name}.send({args.serial_bus}, '{payload}')")
-    else:
-        send(payload)
-
-
-def read_lines(timeout: float):
+def read(timeout: float) -> Iterator[str]:
+    """Yield lines read from the serial port until the timeout expires."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -42,16 +38,14 @@ def read_lines(timeout: float):
 
 
 with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
-    startup = Path(args.config_file).read_text('utf-8')
-    if not startup.endswith('\n'):
-        startup += '\n'
+    startup = Path(args.config_file).read_text('utf-8') + '\n'
     checksum = sum(ord(c) for c in startup) % 0x10000
 
-    configure('!-')
+    send('!-')
     for line in startup.splitlines():
-        configure(f'!+{line}')
-    configure('!.')
-    configure('core.restart()')
+        send(f'!+{line}')
+    send('!.')
+    send('core.restart()')
 
     reboot_timeout = 3.0 + 3.0 * startup.count('Expander')
 
@@ -63,15 +57,15 @@ with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
     else:
         target = 'ESP32'
         prefix = 'checksum: '
-        for line in read_lines(reboot_timeout):
+        for line in read(reboot_timeout):
             if line == 'Ready.':
                 print('ESP32 booted and sent "Ready."')
                 break
         else:
             raise TimeoutError('Timeout waiting for device to restart!')
 
-    configure('core.startup_checksum()')
-    for line in read_lines(5.0):
+    send('core.startup_checksum()')
+    for line in read(5.0):
         if len(line) > 3 and line[-3] == '@':
             line = line[:-3]
         if prefix in line:
