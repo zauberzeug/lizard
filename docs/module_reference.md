@@ -668,6 +668,11 @@ The `rotate()` method moves the motor by a relative number of degrees with a giv
 
 The `precision_zero()` method performs a multi-step zeroing sequence specific to the Feldfreund gripper: it rotates to a target angle, reads the angle error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
 
+The `homing_state` property can be used in rules to react to the result of this sequence. Useful terminal values are:
+
+- `9`: done (`PZ_DONE`)
+- `10`: failed (`PZ_FAILED`)
+
 ## Motor Axis
 
 The motor axis module wraps a motor and two limit switches.

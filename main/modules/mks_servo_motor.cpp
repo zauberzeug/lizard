@@ -1,5 +1,4 @@
 #include "mks_servo_motor.h"
-#include "../utils/uart.h"
 #include <algorithm>
 
 REGISTER_MODULE_DEFAULTS(MksServoMotor)
@@ -171,7 +170,7 @@ void MksServoMotor::step_precision_zero() {
         this->pz_state = PZ_WAIT_AFTER_ZERO;
         break;
     case PZ_WAIT_AFTER_ZERO:
-        if (millis_since(this->pz_phase_start) >= 1000) {
+        if (millis_since(this->pz_phase_start) >= this->pz_wait_after_zero_ms) {
             this->pz_state = PZ_MOVE_TO_START;
         }
         break;

@@ -37,6 +37,7 @@ private:
     int64_t pz_acc = 300;
     unsigned long pz_rotate_wait_ms = 2000;
     unsigned long pz_correct_wait_ms = 1000;
+    unsigned long pz_wait_after_zero_ms = 1000;
 
     // Angle error read (CAN 0x39)
     bool angle_error_read_pending = false;
