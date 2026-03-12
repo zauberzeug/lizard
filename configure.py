@@ -57,7 +57,7 @@ with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
     send('core.startup_checksum()')
     for line in read(timeout=5.0):
         words = line.split()
-        if words[-2] == 'checksum:':
+        if len(words) >= 2 and words[-2] == 'checksum:':
             received = int(words[-1], 16)
             if received == checksum:
                 print('Checksum matches.')
