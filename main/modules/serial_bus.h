@@ -47,6 +47,7 @@ private:
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
     uint8_t requesting_node = 0;
+    bool ready_pending = true;
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;
 
