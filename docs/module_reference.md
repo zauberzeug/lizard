@@ -632,7 +632,7 @@ When the motor is disabled, it will stop and ignore movement commands.
 
 ## MKS Servo Motor
 
-The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/makerbase-mks) closed-loop stepper motor via CAN.
+The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/makerbase-motor/MKS-SERVO42D-57D) closed-loop stepper motor via CAN.
 
 | Constructor                                  | Description              | Arguments                |
 | -------------------------------------------- | ------------------------ | ------------------------ |
@@ -641,7 +641,7 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | Properties              | Description                                 | Data type |
 | ----------------------- | ------------------------------------------- | --------- |
 | `motor.position`        | Motor position (degrees)                    | `float`   |
-| `motor.speed`           | Motor speed                                 | `int`     |
+| `motor.speed`           | Motor speed (RPM)                           | `int`     |
 | `motor.working_current` | Working current (mA, 0-3000, default: 1700) | `int`     |
 | `motor.enabled`         | Whether the motor is enabled                | `bool`    |
 | `motor.homing_state`    | Current state of the precision zero sequence | `int`    |
@@ -659,14 +659,15 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.run(speed, direction, acc)`         | Run motor with speed, direction and acceleration | `int`, `int`, `int`          |
 | `motor.stop(acc)`                          | Stop motor with given deceleration              | `int`                         |
 | `motor.rotate(degrees, speed, acc)`        | Rotate by given degrees                         | `float`, `int`, `int`        |
-| `motor.grip()`                             | Grip (rotate 5 degrees at high speed)           |                               |
-| `motor.release()`                          | Release (rotate -40 degrees at high speed)      |                               |
+| `motor.grip()`                             | Grip (rotate to 5 degrees at high speed)           |                               |
+| `motor.release()`                          | Release (rotate to -40 degrees at high speed)      |                               |
 
 The `run()` method accepts a speed (0-4095), direction (0 or 1) and acceleration (0-255).
 
 The `rotate()` method moves the motor by a relative number of degrees with a given speed (0-65535) and acceleration (0-255).
 
-The `precision_zero()` method performs a multi-step zeroing sequence specific to the Feldfreund gripper: it rotates to a target angle, reads the angle error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
+The `precision_zero()` method performs a multi-step zeroing sequence specific to the Feldfreund gripper:
+it rotates to a target angle, reads the angle error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
 
 The `homing_state` property can be used in rules to react to the result of this sequence. Useful terminal values are:
 
