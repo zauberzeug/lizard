@@ -7,11 +7,11 @@
 
 enum PrecisionZeroState {
     PZ_IDLE = 0,
-    PZ_FIRST_ROTATE,
-    PZ_WAIT_FIRST_ROTATE,
+    PZ_FIRST_POSITION,
+    PZ_WAIT_FIRST_POSITION,
     PZ_READ_ERROR,
     PZ_WAIT_ERROR,
-    PZ_WAIT_CORRECT_ROTATE,
+    PZ_WAIT_CORRECT_POSITION,
     PZ_SET_ZERO,
     PZ_WAIT_AFTER_ZERO,
     PZ_MOVE_TO_START,
@@ -35,7 +35,7 @@ private:
     double pz_target_degrees = 240.0;
     int64_t pz_speed = 300;
     int64_t pz_acc = 300;
-    unsigned long pz_rotate_wait_ms = 2000;
+    unsigned long pz_position_wait_ms = 2000;
     unsigned long pz_correct_wait_ms = 1000;
     unsigned long pz_wait_after_zero_ms = 1000;
 
@@ -53,10 +53,10 @@ private:
     void send_set_vfoc();
     void send_working_current(int64_t ma);
     void send_holding_current(int64_t pct);
-    void send_run_internal(int64_t direction, int64_t speed, int64_t acc);
+    void send_speed_internal(int64_t direction, int64_t speed, int64_t acc);
     void send_stop_internal(int64_t acc);
-    void send_rotate_counts(int32_t counts, int64_t speed, int64_t acc);
-    void send_rotate(double degrees, int64_t speed, int64_t acc);
+    void send_position_counts(int32_t counts, int64_t speed, int64_t acc);
+    void send_position(double degrees, int64_t speed, int64_t acc);
     void send_coord_zero();
     void step_precision_zero();
 
@@ -68,8 +68,8 @@ public:
     static constexpr int32_t INT24_MAX = 8388607;
     static constexpr int64_t MAX_WORKING_CURRENT_MA = 3000;
     static constexpr int64_t MAX_HOLDING_RATIO = 9;
-    static constexpr int64_t MAX_RUN_SPEED = 4095;
-    static constexpr int64_t MAX_ROTATE_SPEED = 65535;
+    static constexpr int64_t MAX_SPEED_SPEED = 4095;
+    static constexpr int64_t MAX_POSITION_SPEED = 65535;
     static constexpr int64_t MAX_ACC = 255;
 
     MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id);
