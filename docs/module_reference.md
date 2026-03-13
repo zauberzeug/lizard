@@ -646,6 +646,7 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.enabled`         | Whether the motor is enabled                 | `bool`    |
 | `motor.homing_state`    | Current state of the precision zero sequence | `int`     |
 | `motor.homing_active`   | Whether precision zero is in progress        | `bool`    |
+| `motor.position_error`  | Last read position error (degrees)           | `float`   |
 
 | Methods                               | Description                                                  | Arguments             |
 | ------------------------------------- | ------------------------------------------------------------ | --------------------- |
@@ -659,6 +660,7 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)       | `float`, `int`, `int` |
 | `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration) | `int`, `int`, `int`   |
 | `motor.stop(acc)`                     | Stop motor with given deceleration (0-255)                   | `int`                 |
+| `motor.read_position_error()`         | Request position error from motor via CAN                    |                       |
 
 The `position()` method moves the motor to an absolute coordinate position (in degrees from the zero point)
 with a given speed in RPM (0-3000) and acceleration (0-255).
@@ -670,10 +672,14 @@ If acceleration is 0, the motor runs directly at the set speed without ramping.
 The `stop()` method decelerates and stops the motor with the given acceleration (0-255).
 If acceleration is 0, the motor stops immediately.
 
-The `precision_zero()` method performs a multi-step zeroing sequence specific to the Feldfreund gripper:
-It moves to a target angle, reads the angle error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
+The `read_position_error()` method requests the current position error from the motor via CAN.
+The result is available in the `position_error` property (in degrees) once the motor responds.
 
-The `homing_state` property can be used in rules to react to the result of this sequence. Useful terminal values are:
+The `precision_zero()` method performs a multi-step zeroing sequence specific to the Feldfreund gripper:
+It moves to a target position, reads the position error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
+
+The `homing_state` property can be used in rules to react to the result of this sequence.
+Useful terminal values are:
 
 - `9`: done (`PZ_DONE`)
 - `10`: failed (`PZ_FAILED`)

@@ -39,14 +39,14 @@ private:
     unsigned long pz_correct_wait_ms = 1000;
     unsigned long pz_wait_after_zero_ms = 1000;
 
-    // Angle error read (CAN 0x39)
-    bool angle_error_read_pending = false;
-    bool angle_error_read_received = false;
-    int32_t angle_error_value = 0;
-    unsigned long angle_error_read_sent_at = 0;
-    uint8_t angle_error_read_retries = 0;
+    // Position error read (CAN 0x39)
+    bool position_error_read_pending = false;
+    bool position_error_read_received = false;
+    int32_t position_error_value = 0;
+    unsigned long position_error_read_sent_at = 0;
+    uint8_t position_error_read_retries = 0;
 
-    void send_angle_error_read();
+    void send_position_error_read();
 
     // Private helpers
     void send_enable(bool enable);
@@ -63,7 +63,7 @@ private:
 public:
     static constexpr int32_t COUNTS_PER_TURN = 16384;
     static constexpr double COUNTS_PER_DEG = 16384.0 / 360.0;
-    static constexpr double ANGLE_ERROR_COUNTS_PER_TURN = 51200.0;
+    static constexpr double POSITION_ERROR_COUNTS_PER_TURN = 51200.0;
     static constexpr int32_t INT24_MIN = -8388608;
     static constexpr int32_t INT24_MAX = 8388607;
     static constexpr int64_t MAX_WORKING_CURRENT_MA = 3000;

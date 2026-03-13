@@ -11,6 +11,7 @@ const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
         {"enabled", std::make_shared<BooleanVariable>(false)},
         {"homing_state", std::make_shared<IntegerVariable>(0)},
         {"homing_active", std::make_shared<BooleanVariable>(false)},
+        {"position_error", std::make_shared<NumberVariable>()},
     };
 }
 
@@ -106,12 +107,12 @@ void MksServoMotor::send_coord_zero() {
     this->send(data, 1);
 }
 
-void MksServoMotor::send_angle_error_read() {
+void MksServoMotor::send_position_error_read() {
     uint8_t data[] = {0x39};
     this->send(data, 1);
-    this->angle_error_read_pending = true;
-    this->angle_error_read_received = false;
-    this->angle_error_read_sent_at = millis();
+    this->position_error_read_pending = true;
+    this->position_error_read_received = false;
+    this->position_error_read_sent_at = millis();
 }
 
 void MksServoMotor::step() {
@@ -136,22 +137,22 @@ void MksServoMotor::step_precision_zero() {
         }
         break;
     case PZ_READ_ERROR:
-        this->angle_error_read_retries = 0;
-        this->send_angle_error_read();
+        this->position_error_read_retries = 0;
+        this->send_position_error_read();
         this->pz_state = PZ_WAIT_ERROR;
         break;
     case PZ_WAIT_ERROR:
-        if (this->angle_error_read_received) {
-            int32_t abs_error = this->angle_error_value < 0 ? -this->angle_error_value : this->angle_error_value;
-            double error_degrees = (double)abs_error * 360.0 / ANGLE_ERROR_COUNTS_PER_TURN;
+        if (this->position_error_read_received) {
+            int32_t abs_error = this->position_error_value < 0 ? -this->position_error_value : this->position_error_value;
+            double error_degrees = (double)abs_error * 360.0 / POSITION_ERROR_COUNTS_PER_TURN;
             double corrected = this->pz_target_degrees - error_degrees;
             this->send_position(corrected, this->pz_speed, this->pz_acc);
             this->pz_phase_start = millis();
             this->pz_state = PZ_WAIT_CORRECT_POSITION;
-        } else if (millis_since(this->angle_error_read_sent_at) > 200) {
-            if (this->angle_error_read_retries < 5) {
-                this->angle_error_read_retries++;
-                this->send_angle_error_read();
+        } else if (millis_since(this->position_error_read_sent_at) > 200) {
+            if (this->position_error_read_retries < 5) {
+                this->position_error_read_retries++;
+                this->send_position_error_read();
             } else {
                 this->pz_state = PZ_IDLE;
                 this->properties.at("homing_state")->integer_value = PZ_FAILED;
@@ -231,6 +232,9 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         this->send_position(degrees, speed, acc);
         this->properties.at("position")->number_value = degrees;
         this->properties.at("speed")->integer_value = speed;
+    } else if (method_name == "read_position_error") {
+        Module::expect(arguments, 0);
+        this->send_position_error_read();
     } else {
         Module::call(method_name, arguments);
     }
@@ -249,13 +253,14 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
         if ((crc & 0xFF) != data[5]) {
             return;
         }
-        // Extract 32-bit big-endian signed angle error from data[1..4]
+        // Extract 32-bit big-endian signed position error from data[1..4]
         int32_t val = ((int32_t)data[1] << 24) |
                       ((int32_t)data[2] << 16) |
                       ((int32_t)data[3] << 8) |
                       (int32_t)data[4];
-        this->angle_error_value = val;
-        this->angle_error_read_received = true;
-        this->angle_error_read_pending = false;
+        this->position_error_value = val;
+        this->position_error_read_received = true;
+        this->position_error_read_pending = false;
+        this->properties.at("position_error")->number_value = (double)val * 360.0 / POSITION_ERROR_COUNTS_PER_TURN;
     }
 }
