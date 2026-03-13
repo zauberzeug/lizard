@@ -222,16 +222,6 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         Module::expect(arguments, 1, integer);
         this->send_stop_internal(arguments[0]->evaluate_integer());
         this->properties.at("speed")->integer_value = 0;
-    } else if (method_name == "grip") {
-        Module::expect(arguments, 0);
-        this->send_rotate(5.0, 3000, MAX_ACC);
-        this->properties.at("position")->number_value = 5.0;
-        this->properties.at("speed")->integer_value = 3000;
-    } else if (method_name == "release") {
-        Module::expect(arguments, 0);
-        this->send_rotate(-40.0, 3000, MAX_ACC);
-        this->properties.at("position")->number_value = -40.0;
-        this->properties.at("speed")->integer_value = 3000;
     } else if (method_name == "rotate") {
         Module::expect(arguments, 3, numbery, integer, integer);
         double degrees = arguments[0]->evaluate_number();

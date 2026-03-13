@@ -659,8 +659,6 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.run(speed, direction, acc)`  | Run motor with speed, direction and acceleration | `int`, `int`, `int`   |
 | `motor.stop(acc)`                   | Stop motor with given deceleration               | `int`                 |
 | `motor.rotate(degrees, speed, acc)` | Rotate by given degrees                          | `float`, `int`, `int` |
-| `motor.grip()`                      | Grip (rotate to 5 degrees at high speed)         |                       |
-| `motor.release()`                   | Release (rotate to -40 degrees at high speed)    |                       |
 
 The `run()` method accepts a speed (0-4095), direction (0 or 1) and acceleration (0-255).
 
