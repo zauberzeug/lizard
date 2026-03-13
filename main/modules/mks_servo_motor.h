@@ -68,8 +68,7 @@ public:
     static constexpr int32_t INT24_MAX = 8388607;
     static constexpr int64_t MAX_WORKING_CURRENT_MA = 3000;
     static constexpr int64_t MAX_HOLDING_RATIO = 9;
-    static constexpr int64_t MAX_SPEED_SPEED = 4095;
-    static constexpr int64_t MAX_POSITION_SPEED = 65535;
+    static constexpr int64_t MAX_SPEED = 3000;
     static constexpr int64_t MAX_ACC = 255;
 
     MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id);

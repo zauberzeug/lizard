@@ -61,7 +61,7 @@ void MksServoMotor::send_holding_current(int64_t pct) {
 }
 
 void MksServoMotor::send_speed_internal(int64_t direction, int64_t speed, int64_t acc) {
-    speed = std::clamp(speed, (int64_t)0, MAX_SPEED_SPEED);
+    speed = std::clamp(speed, (int64_t)0, MAX_SPEED);
     direction = std::clamp(direction, (int64_t)0, (int64_t)1);
     acc = std::clamp(acc, (int64_t)0, MAX_ACC);
     uint8_t byte1 = (uint8_t)((direction << 7) | ((speed >> 8) & 0x0F));
@@ -77,7 +77,7 @@ void MksServoMotor::send_stop_internal(int64_t acc) {
 }
 
 void MksServoMotor::send_position_counts(int32_t counts, int64_t speed, int64_t acc) {
-    speed = std::clamp(speed, (int64_t)0, MAX_POSITION_SPEED);
+    speed = std::clamp(speed, (int64_t)0, MAX_SPEED);
     acc = std::clamp(acc, (int64_t)0, MAX_ACC);
     counts = std::clamp(counts, INT24_MIN, INT24_MAX);
     uint32_t raw = (uint32_t)counts;
