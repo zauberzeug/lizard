@@ -153,8 +153,9 @@ void MksServoMotor::step_precision_zero() {
                 this->angle_error_read_retries++;
                 this->send_angle_error_read();
             } else {
-                this->pz_state = PZ_FAILED;
+                this->pz_state = PZ_IDLE;
                 this->properties.at("homing_state")->integer_value = PZ_FAILED;
+                this->properties.at("homing_active")->boolean_value = false;
             }
         }
         break;
