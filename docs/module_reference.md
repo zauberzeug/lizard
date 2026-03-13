@@ -647,22 +647,28 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.homing_state`    | Current state of the precision zero sequence | `int`     |
 | `motor.homing_active`   | Whether precision zero is in progress        | `bool`    |
 
-| Methods                             | Description                                      | Arguments             |
-| ----------------------------------- | ------------------------------------------------ | --------------------- |
-| `motor.enable()`                    | Enable the motor                                 |                       |
-| `motor.disable()`                   | Disable the motor                                |                       |
-| `motor.set_vfoc()`                  | Set VFOC mode                                    |                       |
-| `motor.zero()`                      | Set current position as zero                     |                       |
-| `motor.precision_zero()`            | Start precision zeroing sequence                 |                       |
-| `motor.set_working_current(ma)`     | Set working current (mA, 0-3000)                 | `int`                 |
-| `motor.set_holding_current(pct)`    | Set holding current (percentage)                 | `int`                 |
-| `motor.run(speed, direction, acc)`  | Run motor with speed, direction and acceleration | `int`, `int`, `int`   |
-| `motor.stop(acc)`                   | Stop motor with given deceleration               | `int`                 |
-| `motor.rotate(degrees, speed, acc)` | Rotate by given degrees                          | `float`, `int`, `int` |
+| Methods                             | Description                                                  | Arguments             |
+| ----------------------------------- | ------------------------------------------------------------ | --------------------- |
+| `motor.enable()`                    | Enable the motor                                             |                       |
+| `motor.disable()`                   | Disable the motor                                            |                       |
+| `motor.set_vfoc()`                  | Set VFOC mode                                                |                       |
+| `motor.zero()`                      | Set current position as zero                                 |                       |
+| `motor.precision_zero()`            | Start precision zeroing sequence                             |                       |
+| `motor.set_working_current(ma)`     | Set working current (mA, 0-3000)                             | `int`                 |
+| `motor.set_holding_current(pct)`    | Set holding current (percentage, 10-100 in steps of 10)      | `int`                 |
+| `motor.run(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration) | `int`, `int`, `int`   |
+| `motor.stop(acc)`                   | Stop motor with given deceleration (0-255)                   | `int`                 |
+| `motor.rotate(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)       | `float`, `int`, `int` |
 
-The `run()` method accepts a speed (0-4095), direction (0 or 1) and acceleration (0-255).
+The `run()` method accepts a speed in RPM (0-3000), direction (0: CCW, 1: CW) and acceleration (0-255).
+The acceleration parameter controls the ramp rate: higher values mean faster acceleration.
+If acceleration is 0, the motor runs directly at the set speed without ramping.
 
-The `rotate()` method moves the motor by a relative number of degrees with a given speed (0-65535) and acceleration (0-255).
+The `rotate()` method moves the motor to an absolute coordinate position (in degrees from the zero point)
+with a given speed in RPM (0-3000) and acceleration (0-255).
+
+The `stop()` method decelerates and stops the motor with the given acceleration (0-255).
+If acceleration is 0, the motor stops immediately.
 
 The `precision_zero()` method performs a multi-step zeroing sequence specific to the Feldfreund gripper:
 it rotates to a target angle, reads the angle error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
