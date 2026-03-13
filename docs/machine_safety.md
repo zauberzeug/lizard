@@ -21,7 +21,9 @@ It allows formulating rules that stop critical hardware modules when the connect
 
 The following example stops a motor when there is no serial communication for 500 ms:
 
-    when core.last_message_age > 500 then motor.stop(); end
+```
+when core.last_message_age > 500 then motor.stop(); end
+```
 
 ## Expander watchdog
 

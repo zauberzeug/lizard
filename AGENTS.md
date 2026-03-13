@@ -15,6 +15,7 @@ Lizard is a **domain-specific language (DSL)** for defining and controlling hard
 **Tech Stack**: C++17 on ESP-IDF, with Python tooling for build/flash.
 
 **Related Projects**:
+
 - [RoSys](https://github.com/zauberzeug/rosys) – Robot System framework (Python, uses Lizard)
 - [NiceGUI](https://github.com/zauberzeug/nicegui) – Web UI framework often used with RoSys
 
@@ -69,16 +70,16 @@ end
 
 ## Available Module Types
 
-| Category | Modules |
-|----------|---------|
-| **Core** | `Core` (always present) |
-| **I/O** | `Input`, `Output`, `PwmOutput`, `Analog`, `AnalogUnit` |
-| **Communication** | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander` |
+| Category              | Modules                                                                                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Core**              | `Core` (always present)                                                                                                                                          |
+| **I/O**               | `Input`, `Output`, `PwmOutput`, `Analog`, `AnalogUnit`                                                                                                           |
+| **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander`                                                                                                            |
 | **Motor Controllers** | `LinearMotor`, `ODriveMotor`, `ODriveWheels`, `RmdMotor`, `RmdPair`, `StepperMotor`, `RoboClawMotor`, `RoboClawWheels`, `D1Motor`, `DunkerMotor`, `DunkerWheels` |
-| **CANopen** | `CanOpenMaster`, `CanOpenMotor` |
-| **Sensors** | `Imu`, `TemperatureSensor` |
-| **Expanders** | `Mcp23017` (I2C GPIO expander) |
-| **Utilities** | `MotorAxis`, `Proxy` |
+| **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                  |
+| **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                       |
+| **Expanders**         | `Mcp23017` (I2C GPIO expander)                                                                                                                                   |
+| **Utilities**         | `MotorAxis`, `Proxy`                                                                                                                                             |
 
 ---
 
@@ -106,12 +107,12 @@ lizard/
 
 ### Key Entry Points
 
-| File | Purpose |
-|------|---------|
-| `main/main.cpp` | `app_main()` – initialization, main loop |
-| `main/modules/module.cpp` | `Module::create()` – module factory |
-| `main/global.cpp` | Global state management |
-| `language.owl` | DSL grammar definition |
+| File                      | Purpose                                  |
+| ------------------------- | ---------------------------------------- |
+| `main/main.cpp`           | `app_main()` – initialization, main loop |
+| `main/modules/module.cpp` | `Module::create()` – module factory      |
+| `main/global.cpp`         | Global state management                  |
+| `language.owl`            | DSL grammar definition                   |
 
 ---
 
@@ -203,6 +204,7 @@ void MyModule::call(const std::string method_name, const std::vector<ConstExpres
 ```
 
 3. **Register in module factory** (`module.cpp`):
+
    - Add to `ModuleType` enum in `module.h`
    - Add creation logic in `Module::create()` in `module.cpp`
    - Include the header in `module.cpp`
@@ -301,13 +303,17 @@ For significant changes:
 ## Common Pitfalls
 
 ### Main Loop Timing
+
 The main loop runs every **10ms** (`delay(10)` in `app_main`). Any operation that takes longer will delay all modules, rules, and routines. Avoid:
+
 - Blocking I/O operations
 - Long computations
 - Waiting for external responses synchronously
 
 ### Module Registration
+
 When adding a new module, you must:
+
 1. Add to `ModuleType` enum in `module.h`
 2. Add creation case in `Module::create()` in `module.cpp`
 3. Include the header in `module.cpp`
@@ -315,18 +321,23 @@ When adding a new module, you must:
 Forgetting any step causes "unknown module type" errors.
 
 ### Argument Validation
+
 Always use `Module::expect()` to validate constructor/method arguments:
+
 ```cpp
 Module::expect(arguments, 2, identifier, integer);  // Exactly 2 args
 Module::expect(arguments, -1, numbery, numbery);    // Variable count, validate types only
 ```
 
 ### Base Class Calls
+
 Always call parent implementations:
+
 - `Module::step()` – handles `output_on` and `broadcast` flags
 - `Module::call()` – handles `mute`, `unmute`, `shadow`, `broadcast` methods
 
 ### Parser Regeneration
+
 After modifying `language.owl`, always run `./gen_parser.sh`. The `parser.c` file is **generated** – never edit it directly.
 
 ---
@@ -334,21 +345,27 @@ After modifying `language.owl`, always run `./gen_parser.sh`. The `parser.c` fil
 ## Error Handling Patterns
 
 ### User-Facing Output
+
 Use `echo()` for messages sent to the serial console:
+
 ```cpp
 echo("error in module \"%s\": %s", module->name.c_str(), e.what());
 echo("warning: Checksum mismatch");
 ```
 
 ### Exceptions
+
 Use `std::runtime_error` for recoverable errors that should be reported:
+
 ```cpp
 throw std::runtime_error("module \"" + name + "\" is no serial connection");
 throw std::runtime_error("unknown method \"" + this->name + "." + method_name + "\"");
 ```
 
 ### Error Wrapping
+
 The main loop catches exceptions per-module to prevent one failing module from crashing others:
+
 ```cpp
 try {
     module->step();
@@ -362,13 +379,17 @@ try {
 ## Debugging
 
 ### Enable Debug Mode
+
 In a Lizard session:
+
 ```
 core.debug = true
 ```
+
 This prints parsing details and timing information.
 
 ### Serial Monitor
+
 ```bash
 python monitor.py
 # or
@@ -376,19 +397,24 @@ idf.py monitor
 ```
 
 ### Core Dumps
+
 If the device crashes, use `core_dumper.py` to analyze:
+
 ```bash
 python core_dumper.py
 ```
 
 ### Common Debug Techniques
+
 - Add temporary `echo()` calls (remove before committing)
 - Check `core.millis` for timing issues
 - Use `module.unmute()` / `module.mute()` to control output
 - Enable `module.broadcast()` to see all property changes
 
 ### ESP-IDF Logging
+
 For low-level debugging, use ESP-IDF logging macros:
+
 ```cpp
 #include "esp_log.h"
 static const char *TAG = "my_module";
