@@ -647,20 +647,20 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.homing_state`    | Current state of the precision zero sequence | `int`     |
 | `motor.homing_active`   | Whether precision zero is in progress        | `bool`    |
 
-| Methods                             | Description                                         | Arguments             |
-| ----------------------------------- | --------------------------------------------------- | --------------------- |
-| `motor.enable()`                    | Enable the motor                                    |                       |
-| `motor.disable()`                   | Disable the motor                                   |                       |
-| `motor.set_vfoc()`                  | Set VFOC mode                                       |                       |
-| `motor.zero()`                      | Set current position as zero                        |                       |
-| `motor.precision_zero()`            | Start precision zeroing sequence                    |                       |
-| `motor.set_working_current(ma)`     | Set working current (mA, 0-3000)                    | `int`                 |
-| `motor.set_holding_current(pct)`    | Set holding current (percentage)                    | `int`                 |
-| `motor.run(speed, direction, acc)`  | Run motor with speed, direction and acceleration    | `int`, `int`, `int`   |
-| `motor.stop(acc)`                   | Stop motor with given deceleration                  | `int`                 |
-| `motor.rotate(degrees, speed, acc)` | Rotate by given degrees                             | `float`, `int`, `int` |
-| `motor.grip()`                      | Grip (rotate to 5 degrees at high speed)            |                       |
-| `motor.release()`                   | Release (rotate to -40 degrees at high speed)       |                       |
+| Methods                             | Description                                      | Arguments             |
+| ----------------------------------- | ------------------------------------------------ | --------------------- |
+| `motor.enable()`                    | Enable the motor                                 |                       |
+| `motor.disable()`                   | Disable the motor                                |                       |
+| `motor.set_vfoc()`                  | Set VFOC mode                                    |                       |
+| `motor.zero()`                      | Set current position as zero                     |                       |
+| `motor.precision_zero()`            | Start precision zeroing sequence                 |                       |
+| `motor.set_working_current(ma)`     | Set working current (mA, 0-3000)                 | `int`                 |
+| `motor.set_holding_current(pct)`    | Set holding current (percentage)                 | `int`                 |
+| `motor.run(speed, direction, acc)`  | Run motor with speed, direction and acceleration | `int`, `int`, `int`   |
+| `motor.stop(acc)`                   | Stop motor with given deceleration               | `int`                 |
+| `motor.rotate(degrees, speed, acc)` | Rotate by given degrees                          | `float`, `int`, `int` |
+| `motor.grip()`                      | Grip (rotate to 5 degrees at high speed)         |                       |
+| `motor.release()`                   | Release (rotate to -40 degrees at high speed)    |                       |
 
 The `run()` method accepts a speed (0-4095), direction (0 or 1) and acceleration (0-255).
 
