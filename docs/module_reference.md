@@ -32,21 +32,16 @@ It is automatically created right after the boot sequence.
 | `core.print(...)`                | Print arbitrary arguments to the command line      | arbitrary    |
 | `core.output(format)`            | Define the output format                           | `str`        |
 | `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
-| `core.ota(ssid, password, url)`  | Starts OTA update on a URL with given WiFi         | 3x `str`     |
 | `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
 | `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
 | `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
+| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
+| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
+| `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
-
-The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
-After initializing the WiFi connection, it will attempt an OTA update from the given URL.
-Upon successful updating, the ESP will restart and attempt to verify the OTA update.
-It will reconnect to the WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard.
-The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
-If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
@@ -95,6 +90,19 @@ Subscriptions let the coordinator monitor properties on peer nodes.
 The peer reads the property every cycle and sends its current value back to the coordinator.
 The value is stored as `bus.module_property_node` (e.g. `bus.test_level_1` for `"test.level"` on node `1`).
 If the peer restarts, subscriptions are automatically re-sent once it responds again.
+
+**Bus Backup:**
+When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
+If multiple SerialBus modules exist, only the first one is backed up.
+On boot, if the startup script does not create a SerialBus but a backup config exists,
+Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
+This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
+To remove the saved configuration, call `core.forget_serial_bus()`.
+
+**Firmware Updates:**
+Peers on the serial bus can be updated remotely via the coordinator.
+Use the `otb_update.py` tool to push new firmware to any peer node.
+See [OTB Update](tools.md#otb-update) for details.
 
 ## Input
 
@@ -610,12 +618,13 @@ When the wheels are disabled, they will stop and ignore movement commands.
 The stepper motor module controls a stepper motor via "step" and "direction" pins.
 It uses the ESP LED Control API to generate pulses with sufficiently high frequencies and the Pulse Counter API to count steps.
 
-| Constructor                                               | Description             | Arguments |
-| --------------------------------------------------------- | ----------------------- | --------- |
-| `motor = StepperMotor(step, dir[, pu[, cp[, lt[, lc]]]])` | Step and direction pins | 6x `int`  |
+| Constructor                                   | Description             | Arguments  |
+| --------------------------------------------- | ----------------------- | ---------- |
+| `motor = StepperMotor(step, dir[, lt[, lc]])` | Step and direction pins | 2–4x `int` |
 
-The constructor arguments `pu` (pulse counter unit), `pc` (pulse counter channel), `lt` (LED timer) and `lc` (LED channel) are optional and default to 0.
-When using multiple stepper motors, they can be set to different values to avoid conflicts.
+The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
+When using multiple stepper motors, set different timer/channel pairs to avoid conflicts.
+The pulse counter used for position feedback is created internally.
 
 | Properties       | Description                    | Data type |
 | ---------------- | ------------------------------ | --------- |

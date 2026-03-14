@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../utils/otb.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -10,9 +11,15 @@
 #include <string>
 #include <vector>
 
+class SerialBus;
+using SerialBus_ptr = std::shared_ptr<SerialBus>;
+
 class SerialBus : public Module {
 public:
     static constexpr size_t PAYLOAD_CAPACITY = 256;
+
+    const ConstSerial_ptr serial;
+    const uint8_t node_id;
 
     SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id);
 
@@ -38,8 +45,6 @@ private:
         std::string path;      // coordinator: "module.prop:local_name", peer: "local_name"
     };
 
-    const ConstSerial_ptr serial;
-    const uint8_t node_id;
     std::vector<uint8_t> peer_ids;
     bool peer_timed_out[255] = {};
     std::vector<Subscription> subscriptions;
@@ -51,15 +56,17 @@ private:
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
     uint8_t requesting_node = 0;
+    bool ready_pending = true;
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
+    otb::BusOtbSession otb_session;
 
     [[noreturn]] static void communication_loop(void *param);
     void process_uart();
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
-    void enqueue_outgoing_message(uint8_t receiver, const char *payload, size_t length);
+    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
     bool send_outgoing_queue();
-    void send_message(uint8_t receiver, const char *payload, size_t length) const;
+    void send_message(const uint8_t receiver, const char *payload, const size_t length) const;
     void subscribe(uint8_t node, const std::string &path);
     void send_subscription_updates();
 
