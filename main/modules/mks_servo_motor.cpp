@@ -9,8 +9,6 @@ const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
         {"speed", std::make_shared<IntegerVariable>()},
         {"working_current", std::make_shared<IntegerVariable>(1700)},
         {"enabled", std::make_shared<BooleanVariable>(false)},
-        {"homing_state", std::make_shared<IntegerVariable>(0)},
-        {"homing_active", std::make_shared<BooleanVariable>(false)},
         {"position_error", std::make_shared<NumberVariable>()},
     };
 }
@@ -61,7 +59,7 @@ void MksServoMotor::send_holding_current(int64_t pct) {
     this->send(data, 2);
 }
 
-void MksServoMotor::send_speed_internal(int64_t direction, int64_t speed, int64_t acc) {
+void MksServoMotor::send_speed_internal(int64_t speed, int64_t direction, int64_t acc) {
     speed = std::clamp(speed, (int64_t)0, MAX_SPEED);
     direction = std::clamp(direction, (int64_t)0, (int64_t)1);
     acc = std::clamp(acc, (int64_t)0, MAX_ACC);
@@ -117,75 +115,6 @@ void MksServoMotor::send_position_error_read() {
 
 void MksServoMotor::step() {
     Module::step();
-
-    if (this->pz_state != PZ_IDLE) {
-        this->step_precision_zero();
-    }
-}
-
-void MksServoMotor::step_precision_zero() {
-    switch (this->pz_state) {
-    case PZ_FIRST_POSITION:
-        this->send_working_current(1000);
-        this->send_position(this->pz_target_degrees, this->pz_speed, this->pz_acc);
-        this->pz_phase_start = millis();
-        this->pz_state = PZ_WAIT_FIRST_POSITION;
-        break;
-    case PZ_WAIT_FIRST_POSITION:
-        if (millis_since(this->pz_phase_start) >= this->pz_position_wait_ms) {
-            this->pz_state = PZ_READ_ERROR;
-        }
-        break;
-    case PZ_READ_ERROR:
-        this->position_error_read_retries = 0;
-        this->send_position_error_read();
-        this->pz_state = PZ_WAIT_ERROR;
-        break;
-    case PZ_WAIT_ERROR:
-        if (this->position_error_read_received) {
-            int32_t abs_error = this->position_error_value < 0 ? -this->position_error_value : this->position_error_value;
-            double error_degrees = (double)abs_error * 360.0 / POSITION_ERROR_COUNTS_PER_TURN;
-            double corrected = this->pz_target_degrees - error_degrees;
-            this->send_position(corrected, this->pz_speed, this->pz_acc);
-            this->pz_phase_start = millis();
-            this->pz_state = PZ_WAIT_CORRECT_POSITION;
-        } else if (millis_since(this->position_error_read_sent_at) > 200) {
-            if (this->position_error_read_retries < 5) {
-                this->position_error_read_retries++;
-                this->send_position_error_read();
-            } else {
-                this->pz_state = PZ_IDLE;
-                this->properties.at("homing_state")->integer_value = PZ_FAILED;
-                this->properties.at("homing_active")->boolean_value = false;
-            }
-        }
-        break;
-    case PZ_WAIT_CORRECT_POSITION:
-        if (millis_since(this->pz_phase_start) >= this->pz_correct_wait_ms) {
-            this->pz_state = PZ_SET_ZERO;
-        }
-        break;
-    case PZ_SET_ZERO:
-        this->send_coord_zero();
-        this->properties.at("position")->number_value = 0.0;
-        this->pz_phase_start = millis();
-        this->pz_state = PZ_WAIT_AFTER_ZERO;
-        break;
-    case PZ_WAIT_AFTER_ZERO:
-        if (millis_since(this->pz_phase_start) >= this->pz_wait_after_zero_ms) {
-            this->pz_state = PZ_MOVE_TO_START;
-        }
-        break;
-    case PZ_MOVE_TO_START:
-        this->send_position(-110.0, this->pz_speed, this->pz_acc);
-        this->properties.at("position")->number_value = -110.0;
-        this->pz_state = PZ_DONE;
-        this->properties.at("homing_state")->integer_value = PZ_DONE;
-        this->properties.at("homing_active")->boolean_value = false;
-        break;
-    default:
-        break;
-    }
 }
 
 void MksServoMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -202,11 +131,6 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         Module::expect(arguments, 0);
         this->send_coord_zero();
         this->properties.at("position")->number_value = 0.0;
-    } else if (method_name == "precision_zero") {
-        Module::expect(arguments, 0);
-        this->pz_state = PZ_FIRST_POSITION;
-        this->properties.at("homing_active")->boolean_value = true;
-        this->properties.at("homing_state")->integer_value = PZ_FIRST_POSITION;
     } else if (method_name == "set_working_current") {
         Module::expect(arguments, 1, integer);
         this->send_working_current(arguments[0]->evaluate_integer());
@@ -218,7 +142,7 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         int64_t speed = arguments[0]->evaluate_integer();
         int64_t direction = arguments[1]->evaluate_integer();
         int64_t acc = arguments[2]->evaluate_integer();
-        this->send_speed_internal(direction, speed, acc);
+        this->send_speed_internal(speed, direction, acc);
         this->properties.at("speed")->integer_value = speed;
     } else if (method_name == "stop") {
         Module::expect(arguments, 1, integer);

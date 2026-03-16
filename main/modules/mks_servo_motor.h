@@ -5,20 +5,6 @@
 #include "module.h"
 #include <memory>
 
-enum PrecisionZeroState {
-    PZ_IDLE = 0,
-    PZ_FIRST_POSITION,
-    PZ_WAIT_FIRST_POSITION,
-    PZ_READ_ERROR,
-    PZ_WAIT_ERROR,
-    PZ_WAIT_CORRECT_POSITION,
-    PZ_SET_ZERO,
-    PZ_WAIT_AFTER_ZERO,
-    PZ_MOVE_TO_START,
-    PZ_DONE,
-    PZ_FAILED,
-};
-
 class MksServoMotor;
 using MksServoMotor_ptr = std::shared_ptr<MksServoMotor>;
 
@@ -29,22 +15,11 @@ private:
 
     void send(const uint8_t *data, uint8_t len);
 
-    // Precision zero state machine
-    PrecisionZeroState pz_state = PZ_IDLE;
-    unsigned long pz_phase_start = 0;
-    double pz_target_degrees = 240.0;
-    int64_t pz_speed = 300;
-    int64_t pz_acc = 300;
-    unsigned long pz_position_wait_ms = 2000;
-    unsigned long pz_correct_wait_ms = 1000;
-    unsigned long pz_wait_after_zero_ms = 1000;
-
     // Position error read (CAN 0x39)
     bool position_error_read_pending = false;
     bool position_error_read_received = false;
     int32_t position_error_value = 0;
     unsigned long position_error_read_sent_at = 0;
-    uint8_t position_error_read_retries = 0;
 
     void send_position_error_read();
 
@@ -58,7 +33,6 @@ private:
     void send_position_counts(int32_t counts, int64_t speed, int64_t acc);
     void send_position(double degrees, int64_t speed, int64_t acc);
     void send_coord_zero();
-    void step_precision_zero();
 
 public:
     static constexpr int32_t COUNTS_PER_TURN = 16384;

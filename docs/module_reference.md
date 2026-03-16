@@ -638,15 +638,13 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | ------------------------------------ | -------------------------- | ----------------- |
 | `motor = MksServoMotor(can, can_id)` | CAN module and CAN node ID | CAN module, `int` |
 
-| Properties              | Description                                  | Data type |
-| ----------------------- | -------------------------------------------- | --------- |
-| `motor.position`        | Motor position (degrees)                     | `float`   |
-| `motor.speed`           | Motor speed (RPM)                            | `int`     |
-| `motor.working_current` | Working current (mA, 0-3000, default: 1700)  | `int`     |
-| `motor.enabled`         | Whether the motor is enabled                 | `bool`    |
-| `motor.homing_state`    | Current state of the precision zero sequence | `int`     |
-| `motor.homing_active`   | Whether precision zero is in progress        | `bool`    |
-| `motor.position_error`  | Last read position error (degrees)           | `float`   |
+| Properties              | Description                                 | Data type |
+| ----------------------- | ------------------------------------------- | --------- |
+| `motor.position`        | Motor position (degrees)                    | `float`   |
+| `motor.speed`           | Motor speed (RPM)                           | `int`     |
+| `motor.working_current` | Working current (mA, 0-3000, default: 1700) | `int`     |
+| `motor.enabled`         | Whether the motor is enabled                | `bool`    |
+| `motor.position_error`  | Last read position error (degrees)          | `float`   |
 
 | Methods                               | Description                                                  | Arguments             |
 | ------------------------------------- | ------------------------------------------------------------ | --------------------- |
@@ -654,7 +652,6 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.disable()`                     | Disable the motor                                            |                       |
 | `motor.set_vfoc()`                    | Set VFOC mode                                                |                       |
 | `motor.zero()`                        | Set current position as zero                                 |                       |
-| `motor.precision_zero()`              | Start precision zeroing sequence                             |                       |
 | `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                             | `int`                 |
 | `motor.set_holding_current(pct)`      | Set holding current (percentage, 10-100 in steps of 10)      | `int`                 |
 | `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)       | `float`, `int`, `int` |
@@ -674,15 +671,6 @@ If acceleration is 0, the motor stops immediately.
 
 The `read_position_error()` method requests the current position error from the motor via CAN.
 The result is available in the `position_error` property (in degrees) once the motor responds.
-
-The `precision_zero()` method performs a multi-step zeroing sequence specific to the Feldfreund gripper:
-It moves to a target position, reads the position error from the motor, applies a correction, sets the coordinate zero, and then moves to a start position.
-
-The `homing_state` property can be used in rules to react to the result of this sequence.
-Useful terminal values are:
-
-- `9`: done (`PZ_DONE`)
-- `10`: failed (`PZ_FAILED`)
 
 ## Motor Axis
 
