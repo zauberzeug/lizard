@@ -24,6 +24,9 @@ void MksServoMotor::subscribe_to_can() {
 }
 
 void MksServoMotor::send(const uint8_t *data, uint8_t len) {
+    if (len > 7) {
+        return;
+    }
     uint8_t buf[8] = {0};
     uint8_t checksum = (uint8_t)(this->can_id & 0xFF);
     for (uint8_t i = 0; i < len; i++) {
