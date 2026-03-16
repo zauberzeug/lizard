@@ -28,7 +28,7 @@ private:
     void send_set_vfoc();
     void send_working_current(int64_t ma);
     void send_holding_current(int64_t pct);
-    void send_speed_internal(int64_t direction, int64_t speed, int64_t acc);
+    void send_speed_internal(int64_t speed, int64_t direction, int64_t acc);
     void send_stop_internal(int64_t acc);
     void send_position_counts(int32_t counts, int64_t speed, int64_t acc);
     void send_position(double degrees, int64_t speed, int64_t acc);
