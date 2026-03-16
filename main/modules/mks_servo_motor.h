@@ -14,13 +14,6 @@ private:
     const uint16_t can_id;
 
     void send(const uint8_t *data, uint8_t len);
-
-    // Position error read (CAN 0x39)
-    bool position_error_read_pending = false;
-    bool position_error_read_received = false;
-    int32_t position_error_value = 0;
-    unsigned long position_error_read_sent_at = 0;
-
     void send_position_error_read();
 
     // Private helpers

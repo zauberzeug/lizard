@@ -185,9 +185,6 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
                       ((int32_t)data[2] << 16) |
                       ((int32_t)data[3] << 8) |
                       (int32_t)data[4];
-        this->position_error_value = val;
-        this->position_error_read_received = true;
-        this->position_error_read_pending = false;
         this->properties.at("position_error")->number_value = (double)val * 360.0 / POSITION_ERROR_COUNTS_PER_TURN;
     }
 }
