@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../utils/timing.h"
 #include "can.h"
 #include "module.h"
 #include <memory>

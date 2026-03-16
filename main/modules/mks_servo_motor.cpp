@@ -111,9 +111,6 @@ void MksServoMotor::send_coord_zero() {
 void MksServoMotor::send_position_error_read() {
     uint8_t data[] = {0x39};
     this->send(data, 1);
-    this->position_error_read_pending = true;
-    this->position_error_read_received = false;
-    this->position_error_read_sent_at = millis();
 }
 
 void MksServoMotor::step() {
