@@ -1,0 +1,95 @@
+---
+# Lizard clang-tidy configuration
+#
+# Focus: catching real bugs and performance issues in C-style embedded C++ code.
+# This is intentionally minimal — the codebase is closer to C than modern C++,
+# so we avoid checks that push toward idioms that don't fit (auto, smart pointers,
+# range-for, etc.). Only checks that find actual defects are enabled.
+#
+# Run: ./lint.sh
+# Or manually: idf.py clang-check --exclude-paths components/
+#
+# Note: parser.c/parser.h are generated files and excluded via HeaderFilterRegex
+# and lint.sh post-filtering.
+#
+#
+# === Discussion: checks to consider enabling (needs team agreement) ===
+#
+# readability-identifier-naming
+#   Enforces naming conventions from CONTRIBUTING.md (CamelCase classes,
+#   snake_case functions/variables, UPPER_CASE macros). Currently produces
+#   ~2750 warnings — would require a larger cleanup effort. CheckOptions
+#   for naming rules are already defined below and ready to use.
+#
+# modernize-use-using
+#   Replaces typedef with using. Already applied to BNO055ESP32.h.
+#   Low noise, but changes style across the whole codebase.
+#
+# readability-braces-around-statements
+#   Requires braces on all if/for/while bodies. Prevents bugs from
+#   misleading indentation. Noisy if not already enforced.
+#
+# misc-const-correctness
+#   Flags variables/parameters that could be const. Very noisy on existing
+#   code, but valuable for new code going forward.
+#
+# cppcoreguidelines-virtual-class-destructor
+#   Catches base classes with virtual methods but non-virtual destructors.
+#   Low noise, high value — good candidate for enabling.
+#
+
+# Active checks: bugs, performance, and two key modernize checks
+Checks: >-
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-reserved-identifier,
+  -bugprone-exception-escape,
+  performance-*,
+  -performance-no-int-to-ptr,
+  modernize-use-override,
+  modernize-use-nullptr,
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: '.*/main/(?!parser\.).*\.h$'
+
+# CheckOptions for readability-identifier-naming are pre-configured below.
+# They take effect when readability-identifier-naming is added to Checks.
+CheckOptions:
+  # Naming conventions from CONTRIBUTING.md
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: lower_case
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.MethodCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.MemberCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.LocalVariableCase
+    value: lower_case
+  - key: readability-identifier-naming.StaticVariablePrefix
+    value: 's_'
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  # modernize settings
+  - key: modernize-use-override.IgnoreDestructors
+    value: 'false'
+...
