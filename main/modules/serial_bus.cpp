@@ -119,6 +119,13 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             // respond to poll
             if (bus->requesting_node) {
                 try {
+                    // if this is the first response, send "Ready." (will be simplified in the future when broadcasts are implemented)
+                    if (bus->ready_pending) {
+                        char payload[PAYLOAD_CAPACITY];
+                        const int len = std::snprintf(payload, sizeof(payload), "%sReady.", ECHO_CMD);
+                        bus->send_message(bus->requesting_node, payload, len);
+                        bus->ready_pending = false;
+                    }
                     bus->send_outgoing_queue();
                     bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
                 } catch (const std::exception &e) {

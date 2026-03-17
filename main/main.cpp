@@ -18,6 +18,7 @@
 #include "rom/gpio.h"
 #include "rom/uart.h"
 #include "storage.h"
+#include "utils/bus_backup.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -418,6 +419,9 @@ void app_main() {
     } catch (const std::runtime_error &e) {
         echo("error while loading startup script: %s", e.what());
     }
+
+    bus_backup::save_if_present();
+    bus_backup::restore_if_needed();
 
     printf("\nReady.\n");
 
