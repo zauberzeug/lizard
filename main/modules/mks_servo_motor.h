@@ -17,7 +17,7 @@ private:
 
     // Private helpers
     void send_enable(bool enable);
-    void send_set_vfoc();
+    void send_set_mode(int mode);
     void send_working_current(int64_t ma);
     void send_holding_current(int64_t pct);
     void send_speed_internal(int64_t speed, int64_t direction, int64_t acc);

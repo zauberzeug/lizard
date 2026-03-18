@@ -43,8 +43,8 @@ void MksServoMotor::send_enable(bool enable) {
     this->properties.at("enabled")->boolean_value = enable;
 }
 
-void MksServoMotor::send_set_vfoc() {
-    uint8_t data[] = {0x82, 0x05};
+void MksServoMotor::send_set_mode(int mode) {
+    uint8_t data[] = {0x82, mode};
     this->send(data, 2);
 }
 
@@ -124,9 +124,10 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
     } else if (method_name == "disable") {
         Module::expect(arguments, 0);
         this->send_enable(false);
-    } else if (method_name == "set_vfoc") {
-        Module::expect(arguments, 0);
-        this->send_set_vfoc();
+    } else if (method_name == "set_mode") {
+        Module::expect(arguments, 1, integer);
+        int mode = arguments[0]->evaluate_integer();
+        this->send_set_mode(mode);
     } else if (method_name == "zero") {
         Module::expect(arguments, 0);
         this->send_coord_zero();

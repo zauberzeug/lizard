@@ -650,7 +650,7 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | ------------------------------------- | ------------------------------------------------------------ | --------------------- |
 | `motor.enable()`                      | Enable the motor                                             |                       |
 | `motor.disable()`                     | Disable the motor                                            |                       |
-| `motor.set_vfoc()`                    | Set VFOC mode                                                |                       |
+| `motor.set_mode(mode)`                | Set working mode (see [working modes](#working-modes))       | `int`                 |
 | `motor.zero()`                        | Set current position as zero                                 |                       |
 | `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                             | `int`                 |
 | `motor.set_holding_current(pct)`      | Set holding current (percentage, 10-100 in steps of 10)      | `int`                 |
@@ -671,6 +671,21 @@ If acceleration is 0, the motor stops immediately.
 
 The `read_position_error()` method requests the current position error from the motor via CAN.
 The result is available in the `position_error` property (in degrees) once the motor responds.
+
+### Working Modes
+
+The MKS SERVO42D/57D supports the following working modes:
+
+| Mode | Name     | Description                      | Remark  |
+| ---- | -------- | -------------------------------- | ------- |
+| 0x00 | CR_OPEN  | Pulse interface open-loop mode   |         |
+| 0x01 | CR_CLOSE | Pulse interface closed-loop mode |         |
+| 0x02 | CR_vFOC  | Pulse interface FOC mode         | default |
+| 0x03 | SR_OPEN  | Bus interface open-loop mode     |         |
+| 0x04 | SR_CLOSE | Bus interface closed-loop mode   |         |
+| 0x05 | SR_vFOC  | Bus interface FOC mode           |         |
+
+The `set_mode()` method sets the working mode of the motor. For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
 
 ## Motor Axis
 
