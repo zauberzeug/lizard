@@ -113,8 +113,20 @@ void MksServoMotor::send_position_error_read() {
     this->send(data, 1);
 }
 
+void MksServoMotor::send_position_read() {
+    uint8_t data[] = {0x31};
+    this->send(data, 1);
+}
+
+void MksServoMotor::send_speed_read() {
+    uint8_t data[] = {0x32};
+    this->send(data, 1);
+}
+
 void MksServoMotor::step() {
     Module::step();
+    this->send_position_read();
+    this->send_speed_read();
 }
 
 void MksServoMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -130,7 +142,6 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
     } else if (method_name == "zero") {
         Module::expect(arguments, 0);
         this->send_coord_zero();
-        this->properties.at("position")->number_value = 0.0;
     } else if (method_name == "set_working_current") {
         Module::expect(arguments, 1, integer);
         this->send_working_current(arguments[0]->evaluate_integer());
@@ -143,19 +154,15 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         int64_t direction = arguments[1]->evaluate_integer();
         int64_t acc = arguments[2]->evaluate_integer();
         this->send_speed_internal(speed, direction, acc);
-        this->properties.at("speed")->integer_value = speed;
     } else if (method_name == "stop") {
         Module::expect(arguments, 1, integer);
         this->send_stop_internal(arguments[0]->evaluate_integer());
-        this->properties.at("speed")->integer_value = 0;
     } else if (method_name == "position") {
         Module::expect(arguments, 3, numbery, integer, integer);
         double degrees = arguments[0]->evaluate_number();
         int64_t speed = arguments[1]->evaluate_integer();
         int64_t acc = arguments[2]->evaluate_integer();
         this->send_position(degrees, speed, acc);
-        this->properties.at("position")->number_value = degrees;
-        this->properties.at("speed")->integer_value = speed;
     } else if (method_name == "read_position_error") {
         Module::expect(arguments, 0);
         this->send_position_error_read();
@@ -168,7 +175,38 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
     if (count < 1) {
         return;
     }
-    if (data[0] == 0x39 && count == 6) {
+    if (data[0] == 0x31 && count == 8) {
+        // CRC validation
+        uint8_t crc = (uint8_t)(this->can_id & 0xFF);
+        for (int i = 0; i < 7; i++) {
+            crc += data[i];
+        }
+        if ((crc & 0xFF) != data[7]) {
+            return;
+        }
+        // Extract 48-bit big-endian signed encoder value from data[1..6]
+        int64_t val = 0;
+        for (int i = 1; i <= 6; i++) {
+            val = (val << 8) | data[i];
+        }
+        // Sign-extend from 48-bit
+        if (val & ((int64_t)1 << 47)) {
+            val |= ~(((int64_t)1 << 48) - 1);
+        }
+        this->properties.at("position")->number_value = (double)val * 360.0 / COUNTS_PER_TURN;
+    } else if (data[0] == 0x32 && count == 4) {
+        // CRC validation
+        uint8_t crc = (uint8_t)(this->can_id & 0xFF);
+        for (int i = 0; i < 3; i++) {
+            crc += data[i];
+        }
+        if ((crc & 0xFF) != data[3]) {
+            return;
+        }
+        // Extract 16-bit big-endian signed speed (RPM) from data[1..2]
+        int16_t speed = (int16_t)((data[1] << 8) | data[2]);
+        this->properties.at("speed")->integer_value = speed;
+    } else if (data[0] == 0x39 && count == 6) {
         // CRC validation
         uint8_t crc = (uint8_t)(this->can_id & 0xFF);
         for (int i = 0; i < 5; i++) {

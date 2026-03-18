@@ -14,6 +14,8 @@ private:
 
     void send(const uint8_t *data, uint8_t len);
     void send_position_error_read();
+    void send_position_read();
+    void send_speed_read();
 
     // Private helpers
     void send_enable(bool enable);
