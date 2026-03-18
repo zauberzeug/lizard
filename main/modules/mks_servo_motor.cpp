@@ -8,7 +8,7 @@ const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
         {"position", std::make_shared<NumberVariable>()},
         {"speed", std::make_shared<IntegerVariable>()},
         {"working_current", std::make_shared<IntegerVariable>(1700)},
-        {"enabled", std::make_shared<BooleanVariable>(false)},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
         {"position_error", std::make_shared<NumberVariable>()},
     };
 }
@@ -37,10 +37,19 @@ void MksServoMotor::send(const uint8_t *data, uint8_t len) {
     this->can->send(this->can_id, buf, false, len + 1);
 }
 
-void MksServoMotor::send_enable(bool enable) {
-    uint8_t data[] = {0xF3, (uint8_t)(enable ? 0x01 : 0x00)};
+void MksServoMotor::enable() {
+    uint8_t data[] = {0xF3, 0x01};
     this->send(data, 2);
-    this->properties.at("enabled")->boolean_value = enable;
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+}
+
+void MksServoMotor::disable() {
+    this->send_stop_internal(0);
+    uint8_t data[] = {0xF3, 0x00};
+    this->send(data, 2);
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
 }
 
 void MksServoMotor::send_set_mode(uint8_t mode) {
@@ -125,6 +134,13 @@ void MksServoMotor::send_speed_read() {
 }
 
 void MksServoMotor::step() {
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
     this->send_position_read();
     this->send_speed_read();
     Module::step();
@@ -133,10 +149,10 @@ void MksServoMotor::step() {
 void MksServoMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "enable") {
         Module::expect(arguments, 0);
-        this->send_enable(true);
+        this->enable();
     } else if (method_name == "disable") {
         Module::expect(arguments, 0);
-        this->send_enable(false);
+        this->disable();
     } else if (method_name == "set_mode") {
         Module::expect(arguments, 1, integer);
         this->send_set_mode((uint8_t)arguments[0]->evaluate_integer());
@@ -151,15 +167,21 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         this->send_holding_current(arguments[0]->evaluate_integer());
     } else if (method_name == "speed") {
         Module::expect(arguments, 3, integer, integer, integer);
+        if (!this->enabled)
+            return;
         int64_t speed = arguments[0]->evaluate_integer();
         int64_t direction = arguments[1]->evaluate_integer();
         int64_t acc = arguments[2]->evaluate_integer();
         this->send_speed_internal(speed, direction, acc);
     } else if (method_name == "stop") {
         Module::expect(arguments, 1, integer);
+        if (!this->enabled)
+            return;
         this->send_stop_internal(arguments[0]->evaluate_integer());
     } else if (method_name == "position") {
         Module::expect(arguments, 3, numbery, integer, integer);
+        if (!this->enabled)
+            return;
         double degrees = arguments[0]->evaluate_number();
         int64_t speed = arguments[1]->evaluate_integer();
         int64_t acc = arguments[2]->evaluate_integer();
