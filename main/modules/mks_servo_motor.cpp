@@ -125,9 +125,9 @@ void MksServoMotor::send_speed_read() {
 }
 
 void MksServoMotor::step() {
-    Module::step();
     this->send_position_read();
     this->send_speed_read();
+    Module::step();
 }
 
 void MksServoMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
