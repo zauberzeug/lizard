@@ -60,24 +60,6 @@ std::string read(const std::string ns, const std::string key) {
     return result;
 }
 
-static void nvs_delete_key(const std::string &ns, const std::string &key) {
-    esp_err_t err;
-    nvs_handle handle;
-    if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
-        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    err = nvs_erase_key(handle, key.c_str());
-    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
-        nvs_close(handle);
-        throw std::runtime_error("could not erase key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    if ((err = nvs_commit(handle)) != ESP_OK) {
-        nvs_close(handle);
-        throw std::runtime_error("could not commit erase for key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    nvs_close(handle);
-}
-
 void Storage::put(const std::string value) {
     try {
         const int old_num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
@@ -168,6 +150,24 @@ bool Storage::get_user_pin(std::uint32_t &pin) {
         return true;
     }
     return false;
+}
+
+void Storage::nvs_delete_key(const std::string &ns, const std::string &key) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    err = nvs_erase_key(handle, key.c_str());
+    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
+        throw std::runtime_error("could not erase key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit erase for key " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    nvs_close(handle);
 }
 
 void Storage::remove_user_pin() {
