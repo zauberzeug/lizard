@@ -43,7 +43,7 @@ void MksServoMotor::send_enable(bool enable) {
     this->properties.at("enabled")->boolean_value = enable;
 }
 
-void MksServoMotor::send_set_mode(int mode) {
+void MksServoMotor::send_set_mode(uint8_t mode) {
     uint8_t data[] = {0x82, mode};
     this->send(data, 2);
 }
@@ -126,8 +126,7 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         this->send_enable(false);
     } else if (method_name == "set_mode") {
         Module::expect(arguments, 1, integer);
-        int mode = arguments[0]->evaluate_integer();
-        this->send_set_mode(mode);
+        this->send_set_mode((uint8_t)arguments[0]->evaluate_integer());
     } else if (method_name == "zero") {
         Module::expect(arguments, 0);
         this->send_coord_zero();
