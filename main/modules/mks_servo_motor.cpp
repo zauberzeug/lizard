@@ -58,7 +58,7 @@ void MksServoMotor::send_working_current(int64_t ma) {
 }
 
 void MksServoMotor::send_holding_current(int64_t pct) {
-    int64_t ratio = std::clamp((pct / 10) - 1, (int64_t)0, MAX_HOLDING_RATIO);
+    int64_t ratio = std::clamp(((pct + 5) / 10) - 1, (int64_t)0, MAX_HOLDING_RATIO);
     uint8_t data[] = {0x9B, (uint8_t)ratio};
     this->send(data, 2);
 }
