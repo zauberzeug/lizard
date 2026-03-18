@@ -44,6 +44,7 @@ void MksServoMotor::send_enable(bool enable) {
 }
 
 void MksServoMotor::send_set_mode(uint8_t mode) {
+    mode = std::clamp(mode, (uint8_t)0x00, MAX_MODE);
     uint8_t data[] = {0x82, mode};
     this->send(data, 2);
 }

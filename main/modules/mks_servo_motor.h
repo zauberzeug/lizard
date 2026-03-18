@@ -38,6 +38,7 @@ public:
     static constexpr int64_t MAX_HOLDING_RATIO = 9;
     static constexpr int64_t MAX_SPEED = 3000;
     static constexpr int64_t MAX_ACC = 255;
+    static constexpr uint8_t MAX_MODE = 0x05;
 
     MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id);
     void subscribe_to_can();
