@@ -28,6 +28,7 @@ void Core::step() {
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
+    this->output_on = !this->output_list.empty();
 }
 
 void Core::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -73,7 +74,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
                 this->output_list.push_back({module, property_name, precision});
             }
         }
-        this->output_on = true;
+        // output_on is set in Core::step() to delay by one cycle
     } else if (method_name == "startup_checksum") {
         uint16_t checksum = 0;
         for (char const &c : Storage::startup) {
