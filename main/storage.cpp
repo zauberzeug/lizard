@@ -67,6 +67,7 @@ void Storage::put(const std::string value) {
             nvs_delete_key(NAMESPACE, "chunk" + std::to_string(i));
         }
     } catch (...) {
+        echo("warning: could not delete old chunks before writing new ones");
     }
 
     write(NAMESPACE, "num_chunks", std::to_string((value.length() + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE));
