@@ -69,12 +69,10 @@ void Storage::put(const std::string value) {
     } catch (...) {
     }
 
-    int num_chunks = 0;
+    write(NAMESPACE, "num_chunks", std::to_string((value.length() + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE));
     for (size_t pos = 0; pos < value.length(); pos += MAX_CHUNK_SIZE) {
-        num_chunks++;
         write(NAMESPACE, "chunk" + std::to_string(pos / MAX_CHUNK_SIZE), value.substr(pos, MAX_CHUNK_SIZE));
     }
-    write(NAMESPACE, "num_chunks", std::to_string(num_chunks));
 }
 
 std::string Storage::get() {
