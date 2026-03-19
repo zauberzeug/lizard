@@ -670,6 +670,8 @@ When the motor axis is disabled, it will stop the motor and ignore movement comm
 
 The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
 
+**Important:** A CanOpenMaster is required when using CanOpenMotor. Without it, runtime variables (position, velocity, status bits) will never update because TPDO messages are only triggered by SYNC. Other CAN motor modules (D1Motor, DunkerMotor) do not require a CanOpenMaster.
+
 | Constructor                      | Description | Arguments  |
 | -------------------------------- | ----------- | ---------- |
 | `co_master = CanOpenMaster(can)` | CAN module  | CAN module |
@@ -681,8 +683,10 @@ The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At c
 ## CanOpenMotor
 
 The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402.
-Positional and velocity units are currently undefined and must by manually measured.
+Positional and velocity units are currently undefined and must be manually measured.
 Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
+
+A [CanOpenMaster](#canopenmaster) on the same CAN bus is needed for position, velocity and status updates.
 
 | Constructor                          | Description                     | Arguments         |
 | ------------------------------------ | ------------------------------- | ----------------- |
@@ -691,7 +695,7 @@ Once the configuration sequence has finished, current status, position and veloc
 | Methods                                                   | Description                                                                               | Arguments |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
 | `motor.enter_pp_mode(velo)`                               | Set 402 operating mode to profile position, halt off, and target velocity to `velo`       | `int`     |
-| `motor.enter_pv_mode()`                                   | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
+| `motor.enter_pv_mode(velo)`                               | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
 | `motor.set_target_position(pos)`                          | Set target position to `pos` (signed). [pp mode]                                          | `int`     |
 | `motor.commit_target_position()`                          | Instruct motor to move to previously set target position. [pp mode]                       |           |
 | `motor.set_target_velocity(velo)`                         | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
@@ -703,26 +707,28 @@ Once the configuration sequence has finished, current status, position and veloc
 | `motor.reset_fault()`                                     | Clear any faults (like positioning errors). Implicitly sets the "halt" bit.               |           |
 | `motor.sdo_read(index)`                                   | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
 
-| Properties              | Description                                              | Data type |
-| ----------------------- | -------------------------------------------------------- | --------- |
-| `initialized`           | Concurrent init sequence has finished, motor is ready    | `bool`    |
-| `last_heartbeat`        | Time in µs since bootup when last heartbeat was received | `int`     |
-| `is_booting`            | Node is in booting state                                 | `bool`    |
-| `is_preoperational`     | Node is in pre-operational state                         | `bool`    |
-| `is_operational`        | Node is in operational state                             | `bool`    |
-| `actual_position`       | Motor position at last SYNC                              | `int`     |
-| `position_offset`       | Offset implicitly added to target/reported position      | `int`     |
-| `actual_velocity`       | Motor velocity at last SYNC                              | `int`     |
-| `status_enabled`        | Operation enabled bit of status word since last SYNC     | `bool`    |
-| `status_fault`          | Fault bit of status word since last SYNC                 | `bool`    |
-| `status_target_reached` | Target reached bit of status word since last SYNC        | `bool`    |
-| `ctrl_enable`           | Latched operation enable bit of every sent control word  | `bool`    |
-| `ctrl_halt`             | Latched halt bit of every sent control word              | `bool`    |
+| Properties                 | Description                                              | Data type |
+| -------------------------- | -------------------------------------------------------- | --------- |
+| `initialized`              | Concurrent init sequence has finished, motor is ready    | `bool`    |
+| `last_heartbeat`           | Time in µs since bootup when last heartbeat was received | `int`     |
+| `is_booting`               | Node is in booting state                                 | `bool`    |
+| `is_preoperational`        | Node is in pre-operational state                         | `bool`    |
+| `is_operational`           | Node is in operational state                             | `bool`    |
+| `actual_position`          | Motor position at last SYNC                              | `int`     |
+| `position_offset`          | Offset implicitly added to target/reported position      | `int`     |
+| `actual_velocity`          | Motor velocity at last SYNC                              | `int`     |
+| `status_enabled`           | Operation enabled bit of status word since last SYNC     | `bool`    |
+| `status_fault`             | Fault bit of status word since last SYNC                 | `bool`    |
+| `status_target_reached`    | Target reached bit of status word since last SYNC        | `bool`    |
+| `pp_set_point_acknowledge` | Set point acknowledge bit (profile position mode)        | `bool`    |
+| `pv_is_moving`             | Motor is moving (profile velocity mode)                  | `bool`    |
+| `ctrl_enable`              | Latched operation enable bit of every sent control word  | `bool`    |
+| `ctrl_halt`                | Latched halt bit of every sent control word              | `bool`    |
+| `enabled`                  | Whether the motor is enabled                             | `bool`    |
 
 **Configuration sequence**
 
 After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`.
-Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
 
 **Target position sequence**
 
@@ -824,8 +830,6 @@ Note: To reduce bandwidth, voltages are only queried when explicitly requested b
 | `motor.sdo_read(index[, subindex])`             | Read SDO                      | 2x `int`  |
 | `motor.sdo_write(index, subindex, bits, value)` | Write SDO                     | 4x `int`  |
 | `motor.update_voltages()`                       | Update voltages               |           |
-| `motor.enable()`                                | Enable the Motor              |           |
-| `motor.disable()`                               | Disable the Motor             |           |
 
 When the motor is disabled, it will freewheel and ignore movement commands.
 
