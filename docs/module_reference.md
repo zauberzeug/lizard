@@ -668,9 +668,12 @@ When the motor axis is disabled, it will stop the motor and ignore movement comm
 
 ## CanOpenMaster
 
-The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
+The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes.
+At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
 
-**Important:** A CanOpenMaster is required when using CanOpenMotor. Without it, runtime variables (position, velocity, status bits) will never update because TPDO messages are only triggered by SYNC. Other CAN motor modules (D1Motor, DunkerMotor) do not require a CanOpenMaster.
+A CanOpenMaster on the same CAN bus is required for CanOpenMotor —
+without periodic SYNC messages, position, velocity and status properties will not update.
+Other CAN motor modules (D1Motor, DunkerMotor) do not need a CanOpenMaster.
 
 | Constructor                      | Description | Arguments  |
 | -------------------------------- | ----------- | ---------- |
