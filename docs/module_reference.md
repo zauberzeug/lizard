@@ -672,7 +672,7 @@ If acceleration is 0, the motor stops immediately.
 The `read_position_error()` method requests the current position error from the motor via CAN.
 The result is available in the `position_error` property (in degrees) once the motor responds.
 
-### Working Modes
+**Working Modes**
 
 The MKS SERVO42D/57D supports the following working modes:
 
@@ -685,7 +685,8 @@ The MKS SERVO42D/57D supports the following working modes:
 | 0x04 | SR_CLOSE | Bus interface closed-loop mode   |         |
 | 0x05 | SR_vFOC  | Bus interface FOC mode           |         |
 
-The `set_mode()` method sets the working mode of the motor. For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
+The `set_mode()` method sets the working mode of the motor.
+For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
 
 ## Motor Axis
 
