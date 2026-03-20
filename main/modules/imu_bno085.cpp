@@ -4,10 +4,14 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "esp_log.h"
+
 REGISTER_MODULE_DEFAULTS(ImuBno085)
 
 namespace {
+constexpr char TAG[] = "ImuBno085";
 constexpr double RAD_TO_DEG = 180.0 / M_PI;
+constexpr int MAX_EVENTS_PER_STEP = 16;
 
 inline int accuracy_from_status(uint8_t status) {
     return static_cast<int>(status & 0x03U);
@@ -67,40 +71,104 @@ const std::map<std::string, Variable_ptr> ImuBno085::get_defaults() {
     };
 }
 
+void ImuBno085::enable_default_reports() {
+    apply_mode(current_mode);
+}
+
+void ImuBno085::apply_mode(const std::string &mode) {
+    auto set_report = [&](sh2_SensorId_t sensor, bool enable) {
+        if (!bno->enableReport(sensor, enable ? report_interval_us : 0)) {
+            throw std::runtime_error("unable to configure sensor report");
+        }
+    };
+
+    auto disable_all = [&]() {
+        set_report(SH2_ACCELEROMETER, false);
+        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, false);
+        set_report(SH2_GYROSCOPE_CALIBRATED, false);
+        set_report(SH2_GAME_ROTATION_VECTOR, false);
+        set_report(SH2_LINEAR_ACCELERATION, false);
+        set_report(SH2_GRAVITY, false);
+        set_report(SH2_TEMPERATURE, false);
+    };
+
+    disable_all();
+    if (mode == "configmode") {
+        // no reports
+    } else if (mode == "acconly") {
+        set_report(SH2_ACCELEROMETER, true);
+    } else if (mode == "magonly") {
+        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+    } else if (mode == "gyroonly") {
+        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+    } else if (mode == "accmag") {
+        set_report(SH2_ACCELEROMETER, true);
+        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+    } else if (mode == "accgyro") {
+        set_report(SH2_ACCELEROMETER, true);
+        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+    } else if (mode == "maggyro") {
+        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+    } else if (mode == "amg") {
+        set_report(SH2_ACCELEROMETER, true);
+        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+    } else if (mode == "imu") {
+        set_report(SH2_ACCELEROMETER, true);
+        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+        set_report(SH2_GAME_ROTATION_VECTOR, true);
+    } else if (mode == "compass") {
+        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+        set_report(SH2_GAME_ROTATION_VECTOR, true);
+    } else if (mode == "m4g") {
+        set_report(SH2_ACCELEROMETER, true);
+        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+        set_report(SH2_GAME_ROTATION_VECTOR, true);
+    } else if (mode == "ndof_fmc_off") {
+        set_report(SH2_ACCELEROMETER, true);
+        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+        set_report(SH2_GAME_ROTATION_VECTOR, true);
+    } else if (mode == "ndof") {
+        set_report(SH2_ACCELEROMETER, true);
+        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+        set_report(SH2_GAME_ROTATION_VECTOR, true);
+        set_report(SH2_LINEAR_ACCELERATION, true);
+        set_report(SH2_GRAVITY, true);
+        set_report(SH2_TEMPERATURE, true);
+    } else {
+        throw std::runtime_error("invalid mode: " + mode);
+    }
+}
+
 ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, gpio_num_t int_pin,
                      gpio_num_t rst_pin, uint8_t address, int clk_speed)
-    : Module(imu, name), i2c_port(i2c_port), sda_pin(sda_pin), scl_pin(scl_pin), int_pin(int_pin), rst_pin(rst_pin),
+    : Module(imu_bno085, name), i2c_port(i2c_port), sda_pin(sda_pin), scl_pin(scl_pin), int_pin(int_pin), rst_pin(rst_pin),
       address(address), clk_speed(clk_speed), report_interval_us(100000UL) {
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
-    bno = std::make_unique<Adafruit_BNO08x>(rst_pin);
+    bno = std::make_unique<Bno08x>(rst_pin);
 
     if (!bno->begin_I2C(i2c_port, address, int_pin)) {
         throw std::runtime_error("BNO085 initialization failed");
     }
 
-    auto enable_report = [&](sh2_SensorId_t sensor) {
-        if (!bno->enableReport(sensor, report_interval_us)) {
-            throw std::runtime_error("unable to enable sensor report");
-        }
-    };
-
-    enable_report(SH2_ACCELEROMETER);
-    enable_report(SH2_GYROSCOPE_CALIBRATED);
-    enable_report(SH2_MAGNETIC_FIELD_CALIBRATED);
-    enable_report(SH2_GAME_ROTATION_VECTOR);
-    enable_report(SH2_LINEAR_ACCELERATION);
-    enable_report(SH2_GRAVITY);
-    enable_report(SH2_ROTATION_VECTOR);
-    enable_report(SH2_TEMPERATURE);
+    enable_default_reports();
 
     this->properties = ImuBno085::get_defaults();
 }
 
 void ImuBno085::step() {
+    if (bno->wasReset()) {
+        ESP_LOGW(TAG, "BNO085 reset detected, re-enabling reports");
+        enable_default_reports();
+    }
+
     uint16_t data_select = this->properties.at("data_select")->integer_value;
     sh2_SensorValue_t sensor_value{};
 
-    while (bno->getSensorEvent(&sensor_value)) {
+    for (int i = 0; i < MAX_EVENTS_PER_STEP && bno->getSensorEvent(&sensor_value); ++i) {
         switch (sensor_value.sensorId) {
         case SH2_ACCELEROMETER:
             if (data_select & 0x0002) {
@@ -139,17 +207,15 @@ void ImuBno085::step() {
                 this->properties.at("quat_y")->number_value = sensor_value.un.gameRotationVector.j;
                 this->properties.at("quat_z")->number_value = sensor_value.un.gameRotationVector.k;
             }
-            if (data_select & 0x0001) {
-                this->properties.at("cal_sys")->integer_value = accuracy_from_status(sensor_value.status);
-            }
-            break;
-        case SH2_ROTATION_VECTOR:
             if (data_select & 0x0010) {
                 double roll, pitch, yaw;
-                quaternion_to_euler(sensor_value.un.rotationVector, roll, pitch, yaw);
+                quaternion_to_euler(sensor_value.un.gameRotationVector, roll, pitch, yaw);
                 this->properties.at("roll")->number_value = roll * RAD_TO_DEG;
                 this->properties.at("pitch")->number_value = pitch * RAD_TO_DEG;
                 this->properties.at("yaw")->number_value = yaw * RAD_TO_DEG;
+            }
+            if (data_select & 0x0001) {
+                this->properties.at("cal_sys")->integer_value = accuracy_from_status(sensor_value.status);
             }
             break;
         case SH2_LINEAR_ACCELERATION:
@@ -184,77 +250,12 @@ void ImuBno085::call(const std::string method_name, const std::vector<ConstExpre
         Module::expect(arguments, 1, string);
         std::string mode = arguments[0]->evaluate_string();
         std::transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
-
-        auto set_report = [&](sh2_SensorId_t sensor, bool enable) {
-            if (!bno->enableReport(sensor, enable ? report_interval_us : 0)) {
-                throw std::runtime_error("unable to configure sensor report");
-            }
-        };
-
-        auto disable_all = [&]() {
-            set_report(SH2_ACCELEROMETER, false);
-            set_report(SH2_MAGNETIC_FIELD_CALIBRATED, false);
-            set_report(SH2_GYROSCOPE_CALIBRATED, false);
-            set_report(SH2_GAME_ROTATION_VECTOR, false);
-            set_report(SH2_ROTATION_VECTOR, false);
-            set_report(SH2_LINEAR_ACCELERATION, false);
-            set_report(SH2_GRAVITY, false);
-            set_report(SH2_TEMPERATURE, false);
-        };
-
-        try { // TODO: check if the BNO085 has different modes than the BNO055
-            disable_all();
-            if (mode == "configmode") {
-                // no reports
-            } else if (mode == "acconly") {
-                set_report(SH2_ACCELEROMETER, true);
-            } else if (mode == "magonly") {
-                set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-            } else if (mode == "gyroonly") {
-                set_report(SH2_GYROSCOPE_CALIBRATED, true);
-            } else if (mode == "accmag") {
-                set_report(SH2_ACCELEROMETER, true);
-                set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-            } else if (mode == "accgyro") {
-                set_report(SH2_ACCELEROMETER, true);
-                set_report(SH2_GYROSCOPE_CALIBRATED, true);
-            } else if (mode == "maggyro") {
-                set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-                set_report(SH2_GYROSCOPE_CALIBRATED, true);
-            } else if (mode == "amg") {
-                set_report(SH2_ACCELEROMETER, true);
-                set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-                set_report(SH2_GYROSCOPE_CALIBRATED, true);
-            } else if (mode == "imu") {
-                set_report(SH2_ACCELEROMETER, true);
-                set_report(SH2_GYROSCOPE_CALIBRATED, true);
-                set_report(SH2_GAME_ROTATION_VECTOR, true);
-                set_report(SH2_ROTATION_VECTOR, true);
-            } else if (mode == "compass") {
-                set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-                set_report(SH2_ROTATION_VECTOR, true);
-            } else if (mode == "m4g") {
-                set_report(SH2_ACCELEROMETER, true);
-                set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-                set_report(SH2_ROTATION_VECTOR, true);
-            } else if (mode == "ndof_fmc_off") {
-                set_report(SH2_ACCELEROMETER, true);
-                set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-                set_report(SH2_GYROSCOPE_CALIBRATED, true);
-                set_report(SH2_GAME_ROTATION_VECTOR, true);
-                set_report(SH2_ROTATION_VECTOR, true);
-            } else if (mode == "ndof") {
-                set_report(SH2_ACCELEROMETER, true);
-                set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-                set_report(SH2_GYROSCOPE_CALIBRATED, true);
-                set_report(SH2_GAME_ROTATION_VECTOR, true);
-                set_report(SH2_ROTATION_VECTOR, true);
-                set_report(SH2_LINEAR_ACCELERATION, true);
-                set_report(SH2_GRAVITY, true);
-                set_report(SH2_TEMPERATURE, true);
-            } else {
-                throw std::runtime_error("invalid mode: " + mode);
-            }
+        // BNO055 compatibility modes — the BNO085 uses report-based configuration
+        // rather than hardware modes. These presets emulate BNO055 modes by
+        // enabling/disabling the corresponding sensor reports.
+        try {
+            apply_mode(mode);
+            current_mode = mode;
         } catch (std::exception &ex) {
             throw std::runtime_error(std::string("setting imu mode failed: ") + ex.what());
         }

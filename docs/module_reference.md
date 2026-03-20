@@ -329,6 +329,23 @@ The BNO085 offers improved accuracy and better sensor fusion algorithms compared
 | `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
 
 The `mode` parameter supports the same modes as the [IMU](#imu) module.
+The configured mode is automatically restored if the BNO085 resets during operation.
+
+### Differences to BNO055
+
+The calibration properties (`cal_sys`, `cal_gyr`, `cal_acc`, `cal_mag`) use the same 0–3 range as the BNO055, but the meaning differs:
+
+| Value | BNO055                  | BNO085                          |
+| ----- | ----------------------- | ------------------------------- |
+| 0     | Not calibrated          | Unreliable                      |
+| 1     | Partially calibrated    | Low accuracy                    |
+| 2     | Mostly calibrated       | Medium accuracy                 |
+| 3     | Fully calibrated        | High accuracy (fully calibrated)|
+
+On the BNO055, `cal_sys`, `cal_gyr`, `cal_acc`, and `cal_mag` are read together in a single calibration register.
+On the BNO085, each calibration value is derived from the accuracy status of its corresponding sensor report
+(e.g. `cal_acc` is updated when an accelerometer event arrives, `cal_sys` when a rotation vector event arrives).
+This means calibration values only update while the corresponding sensor report is enabled via `set_mode`.
 
 ## CAN interface
 

@@ -27,6 +27,7 @@ enum ModuleType {
     pwm_output,
     mcp23017,
     imu,
+    imu_bno085,
     can,
     serial,
     odrive_motor,
