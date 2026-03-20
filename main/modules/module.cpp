@@ -16,6 +16,7 @@
 #include "expander.h"
 #include "imu.h"
 #include "innotronic_motor.h"
+#include "innotronic_wheels.h"
 #include "input.h"
 #include "linear_motor.h"
 #include "mcp23017.h"
@@ -352,6 +353,11 @@ Module_ptr Module::create(const std::string type,
         InnotronicMotor_ptr motor = std::make_shared<InnotronicMotor>(name, can_module, node_id);
         motor->subscribe_to_can();
         return motor;
+    } else if (type == "InnotronicWheels") {
+        Module::expect(arguments, 2, identifier, identifier);
+        const InnotronicMotor_ptr left_motor = get_module_paramter<InnotronicMotor>(arguments[0], innotronic_motor, "innotronic motor");
+        const InnotronicMotor_ptr right_motor = get_module_paramter<InnotronicMotor>(arguments[1], innotronic_motor, "innotronic motor");
+        return std::make_shared<InnotronicWheels>(name, left_motor, right_motor);
     } else if (type == "DunkerWheels") {
         Module::expect(arguments, 2, identifier, identifier);
         std::string left_name = arguments[0]->evaluate_identifier();
