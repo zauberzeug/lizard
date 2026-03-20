@@ -1,4 +1,5 @@
 #include "innotronic_motor.h"
+#include "../utils/uart.h"
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -14,6 +15,8 @@ const std::map<std::string, Variable_ptr> InnotronicMotor::get_defaults() {
         {"error_codes", std::make_shared<IntegerVariable>()},
         {"angle", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
+        {"m_per_rad", std::make_shared<NumberVariable>(1.0)},
+        {"reversed", std::make_shared<BooleanVariable>(false)},
     };
 }
 
@@ -120,6 +123,14 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         std::memcpy(data + 2, &value1, 2);
         std::memcpy(data + 4, &value2, 4);
         this->can->send((this->node_id << 5) | 0x0B, data);
+    } else if (method_name == "scan") {
+        Module::expect(arguments, 0);
+        echo("Scanning for Innotronic motors on CAN bus...");
+        uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+        for (uint32_t id = 1; id <= 31; ++id) {
+            this->can->send((id << 5) | 0x0A, data, false, 1);
+        }
+        echo("Scan sent to node IDs 1-31. Enable CAN output to see responses.");
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->send_switch_state(0);
@@ -148,6 +159,7 @@ void InnotronicMotor::step() {
             this->disable();
         }
     }
+    this->reversed = this->properties.at("reversed")->boolean_value;
     Module::step();
 }
 
@@ -156,23 +168,32 @@ void InnotronicMotor::stop() {
 }
 
 double InnotronicMotor::get_position() {
-    return this->properties.at("angle")->number_value;
+    double m_per_rad = this->properties.at("m_per_rad")->number_value;
+    double sign = this->reversed ? -1.0 : 1.0;
+    return this->properties.at("angle")->number_value * sign * m_per_rad;
 }
 
 void InnotronicMotor::position(const double position, const double speed, const double acceleration) {
-    float rel = static_cast<float>(position - this->properties.at("angle")->number_value);
-    uint16_t vel_limit = speed > 0 ? static_cast<uint16_t>(speed / 0.001) : 0xFFFF;
+    double m_per_rad = this->properties.at("m_per_rad")->number_value;
+    double sign = this->reversed ? -1.0 : 1.0;
+    float rel = static_cast<float>((position - this->get_position()) / m_per_rad * sign);
+    uint16_t vel_limit = speed > 0 ? static_cast<uint16_t>(speed / m_per_rad / 0.001) : 0xFFFF;
     uint8_t acc_limit = acceleration > 0 ? static_cast<uint8_t>(acceleration) : 0xFF;
     this->send_rel_angle_cmd(rel, vel_limit, acc_limit);
 }
 
 double InnotronicMotor::get_speed() {
-    return this->properties.at("angular_vel")->number_value;
+    double m_per_rad = this->properties.at("m_per_rad")->number_value;
+    double sign = this->reversed ? -1.0 : 1.0;
+    return this->properties.at("angular_vel")->number_value * sign * m_per_rad;
 }
 
 void InnotronicMotor::speed(const double speed, const double acceleration) {
+    double m_per_rad = this->properties.at("m_per_rad")->number_value;
+    double sign = this->reversed ? -1.0 : 1.0;
+    float angular_vel = static_cast<float>(speed / m_per_rad * sign);
     uint8_t acc_limit = acceleration > 0 ? static_cast<uint8_t>(acceleration) : 0xFF;
-    this->send_speed_cmd(static_cast<float>(speed), acc_limit);
+    this->send_speed_cmd(angular_vel, acc_limit);
 }
 
 void InnotronicMotor::enable() {
