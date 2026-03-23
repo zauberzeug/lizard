@@ -639,6 +639,64 @@ The optional acceleration argument defaults to 0, which starts and stops pulsing
 
 When the motor is disabled, it will stop and ignore movement commands.
 
+## MKS Servo Motor
+
+The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/makerbase-motor/MKS-SERVO42D-57D) closed-loop stepper motor via CAN.
+
+| Constructor                          | Description                | Arguments         |
+| ------------------------------------ | -------------------------- | ----------------- |
+| `motor = MksServoMotor(can, can_id)` | CAN module and CAN node ID | CAN module, `int` |
+
+| Properties              | Description                                 | Data type |
+| ----------------------- | ------------------------------------------- | --------- |
+| `motor.position`        | Motor position (degrees)                    | `float`   |
+| `motor.speed`           | Motor speed (RPM)                           | `int`     |
+| `motor.working_current` | Working current (mA, 0-3000, default: 1700) | `int`     |
+| `motor.enabled`         | Whether the motor is enabled                | `bool`    |
+| `motor.position_error`  | Last read position error (degrees)          | `float`   |
+
+| Methods                               | Description                                                                   | Arguments             |
+| ------------------------------------- | ----------------------------------------------------------------------------- | --------------------- |
+| `motor.enable()`                      | Enable the motor                                                              |                       |
+| `motor.disable()`                     | Disable the motor                                                             |                       |
+| `motor.set_mode(mode)`                | Set working mode (see [working modes](#working-modes))                        | `int`                 |
+| `motor.zero()`                        | Set current position as zero                                                  |                       |
+| `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                              | `int`                 |
+| `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10;) | `int`                 |
+| `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                        | `float`, `int`, `int` |
+| `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                  | `int`, `int`, `int`   |
+| `motor.stop(acc)`                     | Stop motor with given deceleration (0-255)                                    | `int`                 |
+| `motor.read_position_error()`         | Request position error from motor via CAN                                     |                       |
+
+The `position()` method moves the motor to an absolute coordinate position (in degrees from the zero point)
+with a given speed in RPM (0-3000) and acceleration (0-255).
+
+The `speed()` method accepts a speed in RPM (0-3000), direction (0: CCW, 1: CW) and acceleration (0-255).
+The acceleration parameter controls the ramp rate: higher values mean faster acceleration.
+If acceleration is 0, the motor runs directly at the set speed without ramping.
+
+The `stop()` method decelerates and stops the motor with the given acceleration (0-255).
+If acceleration is 0, the motor stops immediately.
+
+The `read_position_error()` method requests the current position error from the motor via CAN.
+The result is available in the `position_error` property (in degrees) once the motor responds.
+
+**Working Modes**
+
+The MKS SERVO42D/57D supports the following working modes:
+
+| Mode | Name     | Description                      | Remark  |
+| ---- | -------- | -------------------------------- | ------- |
+| 0x00 | CR_OPEN  | Pulse interface open-loop mode   |         |
+| 0x01 | CR_CLOSE | Pulse interface closed-loop mode |         |
+| 0x02 | CR_vFOC  | Pulse interface FOC mode         | default |
+| 0x03 | SR_OPEN  | Bus interface open-loop mode     |         |
+| 0x04 | SR_CLOSE | Bus interface closed-loop mode   |         |
+| 0x05 | SR_vFOC  | Bus interface FOC mode           |         |
+
+The `set_mode()` method sets the working mode of the motor.
+For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
+
 ## Motor Axis
 
 The motor axis module wraps a motor and two limit switches.

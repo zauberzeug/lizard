@@ -18,6 +18,7 @@
 #include "input.h"
 #include "linear_motor.h"
 #include "mcp23017.h"
+#include "mks_servo_motor.h"
 #include "motor_axis.h"
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
@@ -334,6 +335,13 @@ Module_ptr Module::create(const std::string type,
         D1Motor_ptr motor = std::make_shared<D1Motor>(name, can_module, node_id);
         motor->subscribe_to_can();
         return motor;
+    } else if (type == "MksServoMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t motor_id = arguments[1]->evaluate_integer();
+        MksServoMotor_ptr module = std::make_shared<MksServoMotor>(name, can_module, motor_id);
+        module->subscribe_to_can();
+        return module;
     } else if (type == "DunkerMotor") {
         Module::expect(arguments, 2, identifier, integer);
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");

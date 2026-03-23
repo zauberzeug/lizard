@@ -41,6 +41,7 @@ enum ModuleType {
     canopen_motor,
     canopen_master,
     d1_motor,
+    mks_servo_motor,
     dunker_motor,
     dunker_wheels,
     analog,
