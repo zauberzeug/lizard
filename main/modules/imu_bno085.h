@@ -3,6 +3,7 @@
 #include "bno08x.h"
 #include "driver/i2c.h"
 #include "module.h"
+#include <array>
 #include <memory>
 #include <string>
 
@@ -21,6 +22,7 @@ private:
     uint32_t report_interval_us;
     std::unique_ptr<Bno08x> bno;
     std::string current_mode = "ndof";
+    std::array<bool, 7> active_reports{};
 
     void enable_default_reports();
     void apply_mode(const std::string &mode);

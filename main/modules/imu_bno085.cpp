@@ -76,70 +76,59 @@ void ImuBno085::enable_default_reports() {
 }
 
 void ImuBno085::apply_mode(const std::string &mode) {
-    auto set_report = [&](sh2_SensorId_t sensor, bool enable) {
-        if (!bno->enableReport(sensor, enable ? report_interval_us : 0)) {
-            throw std::runtime_error("unable to configure sensor report");
-        }
+    static constexpr sh2_SensorId_t all_sensors[] = {
+        SH2_ACCELEROMETER,
+        SH2_MAGNETIC_FIELD_CALIBRATED,
+        SH2_GYROSCOPE_CALIBRATED,
+        SH2_GAME_ROTATION_VECTOR,
+        SH2_LINEAR_ACCELERATION,
+        SH2_GRAVITY,
+        SH2_TEMPERATURE,
     };
+    static constexpr size_t N = sizeof(all_sensors) / sizeof(all_sensors[0]);
 
-    auto disable_all = [&]() {
-        set_report(SH2_ACCELEROMETER, false);
-        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, false);
-        set_report(SH2_GYROSCOPE_CALIBRATED, false);
-        set_report(SH2_GAME_ROTATION_VECTOR, false);
-        set_report(SH2_LINEAR_ACCELERATION, false);
-        set_report(SH2_GRAVITY, false);
-        set_report(SH2_TEMPERATURE, false);
-    };
+    // Build desired state: which sensors should be enabled for this mode
+    // Indices: 0=acc, 1=mag, 2=gyr, 3=rot, 4=lin, 5=grav, 6=temp
+    std::array<bool, N> desired{};
 
-    disable_all();
     if (mode == "configmode") {
-        // no reports
+        // all false
     } else if (mode == "acconly") {
-        set_report(SH2_ACCELEROMETER, true);
+        desired[0] = true;
     } else if (mode == "magonly") {
-        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+        desired[1] = true;
     } else if (mode == "gyroonly") {
-        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+        desired[2] = true;
     } else if (mode == "accmag") {
-        set_report(SH2_ACCELEROMETER, true);
-        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
+        desired[0] = true; desired[1] = true;
     } else if (mode == "accgyro") {
-        set_report(SH2_ACCELEROMETER, true);
-        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+        desired[0] = true; desired[2] = true;
     } else if (mode == "maggyro") {
-        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+        desired[1] = true; desired[2] = true;
     } else if (mode == "amg") {
-        set_report(SH2_ACCELEROMETER, true);
-        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-        set_report(SH2_GYROSCOPE_CALIBRATED, true);
+        desired[0] = true; desired[1] = true; desired[2] = true;
     } else if (mode == "imu") {
-        set_report(SH2_ACCELEROMETER, true);
-        set_report(SH2_GYROSCOPE_CALIBRATED, true);
-        set_report(SH2_GAME_ROTATION_VECTOR, true);
+        desired[0] = true; desired[2] = true; desired[3] = true;
     } else if (mode == "compass") {
-        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-        set_report(SH2_GAME_ROTATION_VECTOR, true);
+        desired[1] = true; desired[3] = true;
     } else if (mode == "m4g") {
-        set_report(SH2_ACCELEROMETER, true);
-        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-        set_report(SH2_GAME_ROTATION_VECTOR, true);
+        desired[0] = true; desired[1] = true; desired[3] = true;
     } else if (mode == "ndof_fmc_off") {
-        set_report(SH2_ACCELEROMETER, true);
-        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-        set_report(SH2_GYROSCOPE_CALIBRATED, true);
-        set_report(SH2_GAME_ROTATION_VECTOR, true);
+        desired[0] = true; desired[1] = true; desired[2] = true; desired[3] = true;
     } else if (mode == "ndof") {
-        set_report(SH2_ACCELEROMETER, true);
-        set_report(SH2_MAGNETIC_FIELD_CALIBRATED, true);
-        set_report(SH2_GYROSCOPE_CALIBRATED, true);
-        set_report(SH2_GAME_ROTATION_VECTOR, true);
-        set_report(SH2_LINEAR_ACCELERATION, true);
-        set_report(SH2_GRAVITY, true);
-        set_report(SH2_TEMPERATURE, true);
+        desired.fill(true);
     } else {
         throw std::runtime_error("invalid mode: " + mode);
+    }
+
+    // Only send commands for sensors whose state actually changes
+    for (size_t i = 0; i < N; ++i) {
+        if (desired[i] != active_reports[i]) {
+            if (!bno->enableReport(all_sensors[i], desired[i] ? report_interval_us : 0)) {
+                throw std::runtime_error("unable to configure sensor report");
+            }
+            active_reports[i] = desired[i];
+        }
     }
 }
 

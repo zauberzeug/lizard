@@ -331,6 +331,23 @@ The BNO085 offers improved accuracy and better sensor fusion algorithms compared
 The `mode` parameter supports the same modes as the [IMU](#imu) module.
 The configured mode is automatically restored if the BNO085 resets during operation.
 
+### Data Select
+
+The `data_select` property is a bitmask that controls which sensor values are updated each step.
+It defaults to `0xffff` (all enabled). Set individual bits to `0` to skip costly updates you don't need.
+
+| Bit      | Value    | Data                                      |
+| -------- | -------- | ----------------------------------------- |
+| 0        | `0x0001` | Calibration (`cal_sys/gyr/acc/mag`)       |
+| 1        | `0x0002` | Accelerometer (`acc_x/y/z`)               |
+| 2        | `0x0004` | Magnetometer (`mag_x/y/z`)                |
+| 3        | `0x0008` | Gyroscope (`gyr_x/y/z`)                   |
+| 4        | `0x0010` | Euler angles (`yaw/roll/pitch`)           |
+| 5        | `0x0020` | Quaternion (`quat_w/x/y/z`)              |
+| 6        | `0x0040` | Linear acceleration (`lin_x/y/z`)         |
+| 7        | `0x0080` | Gravity (`grav_x/y/z`)                    |
+| 8        | `0x0100` | Temperature (`temp`)                      |
+
 ### Differences to BNO055
 
 The calibration properties (`cal_sys`, `cal_gyr`, `cal_acc`, `cal_mag`) use the same 0–3 range as the BNO055, but the meaning differs:
