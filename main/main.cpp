@@ -18,7 +18,7 @@
 #include "rom/gpio.h"
 #include "rom/uart.h"
 #include "storage.h"
-#include "utils/ota.h"
+#include "utils/bus_backup.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -364,12 +364,17 @@ void process_line(const char *line, const int len) {
 void process_uart() {
     static char input[BUFFER_SIZE];
     while (true) {
-        int pos = uart_pattern_pop_pos(UART_NUM_0);
+        const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
             break;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        len = check(input, len);
+        bool checksum_ok = true;
+        len = check(input, len, &checksum_ok);
+        if (!checksum_ok) {
+            echo("warning: Checksum mismatch while processing UART0");
+            continue;
+        }
         process_line(input, len);
     }
 }
@@ -415,11 +420,8 @@ void app_main() {
         echo("error while loading startup script: %s", e.what());
     }
 
-    try {
-        xTaskCreate(&ota::verify_task, "ota_verify_task", 8192, NULL, 5, NULL);
-    } catch (const std::runtime_error &e) {
-        echo("error while verifying OTA: %s", e.what());
-    }
+    bus_backup::save_if_present();
+    bus_backup::restore_if_needed();
 
     printf("\nReady.\n");
 

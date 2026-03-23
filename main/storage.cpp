@@ -61,12 +61,19 @@ std::string read(const std::string ns, const std::string key) {
 }
 
 void Storage::put(const std::string value) {
-    int num_chunks = 0;
-    for (int pos = 0; pos < value.length(); pos += MAX_CHUNK_SIZE) {
-        num_chunks++;
+    try {
+        const int old_num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
+        for (int i = 0; i < old_num_chunks; i++) {
+            nvs_delete_key(NAMESPACE, "chunk" + std::to_string(i));
+        }
+    } catch (...) {
+        echo("warning: could not delete old chunks before writing new ones");
+    }
+
+    write(NAMESPACE, "num_chunks", std::to_string((value.length() + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE));
+    for (size_t pos = 0; pos < value.length(); pos += MAX_CHUNK_SIZE) {
         write(NAMESPACE, "chunk" + std::to_string(pos / MAX_CHUNK_SIZE), value.substr(pos, MAX_CHUNK_SIZE));
     }
-    write(NAMESPACE, "num_chunks", std::to_string(num_chunks));
 }
 
 std::string Storage::get() {
@@ -144,7 +151,7 @@ bool Storage::get_user_pin(std::uint32_t &pin) {
     return false;
 }
 
-static void nvs_delete_key(const std::string &ns, const std::string &key) {
+void Storage::nvs_delete_key(const std::string &ns, const std::string &key) {
     esp_err_t err;
     nvs_handle handle;
     if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {

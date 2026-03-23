@@ -42,12 +42,14 @@ enum ModuleType {
     canopen_motor,
     canopen_master,
     d1_motor,
+    mks_servo_motor,
     dunker_motor,
     dunker_wheels,
     analog,
     analog_unit,
     temperature_sensor,
     proxy,
+    serial_bus,
 };
 
 class Module;
@@ -68,6 +70,7 @@ protected:
     bool broadcast = false;
 
 public:
+    static bool broadcast_paused;
     const ModuleType type;
     const std::string name;
 

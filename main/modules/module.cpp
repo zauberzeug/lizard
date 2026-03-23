@@ -11,7 +11,6 @@
 #include "d1_motor.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
-#include "driver/pcnt.h"
 #include "dunker_motor.h"
 #include "dunker_wheels.h"
 #include "expander.h"
@@ -20,6 +19,7 @@
 #include "input.h"
 #include "linear_motor.h"
 #include "mcp23017.h"
+#include "mks_servo_motor.h"
 #include "motor_axis.h"
 #include "odrive_motor.h"
 #include "odrive_wheels.h"
@@ -31,6 +31,7 @@
 #include "roboclaw_motor.h"
 #include "roboclaw_wheels.h"
 #include "serial.h"
+#include "serial_bus.h"
 #include "stepper_motor.h"
 #include "temperature_sensor.h"
 #include <stdarg.h>
@@ -42,6 +43,8 @@
 #define DEFAULT_SDA_PIN GPIO_NUM_21
 #define DEFAULT_SCL_PIN GPIO_NUM_22
 #endif
+
+bool Module::broadcast_paused = false;
 
 Module::Module(const ModuleType type, const std::string name) : type(type), name(name) {
 }
@@ -92,6 +95,19 @@ Module_ptr Module::create(const std::string type,
         const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_NC;
         const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_NC;
         return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
+    } else if (type == "SerialBus") {
+        Module::expect(arguments, 2, identifier, integer);
+        const std::string serial_name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(serial_name);
+        if (module->type != serial) {
+            throw std::runtime_error("module \"" + serial_name + "\" is no serial connection");
+        }
+        const ConstSerial_ptr serial_module = std::static_pointer_cast<const Serial>(module);
+        const long node_id = arguments[1]->evaluate_integer();
+        if (node_id <= 0 || node_id >= 255) {
+            throw std::runtime_error("node ID must be between 0 and 255");
+        }
+        return std::make_shared<SerialBus>(name, serial_module, node_id);
     } else if (type == "Bluetooth") {
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();
@@ -288,17 +304,15 @@ Module_ptr Module::create(const std::string type,
         const RoboClawMotor_ptr right_motor = get_module_paramter<RoboClawMotor>(arguments[1], roboclaw_motor, "roboclaw motor");
         return std::make_shared<RoboClawWheels>(name, left_motor, right_motor);
     } else if (type == "StepperMotor") {
-        if (arguments.size() < 2 || arguments.size() > 6) {
+        if (arguments.size() < 2 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, integer, integer, integer, integer, integer, integer);
+        Module::expect(arguments, -1, integer, integer, integer, integer);
         gpio_num_t step_pin = (gpio_num_t)arguments[0]->evaluate_integer();
         gpio_num_t dir_pin = (gpio_num_t)arguments[1]->evaluate_integer();
-        pcnt_unit_t pcnt_unit = arguments.size() > 2 ? (pcnt_unit_t)arguments[2]->evaluate_integer() : PCNT_UNIT_0;
-        pcnt_channel_t pcnt_channel = arguments.size() > 3 ? (pcnt_channel_t)arguments[3]->evaluate_integer() : PCNT_CHANNEL_0;
-        ledc_timer_t ledc_timer = arguments.size() > 4 ? (ledc_timer_t)arguments[4]->evaluate_integer() : LEDC_TIMER_0;
-        ledc_channel_t ledc_channel = arguments.size() > 5 ? (ledc_channel_t)arguments[5]->evaluate_integer() : LEDC_CHANNEL_0;
-        return std::make_shared<StepperMotor>(name, step_pin, dir_pin, pcnt_unit, pcnt_channel, ledc_timer, ledc_channel);
+        ledc_timer_t ledc_timer = arguments.size() > 2 ? (ledc_timer_t)arguments[2]->evaluate_integer() : LEDC_TIMER_0;
+        ledc_channel_t ledc_channel = arguments.size() > 3 ? (ledc_channel_t)arguments[3]->evaluate_integer() : LEDC_CHANNEL_0;
+        return std::make_shared<StepperMotor>(name, step_pin, dir_pin, ledc_timer, ledc_channel);
     } else if (type == "MotorAxis") {
         Module::expect(arguments, 3, identifier, identifier, identifier);
         const std::string name = arguments[0]->evaluate_identifier();
@@ -335,6 +349,13 @@ Module_ptr Module::create(const std::string type,
         D1Motor_ptr motor = std::make_shared<D1Motor>(name, can_module, node_id);
         motor->subscribe_to_can();
         return motor;
+    } else if (type == "MksServoMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t motor_id = arguments[1]->evaluate_integer();
+        MksServoMotor_ptr module = std::make_shared<MksServoMotor>(name, can_module, motor_id);
+        module->subscribe_to_can();
+        return module;
     } else if (type == "DunkerMotor") {
         Module::expect(arguments, 2, identifier, integer);
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
@@ -392,7 +413,7 @@ void Module::step() {
             echo("%s %s", this->name.c_str(), output.c_str());
         }
     }
-    if (this->broadcast && !this->properties.empty()) {
+    if (!Module::broadcast_paused && this->broadcast && !this->properties.empty()) {
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "!!");
         for (auto const &[property_name, property] : this->properties) {

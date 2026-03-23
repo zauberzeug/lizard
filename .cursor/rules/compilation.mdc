@@ -1,0 +1,47 @@
+---
+globs: main/compilation/*.cpp, main/compilation/*.h, main/main.cpp, language.owl
+---
+
+# Compilation & Parser Rules
+
+When working on the Lizard DSL compilation infrastructure:
+
+## Architecture
+
+```
+language.owl          → Grammar definition (Owl parser generator)
+    ↓ gen_parser.sh
+parser.h              → Generated parser (DO NOT EDIT)
+    ↓
+main.cpp              → process_tree() compiles AST to runtime objects
+    ↓
+compilation/*.cpp     → Expression, Variable, Action, Routine, Rule classes
+```
+
+## Key Functions in main.cpp
+
+| Function | Purpose |
+|----------|---------|
+| `compile_expression()` | AST → Expression_ptr |
+| `compile_arguments()` | AST → vector of expressions |
+| `compile_actions()` | AST → vector of Action_ptr |
+| `process_tree()` | Handle all statement types |
+| `process_lizard()` | Parse string → tree → process |
+
+## Adding New Expression Types
+
+1. Add case to `compile_expression()` switch in `main.cpp`
+2. Create Expression subclass in `compilation/expression.cpp`
+3. If new grammar needed: modify `language.owl` then run `./gen_parser.sh`
+
+## Adding New Statement Types
+
+1. Modify grammar in `language.owl`
+2. Run `./gen_parser.sh` to regenerate parser
+3. Add handling in `process_tree()` switch in `main.cpp`
+
+## IMPORTANT
+
+- **Never edit `parser.h`** – it's generated from `language.owl`
+- **Always regenerate parser** after grammar changes: `./gen_parser.sh`
+- **Test grammar changes** thoroughly – they affect all Lizard scripts

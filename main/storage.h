@@ -7,6 +7,7 @@ class Storage {
 private:
     static void put(const std::string value);
     static std::string get();
+    static void nvs_delete_key(const std::string &ns, const std::string &key);
 
 public:
     static std::string startup;

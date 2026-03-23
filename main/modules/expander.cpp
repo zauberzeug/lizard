@@ -69,7 +69,12 @@ void Expander::check_boot_progress() {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
-        check(buffer, len);
+        bool checksum_ok = true;
+        check(buffer, len, &checksum_ok);
+        if (!checksum_ok) {
+            echo("%s: Checksum mismatch while checking boot progress", this->name.c_str());
+            continue;
+        }
         this->last_message_millis = millis();
         echo("%s: %s", this->name.c_str(), buffer);
         if (strcmp("Ready.", buffer) == 0) {
@@ -115,7 +120,14 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer, sizeof(buffer));
-        check(buffer, len);
+        bool checksum_ok = true;
+        len = check(buffer, len, &checksum_ok);
+        if (!checksum_ok) {
+            echo("%s: Checksum mismatch while handling messages", this->name.c_str());
+            this->last_message_millis = millis();
+            this->ping_pending = false;
+            continue;
+        }
         if (check_for_strapping_pins) {
             this->check_strapping_pins(buffer);
         }
@@ -217,7 +229,7 @@ void Expander::deinstall() {
 }
 
 void Expander::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
-    static char buffer[256];
+    static char buffer[512];
     int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
@@ -226,14 +238,14 @@ void Expander::send_proxy(const std::string module_name, const std::string modul
 }
 
 void Expander::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
-    static char buffer[256];
+    static char buffer[512];
     int pos = csprintf(buffer, sizeof(buffer), "%s.%s = ", proxy_name.c_str(), property_name.c_str());
     pos += expression->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
     this->serial->write_checked_line(buffer, pos);
 }
 
 void Expander::send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    static char buffer[256];
+    static char buffer[512];
     int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", proxy_name.c_str(), method_name.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ")");

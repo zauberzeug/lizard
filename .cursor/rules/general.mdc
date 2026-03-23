@@ -1,0 +1,35 @@
+---
+alwaysApply: true
+---
+
+# Cursor AI Quick Reference
+
+**Read these files before working:**
+
+1. [README.md](../../README.md) - Project overview
+2. [AGENTS.md](../../AGENTS.md) - AI guidelines, architecture, commands, boundaries
+3. [CONTRIBUTING.md](../../CONTRIBUTING.md) - ESP-IDF coding style
+
+## Key Commands
+
+```bash
+python build.py           # Build for ESP32
+python build.py esp32s3   # Build for ESP32-S3
+python flash.py           # Flash to device
+python monitor.py         # Serial monitor
+./gen_parser.sh           # Regenerate parser from language.owl
+```
+
+## Quick Style Reference
+
+- 4-space indent, 120 char lines, no tabs
+- CamelCase for classes, snake_case for functions/variables
+- Use `#pragma once` for headers
+- Use smart pointers (`Module_ptr`, `std::shared_ptr`)
+- Follow existing module patterns in `main/modules/`
+
+## Boundaries
+
+**Do freely**: Read files, run builds, search code, suggest improvements
+
+**Ask first**: Modify `language.owl`, add dependencies, change interfaces, git operations

@@ -32,21 +32,16 @@ It is automatically created right after the boot sequence.
 | `core.print(...)`                | Print arbitrary arguments to the command line      | arbitrary    |
 | `core.output(format)`            | Define the output format                           | `str`        |
 | `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
-| `core.ota(ssid, password, url)`  | Starts OTA update on a URL with given WiFi         | 3x `str`     |
 | `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
 | `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
 | `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
+| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
+| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
+| `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
-
-The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
-After initializing the WiFi connection, it will attempt an OTA update from the given URL.
-Upon successful updating, the ESP will restart and attempt to verify the OTA update.
-It will reconnect to the WiFi and try to access URL + `/verify` to receive a message with the current version of Lizard.
-The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
-If the newly updated Lizard cannot connect to URL + `/verify`, the OTA update will be rolled back.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
@@ -76,6 +71,32 @@ The Bluetooth module stores up to four devices.
 When a fifth connects, the oldest entry is removed.
 
 To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
+
+## Serial Bus
+
+The serial bus module lets multiple ESP32s share a UART link with a coordinator that polls peers in turn.
+
+| Constructor                   | Description                                    | Arguments       |
+| ----------------------------- | ---------------------------------------------- | --------------- |
+| `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
+
+| Methods                             | Description                                                | Arguments    |
+| ----------------------------------- | ---------------------------------------------------------- | ------------ |
+| `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
+
+**Bus Backup:**
+When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
+If multiple SerialBus modules exist, only the first one is backed up.
+On boot, if the startup script does not create a SerialBus but a backup config exists,
+Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
+This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
+To remove the saved configuration, call `core.forget_serial_bus()`.
+
+**Firmware Updates:**
+Peers on the serial bus can be updated remotely via the coordinator.
+Use the `otb_update.py` tool to push new firmware to any peer node.
+See [OTB Update](tools.md#otb-update) for details.
 
 ## Input
 
@@ -448,19 +469,25 @@ The ODrive motor module controls a motor using an [ODrive motor controller](http
 | --------------------------------------------- | ------------------------------- | ------------------------ |
 | `motor = ODriveMotor(can, can_id[, version])` | CAN module, node ID and version | CAN module, `int`, `int` |
 
-The `version` parameter is an optional integer indicating the patch number of the ODrive firmware (4, 5 or 6; default: 4 for version "0.5.4"). Version 0.5.6 allows to read the motor error flag.
+The `version` parameter is an optional integer indicating the patch number of the ODrive firmware (4, 5 or 6; default: 4 for version "0.5.4").
+Version 0.5.6 allows to read the motor error flag.
 
-| Properties          | Description                               | Data type |
-| ------------------- | ----------------------------------------- | --------- |
-| `motor.position`    | Motor position (meters)                   | `float`   |
-| `motor.speed`       | Motor speed (m/s)                         | `float`   |
-| `motor.tick_offset` | Encoder tick offset                       | `float`   |
-| `motor.m_per_tick`  | Meters per encoder tick                   | `float`   |
-| `motor.reversed`    | Reverse motor direction                   | `bool`    |
-| `motor.axis_state`  | State of the motor axis                   | `int`     |
-| `motor.axis_error`  | Error code of the axis                    | `int`     |
-| `motor.motor_error` | Motor error flat (requires version 0.5.6) | `int`     |
-| `motor.enabled`     | Whether the motor is enabled              | `bool`    |
+| Properties                | Description                               | Data type |
+| ------------------------- | ----------------------------------------- | --------- |
+| `motor.position`          | Motor position (meters)                   | `float`   |
+| `motor.speed`             | Motor speed (m/s)                         | `float`   |
+| `motor.tick_offset`       | Encoder tick offset                       | `float`   |
+| `motor.m_per_tick`        | Meters per encoder tick                   | `float`   |
+| `motor.reversed`          | Reverse motor direction                   | `bool`    |
+| `motor.axis_state`        | State of the motor axis                   | `int`     |
+| `motor.axis_error`        | Error code of the axis                    | `int`     |
+| `motor.motor_error`       | Motor error flat (requires version 0.5.6) | `int`     |
+| `motor.enabled`           | Whether the motor is enabled              | `bool`    |
+| `motor.motor_temperature` | Motor temperature (°C)                    | `float`   |
+
+The `motor_temperature` will only update if the firmware generated from the
+[zauberzeug/ODrive](https://github.com/zauberzeug/ODrive) fork is installed on the ODrive.
+Otherwise, the `motor_temperature` property will remain at 0.
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |
@@ -647,12 +674,13 @@ When the wheels are disabled, they will stop and ignore movement commands.
 The stepper motor module controls a stepper motor via "step" and "direction" pins.
 It uses the ESP LED Control API to generate pulses with sufficiently high frequencies and the Pulse Counter API to count steps.
 
-| Constructor                                               | Description             | Arguments |
-| --------------------------------------------------------- | ----------------------- | --------- |
-| `motor = StepperMotor(step, dir[, pu[, cp[, lt[, lc]]]])` | Step and direction pins | 6x `int`  |
+| Constructor                                   | Description             | Arguments  |
+| --------------------------------------------- | ----------------------- | ---------- |
+| `motor = StepperMotor(step, dir[, lt[, lc]])` | Step and direction pins | 2–4x `int` |
 
-The constructor arguments `pu` (pulse counter unit), `pc` (pulse counter channel), `lt` (LED timer) and `lc` (LED channel) are optional and default to 0.
-When using multiple stepper motors, they can be set to different values to avoid conflicts.
+The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
+When using multiple stepper motors, set different timer/channel pairs to avoid conflicts.
+The pulse counter used for position feedback is created internally.
 
 | Properties       | Description                    | Data type |
 | ---------------- | ------------------------------ | --------- |
@@ -672,6 +700,64 @@ When using multiple stepper motors, they can be set to different values to avoid
 The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.
 
 When the motor is disabled, it will stop and ignore movement commands.
+
+## MKS Servo Motor
+
+The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/makerbase-motor/MKS-SERVO42D-57D) closed-loop stepper motor via CAN.
+
+| Constructor                          | Description                | Arguments         |
+| ------------------------------------ | -------------------------- | ----------------- |
+| `motor = MksServoMotor(can, can_id)` | CAN module and CAN node ID | CAN module, `int` |
+
+| Properties              | Description                                 | Data type |
+| ----------------------- | ------------------------------------------- | --------- |
+| `motor.position`        | Motor position (degrees)                    | `float`   |
+| `motor.speed`           | Motor speed (RPM)                           | `int`     |
+| `motor.working_current` | Working current (mA, 0-3000, default: 1700) | `int`     |
+| `motor.enabled`         | Whether the motor is enabled                | `bool`    |
+| `motor.position_error`  | Last read position error (degrees)          | `float`   |
+
+| Methods                               | Description                                                                   | Arguments             |
+| ------------------------------------- | ----------------------------------------------------------------------------- | --------------------- |
+| `motor.enable()`                      | Enable the motor                                                              |                       |
+| `motor.disable()`                     | Disable the motor                                                             |                       |
+| `motor.set_mode(mode)`                | Set working mode (see [working modes](#working-modes))                        | `int`                 |
+| `motor.zero()`                        | Set current position as zero                                                  |                       |
+| `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                              | `int`                 |
+| `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10;) | `int`                 |
+| `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                        | `float`, `int`, `int` |
+| `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                  | `int`, `int`, `int`   |
+| `motor.stop(acc)`                     | Stop motor with given deceleration (0-255)                                    | `int`                 |
+| `motor.read_position_error()`         | Request position error from motor via CAN                                     |                       |
+
+The `position()` method moves the motor to an absolute coordinate position (in degrees from the zero point)
+with a given speed in RPM (0-3000) and acceleration (0-255).
+
+The `speed()` method accepts a speed in RPM (0-3000), direction (0: CCW, 1: CW) and acceleration (0-255).
+The acceleration parameter controls the ramp rate: higher values mean faster acceleration.
+If acceleration is 0, the motor runs directly at the set speed without ramping.
+
+The `stop()` method decelerates and stops the motor with the given acceleration (0-255).
+If acceleration is 0, the motor stops immediately.
+
+The `read_position_error()` method requests the current position error from the motor via CAN.
+The result is available in the `position_error` property (in degrees) once the motor responds.
+
+**Working Modes**
+
+The MKS SERVO42D/57D supports the following working modes:
+
+| Mode | Name     | Description                      | Remark  |
+| ---- | -------- | -------------------------------- | ------- |
+| 0x00 | CR_OPEN  | Pulse interface open-loop mode   |         |
+| 0x01 | CR_CLOSE | Pulse interface closed-loop mode |         |
+| 0x02 | CR_vFOC  | Pulse interface FOC mode         | default |
+| 0x03 | SR_OPEN  | Bus interface open-loop mode     |         |
+| 0x04 | SR_CLOSE | Bus interface closed-loop mode   |         |
+| 0x05 | SR_vFOC  | Bus interface FOC mode           |         |
+
+The `set_mode()` method sets the working mode of the motor.
+For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
 
 ## Motor Axis
 
@@ -702,7 +788,12 @@ When the motor axis is disabled, it will stop the motor and ignore movement comm
 
 ## CanOpenMaster
 
-The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
+The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes.
+At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
+
+A CanOpenMaster on the same CAN bus is required for CanOpenMotor —
+without periodic SYNC messages, position, velocity and status properties will not update.
+Other CAN motor modules (D1Motor, DunkerMotor) do not need a CanOpenMaster.
 
 | Constructor                      | Description | Arguments  |
 | -------------------------------- | ----------- | ---------- |
@@ -715,8 +806,10 @@ The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At c
 ## CanOpenMotor
 
 The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402.
-Positional and velocity units are currently undefined and must by manually measured.
+Positional and velocity units are currently undefined and must be manually measured.
 Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
+
+A [CanOpenMaster](#canopenmaster) on the same CAN bus is needed for position, velocity and status updates.
 
 | Constructor                          | Description                     | Arguments         |
 | ------------------------------------ | ------------------------------- | ----------------- |
@@ -725,7 +818,7 @@ Once the configuration sequence has finished, current status, position and veloc
 | Methods                                                   | Description                                                                               | Arguments |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
 | `motor.enter_pp_mode(velo)`                               | Set 402 operating mode to profile position, halt off, and target velocity to `velo`       | `int`     |
-| `motor.enter_pv_mode()`                                   | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
+| `motor.enter_pv_mode(velo)`                               | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
 | `motor.set_target_position(pos)`                          | Set target position to `pos` (signed). [pp mode]                                          | `int`     |
 | `motor.commit_target_position()`                          | Instruct motor to move to previously set target position. [pp mode]                       |           |
 | `motor.set_target_velocity(velo)`                         | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
@@ -737,26 +830,28 @@ Once the configuration sequence has finished, current status, position and veloc
 | `motor.reset_fault()`                                     | Clear any faults (like positioning errors). Implicitly sets the "halt" bit.               |           |
 | `motor.sdo_read(index)`                                   | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
 
-| Properties              | Description                                              | Data type |
-| ----------------------- | -------------------------------------------------------- | --------- |
-| `initialized`           | Concurrent init sequence has finished, motor is ready    | `bool`    |
-| `last_heartbeat`        | Time in µs since bootup when last heartbeat was received | `int`     |
-| `is_booting`            | Node is in booting state                                 | `bool`    |
-| `is_preoperational`     | Node is in pre-operational state                         | `bool`    |
-| `is_operational`        | Node is in operational state                             | `bool`    |
-| `actual_position`       | Motor position at last SYNC                              | `int`     |
-| `position_offset`       | Offset implicitly added to target/reported position      | `int`     |
-| `actual_velocity`       | Motor velocity at last SYNC                              | `int`     |
-| `status_enabled`        | Operation enabled bit of status word since last SYNC     | `bool`    |
-| `status_fault`          | Fault bit of status word since last SYNC                 | `bool`    |
-| `status_target_reached` | Target reached bit of status word since last SYNC        | `bool`    |
-| `ctrl_enable`           | Latched operation enable bit of every sent control word  | `bool`    |
-| `ctrl_halt`             | Latched halt bit of every sent control word              | `bool`    |
+| Properties                 | Description                                              | Data type |
+| -------------------------- | -------------------------------------------------------- | --------- |
+| `initialized`              | Concurrent init sequence has finished, motor is ready    | `bool`    |
+| `last_heartbeat`           | Time in µs since bootup when last heartbeat was received | `int`     |
+| `is_booting`               | Node is in booting state                                 | `bool`    |
+| `is_preoperational`        | Node is in pre-operational state                         | `bool`    |
+| `is_operational`           | Node is in operational state                             | `bool`    |
+| `actual_position`          | Motor position at last SYNC                              | `int`     |
+| `position_offset`          | Offset implicitly added to target/reported position      | `int`     |
+| `actual_velocity`          | Motor velocity at last SYNC                              | `int`     |
+| `status_enabled`           | Operation enabled bit of status word since last SYNC     | `bool`    |
+| `status_fault`             | Fault bit of status word since last SYNC                 | `bool`    |
+| `status_target_reached`    | Target reached bit of status word since last SYNC        | `bool`    |
+| `pp_set_point_acknowledge` | Set point acknowledge bit (profile position mode)        | `bool`    |
+| `pv_is_moving`             | Motor is moving (profile velocity mode)                  | `bool`    |
+| `ctrl_enable`              | Latched operation enable bit of every sent control word  | `bool`    |
+| `ctrl_halt`                | Latched halt bit of every sent control word              | `bool`    |
+| `enabled`                  | Whether the motor is enabled                             | `bool`    |
 
 **Configuration sequence**
 
 After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`.
-Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
 
 **Target position sequence**
 
@@ -858,8 +953,6 @@ Note: To reduce bandwidth, voltages are only queried when explicitly requested b
 | `motor.sdo_read(index[, subindex])`             | Read SDO                      | 2x `int`  |
 | `motor.sdo_write(index, subindex, bits, value)` | Write SDO                     | 4x `int`  |
 | `motor.update_voltages()`                       | Update voltages               |           |
-| `motor.enable()`                                | Enable the Motor              |           |
-| `motor.disable()`                               | Disable the Motor             |           |
 
 When the motor is disabled, it will freewheel and ignore movement commands.
 
