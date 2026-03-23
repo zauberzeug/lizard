@@ -1,7 +1,6 @@
 #include "imu_bno085.h"
 #include "i2c_bus.h"
 #include <algorithm>
-#include <cmath>
 #include <stdexcept>
 
 #include "esp_log.h"
@@ -10,31 +9,10 @@ REGISTER_MODULE_DEFAULTS(ImuBno085)
 
 namespace {
 constexpr char TAG[] = "ImuBno085";
-constexpr double RAD_TO_DEG = 180.0 / M_PI;
 constexpr int MAX_EVENTS_PER_STEP = 16;
 
 inline int accuracy_from_status(uint8_t status) {
     return static_cast<int>(status & 0x03U);
-}
-
-template <typename Quaternion>
-inline void quaternion_to_euler(const Quaternion &quat, double &roll, double &pitch, double &yaw) {
-    double w = quat.real;
-    double x = quat.i;
-    double y = quat.j;
-    double z = quat.k;
-
-    double t0 = +2.0 * (w * x + y * z);
-    double t1 = +1.0 - 2.0 * (x * x + y * y);
-    roll = std::atan2(t0, t1);
-
-    double t2 = +2.0 * (w * y - z * x);
-    t2 = std::clamp(t2, -1.0, 1.0);
-    pitch = std::asin(t2);
-
-    double t3 = +2.0 * (w * z + x * y);
-    double t4 = +1.0 - 2.0 * (y * y + z * z);
-    yaw = std::atan2(t3, t4);
 }
 } // namespace
 
@@ -53,9 +31,6 @@ const std::map<std::string, Variable_ptr> ImuBno085::get_defaults() {
         {"gyr_x", std::make_shared<NumberVariable>()},
         {"gyr_y", std::make_shared<NumberVariable>()},
         {"gyr_z", std::make_shared<NumberVariable>()},
-        {"yaw", std::make_shared<NumberVariable>()},
-        {"roll", std::make_shared<NumberVariable>()},
-        {"pitch", std::make_shared<NumberVariable>()},
         {"quat_w", std::make_shared<NumberVariable>()},
         {"quat_x", std::make_shared<NumberVariable>()},
         {"quat_y", std::make_shared<NumberVariable>()},
@@ -190,39 +165,32 @@ void ImuBno085::step() {
             }
             break;
         case SH2_GAME_ROTATION_VECTOR:
-            if (data_select & 0x0020) {
+            if (data_select & 0x0010) {
                 this->properties.at("quat_w")->number_value = sensor_value.un.gameRotationVector.real;
                 this->properties.at("quat_x")->number_value = sensor_value.un.gameRotationVector.i;
                 this->properties.at("quat_y")->number_value = sensor_value.un.gameRotationVector.j;
                 this->properties.at("quat_z")->number_value = sensor_value.un.gameRotationVector.k;
-            }
-            if (data_select & 0x0010) {
-                double roll, pitch, yaw;
-                quaternion_to_euler(sensor_value.un.gameRotationVector, roll, pitch, yaw);
-                this->properties.at("roll")->number_value = roll * RAD_TO_DEG;
-                this->properties.at("pitch")->number_value = pitch * RAD_TO_DEG;
-                this->properties.at("yaw")->number_value = yaw * RAD_TO_DEG;
             }
             if (data_select & 0x0001) {
                 this->properties.at("cal_sys")->integer_value = accuracy_from_status(sensor_value.status);
             }
             break;
         case SH2_LINEAR_ACCELERATION:
-            if (data_select & 0x0040) {
+            if (data_select & 0x0020) {
                 this->properties.at("lin_x")->number_value = sensor_value.un.linearAcceleration.x;
                 this->properties.at("lin_y")->number_value = sensor_value.un.linearAcceleration.y;
                 this->properties.at("lin_z")->number_value = sensor_value.un.linearAcceleration.z;
             }
             break;
         case SH2_GRAVITY:
-            if (data_select & 0x0080) {
+            if (data_select & 0x0040) {
                 this->properties.at("grav_x")->number_value = sensor_value.un.gravity.x;
                 this->properties.at("grav_y")->number_value = sensor_value.un.gravity.y;
                 this->properties.at("grav_z")->number_value = sensor_value.un.gravity.z;
             }
             break;
         case SH2_TEMPERATURE:
-            if (data_select & 0x0100) {
+            if (data_select & 0x0080) {
                 this->properties.at("temp")->integer_value = static_cast<int>(sensor_value.un.temperature.value);
             }
             break;

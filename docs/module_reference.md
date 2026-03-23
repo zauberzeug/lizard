@@ -321,8 +321,9 @@ The constructor expects up to seven arguments:
 - `address`: I²C address (default: `0x4A`)
 - `clk`: I²C clock in Hz (default: `400000`)
 
-The properties and methods are identical to the [IMU](#imu) module, providing the same interface for compatibility.
+The properties and methods are similar to the [IMU](#imu) module.
 The BNO085 offers improved accuracy and better sensor fusion algorithms compared to the BNO055.
+Unlike the BNO055 module, euler angles (`yaw`, `roll`, `pitch`) are not computed on-device — only quaternion output (`quat_w/x/y/z`) is provided. Euler conversion should be done upstream.
 
 | Methods              | Description                   | Arguments |
 | -------------------- | ----------------------------- | --------- |
@@ -342,11 +343,10 @@ It defaults to `0xffff` (all enabled). Set individual bits to `0` to skip costly
 | 1        | `0x0002` | Accelerometer (`acc_x/y/z`)               |
 | 2        | `0x0004` | Magnetometer (`mag_x/y/z`)                |
 | 3        | `0x0008` | Gyroscope (`gyr_x/y/z`)                   |
-| 4        | `0x0010` | Euler angles (`yaw/roll/pitch`)           |
-| 5        | `0x0020` | Quaternion (`quat_w/x/y/z`)              |
-| 6        | `0x0040` | Linear acceleration (`lin_x/y/z`)         |
-| 7        | `0x0080` | Gravity (`grav_x/y/z`)                    |
-| 8        | `0x0100` | Temperature (`temp`)                      |
+| 4        | `0x0010` | Quaternion (`quat_w/x/y/z`)              |
+| 5        | `0x0020` | Linear acceleration (`lin_x/y/z`)         |
+| 6        | `0x0040` | Gravity (`grav_x/y/z`)                    |
+| 7        | `0x0080` | Temperature (`temp`)                      |
 
 ### Differences to BNO055
 
