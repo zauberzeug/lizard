@@ -120,10 +120,10 @@ void ImuBno085::apply_mode(const std::string &mode) {
     }
 }
 
-ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, gpio_num_t int_pin,
-                     gpio_num_t rst_pin, uint8_t address, int clk_speed)
-    : Module(imu_bno085, name), i2c_port(i2c_port), sda_pin(sda_pin), scl_pin(scl_pin), int_pin(int_pin), rst_pin(rst_pin),
-      address(address), clk_speed(clk_speed), report_interval_us(100000UL) {
+ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin,
+                     gpio_num_t int_pin, gpio_num_t rst_pin, uint8_t address, int clk_speed)
+    : Module(imu_bno085, name), i2c_port(i2c_port), sda_pin(sda_pin), scl_pin(scl_pin),
+      int_pin(int_pin), rst_pin(rst_pin), address(address), clk_speed(clk_speed), report_interval_us(100000UL) {
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     bno = std::make_unique<Bno08x>(rst_pin);
 
@@ -142,7 +142,7 @@ void ImuBno085::step() {
         enable_default_reports();
     }
 
-    uint16_t data_select = this->properties.at("data_select")->integer_value;
+    const uint16_t data_select = this->properties.at("data_select")->integer_value;
     sh2_SensorValue_t sensor_value{};
 
     for (int i = 0; i < MAX_EVENTS_PER_STEP && bno->getSensorEvent(&sensor_value); ++i) {
@@ -220,9 +220,8 @@ void ImuBno085::call(const std::string method_name, const std::vector<ConstExpre
         Module::expect(arguments, 1, string);
         std::string mode = arguments[0]->evaluate_string();
         std::transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
-        // BNO055 compatibility modes — the BNO085 uses report-based configuration
-        // rather than hardware modes. These presets emulate BNO055 modes by
-        // enabling/disabling the corresponding sensor reports.
+        // BNO055 compatibility modes — the BNO085 uses report-based configuration rather than hardware modes.
+        // These presets emulate BNO055 modes by enabling/disabling the corresponding sensor reports.
         try {
             apply_mode(mode);
             current_mode = mode;
