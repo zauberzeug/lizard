@@ -60,7 +60,7 @@ void ImuBno085::apply_mode(const std::string &mode) {
         SH2_GRAVITY,
         SH2_TEMPERATURE,
     };
-    static constexpr size_t N = sizeof(all_sensors) / sizeof(all_sensors[0]);
+    static constexpr size_t N = std::size(all_sensors);
 
     // Build desired state: which sensors should be enabled for this mode
     // Indices: 0=acc, 1=mag, 2=gyr, 3=rot, 4=lin, 5=grav, 6=temp
