@@ -11,6 +11,7 @@ idf_component_register(
     INCLUDE_DIRS "." "compilation" "modules" "utils" "${CMAKE_BINARY_DIR}/generated"
     REQUIRES
         app_update
+        bno08x_driver
         bt
         driver
         efuse
@@ -28,7 +29,6 @@ idf_component_register(
         mbedtls
         nvs_flash
         spi_flash
-        bno08x_driver
 )
 add_compile_definitions(OWL_TOKEN_RUN_LENGTH=256)
 component_compile_options(-std=gnu++17 -Wsuggest-override)
