@@ -354,7 +354,7 @@ Euler conversion should be done upstream.
 | -------------------- | ----------------------------- | --------- |
 | `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
 
-The `mode` parameter supports the same modes as the [IMU](#imu) module.
+The `mode` parameter supports the same modes as the [IMU](#imu) module, except `ndof_fmc_off` which is not available on the BNO085 (use `ndof` instead).
 The configured mode is automatically restored if the BNO085 resets during operation.
 
 **Data Select**

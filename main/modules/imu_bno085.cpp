@@ -95,11 +95,6 @@ void ImuBno085::apply_mode(const std::string &mode) {
         desired[0] = true;
         desired[1] = true;
         desired[3] = true;
-    } else if (mode == "ndof_fmc_off") {
-        desired[0] = true;
-        desired[1] = true;
-        desired[2] = true;
-        desired[3] = true;
     } else if (mode == "ndof") {
         desired.fill(true);
     } else {
