@@ -10,6 +10,7 @@ REGISTER_MODULE_DEFAULTS(ImuBno085)
 namespace {
 constexpr char TAG[] = "ImuBno085";
 constexpr int MAX_EVENTS_PER_STEP = 16;
+constexpr uint32_t REPORT_INTERVAL_US = 100000UL;
 
 inline int accuracy_from_status(uint8_t status) {
     return static_cast<int>(status & 0x03U);
@@ -112,7 +113,7 @@ void ImuBno085::apply_mode(const std::string &mode) {
     // Only send commands for sensors whose state actually changes
     for (size_t i = 0; i < N; ++i) {
         if (desired[i] != active_reports[i]) {
-            if (!bno->enableReport(all_sensors[i], desired[i] ? report_interval_us : 0)) {
+            if (!bno->enableReport(all_sensors[i], desired[i] ? REPORT_INTERVAL_US : 0)) {
                 throw std::runtime_error("unable to configure sensor report");
             }
             active_reports[i] = desired[i];
@@ -123,7 +124,7 @@ void ImuBno085::apply_mode(const std::string &mode) {
 ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin,
                      gpio_num_t int_pin, gpio_num_t rst_pin, uint8_t address, int clk_speed)
     : Module(imu_bno085, name), i2c_port(i2c_port), sda_pin(sda_pin), scl_pin(scl_pin),
-      int_pin(int_pin), rst_pin(rst_pin), address(address), clk_speed(clk_speed), report_interval_us(100000UL) {
+      int_pin(int_pin), rst_pin(rst_pin), address(address), clk_speed(clk_speed) {
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     bno = std::make_unique<Bno08x>(rst_pin);
 

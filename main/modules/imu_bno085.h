@@ -26,7 +26,6 @@ private:
     gpio_num_t rst_pin;
     uint8_t address;
     int clk_speed;
-    uint32_t report_interval_us;
     std::unique_ptr<Bno08x> bno;
     std::string current_mode = "ndof";
     std::array<bool, 7> active_reports{};
