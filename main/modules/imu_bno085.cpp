@@ -47,10 +47,6 @@ const std::map<std::string, Variable_ptr> ImuBno085::get_defaults() {
     };
 }
 
-void ImuBno085::enable_default_reports() {
-    apply_mode(current_mode);
-}
-
 void ImuBno085::apply_mode(const std::string &mode) {
     static constexpr sh2_SensorId_t all_sensors[] = {
         SH2_ACCELEROMETER,
@@ -132,7 +128,7 @@ ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda
         throw std::runtime_error("BNO085 initialization failed");
     }
 
-    enable_default_reports();
+    apply_mode(current_mode);
 
     this->properties = ImuBno085::get_defaults();
 }
@@ -140,7 +136,7 @@ ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda
 void ImuBno085::step() {
     if (bno->wasReset()) {
         ESP_LOGW(TAG, "BNO085 reset detected, re-enabling reports");
-        enable_default_reports();
+        apply_mode(current_mode);
     }
 
     const uint16_t data_select = this->properties.at("data_select")->integer_value;

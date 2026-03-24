@@ -30,6 +30,5 @@ private:
     std::string current_mode = "ndof";
     std::array<bool, 7> active_reports{};
 
-    void enable_default_reports();
     void apply_mode(const std::string &mode);
 };
