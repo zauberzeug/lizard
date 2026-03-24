@@ -1,7 +1,6 @@
 #pragma once
 
 #include <map>
-#include <mutex>
 
 #include "driver/i2c.h"
 
@@ -18,5 +17,4 @@ private:
     };
 
     static std::map<i2c_port_t, BusConfig> configs;
-    static std::mutex configs_mutex;
 };

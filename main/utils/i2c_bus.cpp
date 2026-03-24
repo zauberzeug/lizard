@@ -9,11 +9,8 @@ constexpr uint32_t DEFAULT_TIMEOUT_TICKS = 1048575;
 } // namespace
 
 std::map<i2c_port_t, I2cBusManager::BusConfig> I2cBusManager::configs;
-std::mutex I2cBusManager::configs_mutex;
 
 void I2cBusManager::ensure(i2c_port_t port, gpio_num_t sda_pin, gpio_num_t scl_pin, int clk_speed_hz) {
-    std::lock_guard<std::mutex> lock(configs_mutex);
-
     BusConfig &config = configs[port];
     if (config.initialized) {
         if (config.sda_pin != sda_pin || config.scl_pin != scl_pin || config.clk_speed_hz != clk_speed_hz) {
