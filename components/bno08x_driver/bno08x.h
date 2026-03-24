@@ -27,11 +27,10 @@ public:
     bool enableReport(sh2_SensorId_t sensor, uint32_t interval_us = 10000);
     bool getSensorEvent(sh2_SensorValue_t *value);
 
-    sh2_ProductIds_t prodIds;
-
     I2cDevice *get_device() const;
 
 private:
+    sh2_ProductIds_t prodIds;
     bool init(int32_t sensor_id);
 
     i2c_port_t port;
