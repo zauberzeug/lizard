@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -480,6 +480,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#imu-bno085" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IMU BNO085
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#can-interface" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -594,6 +605,17 @@
     <span class="md-ellipsis">
       
         Stepper Motor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mks-servo-motor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MKS Servo Motor
       
     </span>
   </a>
@@ -898,6 +920,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#imu-bno085" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IMU BNO085
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#can-interface" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1012,6 +1045,17 @@
     <span class="md-ellipsis">
       
         Stepper Motor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mks-servo-motor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MKS Servo Motor
       
     </span>
   </a>
@@ -1258,11 +1302,6 @@ It is automatically created right after the boot sequence.</p>
 <td></td>
 </tr>
 <tr>
-<td><code>core.ota(ssid, password, url)</code></td>
-<td>Starts OTA update on a URL with given WiFi</td>
-<td>3x <code>str</code></td>
-</tr>
-<tr>
 <td><code>core.get_pin_status(pin)</code></td>
 <td>Print the status of the chosen pin</td>
 <td><code>int</code></td>
@@ -1277,17 +1316,26 @@ It is automatically created right after the boot sequence.</p>
 <td>Print value of the pin from the strapping register</td>
 <td><code>int</code></td>
 </tr>
+<tr>
+<td><code>core.forget_serial_bus()</code></td>
+<td>Remove the saved SerialBus configuration from NVS</td>
+<td></td>
+</tr>
+<tr>
+<td><code>core.pause_broadcasts()</code></td>
+<td>Pause property broadcasts (all modules)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>core.resume_broadcasts()</code></td>
+<td>Resume property broadcasts</td>
+<td></td>
+</tr>
 </tbody>
 </table>
 <p>The output <code>format</code> is a string with multiple space-separated elements of the pattern <code>&lt;module&gt;.&lt;property&gt;[:&lt;precision&gt;]</code> or <code>&lt;variable&gt;[:&lt;precision&gt;]</code>.
 The <code>precision</code> is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format <code>"core.millis input.level motor.position:3"</code> might yield an output like <code>"92456 1 12.789"</code>.</p>
-<p>The OTA update will try to connect to the specified WiFi network with the provided SSID and password.
-After initializing the WiFi connection, it will attempt an OTA update from the given URL.
-Upon successful updating, the ESP will restart and attempt to verify the OTA update.
-It will reconnect to the WiFi and try to access URL + <code>/verify</code> to receive a message with the current version of Lizard.
-The test is considered successful if an HTTP request is received, even if the version does not match or is empty.
-If the newly updated Lizard cannot connect to URL + <code>/verify</code>, the OTA update will be rolled back.</p>
 <p><code>core.get_pin_status(pin)</code> reads the pin's voltage, not the output state directly.</p>
 <h2 id="bluetooth">Bluetooth<a class="headerlink" href="#bluetooth" title="Permanent link">&para;</a></h2>
 <p>Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
@@ -1394,6 +1442,17 @@ When a fifth connects, the oldest entry is removed.</p>
 </tr>
 </tbody>
 </table>
+<p><strong>Bus Backup:</strong>
+When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
+If multiple SerialBus modules exist, only the first one is backed up.
+On boot, if the startup script does not create a SerialBus but a backup config exists,
+Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
+This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
+To remove the saved configuration, call <code>core.forget_serial_bus()</code>.</p>
+<p><strong>Firmware Updates:</strong>
+Peers on the serial bus can be updated remotely via the coordinator.
+Use the <code>otb_update.py</code> tool to push new firmware to any peer node.
+See <a href="../tools/#otb-update">OTB Update</a> for details.</p>
 <h2 id="input">Input<a class="headerlink" href="#input" title="Permanent link">&para;</a></h2>
 <p>The input module is associated with a digital input pin that is be connected to a pushbutton, sensor or other input signal.</p>
 <table>
@@ -2101,6 +2160,152 @@ the sensor signals (Accel, Mag, Gyro) are compensated and fusion data (Relative 
 </tr>
 </tbody>
 </table>
+<h2 id="imu-bno085">IMU BNO085<a class="headerlink" href="#imu-bno085" title="Permanent link">&para;</a></h2>
+<p>The IMU BNO085 module provides access to a Bosch BNO085 9-axis absolute orientation sensor over the shared I²C bus.
+This module uses the same API as the <a href="#imu">IMU</a> module but offers improved fusion quality and additional reports.</p>
+<p>Note: Only one <code>ImuBno085</code> instance can be active at a time due to hardware abstraction layer constraints.</p>
+<table>
+<thead>
+<tr>
+<th>Constructor</th>
+<th>Description</th>
+<th>Arguments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>imu = ImuBno085([port[, sda[, scl[, int[, rst[, address[, clk]]]]]]])</code></td>
+<td>See below</td>
+<td><code>int</code>s</td>
+</tr>
+</tbody>
+</table>
+<p>The constructor expects up to seven arguments:</p>
+<ul>
+<li><code>port</code>: I²C port number (default: 0)</li>
+<li><code>sda</code>: SDA pin (default matches target, e.g. 21 on ESP32)</li>
+<li><code>scl</code>: SCL pin (default matches target, e.g. 22 on ESP32)</li>
+<li><code>int</code>: Interrupt pin (default: 26)</li>
+<li><code>rst</code>: Reset pin (default: 32)</li>
+<li><code>address</code>: I²C address (default: 0x4A)</li>
+<li><code>clk</code>: I²C clock in Hz (default: 400000)</li>
+</ul>
+<p>The properties and methods are similar to the <a href="#imu">IMU</a> module.
+The BNO085 offers improved accuracy and better sensor fusion algorithms compared to the BNO055.
+Unlike the BNO055 module, euler angles (<code>yaw</code>, <code>roll</code>, <code>pitch</code>) are not computed on-device —
+only quaternion output (<code>quat_w/x/y/z</code>) is provided.
+Euler conversion should be done upstream.</p>
+<table>
+<thead>
+<tr>
+<th>Methods</th>
+<th>Description</th>
+<th>Arguments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>imu.set_mode(mode)</code></td>
+<td>Set operation mode of the IMU</td>
+<td><code>str</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>mode</code> parameter supports the same modes as the <a href="#imu">IMU</a> module, except <code>ndof_fmc_off</code> (use <code>ndof</code> instead).
+The configured mode is automatically restored if the BNO085 resets during operation.</p>
+<p><strong>Data Select</strong></p>
+<p>The <code>data_select</code> property is a bitmask that controls which sensor values are updated each step.
+It defaults to <code>0xffff</code> (all enabled).
+Set individual bits to <code>0</code> to skip costly updates you don't need.</p>
+<table>
+<thead>
+<tr>
+<th>Bit</th>
+<th>Value</th>
+<th>Data</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td><code>0x0001</code></td>
+<td>Calibration (<code>cal_sys/gyr/acc/mag</code>)</td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>0x0002</code></td>
+<td>Accelerometer (<code>acc_x/y/z</code>)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>0x0004</code></td>
+<td>Magnetometer (<code>mag_x/y/z</code>)</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>0x0008</code></td>
+<td>Gyroscope (<code>gyr_x/y/z</code>)</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>0x0010</code></td>
+<td>Quaternion (<code>quat_w/x/y/z</code>)</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>0x0020</code></td>
+<td>Linear acceleration (<code>lin_x/y/z</code>)</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>0x0040</code></td>
+<td>Gravity (<code>grav_x/y/z</code>)</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>0x0080</code></td>
+<td>Temperature (<code>temp</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Differences to BNO055</strong></p>
+<p>The calibration properties (<code>cal_sys</code>, <code>cal_gyr</code>, <code>cal_acc</code>, <code>cal_mag</code>) use the same 0–3 range as the BNO055,
+but the meaning differs:</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>BNO055</th>
+<th>BNO085</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Not calibrated</td>
+<td>Unreliable</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Partially calibrated</td>
+<td>Low accuracy</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Mostly calibrated</td>
+<td>Medium accuracy</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Fully calibrated</td>
+<td>High accuracy (fully calibrated)</td>
+</tr>
+</tbody>
+</table>
+<p>On the BNO055, <code>cal_sys</code>, <code>cal_gyr</code>, <code>cal_acc</code>, and <code>cal_mag</code> are read together in a single calibration register.
+On the BNO085, each calibration value is derived from the accuracy status of its corresponding sensor report
+(e.g. <code>cal_acc</code> is updated when an accelerometer event arrives, <code>cal_sys</code> when a rotation vector event arrives).
+This means calibration values only update while the corresponding sensor report is enabled via <code>set_mode</code>.</p>
 <h2 id="can-interface">CAN interface<a class="headerlink" href="#can-interface" title="Permanent link">&para;</a></h2>
 <p>The CAN module allows communicating with peripherals on the specified CAN bus.</p>
 <table>
@@ -2989,14 +3194,15 @@ It uses the ESP LED Control API to generate pulses with sufficiently high freque
 </thead>
 <tbody>
 <tr>
-<td><code>motor = StepperMotor(step, dir[, pu[, cp[, lt[, lc]]]])</code></td>
+<td><code>motor = StepperMotor(step, dir[, lt[, lc]])</code></td>
 <td>Step and direction pins</td>
-<td>6x <code>int</code></td>
+<td>2–4x <code>int</code></td>
 </tr>
 </tbody>
 </table>
-<p>The constructor arguments <code>pu</code> (pulse counter unit), <code>pc</code> (pulse counter channel), <code>lt</code> (LED timer) and <code>lc</code> (LED channel) are optional and default to 0.
-When using multiple stepper motors, they can be set to different values to avoid conflicts.</p>
+<p>The constructor arguments <code>lt</code> (LEDC timer) and <code>lc</code> (LEDC channel) are optional and default to 0.
+When using multiple stepper motors, set different timer/channel pairs to avoid conflicts.
+The pulse counter used for position feedback is created internally.</p>
 <table>
 <thead>
 <tr>
@@ -3066,6 +3272,182 @@ When using multiple stepper motors, they can be set to different values to avoid
 </table>
 <p>The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.</p>
 <p>When the motor is disabled, it will stop and ignore movement commands.</p>
+<h2 id="mks-servo-motor">MKS Servo Motor<a class="headerlink" href="#mks-servo-motor" title="Permanent link">&para;</a></h2>
+<p>The MKS Servo Motor module controls an <a href="https://github.com/makerbase-motor/MKS-SERVO42D-57D">MKS SERVO42D/57D</a> closed-loop stepper motor via CAN.</p>
+<table>
+<thead>
+<tr>
+<th>Constructor</th>
+<th>Description</th>
+<th>Arguments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>motor = MksServoMotor(can, can_id)</code></td>
+<td>CAN module and CAN node ID</td>
+<td>CAN module, <code>int</code></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Properties</th>
+<th>Description</th>
+<th>Data type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>motor.position</code></td>
+<td>Motor position (degrees)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>motor.speed</code></td>
+<td>Motor speed (RPM)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.working_current</code></td>
+<td>Working current (mA, 0-3000, default: 1700)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.enabled</code></td>
+<td>Whether the motor is enabled</td>
+<td><code>bool</code></td>
+</tr>
+<tr>
+<td><code>motor.position_error</code></td>
+<td>Last read position error (degrees)</td>
+<td><code>float</code></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Methods</th>
+<th>Description</th>
+<th>Arguments</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>motor.enable()</code></td>
+<td>Enable the motor</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.disable()</code></td>
+<td>Disable the motor</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.set_mode(mode)</code></td>
+<td>Set working mode (see <a href="#working-modes">working modes</a>)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.zero()</code></td>
+<td>Set current position as zero</td>
+<td></td>
+</tr>
+<tr>
+<td><code>motor.set_working_current(ma)</code></td>
+<td>Set working current (mA, 0-3000)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.set_holding_current(pct)</code></td>
+<td>Set holding current as percentage of working current (10-100 in steps of 10;)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.position(degrees, speed, acc)</code></td>
+<td>Move to absolute position (degrees, RPM, acceleration)</td>
+<td><code>float</code>, <code>int</code>, <code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.speed(speed, direction, acc)</code></td>
+<td>Run motor continuously (0-3000 RPM, direction, acceleration)</td>
+<td><code>int</code>, <code>int</code>, <code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.stop(acc)</code></td>
+<td>Stop motor with given deceleration (0-255)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.read_position_error()</code></td>
+<td>Request position error from motor via CAN</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>position()</code> method moves the motor to an absolute coordinate position (in degrees from the zero point)
+with a given speed in RPM (0-3000) and acceleration (0-255).</p>
+<p>The <code>speed()</code> method accepts a speed in RPM (0-3000), direction (0: CCW, 1: CW) and acceleration (0-255).
+The acceleration parameter controls the ramp rate: higher values mean faster acceleration.
+If acceleration is 0, the motor runs directly at the set speed without ramping.</p>
+<p>The <code>stop()</code> method decelerates and stops the motor with the given acceleration (0-255).
+If acceleration is 0, the motor stops immediately.</p>
+<p>The <code>read_position_error()</code> method requests the current position error from the motor via CAN.
+The result is available in the <code>position_error</code> property (in degrees) once the motor responds.</p>
+<p><strong>Working Modes</strong></p>
+<p>The MKS SERVO42D/57D supports the following working modes:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Name</th>
+<th>Description</th>
+<th>Remark</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0x00</td>
+<td>CR_OPEN</td>
+<td>Pulse interface open-loop mode</td>
+<td></td>
+</tr>
+<tr>
+<td>0x01</td>
+<td>CR_CLOSE</td>
+<td>Pulse interface closed-loop mode</td>
+<td></td>
+</tr>
+<tr>
+<td>0x02</td>
+<td>CR_vFOC</td>
+<td>Pulse interface FOC mode</td>
+<td>default</td>
+</tr>
+<tr>
+<td>0x03</td>
+<td>SR_OPEN</td>
+<td>Bus interface open-loop mode</td>
+<td></td>
+</tr>
+<tr>
+<td>0x04</td>
+<td>SR_CLOSE</td>
+<td>Bus interface closed-loop mode</td>
+<td></td>
+</tr>
+<tr>
+<td>0x05</td>
+<td>SR_vFOC</td>
+<td>Bus interface FOC mode</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>set_mode()</code> method sets the working mode of the motor.
+For CAN bus control, use SR_vFOC mode (0x05): <code>motor.set_mode(5)</code>.</p>
 <h2 id="motor-axis">Motor Axis<a class="headerlink" href="#motor-axis" title="Permanent link">&para;</a></h2>
 <p>The motor axis module wraps a motor and two limit switches.
 It prevents the motor from moving past the limits.
@@ -3142,7 +3524,11 @@ Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.<
 </table>
 <p>When the motor axis is disabled, it will stop the motor and ignore movement commands.</p>
 <h2 id="canopenmaster">CanOpenMaster<a class="headerlink" href="#canopenmaster" title="Permanent link">&para;</a></h2>
-<p>The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until <code>sync_interval</code> is set to a value greater than 0.</p>
+<p>The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes.
+At creation, no messages are sent until <code>sync_interval</code> is set to a value greater than 0.</p>
+<p>A CanOpenMaster on the same CAN bus is required for CanOpenMotor —
+without periodic SYNC messages, position, velocity and status properties will not update.
+Other CAN motor modules (D1Motor, DunkerMotor) do not need a CanOpenMaster.</p>
 <table>
 <thead>
 <tr>
@@ -3177,8 +3563,9 @@ Currently supported motor types are CanOpenMotor, ODriveMotor and StepperMotor.<
 </table>
 <h2 id="canopenmotor">CanOpenMotor<a class="headerlink" href="#canopenmotor" title="Permanent link">&para;</a></h2>
 <p>The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402.
-Positional and velocity units are currently undefined and must by manually measured.
+Positional and velocity units are currently undefined and must be manually measured.
 Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.</p>
+<p>A <a href="#canopenmaster">CanOpenMaster</a> on the same CAN bus is needed for position, velocity and status updates.</p>
 <table>
 <thead>
 <tr>
@@ -3210,7 +3597,7 @@ Once the configuration sequence has finished, current status, position and veloc
 <td><code>int</code></td>
 </tr>
 <tr>
-<td><code>motor.enter_pv_mode()</code></td>
+<td><code>motor.enter_pv_mode(velo)</code></td>
 <td>Set 402 operating mode to profile velocity, halt on, and target velocity to <code>velo</code></td>
 <td><code>int</code></td>
 </tr>
@@ -3331,6 +3718,16 @@ Once the configuration sequence has finished, current status, position and veloc
 <td><code>bool</code></td>
 </tr>
 <tr>
+<td><code>pp_set_point_acknowledge</code></td>
+<td>Set point acknowledge bit (profile position mode)</td>
+<td><code>bool</code></td>
+</tr>
+<tr>
+<td><code>pv_is_moving</code></td>
+<td>Motor is moving (profile velocity mode)</td>
+<td><code>bool</code></td>
+</tr>
+<tr>
 <td><code>ctrl_enable</code></td>
 <td>Latched operation enable bit of every sent control word</td>
 <td><code>bool</code></td>
@@ -3340,11 +3737,15 @@ Once the configuration sequence has finished, current status, position and veloc
 <td>Latched halt bit of every sent control word</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>enabled</code></td>
+<td>Whether the motor is enabled</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <p><strong>Configuration sequence</strong></p>
-<p>After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the <code>initialized</code> attribute is set to <code>true</code>.
-Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.</p>
+<p>After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the <code>initialized</code> attribute is set to <code>true</code>.</p>
 <p><strong>Target position sequence</strong></p>
 <p>Note: The target velocity must be positive regardless of target point direction.
 The halt bit is cleared when entering pp, though it can be set at any point during moves to effectively apply brakes.</p>
@@ -3618,16 +4019,6 @@ motor.set_ctrl_halt(true)
 <tr>
 <td><code>motor.update_voltages()</code></td>
 <td>Update voltages</td>
-<td></td>
-</tr>
-<tr>
-<td><code>motor.enable()</code></td>
-<td>Enable the Motor</td>
-<td></td>
-</tr>
-<tr>
-<td><code>motor.disable()</code></td>
-<td>Disable the Motor</td>
 <td></td>
 </tr>
 </tbody>

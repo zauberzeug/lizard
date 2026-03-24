@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -618,7 +618,7 @@ The following statement types are currently supported.</p>
 <pre><code>true
 42
 3.14
-"Hello world"
+&quot;Hello world&quot;
 led
 button.level
 1 + (2 - 3 * 4)**5
@@ -664,7 +664,7 @@ end
 <p><strong>Rules: definition</strong></p>
 <p>Rules execute a list of actions when a condition is met:</p>
 <pre><code>when button.level == 0 then
-    core.print("Off!")
+    core.print(&quot;Off!&quot;)
     led.off()
 end
 </code></pre>
@@ -677,7 +677,7 @@ If there are still actions running asynchronously, a truthy condition is ignored
 <p><strong>Method and routine calls</strong></p>
 <p>Like with a method call statement, you can call methods and routines with an action:</p>
 <pre><code>when clicked then
-    core.print("On!")
+    core.print(&quot;On!&quot;)
     all_on()
 end
 </code></pre>
@@ -700,9 +700,9 @@ end
 </code></pre>
 <p>Similarly, actions can await asynchronous routines, causing subsequent actions to wait until a routine is completed.</p>
 <pre><code>when button.level == 0 then
-    core.print("Blink...")
+    core.print(&quot;Blink...&quot;)
     await blink()
-    core.print("Done.")
+    core.print(&quot;Done.&quot;)
 end
 </code></pre>
 <h2 id="data-types">Data types<a class="headerlink" href="#data-types" title="Permanent link">&para;</a></h2>

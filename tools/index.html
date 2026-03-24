@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -506,6 +506,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#otb-update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OTB Update
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#configure" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -679,6 +690,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#otb-update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OTB Update
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#configure" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -795,6 +817,129 @@ where the microcontroller is connected to the pin header of an NVIDIA Jetson com
 <pre><code class="language-bash">./monitor_ssh.sh &lt;user@host&gt;
 </code></pre>
 <p>Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.</p>
+<h3 id="otb-update">OTB Update<a class="headerlink" href="#otb-update" title="Permanent link">&para;</a></h3>
+<p><code>otb_update.py</code> pushes firmware to a peer over a <code>SerialBus</code> coordinator using the OTB (Over The Bus) protocol.</p>
+<pre><code class="language-bash">./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target &lt;peer_id&gt; [--bus &lt;name&gt;] [--expander &lt;name&gt;]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>firmware</code></td>
+<td>Path to the firmware binary (e.g. <code>build/lizard.bin</code>)</td>
+</tr>
+<tr>
+<td><code>--port</code></td>
+<td>Serial port (default: <code>/dev/ttyUSB0</code>)</td>
+</tr>
+<tr>
+<td><code>--baud</code></td>
+<td>Baudrate (default: <code>115200</code>)</td>
+</tr>
+<tr>
+<td><code>--target</code></td>
+<td>Bus ID of the target node (required)</td>
+</tr>
+<tr>
+<td><code>--bus</code></td>
+<td>Name of the SerialBus module (default: <code>bus</code>)</td>
+</tr>
+<tr>
+<td><code>--expander</code></td>
+<td>Expander name when coordinator is behind an expander</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Expander chains:</strong></p>
+<p>When the SerialBus coordinator sits behind an expander (e.g. <code>p0</code>), pass <code>--expander p0</code>.
+The script will pause broadcasts on that expander via <code>core.pause_broadcasts()</code> before the transfer
+and resume them afterwards to keep the UART link clear.</p>
+<p>Example:</p>
+<pre><code class="language-bash">./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target 1 --expander p0
+</code></pre>
+<p>This flashes node 1 through expander <code>p0</code>.
+The target node will reboot with the new firmware after a successful transfer.</p>
+<p><strong>OTB Protocol:</strong></p>
+<p>The OTB (Over The Bus) protocol uses these message types:</p>
+<table>
+<thead>
+<tr>
+<th>Host → Target</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>__OTB_BEGIN__</code></td>
+<td>Begin firmware update session</td>
+</tr>
+<tr>
+<td><code>__OTB_CHUNK_&lt;seq&gt;__:data</code></td>
+<td>Send base64-encoded firmware chunk (incl. sequence number)</td>
+</tr>
+<tr>
+<td><code>__OTB_COMMIT__</code></td>
+<td>Commit update and set boot partition</td>
+</tr>
+<tr>
+<td><code>__OTB_ABORT__</code></td>
+<td>Cancel the update session</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Host ← Target</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>__OTB_ACK_BEGIN__</code></td>
+<td>Acknowledge begin</td>
+</tr>
+<tr>
+<td><code>__OTB_ACK_CHUNK_&lt;seq&gt;__</code></td>
+<td>Acknowledge chunk (incl. sequence number)</td>
+</tr>
+<tr>
+<td><code>__OTB_ACK_COMMIT__</code></td>
+<td>Acknowledge commit</td>
+</tr>
+<tr>
+<td><code>__OTB_ERROR__:reason</code></td>
+<td>Error response with reason code</td>
+</tr>
+</tbody>
+</table>
+<p>Flow:</p>
+<pre><code>Host                            Target
+  |                                |
+  |--- __OTB_BEGIN__ -------------&gt;|
+  |&lt;-- __OTB_ACK_BEGIN__ ----------|
+  |                                |
+  |--- __OTB_CHUNK_&lt;0&gt;__:... -----&gt;|
+  |&lt;-- __OTB_ACK_CHUNK_&lt;0&gt;__ ------|
+  |                                |
+  |--- __OTB_CHUNK_&lt;1&gt;__:... -----&gt;|
+  |&lt;-- __OTB_ACK_CHUNK_&lt;1&gt;__ ------|
+  |                                |
+  |       ... more chunks ...      |
+  |                                |
+  |--- __OTB_CHUNK_&lt;N-1&gt;__:... ---&gt;|
+  |&lt;-- __OTB_ACK_CHUNK_&lt;N-1&gt;__ ----|
+  |                                |
+  |--- __OTB_COMMIT__ ------------&gt;|
+  |&lt;-- __OTB_ACK_COMMIT__ ---------|
+  |                                |
+</code></pre>
+<p>On error at any point, the target responds with <code>__OTB_ERROR__:&lt;message&gt;</code> with a human-readable error message.</p>
 <h3 id="configure">Configure<a class="headerlink" href="#configure" title="Permanent link">&para;</a></h3>
 <p>Use the configure script to send a new startup script to the microcontroller.</p>
 <pre><code class="language-bash">./configure.py &lt;config_file&gt; &lt;device_path&gt;
