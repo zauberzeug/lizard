@@ -18,7 +18,7 @@ public:
     explicit Bno08x(gpio_num_t reset_pin = GPIO_NUM_NC);
     ~Bno08x();
 
-    bool begin_I2C(i2c_port_t port, uint8_t i2c_addr = kI2cAddrDefault,
+    bool begin_i2c(i2c_port_t port, uint8_t i2c_addr = kI2cAddrDefault,
                    gpio_num_t int_pin = GPIO_NUM_NC, int32_t sensor_id = 0);
 
     void hardwareReset();

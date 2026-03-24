@@ -124,7 +124,7 @@ ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     bno = std::make_unique<Bno08x>(rst_pin);
 
-    if (!bno->begin_I2C(i2c_port, address, int_pin)) {
+    if (!bno->begin_i2c(i2c_port, address, int_pin)) {
         throw std::runtime_error("BNO085 initialization failed");
     }
 

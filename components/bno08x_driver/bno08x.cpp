@@ -80,7 +80,7 @@ Bno08x::~Bno08x() {
     }
 }
 
-bool Bno08x::begin_I2C(i2c_port_t port, uint8_t i2c_addr, gpio_num_t int_pin, int32_t sensor_id) {
+bool Bno08x::begin_i2c(i2c_port_t port, uint8_t i2c_addr, gpio_num_t int_pin, int32_t sensor_id) {
     if (active_instance != nullptr && active_instance != this) {
         ESP_LOGE(TAG, "only one Bno08x instance is supported");
         return false;
