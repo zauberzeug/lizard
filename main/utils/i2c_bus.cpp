@@ -43,4 +43,3 @@ void I2cBusManager::ensure(i2c_port_t port, gpio_num_t sda_pin, gpio_num_t scl_p
 
     config = BusConfig{.sda_pin = sda_pin, .scl_pin = scl_pin, .clk_speed_hz = clk_speed_hz, .initialized = true};
 }
-
