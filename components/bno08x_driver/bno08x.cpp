@@ -51,19 +51,19 @@ private:
 
 namespace {
 
-static void delay_ms(uint32_t ms) {
+void delay_ms(uint32_t ms) {
     vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
-static Bno08x *active_instance = nullptr;
+Bno08x *active_instance = nullptr;
 
-static int i2c_hal_open(sh2_Hal_t *self);
-static void i2c_hal_close(sh2_Hal_t *self);
-static int i2c_hal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len, uint32_t *t_us);
-static int i2c_hal_write(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len);
-static uint32_t hal_get_time_us(sh2_Hal_t *self);
-static void hal_callback(void *cookie, sh2_AsyncEvent_t *event);
-static void sensor_handler(void *cookie, sh2_SensorEvent_t *event);
+int i2c_hal_open(sh2_Hal_t *self);
+void i2c_hal_close(sh2_Hal_t *self);
+int i2c_hal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len, uint32_t *t_us);
+int i2c_hal_write(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len);
+uint32_t hal_get_time_us(sh2_Hal_t *self);
+void hal_callback(void *cookie, sh2_AsyncEvent_t *event);
+void sensor_handler(void *cookie, sh2_SensorEvent_t *event);
 
 } // namespace
 
