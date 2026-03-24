@@ -11,14 +11,14 @@
 
 class I2cDevice;
 
-#define BNO08x_I2CADDR_DEFAULT 0x4A
+static constexpr uint8_t kI2cAddrDefault = 0x4A;
 
 class Bno08x {
 public:
     explicit Bno08x(gpio_num_t reset_pin = GPIO_NUM_NC);
     ~Bno08x();
 
-    bool begin_I2C(i2c_port_t port, uint8_t i2c_addr = BNO08x_I2CADDR_DEFAULT,
+    bool begin_I2C(i2c_port_t port, uint8_t i2c_addr = kI2cAddrDefault,
                    gpio_num_t int_pin = GPIO_NUM_NC, int32_t sensor_id = 0);
 
     void hardwareReset();

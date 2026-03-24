@@ -68,7 +68,7 @@ static void sensor_handler(void *cookie, sh2_SensorEvent_t *event);
 } // namespace
 
 Bno08x::Bno08x(gpio_num_t reset_pin)
-    : port(I2C_NUM_0), address(BNO08x_I2CADDR_DEFAULT), int_pin(GPIO_NUM_NC),
+    : port(I2C_NUM_0), address(kI2cAddrDefault), int_pin(GPIO_NUM_NC),
       reset_pin(reset_pin), pending_value(nullptr), reset_occurred(false) {
     std::memset(&prodIds, 0, sizeof(prodIds));
     std::memset(&hal, 0, sizeof(hal));
