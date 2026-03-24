@@ -10,8 +10,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static constexpr TickType_t kI2cTimeoutTicks = pdMS_TO_TICKS(100);
-static constexpr size_t kI2cChunkSize = 64;
+static constexpr TickType_t I2C_TIMEOUT_TICKS = pdMS_TO_TICKS(100);
+static constexpr size_t I2C_CHUNK_SIZE = 64;
 static constexpr char TAG[] = "Bno08x";
 
 class I2cDevice {
@@ -22,7 +22,7 @@ public:
         if (len == 0) {
             return true;
         }
-        esp_err_t err = i2c_master_write_to_device(port, address, data, len, kI2cTimeoutTicks);
+        esp_err_t err = i2c_master_write_to_device(port, address, data, len, I2C_TIMEOUT_TICKS);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "i2c write failed: %s", esp_err_to_name(err));
             return false;
@@ -34,7 +34,7 @@ public:
         if (len == 0) {
             return true;
         }
-        esp_err_t err = i2c_master_read_from_device(port, address, data, len, kI2cTimeoutTicks);
+        esp_err_t err = i2c_master_read_from_device(port, address, data, len, I2C_TIMEOUT_TICKS);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "i2c read failed: %s", esp_err_to_name(err));
             return false;
@@ -42,7 +42,7 @@ public:
         return true;
     }
 
-    size_t maxBufferSize() const { return kI2cChunkSize; }
+    size_t maxBufferSize() const { return I2C_CHUNK_SIZE; }
 
 private:
     i2c_port_t port;
@@ -68,7 +68,7 @@ void sensor_handler(void *cookie, sh2_SensorEvent_t *event);
 } // namespace
 
 Bno08x::Bno08x(gpio_num_t reset_pin)
-    : port(I2C_NUM_0), address(kI2cAddrDefault), int_pin(GPIO_NUM_NC),
+    : port(I2C_NUM_0), address(I2C_ADDR_DEFAULT), int_pin(GPIO_NUM_NC),
       reset_pin(reset_pin), pending_value(nullptr), reset_occurred(false) {
     std::memset(&prodIds, 0, sizeof(prodIds));
     std::memset(&hal, 0, sizeof(hal));
@@ -245,7 +245,7 @@ int i2c_hal_read(sh2_Hal_t *self, uint8_t *pBuffer, unsigned len, uint32_t *t_us
     }
 
     uint16_t cargo_remaining = packet_size;
-    std::array<uint8_t, kI2cChunkSize> chunk{};
+    std::array<uint8_t, I2C_CHUNK_SIZE> chunk{};
     bool first_read = true;
 
     while (cargo_remaining > 0) {
