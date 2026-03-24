@@ -11,6 +11,7 @@ idf_component_register(
     INCLUDE_DIRS "." "compilation" "modules" "utils" "${CMAKE_BINARY_DIR}/generated"
     REQUIRES
         app_update
+        bno08x_driver
         bt
         driver
         efuse

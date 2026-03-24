@@ -323,6 +323,74 @@ Note that the individual sensors need to be calibrated before the compensated an
 | Magnetometer  | Move the sensor in a figure-8 pattern in space         |
 | Gyroscope     | Keep the sensor still for a few seconds                |
 
+## IMU BNO085
+
+The IMU BNO085 module provides access to a Bosch BNO085 9-axis absolute orientation sensor over the shared I²C bus.
+This module uses the same API as the [IMU](#imu) module but offers improved fusion quality and additional reports.
+
+Note: Only one `ImuBno085` instance can be active at a time due to hardware abstraction layer constraints.
+
+| Constructor                                                             | Description | Arguments |
+| ----------------------------------------------------------------------- | ----------- | --------- |
+| `imu = ImuBno085([port[, sda[, scl[, int[, rst[, address[, clk]]]]]]])` | See below   | `int`s    |
+
+The constructor expects up to seven arguments:
+
+- `port`: I²C port number (default: 0)
+- `sda`: SDA pin (default matches target, e.g. 21 on ESP32)
+- `scl`: SCL pin (default matches target, e.g. 22 on ESP32)
+- `int`: Interrupt pin (default: 26)
+- `rst`: Reset pin (default: 32)
+- `address`: I²C address (default: 0x4A)
+- `clk`: I²C clock in Hz (default: 400000)
+
+The properties and methods are similar to the [IMU](#imu) module.
+The BNO085 offers improved accuracy and better sensor fusion algorithms compared to the BNO055.
+Unlike the BNO055 module, euler angles (`yaw`, `roll`, `pitch`) are not computed on-device —
+only quaternion output (`quat_w/x/y/z`) is provided.
+Euler conversion should be done upstream.
+
+| Methods              | Description                   | Arguments |
+| -------------------- | ----------------------------- | --------- |
+| `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
+
+The `mode` parameter supports the same modes as the [IMU](#imu) module, except `ndof_fmc_off` (use `ndof` instead).
+The configured mode is automatically restored if the BNO085 resets during operation.
+
+**Data Select**
+
+The `data_select` property is a bitmask that controls which sensor values are updated each step.
+It defaults to `0xffff` (all enabled).
+Set individual bits to `0` to skip costly updates you don't need.
+
+| Bit | Value    | Data                                |
+| --- | -------- | ----------------------------------- |
+| 0   | `0x0001` | Calibration (`cal_sys/gyr/acc/mag`) |
+| 1   | `0x0002` | Accelerometer (`acc_x/y/z`)         |
+| 2   | `0x0004` | Magnetometer (`mag_x/y/z`)          |
+| 3   | `0x0008` | Gyroscope (`gyr_x/y/z`)             |
+| 4   | `0x0010` | Quaternion (`quat_w/x/y/z`)         |
+| 5   | `0x0020` | Linear acceleration (`lin_x/y/z`)   |
+| 6   | `0x0040` | Gravity (`grav_x/y/z`)              |
+| 7   | `0x0080` | Temperature (`temp`)                |
+
+**Differences to BNO055**
+
+The calibration properties (`cal_sys`, `cal_gyr`, `cal_acc`, `cal_mag`) use the same 0–3 range as the BNO055,
+but the meaning differs:
+
+| Value | BNO055               | BNO085                           |
+| ----- | -------------------- | -------------------------------- |
+| 0     | Not calibrated       | Unreliable                       |
+| 1     | Partially calibrated | Low accuracy                     |
+| 2     | Mostly calibrated    | Medium accuracy                  |
+| 3     | Fully calibrated     | High accuracy (fully calibrated) |
+
+On the BNO055, `cal_sys`, `cal_gyr`, `cal_acc`, and `cal_mag` are read together in a single calibration register.
+On the BNO085, each calibration value is derived from the accuracy status of its corresponding sensor report
+(e.g. `cal_acc` is updated when an accelerometer event arrives, `cal_sys` when a rotation vector event arrives).
+This means calibration values only update while the corresponding sensor report is enabled via `set_mode`.
+
 ## CAN interface
 
 The CAN module allows communicating with peripherals on the specified CAN bus.
