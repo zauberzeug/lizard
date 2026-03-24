@@ -328,6 +328,8 @@ Note that the individual sensors need to be calibrated before the compensated an
 The IMU BNO085 module provides access to a Bosch BNO085 9-axis absolute orientation sensor over the shared I²C bus.
 This module uses the same API as the [IMU](#imu) module but offers improved fusion quality and additional reports.
 
+Note: Only one `ImuBno085` instance can be active at a time due to hardware abstraction layer constraints.
+
 | Constructor                                                             | Description | Arguments |
 | ----------------------------------------------------------------------- | ----------- | --------- |
 | `imu = ImuBno085([port[, sda[, scl[, int[, rst[, address[, clk]]]]]]])` | See below   | `int`s    |
