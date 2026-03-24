@@ -6,7 +6,7 @@ namespace {
 constexpr int I2C_MASTER_TX_BUF_DISABLE = 0;
 constexpr int I2C_MASTER_RX_BUF_DISABLE = 0;
 constexpr uint32_t DEFAULT_TIMEOUT_TICKS = 1048575;
-}
+} // namespace
 
 std::map<i2c_port_t, I2cBusManager::BusConfig> I2cBusManager::configs;
 std::mutex I2cBusManager::configs_mutex;

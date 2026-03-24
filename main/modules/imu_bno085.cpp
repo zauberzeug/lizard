@@ -75,21 +75,34 @@ void ImuBno085::apply_mode(const std::string &mode) {
     } else if (mode == "gyroonly") {
         desired[2] = true;
     } else if (mode == "accmag") {
-        desired[0] = true; desired[1] = true;
+        desired[0] = true;
+        desired[1] = true;
     } else if (mode == "accgyro") {
-        desired[0] = true; desired[2] = true;
+        desired[0] = true;
+        desired[2] = true;
     } else if (mode == "maggyro") {
-        desired[1] = true; desired[2] = true;
+        desired[1] = true;
+        desired[2] = true;
     } else if (mode == "amg") {
-        desired[0] = true; desired[1] = true; desired[2] = true;
+        desired[0] = true;
+        desired[1] = true;
+        desired[2] = true;
     } else if (mode == "imu") {
-        desired[0] = true; desired[2] = true; desired[3] = true;
+        desired[0] = true;
+        desired[2] = true;
+        desired[3] = true;
     } else if (mode == "compass") {
-        desired[1] = true; desired[3] = true;
+        desired[1] = true;
+        desired[3] = true;
     } else if (mode == "m4g") {
-        desired[0] = true; desired[1] = true; desired[3] = true;
+        desired[0] = true;
+        desired[1] = true;
+        desired[3] = true;
     } else if (mode == "ndof_fmc_off") {
-        desired[0] = true; desired[1] = true; desired[2] = true; desired[3] = true;
+        desired[0] = true;
+        desired[1] = true;
+        desired[2] = true;
+        desired[3] = true;
     } else if (mode == "ndof") {
         desired.fill(true);
     } else {
