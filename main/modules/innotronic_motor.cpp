@@ -42,7 +42,7 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
         std::memcpy(&raw_current, data + 2, 2);
         this->properties.at("current")->number_value = raw_current * 0.01;
 
-        this->properties.at("temperature")->integer_value = data[4];
+        this->properties.at("temperature")->integer_value = static_cast<int8_t>(data[4]);
         this->properties.at("state")->integer_value = data[5];
 
         uint16_t raw_error;
@@ -125,12 +125,13 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         this->can->send((this->node_id << 5) | 0x0B, data);
     } else if (method_name == "scan") {
         Module::expect(arguments, 0);
-        echo("Scanning for Innotronic motors on CAN bus...");
-        uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-        for (uint32_t id = 1; id <= 31; ++id) {
-            this->can->send((id << 5) | 0x0A, data, false, 1);
+        echo("Scanning all CAN IDs 0x001-0x7FF...");
+        uint8_t data[8] = {0xe8, 0x03, 0, 0, 0, 0, 0, 0};
+        for (uint32_t can_id = 0x001; can_id <= 0x7FF; ++can_id) {
+            echo("Sending to CAN ID 0x%03lx", can_id);
+            this->can->send(can_id, data);
         }
-        echo("Scan sent to node IDs 1-31. Enable CAN output to see responses.");
+        echo("Scan complete.");
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->send_switch_state(0);
