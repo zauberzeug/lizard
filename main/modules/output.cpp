@@ -41,6 +41,8 @@ void Output::step() {
             this->deactivate();
         }
     }
+    if (this->broadcast)
+        Module::step();
 }
 
 void Output::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

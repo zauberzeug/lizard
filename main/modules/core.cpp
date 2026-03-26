@@ -28,7 +28,6 @@ void Core::step() {
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
-    this->output_on = std::exchange(this->output_starting, false) || this->output_on;
 }
 
 void Core::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -74,7 +73,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
                 this->output_list.push_back({module, property_name, precision});
             }
         }
-        this->output_starting = true;
+        this->output_on = true;
     } else if (method_name == "startup_checksum") {
         uint16_t checksum = 0;
         for (char const &c : Storage::startup) {
@@ -173,6 +172,13 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
 }
 
 std::string Core::get_output() const {
+    for (auto const &element : this->output_list) {
+        if (element.module && element.module->type == proxy &&
+            !element.module->get_property("is_ready")->boolean_value) {
+            echo("proxy %s not ready", element.module->name.c_str());
+            return "";
+        }
+    }
     static char output_buffer[1024];
     int pos = 0;
     for (auto const &element : this->output_list) {

@@ -15,7 +15,6 @@ Proxy::Proxy(const std::string name,
 
     if (this->expander->get_property("is_ready")->boolean_value) {
         this->expander->send_proxy(name, module_type, arguments);
-        this->properties["is_ready"]->boolean_value = true;
     } else {
         echo("%s: Expander not ready", this->name.c_str());
     }
@@ -34,4 +33,7 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
         this->expander->send_property(this->name, property_name, expression);
     }
     Module::get_property(property_name)->assign(expression);
+    if (from_expander) {
+        this->properties.at("is_ready")->boolean_value = true;
+    }
 }

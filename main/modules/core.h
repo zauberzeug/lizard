@@ -17,7 +17,6 @@ class Core : public Module {
 private:
     std::list<struct output_element_t> output_list;
     unsigned long int last_message_millis = 0;
-    bool output_starting = false;
 
 public:
     Core(const std::string name);

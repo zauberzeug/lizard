@@ -21,4 +21,6 @@ void CanOpenMaster::step() {
         this->sync_interval_counter = 0;
         this->can->send(0x80, nullptr, false, 0);
     }
+    if (this->broadcast)
+        Module::step();
 }
