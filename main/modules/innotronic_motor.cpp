@@ -36,7 +36,7 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
     case 0x11: {
         int16_t raw_vel;
         std::memcpy(&raw_vel, data, 2);
-        this->properties.at("angular_vel")->number_value = raw_vel * 0.001;
+        this->properties.at("angular_vel")->number_value = raw_vel * 0.01;
 
         int16_t raw_current;
         std::memcpy(&raw_current, data + 2, 2);
@@ -63,7 +63,7 @@ void InnotronicMotor::send_speed_cmd(float angular_vel, uint8_t acc_limit, int8_
     if (!this->enabled) {
         return;
     }
-    int16_t raw_vel = static_cast<int16_t>(angular_vel / 0.001);
+    int16_t raw_vel = static_cast<int16_t>(angular_vel / 0.01);
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     std::memcpy(data, &raw_vel, 2);
     data[2] = acc_limit;
@@ -123,6 +123,10 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         std::memcpy(data + 2, &value1, 2);
         std::memcpy(data + 4, &value2, 4);
         this->can->send((this->node_id << 5) | 0x0B, data);
+    } else if (method_name == "request_angle") {
+        Module::expect(arguments, 0);
+        uint8_t empty[8] = {};
+        this->can->send((this->node_id << 5) | 0x12, empty, false, 0);
     } else if (method_name == "scan") {
         Module::expect(arguments, 0);
         echo("Scanning all CAN IDs 0x001-0x7FF...");
@@ -134,13 +138,13 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         echo("Scan complete.");
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
-        this->send_switch_state(0);
+        this->send_switch_state(1);
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
         this->stop();
     } else if (method_name == "on") {
         Module::expect(arguments, 0);
-        this->send_switch_state(2);
+        this->send_switch_state(3);
     } else if (method_name == "enable") {
         Module::expect(arguments, 0);
         this->enable();
@@ -165,7 +169,7 @@ void InnotronicMotor::step() {
 }
 
 void InnotronicMotor::stop() {
-    this->send_switch_state(1);
+    this->send_switch_state(2);
 }
 
 double InnotronicMotor::get_position() {
@@ -200,11 +204,11 @@ void InnotronicMotor::speed(const double speed, const double acceleration) {
 void InnotronicMotor::enable() {
     this->enabled = true;
     this->properties.at("enabled")->boolean_value = true;
-    this->send_switch_state(2);
+    this->send_switch_state(3);
 }
 
 void InnotronicMotor::disable() {
-    this->send_switch_state(0);
+    this->send_switch_state(1);
     this->enabled = false;
     this->properties.at("enabled")->boolean_value = false;
 }
