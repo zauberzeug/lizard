@@ -12,7 +12,7 @@ const std::map<std::string, Variable_ptr> InnotronicMotor::get_defaults() {
         {"current", std::make_shared<NumberVariable>()},
         {"temperature", std::make_shared<IntegerVariable>()},
         {"state", std::make_shared<IntegerVariable>()},
-        {"error_codes", std::make_shared<IntegerVariable>()},
+        {"error_codes", std::make_shared<StringVariable>("0x0000")},
         {"angle", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
         {"m_per_rad", std::make_shared<NumberVariable>(1.0)},
@@ -36,18 +36,23 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
     case 0x11: {
         int16_t raw_vel;
         std::memcpy(&raw_vel, data, 2);
+        // 0.01 rad/s per bit; 6.28 equals to 1 rotation per second
         this->properties.at("angular_vel")->number_value = raw_vel * 0.01;
 
         int16_t raw_current;
         std::memcpy(&raw_current, data + 2, 2);
-        this->properties.at("current")->number_value = raw_current * 0.01;
+        // 0.095 A per bit
+        this->properties.at("current")->number_value = raw_current * 0.095;
 
+        // Temperature in degrees Celsius
         this->properties.at("temperature")->integer_value = static_cast<int8_t>(data[4]);
         this->properties.at("state")->integer_value = data[5];
 
         uint16_t raw_error;
         std::memcpy(&raw_error, data + 6, 2);
-        this->properties.at("error_codes")->integer_value = raw_error;
+        char hex_buf[7];
+        snprintf(hex_buf, sizeof(hex_buf), "0x%04x", raw_error);
+        this->properties.at("error_codes")->string_value = hex_buf;
         break;
     }
     case 0x12: {
@@ -68,7 +73,10 @@ void InnotronicMotor::send_speed_cmd(float angular_vel, uint8_t acc_limit, int8_
     std::memcpy(data, &raw_vel, 2);
     data[2] = acc_limit;
     data[3] = static_cast<uint8_t>(jerk_limit_exp);
-    this->can->send((this->node_id << 5) | 0x01, data);
+    uint32_t can_id = (this->node_id << 5) | 0x01;
+    echo("CAN TX [NodeID=%ld, CmdID=0x01]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (speed %.2f rad/s, raw %d)",
+         this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], angular_vel, raw_vel);
+    this->can->send(can_id, data);
 }
 
 void InnotronicMotor::send_rel_angle_cmd(float angle, uint16_t vel_limit, uint8_t acc_limit, int8_t jerk_limit_exp) {
@@ -81,13 +89,19 @@ void InnotronicMotor::send_rel_angle_cmd(float angle, uint16_t vel_limit, uint8_
     std::memcpy(data + 2, &vel_limit, 2);
     data[4] = acc_limit;
     data[5] = static_cast<uint8_t>(jerk_limit_exp);
-    this->can->send((this->node_id << 5) | 0x02, data);
+    uint32_t can_id = (this->node_id << 5) | 0x02;
+    echo("CAN TX [NodeID=%ld, CmdID=0x02]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (rel_angle %.3f rad, raw %d)",
+         this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], angle, raw_angle);
+    this->can->send(can_id, data);
 }
 
 void InnotronicMotor::send_switch_state(uint8_t state) {
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     data[0] = state;
-    this->can->send((this->node_id << 5) | 0x0A, data);
+    uint32_t can_id = (this->node_id << 5) | 0x0A;
+    echo("CAN TX [NodeID=%ld, CmdID=0x0a]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (switch_state %d)",
+         this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], state);
+    this->can->send(can_id, data);
 }
 
 void InnotronicMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -106,7 +120,7 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         }
         Module::expect(arguments, -1, numbery, numbery, numbery, numbery);
         float angle = arguments[0]->evaluate_number();
-        uint16_t vel_limit = arguments.size() > 1 ? static_cast<uint16_t>(arguments[1]->evaluate_number() / 0.001) : 0xFFFF;
+        uint16_t vel_limit = arguments.size() > 1 ? static_cast<uint16_t>(arguments[1]->evaluate_number() / 0.01) : 0xFFFF;
         uint8_t acc_limit = arguments.size() > 2 ? static_cast<uint8_t>(arguments[2]->evaluate_number()) : 0xFF;
         int8_t jerk_limit_exp = arguments.size() > 3 ? static_cast<int8_t>(arguments[3]->evaluate_number()) : (int8_t)0xFF;
         this->send_rel_angle_cmd(angle, vel_limit, acc_limit, jerk_limit_exp);
@@ -122,7 +136,10 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         data[0] = setting_id;
         std::memcpy(data + 2, &value1, 2);
         std::memcpy(data + 4, &value2, 4);
-        this->can->send((this->node_id << 5) | 0x0B, data);
+        uint32_t can_id = (this->node_id << 5) | 0x0B;
+        echo("CAN TX [NodeID=%ld, CmdID=0x0b]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (configure sid=%d v1=%d v2=%ld)",
+             this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], setting_id, value1, value2);
+        this->can->send(can_id, data);
     } else if (method_name == "request_angle") {
         Module::expect(arguments, 0);
         uint8_t empty[8] = {};
@@ -182,7 +199,7 @@ void InnotronicMotor::position(const double position, const double speed, const 
     double m_per_rad = this->properties.at("m_per_rad")->number_value;
     double sign = this->reversed ? -1.0 : 1.0;
     float rel = static_cast<float>((position - this->get_position()) / m_per_rad * sign);
-    uint16_t vel_limit = speed > 0 ? static_cast<uint16_t>(speed / m_per_rad / 0.001) : 0xFFFF;
+    uint16_t vel_limit = speed > 0 ? static_cast<uint16_t>(speed / m_per_rad / 0.01) : 0xFFFF;
     uint8_t acc_limit = acceleration > 0 ? static_cast<uint8_t>(acceleration) : 0xFF;
     this->send_rel_angle_cmd(rel, vel_limit, acc_limit);
 }
