@@ -16,6 +16,7 @@
 #include "expander.h"
 #include "imu.h"
 #include "innotronic_motor.h"
+#include "innotronic_delta_arm.h"
 #include "innotronic_wheels.h"
 #include "input.h"
 #include "linear_motor.h"
@@ -358,6 +359,12 @@ Module_ptr Module::create(const std::string type,
         const InnotronicMotor_ptr left_motor = get_module_paramter<InnotronicMotor>(arguments[0], innotronic_motor, "innotronic motor");
         const InnotronicMotor_ptr right_motor = get_module_paramter<InnotronicMotor>(arguments[1], innotronic_motor, "innotronic motor");
         return std::make_shared<InnotronicWheels>(name, left_motor, right_motor);
+    } else if (type == "InnotronicDeltaArm") {
+        Module::expect(arguments, 3, identifier, identifier, identifier);
+        const InnotronicMotor_ptr motor = get_module_paramter<InnotronicMotor>(arguments[0], innotronic_motor, "innotronic motor");
+        const Input_ptr left_endstop = get_module_paramter<Input>(arguments[1], input, "input");
+        const Input_ptr right_endstop = get_module_paramter<Input>(arguments[2], input, "input");
+        return std::make_shared<InnotronicDeltaArm>(name, motor, left_endstop, right_endstop);
     } else if (type == "DunkerWheels") {
         Module::expect(arguments, 2, identifier, identifier);
         std::string left_name = arguments[0]->evaluate_identifier();

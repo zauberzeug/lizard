@@ -20,6 +20,7 @@ private:
     void send_switch_state(uint8_t state);
 
 public:
+    void send_delta_angle_cmd(float angle_a, float angle_b, uint8_t vel_lim_a = 0xFF, uint8_t vel_lim_b = 0xFF, uint8_t acc_lim = 0xFF, int8_t jerk_lim_exp = (int8_t)0xFF);
     InnotronicMotor(const std::string name, const Can_ptr can, const uint32_t node_id);
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

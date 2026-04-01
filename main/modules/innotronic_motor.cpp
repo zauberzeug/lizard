@@ -111,6 +111,28 @@ void InnotronicMotor::send_rel_angle_cmd(float angle, uint16_t vel_limit, uint8_
     this->can->send(can_id, data);
 }
 
+void InnotronicMotor::send_delta_angle_cmd(float angle_a, float angle_b, uint8_t vel_lim_a, uint8_t vel_lim_b, uint8_t acc_lim, int8_t jerk_lim_exp) {
+    if (!this->enabled) {
+        return;
+    }
+    // AngleCmd CmdID 0x03: AngleA(0-1) + VelLimA(2) + AngleB(3-4) + VelLimB(5) + AccLim(6) + JerkLimExp(7)
+    // Angle unit: π/9000 rad per bit (= 0.02°)
+    // VelLim unit: π/64 rad/s per bit
+    int16_t raw_angle_a = static_cast<int16_t>(angle_a / (M_PI / 9000.0));
+    int16_t raw_angle_b = static_cast<int16_t>(angle_b / (M_PI / 9000.0));
+    uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    std::memcpy(data, &raw_angle_a, 2);
+    data[2] = vel_lim_a;
+    std::memcpy(data + 3, &raw_angle_b, 2);
+    data[5] = vel_lim_b;
+    data[6] = acc_lim;
+    data[7] = static_cast<uint8_t>(jerk_lim_exp);
+    uint32_t can_id = (this->node_id << 5) | 0x03;
+    echo("CAN TX [NodeID=%ld, CmdID=0x03]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (delta_angle A=%.3f B=%.3f rad)",
+         this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], angle_a, angle_b);
+    this->can->send(can_id, data);
+}
+
 void InnotronicMotor::send_switch_state(uint8_t state) {
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     data[0] = state;
@@ -155,6 +177,27 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         uint32_t can_id = (this->node_id << 5) | 0x0B;
         echo("CAN TX [NodeID=%ld, CmdID=0x0b]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (configure sid=%d v1=%d v2=%ld)",
              this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], setting_id, value1, value2);
+        this->can->send(can_id, data);
+    } else if (method_name == "delta_angle") {
+        if (arguments.size() < 2 || arguments.size() > 6) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, numbery, numbery, numbery, numbery, numbery, numbery);
+        float angle_a = arguments[0]->evaluate_number();
+        float angle_b = arguments[1]->evaluate_number();
+        uint8_t vel_lim_a = arguments.size() > 2 ? static_cast<uint8_t>(arguments[2]->evaluate_number()) : 0xFF;
+        uint8_t vel_lim_b = arguments.size() > 3 ? static_cast<uint8_t>(arguments[3]->evaluate_number()) : 0xFF;
+        uint8_t acc_lim = arguments.size() > 4 ? static_cast<uint8_t>(arguments[4]->evaluate_number()) : 0xFF;
+        int8_t jerk_lim_exp = arguments.size() > 5 ? static_cast<int8_t>(arguments[5]->evaluate_number()) : (int8_t)0xFF;
+        this->send_delta_angle_cmd(angle_a, angle_b, vel_lim_a, vel_lim_b, acc_lim, jerk_lim_exp);
+    } else if (method_name == "switch_to_delta_mode") {
+        Module::expect(arguments, 0);
+        // #PLACEHOLDER - configure setting_id=4, values TBD from Innotronic
+        uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+        data[0] = 0x04; // #PLACEHOLDER setting_id
+        uint32_t can_id = (this->node_id << 5) | 0x0B;
+        echo("CAN TX [NodeID=%ld, CmdID=0x0b]: 0x%03lx: switch_to_delta_mode (PLACEHOLDER)",
+             this->node_id, can_id);
         this->can->send(can_id, data);
     } else if (method_name == "request_angle") {
         Module::expect(arguments, 0);
