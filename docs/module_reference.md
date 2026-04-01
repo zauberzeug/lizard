@@ -323,6 +323,74 @@ Note that the individual sensors need to be calibrated before the compensated an
 | Magnetometer  | Move the sensor in a figure-8 pattern in space         |
 | Gyroscope     | Keep the sensor still for a few seconds                |
 
+## IMU BNO085
+
+The IMU BNO085 module provides access to a Bosch BNO085 9-axis absolute orientation sensor over the shared I²C bus.
+This module uses the same API as the [IMU](#imu) module but offers improved fusion quality and additional reports.
+
+Note: Only one `ImuBno085` instance can be active at a time due to hardware abstraction layer constraints.
+
+| Constructor                                                             | Description | Arguments |
+| ----------------------------------------------------------------------- | ----------- | --------- |
+| `imu = ImuBno085([port[, sda[, scl[, int[, rst[, address[, clk]]]]]]])` | See below   | `int`s    |
+
+The constructor expects up to seven arguments:
+
+- `port`: I²C port number (default: 0)
+- `sda`: SDA pin (default matches target, e.g. 21 on ESP32)
+- `scl`: SCL pin (default matches target, e.g. 22 on ESP32)
+- `int`: Interrupt pin (default: 26)
+- `rst`: Reset pin (default: 32)
+- `address`: I²C address (default: 0x4A)
+- `clk`: I²C clock in Hz (default: 400000)
+
+The properties and methods are similar to the [IMU](#imu) module.
+The BNO085 offers improved accuracy and better sensor fusion algorithms compared to the BNO055.
+Unlike the BNO055 module, euler angles (`yaw`, `roll`, `pitch`) are not computed on-device —
+only quaternion output (`quat_w/x/y/z`) is provided.
+Euler conversion should be done upstream.
+
+| Methods              | Description                   | Arguments |
+| -------------------- | ----------------------------- | --------- |
+| `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
+
+The `mode` parameter supports the same modes as the [IMU](#imu) module, except `ndof_fmc_off` (use `ndof` instead).
+The configured mode is automatically restored if the BNO085 resets during operation.
+
+**Data Select**
+
+The `data_select` property is a bitmask that controls which sensor values are updated each step.
+It defaults to `0xffff` (all enabled).
+Set individual bits to `0` to skip costly updates you don't need.
+
+| Bit | Value    | Data                                |
+| --- | -------- | ----------------------------------- |
+| 0   | `0x0001` | Calibration (`cal_sys/gyr/acc/mag`) |
+| 1   | `0x0002` | Accelerometer (`acc_x/y/z`)         |
+| 2   | `0x0004` | Magnetometer (`mag_x/y/z`)          |
+| 3   | `0x0008` | Gyroscope (`gyr_x/y/z`)             |
+| 4   | `0x0010` | Quaternion (`quat_w/x/y/z`)         |
+| 5   | `0x0020` | Linear acceleration (`lin_x/y/z`)   |
+| 6   | `0x0040` | Gravity (`grav_x/y/z`)              |
+| 7   | `0x0080` | Temperature (`temp`)                |
+
+**Differences to BNO055**
+
+The calibration properties (`cal_sys`, `cal_gyr`, `cal_acc`, `cal_mag`) use the same 0–3 range as the BNO055,
+but the meaning differs:
+
+| Value | BNO055               | BNO085                           |
+| ----- | -------------------- | -------------------------------- |
+| 0     | Not calibrated       | Unreliable                       |
+| 1     | Partially calibrated | Low accuracy                     |
+| 2     | Mostly calibrated    | Medium accuracy                  |
+| 3     | Fully calibrated     | High accuracy (fully calibrated) |
+
+On the BNO055, `cal_sys`, `cal_gyr`, `cal_acc`, and `cal_mag` are read together in a single calibration register.
+On the BNO085, each calibration value is derived from the accuracy status of its corresponding sensor report
+(e.g. `cal_acc` is updated when an accelerometer event arrives, `cal_sys` when a rotation vector event arrives).
+This means calibration values only update while the corresponding sensor report is enabled via `set_mode`.
+
 ## CAN interface
 
 The CAN module allows communicating with peripherals on the specified CAN bus.
@@ -638,6 +706,64 @@ The pulse counter used for position feedback is created internally.
 The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.
 
 When the motor is disabled, it will stop and ignore movement commands.
+
+## MKS Servo Motor
+
+The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/makerbase-motor/MKS-SERVO42D-57D) closed-loop stepper motor via CAN.
+
+| Constructor                          | Description                | Arguments         |
+| ------------------------------------ | -------------------------- | ----------------- |
+| `motor = MksServoMotor(can, can_id)` | CAN module and CAN node ID | CAN module, `int` |
+
+| Properties              | Description                                 | Data type |
+| ----------------------- | ------------------------------------------- | --------- |
+| `motor.position`        | Motor position (degrees)                    | `float`   |
+| `motor.speed`           | Motor speed (RPM)                           | `int`     |
+| `motor.working_current` | Working current (mA, 0-3000, default: 1700) | `int`     |
+| `motor.enabled`         | Whether the motor is enabled                | `bool`    |
+| `motor.position_error`  | Last read position error (degrees)          | `float`   |
+
+| Methods                               | Description                                                                   | Arguments             |
+| ------------------------------------- | ----------------------------------------------------------------------------- | --------------------- |
+| `motor.enable()`                      | Enable the motor                                                              |                       |
+| `motor.disable()`                     | Disable the motor                                                             |                       |
+| `motor.set_mode(mode)`                | Set working mode (see [working modes](#working-modes))                        | `int`                 |
+| `motor.zero()`                        | Set current position as zero                                                  |                       |
+| `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                              | `int`                 |
+| `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10;) | `int`                 |
+| `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                        | `float`, `int`, `int` |
+| `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                  | `int`, `int`, `int`   |
+| `motor.stop(acc)`                     | Stop motor with given deceleration (0-255)                                    | `int`                 |
+| `motor.read_position_error()`         | Request position error from motor via CAN                                     |                       |
+
+The `position()` method moves the motor to an absolute coordinate position (in degrees from the zero point)
+with a given speed in RPM (0-3000) and acceleration (0-255).
+
+The `speed()` method accepts a speed in RPM (0-3000), direction (0: CCW, 1: CW) and acceleration (0-255).
+The acceleration parameter controls the ramp rate: higher values mean faster acceleration.
+If acceleration is 0, the motor runs directly at the set speed without ramping.
+
+The `stop()` method decelerates and stops the motor with the given acceleration (0-255).
+If acceleration is 0, the motor stops immediately.
+
+The `read_position_error()` method requests the current position error from the motor via CAN.
+The result is available in the `position_error` property (in degrees) once the motor responds.
+
+**Working Modes**
+
+The MKS SERVO42D/57D supports the following working modes:
+
+| Mode | Name     | Description                      | Remark  |
+| ---- | -------- | -------------------------------- | ------- |
+| 0x00 | CR_OPEN  | Pulse interface open-loop mode   |         |
+| 0x01 | CR_CLOSE | Pulse interface closed-loop mode |         |
+| 0x02 | CR_vFOC  | Pulse interface FOC mode         | default |
+| 0x03 | SR_OPEN  | Bus interface open-loop mode     |         |
+| 0x04 | SR_CLOSE | Bus interface closed-loop mode   |         |
+| 0x05 | SR_vFOC  | Bus interface FOC mode           |         |
+
+The `set_mode()` method sets the working mode of the motor.
+For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
 
 ## Motor Axis
 
