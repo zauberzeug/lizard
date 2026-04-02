@@ -16,6 +16,9 @@
 #include "expander.h"
 #include "imu.h"
 #include "imu_bno085.h"
+#include "innotronic_motor.h"
+#include "innotronic_delta_arm.h"
+#include "innotronic_wheels.h"
 #include "input.h"
 #include "linear_motor.h"
 #include "mcp23017.h"
@@ -363,6 +366,27 @@ Module_ptr Module::create(const std::string type,
         DunkerMotor_ptr motor = std::make_shared<DunkerMotor>(name, can_module, node_id);
         motor->subscribe_to_can();
         return motor;
+    } else if (type == "InnotronicMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t node_id = arguments[1]->evaluate_integer();
+        if (node_id < 0 || node_id > 0x3F) {
+            throw std::runtime_error("node ID must be between 0 and 63");
+        }
+        InnotronicMotor_ptr motor = std::make_shared<InnotronicMotor>(name, can_module, node_id);
+        motor->subscribe_to_can();
+        return motor;
+    } else if (type == "InnotronicWheels") {
+        Module::expect(arguments, 2, identifier, identifier);
+        const InnotronicMotor_ptr left_motor = get_module_paramter<InnotronicMotor>(arguments[0], innotronic_motor, "innotronic motor");
+        const InnotronicMotor_ptr right_motor = get_module_paramter<InnotronicMotor>(arguments[1], innotronic_motor, "innotronic motor");
+        return std::make_shared<InnotronicWheels>(name, left_motor, right_motor);
+    } else if (type == "InnotronicDeltaArm") {
+        Module::expect(arguments, 3, identifier, identifier, identifier);
+        const InnotronicMotor_ptr motor = get_module_paramter<InnotronicMotor>(arguments[0], innotronic_motor, "innotronic motor");
+        const Input_ptr left_endstop = get_module_paramter<Input>(arguments[1], input, "input");
+        const Input_ptr right_endstop = get_module_paramter<Input>(arguments[2], input, "input");
+        return std::make_shared<InnotronicDeltaArm>(name, motor, left_endstop, right_endstop);
     } else if (type == "DunkerWheels") {
         Module::expect(arguments, 2, identifier, identifier);
         std::string left_name = arguments[0]->evaluate_identifier();
