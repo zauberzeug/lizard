@@ -14,7 +14,8 @@ private:
     enum CalibrationState { cal_idle, cal_left, cal_right, cal_verify_left, cal_verify_right };
     CalibrationState cal_state = cal_idle;
 
-    bool can_move(float angle_a, float angle_b) const;
+    bool is_motor_active(bool left) const;
+    bool can_move(int16_t left_ticks, int16_t right_ticks) const;
     void start_reference(const std::string &side);
     void enable();
     void disable();

@@ -3,6 +3,8 @@
 #include <cmath>
 #include <stdexcept>
 
+static constexpr double VELOCITY_ACTIVE_THRESHOLD = 0.01; // rad/s, 1 raw digit = 0.01 rad/s
+
 REGISTER_MODULE_DEFAULTS(InnotronicDeltaArm)
 
 const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
@@ -20,18 +22,23 @@ InnotronicDeltaArm::InnotronicDeltaArm(const std::string name, const InnotronicM
     this->properties = InnotronicDeltaArm::get_defaults();
 }
 
-bool InnotronicDeltaArm::can_move(float angle_a, float angle_b) const {
+bool InnotronicDeltaArm::is_motor_active(bool left) const {
+    double vel = this->motor->get_property(left ? "angular_vel_m1" : "angular_vel_m2")->number_value;
+    return std::abs(vel) >= VELOCITY_ACTIVE_THRESHOLD;
+}
+
+bool InnotronicDeltaArm::can_move(int16_t left_ticks, int16_t right_ticks) const {
     if (!this->enabled) {
         return false;
     }
-    bool left_active = this->left_endstop && this->left_endstop->get_property("active")->boolean_value;
-    bool right_active = this->right_endstop && this->right_endstop->get_property("active")->boolean_value;
-    if (left_active && angle_a > 0) {
-        echo("%s: left endstop triggered, blocking positive motion on A", this->name.c_str());
+    bool left_endstop_active = this->left_endstop && this->left_endstop->get_property("active")->boolean_value;
+    bool right_endstop_active = this->right_endstop && this->right_endstop->get_property("active")->boolean_value;
+    if (left_endstop_active && left_ticks > 0) {
+        echo("%s: left endstop triggered, blocking positive motion", this->name.c_str());
         return false;
     }
-    if (right_active && angle_b < 0) {
-        echo("%s: right endstop triggered, blocking negative motion on B", this->name.c_str());
+    if (right_endstop_active && right_ticks < 0) {
+        echo("%s: right endstop triggered, blocking negative motion", this->name.c_str());
         return false;
     }
     return true;
@@ -42,19 +49,17 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         echo("%s: already calibrating, ignoring reference(%s)", this->name.c_str(), side.c_str());
         return;
     }
-    uint8_t cal_speed = static_cast<uint8_t>(this->properties.at("cal_speed")->integer_value);
+    uint16_t cal_speed = static_cast<uint16_t>(this->properties.at("cal_speed")->integer_value);
     if (side == "left") {
         this->cal_state = cal_left;
         this->properties.at("calibrating")->boolean_value = true;
-        // Move left arm (A) toward endstop (positive direction), keep right (B) still (vel=0)
-        this->motor->send_delta_angle_cmd(2 * M_PI, 0, cal_speed, 0);
-        echo("%s: reference left started, moving A toward endstop", this->name.c_str());
+        this->motor->send_delta_angle_cmd(0x10, 150, cal_speed);
+        echo("%s: reference left started, moving left toward endstop", this->name.c_str());
     } else if (side == "right") {
         this->cal_state = cal_right;
         this->properties.at("calibrating")->boolean_value = true;
-        // Move right arm (B) toward endstop (negative direction), keep left (A) still (vel=0)
-        this->motor->send_delta_angle_cmd(0, -2 * M_PI, 0, cal_speed);
-        echo("%s: reference right started, moving B toward endstop", this->name.c_str());
+        this->motor->send_delta_angle_cmd(0x20, -150, cal_speed);
+        echo("%s: reference right started, moving right toward endstop", this->name.c_str());
     } else {
         throw std::runtime_error("reference side must be \"left\" or \"right\"");
     }
@@ -69,22 +74,29 @@ void InnotronicDeltaArm::step() {
         }
     }
 
-    bool left_active = this->left_endstop && this->left_endstop->get_property("active")->boolean_value;
-    bool right_active = this->right_endstop && this->right_endstop->get_property("active")->boolean_value;
+    bool left_endstop_active = this->left_endstop && this->left_endstop->get_property("active")->boolean_value;
+    bool right_endstop_active = this->right_endstop && this->right_endstop->get_property("active")->boolean_value;
 
+    // Brake motor when endstop triggers and motor is drawing current
+    if (left_endstop_active && this->is_motor_active(true)) {
+        this->motor->send_single_motor_control(0x05, 0x00);
+        echo("%s: left endstop triggered, braking left motor", this->name.c_str());
+    }
+    if (right_endstop_active && this->is_motor_active(false)) {
+        this->motor->send_single_motor_control(0x00, 0x05);
+        echo("%s: right endstop triggered, braking right motor", this->name.c_str());
+    }
+
+    // Calibration state machine
     switch (this->cal_state) {
     case cal_left:
-        if (left_active) {
-            // Endstop hit: stop motor A, send ref_stop to zero it
-            // #PLACEHOLDER - per-motor stop for motor 1
-            this->motor->stop();
-            echo("%s: left endstop reached, sending ref_stop(1)", this->name.c_str());
+        if (left_endstop_active) {
             // #PLACEHOLDER - ref_stop configure command for motor 1, setting_id TBD from Innotronic
+            echo("%s: left endstop reached, sending ref_stop(1)", this->name.c_str());
             this->cal_state = cal_verify_left;
         }
         break;
     case cal_verify_left:
-        // Verify angle is ~0 after ref_stop (one cycle later so 0x12 has updated)
         {
             double angle = this->motor->get_property("angle")->number_value;
             echo("%s: left reference verify, angle=%.4f", this->name.c_str(), angle);
@@ -95,17 +107,13 @@ void InnotronicDeltaArm::step() {
         }
         break;
     case cal_right:
-        if (right_active) {
-            // Endstop hit: stop motor B, send ref_stop to zero it
-            // #PLACEHOLDER - per-motor stop for motor 2
-            this->motor->stop();
-            echo("%s: right endstop reached, sending ref_stop(2)", this->name.c_str());
+        if (right_endstop_active) {
             // #PLACEHOLDER - ref_stop configure command for motor 2, setting_id TBD from Innotronic
+            echo("%s: right endstop reached, sending ref_stop(2)", this->name.c_str());
             this->cal_state = cal_verify_right;
         }
         break;
     case cal_verify_right:
-        // Verify angle is ~0 after ref_stop (one cycle later so 0x12 has updated)
         {
             double angle = this->motor->get_property("angle")->number_value;
             echo("%s: right reference verify, angle=%.4f", this->name.c_str(), angle);
@@ -124,31 +132,33 @@ void InnotronicDeltaArm::step() {
 
 void InnotronicDeltaArm::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "position") {
-        if (arguments.size() < 2 || arguments.size() > 6) {
+        // position(left_ticks, right_ticks, [speed_left, speed_right])
+        if (arguments.size() < 2 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, numbery, numbery, numbery, numbery, numbery, numbery);
-        float angle_a = arguments[0]->evaluate_number();
-        float angle_b = arguments[1]->evaluate_number();
-        if (this->can_move(angle_a, angle_b)) {
-            uint8_t vel_lim_a = arguments.size() > 2 ? static_cast<uint8_t>(arguments[2]->evaluate_number()) : 0xFF;
-            uint8_t vel_lim_b = arguments.size() > 3 ? static_cast<uint8_t>(arguments[3]->evaluate_number()) : 0xFF;
-            uint8_t acc_lim = arguments.size() > 4 ? static_cast<uint8_t>(arguments[4]->evaluate_number()) : 0xFF;
-            int8_t jerk_lim_exp = arguments.size() > 5 ? static_cast<int8_t>(arguments[5]->evaluate_number()) : (int8_t)0xFF;
-            this->motor->send_delta_angle_cmd(angle_a, angle_b, vel_lim_a, vel_lim_b, acc_lim, jerk_lim_exp);
+        Module::expect(arguments, -1, integer, integer, integer, integer);
+        int16_t left_ticks = static_cast<int16_t>(arguments[0]->evaluate_integer());
+        int16_t right_ticks = static_cast<int16_t>(arguments[1]->evaluate_integer());
+        uint16_t speed_left = arguments.size() > 2 ? static_cast<uint16_t>(arguments[2]->evaluate_integer()) : 0xFFFF;
+        uint16_t speed_right = arguments.size() > 3 ? static_cast<uint16_t>(arguments[3]->evaluate_integer()) : 0xFFFF;
+        if (this->can_move(left_ticks, right_ticks)) {
+            this->motor->send_delta_angle_cmd(0x10, left_ticks, speed_left);
+            this->motor->send_delta_angle_cmd(0x20, right_ticks, speed_right);
         }
+    } else if (method_name == "move_a") {
+        // move_a: left down (-80), right up (80), speed 10
+        Module::expect(arguments, 0);
+        this->motor->send_delta_angle_cmd(0x10, -80, 10);
+        this->motor->send_delta_angle_cmd(0x20, 80, 10);
+    } else if (method_name == "move_b") {
+        // move_b: left up (10), right down (-10), speed 10
+        Module::expect(arguments, 0);
+        this->motor->send_delta_angle_cmd(0x10, -10, 10);
+        this->motor->send_delta_angle_cmd(0x20, 10, 10);
     } else if (method_name == "reference") {
         Module::expect(arguments, 1, string);
         std::string side = arguments[0]->evaluate_string();
         this->start_reference(side);
-    } else if (method_name == "ref_stop") {
-        Module::expect(arguments, 1, integer);
-        int motor_nr = arguments[0]->evaluate_integer();
-        if (motor_nr < 1 || motor_nr > 2) {
-            throw std::runtime_error("motor number must be 1 or 2");
-        }
-        // #PLACEHOLDER - configure command for HALL_REACHED zeroing per motor, setting_id TBD from Innotronic
-        echo("%s: ref_stop motor %d (PLACEHOLDER - HALL_REACHED configure TBD)", this->name.c_str(), motor_nr);
     } else if (method_name == "stop") {
         // stop() = stop both, stop(1) or stop(2) = stop individual motor
         if (arguments.size() == 0) {
@@ -164,8 +174,12 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
             if (motor_nr < 1 || motor_nr > 2) {
                 throw std::runtime_error("motor number must be 1 or 2");
             }
-            // #PLACEHOLDER - per-motor stop in delta mode, TBD from Innotronic
-            echo("%s: stop motor %d (PLACEHOLDER - per-motor stop TBD)", this->name.c_str(), motor_nr);
+            if (motor_nr == 1) {
+                this->motor->send_single_motor_control(0x05, 0x00);
+            } else {
+                this->motor->send_single_motor_control(0x00, 0x05);
+            }
+            echo("%s: brake motor %d", this->name.c_str(), motor_nr);
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
