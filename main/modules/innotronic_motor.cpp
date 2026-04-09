@@ -176,6 +176,29 @@ void InnotronicMotor::send_single_motor_control(uint8_t cmd_motor1, uint8_t cmd_
     this->can->send(can_id, data);
 }
 
+
+void InnotronicMotor::configure(uint8_t setting_id, uint16_t value1, int32_t value2) {
+    // Configure CmdID 0x0B: send a setting to the motor controller
+    // Byte 0: setting_id (0x00=ACK, 0x01=Set CanID, 0x02=Switch to Delta Arm Motor)
+    // Byte 2-3: value1 (uint16, little-endian)
+    // Byte 4-7: value2 (int32, little-endian)
+    uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    data[0] = setting_id;
+    std::memcpy(data + 2, &value1, 2);
+    std::memcpy(data + 4, &value2, 4);
+    uint32_t can_id = (this->node_id << 5) | 0x0B;
+    echo("CAN TX [NodeID=%ld, CmdID=0x0b]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (configure sid=%d v1=%d v2=%ld)",
+         this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], setting_id, value1, value2);
+    this->can->send(can_id, data);
+}
+
+void InnotronicMotor::configure_node_id(uint8_t new_node_id) {
+    // Set the CAN node ID of the motor controller (setting_id=0x01)
+    // new_node_id is shifted left by 5 to form the CAN base address (e.g. node_id=1 -> base=0x020)
+    uint16_t can_base_address = static_cast<uint16_t>(new_node_id) << 5;
+    this->configure(0x01, can_base_address, 0);
+}
+
 void InnotronicMotor::send_switch_state(uint8_t state) {
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     data[0] = state;
@@ -205,6 +228,10 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         uint8_t acc_limit = arguments.size() > 2 ? static_cast<uint8_t>(arguments[2]->evaluate_number()) : 0x00;
         int8_t jerk_limit_exp = arguments.size() > 3 ? static_cast<int8_t>(arguments[3]->evaluate_number()) : (int8_t)0x00;
         this->send_rel_angle_cmd(angle, vel_limit, acc_limit, jerk_limit_exp);
+    } else if (method_name == "configure_node_id") {
+        // arg0: new node ID (0-63)
+        Module::expect(arguments, 1, integer);
+        this->configure_node_id(static_cast<uint8_t>(arguments[0]->evaluate_integer()));
     } else if (method_name == "switch_state") {
         Module::expect(arguments, 1, integer);
         this->send_switch_state(static_cast<uint8_t>(arguments[0]->evaluate_integer()));
@@ -213,14 +240,7 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         uint8_t setting_id = static_cast<uint8_t>(arguments[0]->evaluate_integer());
         uint16_t value1 = static_cast<uint16_t>(arguments[1]->evaluate_integer());
         int32_t value2 = static_cast<int32_t>(arguments[2]->evaluate_integer());
-        uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-        data[0] = setting_id;
-        std::memcpy(data + 2, &value1, 2);
-        std::memcpy(data + 4, &value2, 4);
-        uint32_t can_id = (this->node_id << 5) | 0x0B;
-        echo("CAN TX [NodeID=%ld, CmdID=0x0b]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (configure sid=%d v1=%d v2=%ld)",
-             this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], setting_id, value1, value2);
-        this->can->send(can_id, data);
+        this->configure(setting_id, value1, value2);
     } else if (method_name == "delta_angle") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");

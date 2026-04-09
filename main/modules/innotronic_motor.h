@@ -22,6 +22,8 @@ private:
 public:
     void send_delta_angle_cmd(uint8_t motor_select, int16_t position_ticks, uint16_t speed_limit = 0xFFFF);
     void send_single_motor_control(uint8_t cmd_motor1, uint8_t cmd_motor2);
+    void configure(uint8_t setting_id, uint16_t value1, int32_t value2);
+    void configure_node_id(uint8_t new_node_id);
     InnotronicMotor(const std::string name, const Can_ptr can, const uint32_t node_id);
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
