@@ -64,6 +64,15 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
         char hex_buf[7];
         snprintf(hex_buf, sizeof(hex_buf), "0x%04x", raw_error);
         this->properties.at("error_codes")->string_value = hex_buf;
+        if (this->properties.at("debug")->boolean_value) {
+            echo("CAN RX [NodeID=%ld, CmdID=0x11]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (vel %.2f rad/s, voltage %.2f V, temp %d C, state %d, error %s)",
+                 this->node_id, id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
+                 this->properties.at("angular_vel")->number_value,
+                 this->properties.at("voltage")->number_value,
+                 (int)this->properties.at("temperature")->integer_value,
+                 (int)this->properties.at("state")->integer_value,
+                 hex_buf);
+        }
         break;
     }
     case 0x12: {
