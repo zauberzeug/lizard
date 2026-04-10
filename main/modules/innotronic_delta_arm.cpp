@@ -59,8 +59,16 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         this->properties.at("calibrating")->boolean_value = true;
         this->motor->reference_drive_start(2, true);
         echo("%s: reference right started", this->name.c_str());
+    } else if (side == "both") {
+        this->cal_state = cal_both;
+        this->both_left_done = false;
+        this->both_right_done = false;
+        this->properties.at("calibrating")->boolean_value = true;
+        this->motor->reference_drive_start(1, true);
+        this->motor->reference_drive_start(2, true);
+        echo("%s: reference both started", this->name.c_str());
     } else {
-        throw std::runtime_error("reference side must be \"left\" or \"right\"");
+        throw std::runtime_error("reference side must be \"left\", \"right\" or \"both\"");
     }
 }
 
@@ -117,6 +125,31 @@ void InnotronicDeltaArm::step() {
         this->properties.at("calibrating")->boolean_value = false;
         this->cal_state = cal_idle;
         echo("%s: right calibration complete", this->name.c_str());
+    } break;
+    case cal_both:
+        if (left_endstop_active && !this->both_left_done) {
+            this->motor->reference_drive_stop(1);
+            this->both_left_done = true;
+            echo("%s: left endstop reached during both-reference", this->name.c_str());
+        }
+        if (right_endstop_active && !this->both_right_done) {
+            this->motor->reference_drive_stop(2);
+            this->both_right_done = true;
+            echo("%s: right endstop reached during both-reference", this->name.c_str());
+        }
+        if (this->both_left_done && this->both_right_done) {
+            this->cal_state = cal_verify_both;
+        }
+        break;
+    case cal_verify_both: {
+        double angle_m1 = this->motor->get_property("angle_m1")->number_value;
+        double angle_m2 = this->motor->get_property("angle_m2")->number_value;
+        echo("%s: both reference verify, angle_m1=%.4f angle_m2=%.4f", this->name.c_str(), angle_m1, angle_m2);
+        this->properties.at("calibrated_left")->boolean_value = true;
+        this->properties.at("calibrated_right")->boolean_value = true;
+        this->properties.at("calibrating")->boolean_value = false;
+        this->cal_state = cal_idle;
+        echo("%s: both calibration complete", this->name.c_str());
     } break;
     case cal_idle:
         break;
