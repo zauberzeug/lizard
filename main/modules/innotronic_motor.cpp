@@ -9,6 +9,11 @@ REGISTER_MODULE_DEFAULTS(InnotronicMotor)
 static constexpr int DRIVE_MOTOR_TICKS = 600;
 static constexpr int DELTA_MOTOR_TICKS = 200;
 
+static constexpr uint8_t REF_NONE = 0;
+static constexpr uint8_t REF_OK = 1;
+static constexpr uint8_t REF_OVERCURRENT = 2;
+static constexpr uint8_t REF_END = 4;
+
 const std::map<std::string, Variable_ptr> InnotronicMotor::get_defaults() {
     return {
         {"voltage", std::make_shared<NumberVariable>()},
@@ -28,6 +33,8 @@ const std::map<std::string, Variable_ptr> InnotronicMotor::get_defaults() {
         {"reversed", std::make_shared<BooleanVariable>(false)},
         {"rad_limit", std::make_shared<NumberVariable>(6.0)}, // take testet on robot currently with 600 on 02.04.2026
 
+        {"ref_result_m1", std::make_shared<IntegerVariable>(0)},
+        {"ref_result_m2", std::make_shared<IntegerVariable>(0)},
         {"debug", std::make_shared<BooleanVariable>(false)},
     };
 }
@@ -41,6 +48,7 @@ void InnotronicMotor::subscribe_to_can() {
     this->can->subscribe((this->node_id << 5) | 0x11, std::static_pointer_cast<Module>(this->shared_from_this()));
     this->can->subscribe((this->node_id << 5) | 0x12, std::static_pointer_cast<Module>(this->shared_from_this()));
     this->can->subscribe((this->node_id << 5) | 0x13, std::static_pointer_cast<Module>(this->shared_from_this()));
+    this->can->subscribe((this->node_id << 5) | 0x14, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
 void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
@@ -100,6 +108,26 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
         int16_t raw_vel_m2;
         std::memcpy(&raw_vel_m2, data + 6, 2);
         this->properties.at("angular_vel_m2")->number_value = raw_vel_m2 * 0.01;
+        break;
+    }
+    case 0x14: {
+        // ReferenceFeedback CmdID 0x14: reference drive completion
+        // Byte 0: MSB nibble = motor 1 result, LSB nibble = motor 2 result
+        // Values: 0 = no result, 1 = ok, 2 = overcurrent, 4 = ref_end (motor keeps spinning)
+        uint8_t ref_m1 = (data[0] >> 4) & 0x0F;
+        uint8_t ref_m2 = data[0] & 0x0F;
+        this->properties.at("ref_result_m1")->integer_value = ref_m1;
+        this->properties.at("ref_result_m2")->integer_value = ref_m2;
+        auto ref_str = [](uint8_t v) -> const char * {
+            switch (v) {
+            case REF_OK: return "OK";
+            case REF_OVERCURRENT: return "OVERCURRENT";
+            case REF_END: return "REF_END";
+            default: return "NONE";
+            }
+        };
+        echo("CAN RX [NodeID=%ld, CmdID=0x14]: Reference Result Motor1: %s Motor2: %s",
+             this->node_id, ref_str(ref_m1), ref_str(ref_m2));
         break;
     }
     }
