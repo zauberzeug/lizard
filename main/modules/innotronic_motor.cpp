@@ -106,6 +106,11 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
 }
 
 void InnotronicMotor::send_speed_cmd(float angular_vel, uint8_t acc_limit, int8_t jerk_limit_exp) {
+    // SpeedCmd CmdID 0x01: set target speed
+    // Byte 0-1: angular velocity (int16, 0.01 rad/s)
+    // Byte 2:   acceleration limit (uint8, 0x00 = default)
+    // Byte 3:   jerk limit exponent (int8, 0x00 = default)
+    // Byte 4-7: reserved
     if (!this->enabled) {
         return;
     }
@@ -128,6 +133,12 @@ void InnotronicMotor::send_speed_cmd(float angular_vel, uint8_t acc_limit, int8_
 }
 
 void InnotronicMotor::send_rel_angle_cmd(float angle, uint16_t vel_limit, uint8_t acc_limit, int8_t jerk_limit_exp) {
+    // RelAngleCmd CmdID 0x02: move by relative angle
+    // Byte 0-1: relative angle (int16, 0.001 rad)
+    // Byte 2-3: velocity limit (uint16, 0.01 rad/s, 0xFFFF = no limit)
+    // Byte 4:   acceleration limit (uint8, 0x00 = default)
+    // Byte 5:   jerk limit exponent (int8, 0x00 = default)
+    // Byte 6-7: reserved
     if (!this->enabled) {
         return;
     }
@@ -163,6 +174,32 @@ void InnotronicMotor::send_delta_angle_cmd(uint8_t motor_select, int16_t positio
     this->can->send(can_id, data);
 }
 
+void InnotronicMotor::send_reference_drive(uint8_t motor, uint8_t cmd) {
+    // Reference drive via SingleMotorControl CmdID 0x0C
+    // Byte 0: command for motor 1
+    // Byte 1: command for motor 2
+    // Commands: 0x00 = no action, 0x05 = brake, 0x10 = calibration CW, 0x20 = calibration CCW
+    // Byte 2-7: reserved
+    uint8_t cmd_motor1 = (motor == 1) ? cmd : 0x00;
+    uint8_t cmd_motor2 = (motor == 2) ? cmd : 0x00;
+    uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    data[0] = cmd_motor1;
+    data[1] = cmd_motor2;
+    uint32_t can_id = (this->node_id << 5) | 0x0C;
+    echo("CAN TX [NodeID=%ld, CmdID=0x0c]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (reference motor=%d cmd=0x%02x)",
+         this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], motor, cmd);
+    this->can->send(can_id, data);
+}
+
+void InnotronicMotor::reference_drive_start(uint8_t motor, bool clockwise) {
+    uint8_t cmd = clockwise ? 0x10 : 0x20;
+    this->send_reference_drive(motor, cmd);
+}
+
+void InnotronicMotor::reference_drive_stop(uint8_t motor) {
+    this->send_reference_drive(motor, 0x05);
+}
+
 void InnotronicMotor::send_single_motor_control(uint8_t cmd_motor1, uint8_t cmd_motor2) {
     // SingleMotorControl CmdID 0x0C
     // Byte 0: command for motor 1, Byte 1: command for motor 2
@@ -175,7 +212,6 @@ void InnotronicMotor::send_single_motor_control(uint8_t cmd_motor1, uint8_t cmd_
          this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], cmd_motor1, cmd_motor2);
     this->can->send(can_id, data);
 }
-
 
 void InnotronicMotor::configure(uint8_t setting_id, uint16_t value1, int32_t value2) {
     // Configure CmdID 0x0B: send a setting to the motor controller
@@ -200,6 +236,9 @@ void InnotronicMotor::configure_node_id(uint8_t new_node_id) {
 }
 
 void InnotronicMotor::send_switch_state(uint8_t state) {
+    // SwitchState CmdID 0x0A: change operating state
+    // Byte 0: state (1 = off, 2 = stop/brake, 3 = on)
+    // Byte 1-7: reserved
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     data[0] = state;
     uint32_t can_id = (this->node_id << 5) | 0x0A;
@@ -265,6 +304,18 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         uint8_t cmd_motor1 = static_cast<uint8_t>(arguments[0]->evaluate_integer());
         uint8_t cmd_motor2 = static_cast<uint8_t>(arguments[1]->evaluate_integer());
         this->send_single_motor_control(cmd_motor1, cmd_motor2);
+    } else if (method_name == "reference_drive_start") {
+        if (arguments.size() < 1 || arguments.size() > 2) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer, boolean);
+        uint8_t motor = static_cast<uint8_t>(arguments[0]->evaluate_integer());
+        bool clockwise = arguments.size() > 1 ? arguments[1]->evaluate_boolean() : true;
+        this->reference_drive_start(motor, clockwise);
+    } else if (method_name == "reference_drive_stop") {
+        Module::expect(arguments, 1, integer);
+        uint8_t motor = static_cast<uint8_t>(arguments[0]->evaluate_integer());
+        this->reference_drive_stop(motor);
     } else if (method_name == "request_angle") {
         Module::expect(arguments, 0);
         uint8_t empty[8] = {};

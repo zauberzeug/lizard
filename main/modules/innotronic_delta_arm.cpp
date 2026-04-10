@@ -49,17 +49,16 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         echo("%s: already calibrating, ignoring reference(%s)", this->name.c_str(), side.c_str());
         return;
     }
-    uint16_t cal_speed = static_cast<uint16_t>(this->properties.at("cal_speed")->integer_value);
     if (side == "left") {
         this->cal_state = cal_left;
         this->properties.at("calibrating")->boolean_value = true;
-        this->motor->send_delta_angle_cmd(0x10, 150, cal_speed);
-        echo("%s: reference left started, moving left toward endstop", this->name.c_str());
+        this->motor->reference_drive_start(1, true);
+        echo("%s: reference left started", this->name.c_str());
     } else if (side == "right") {
         this->cal_state = cal_right;
         this->properties.at("calibrating")->boolean_value = true;
-        this->motor->send_delta_angle_cmd(0x20, -150, cal_speed);
-        echo("%s: reference right started, moving right toward endstop", this->name.c_str());
+        this->motor->reference_drive_start(2, true);
+        echo("%s: reference right started", this->name.c_str());
     } else {
         throw std::runtime_error("reference side must be \"left\" or \"right\"");
     }
@@ -79,11 +78,11 @@ void InnotronicDeltaArm::step() {
 
     // Brake motor when endstop triggers and motor is drawing current
     if (left_endstop_active && this->is_motor_active(true)) {
-        this->motor->send_single_motor_control(0x05, 0x00);
+        this->motor->reference_drive_stop(1);
         echo("%s: left endstop triggered, braking left motor", this->name.c_str());
     }
     if (right_endstop_active && this->is_motor_active(false)) {
-        this->motor->send_single_motor_control(0x00, 0x05);
+        this->motor->reference_drive_stop(2);
         echo("%s: right endstop triggered, braking right motor", this->name.c_str());
     }
 
@@ -96,16 +95,14 @@ void InnotronicDeltaArm::step() {
             this->cal_state = cal_verify_left;
         }
         break;
-    case cal_verify_left:
-        {
-            double angle = this->motor->get_property("angle")->number_value;
-            echo("%s: left reference verify, angle=%.4f", this->name.c_str(), angle);
-            this->properties.at("calibrated_left")->boolean_value = true;
-            this->properties.at("calibrating")->boolean_value = false;
-            this->cal_state = cal_idle;
-            echo("%s: left calibration complete", this->name.c_str());
-        }
-        break;
+    case cal_verify_left: {
+        double angle = this->motor->get_property("angle_m1")->number_value;
+        echo("%s: left reference verify, angle=%.4f", this->name.c_str(), angle);
+        this->properties.at("calibrated_left")->boolean_value = true;
+        this->properties.at("calibrating")->boolean_value = false;
+        this->cal_state = cal_idle;
+        echo("%s: left calibration complete", this->name.c_str());
+    } break;
     case cal_right:
         if (right_endstop_active) {
             // #PLACEHOLDER - ref_stop configure command for motor 2, setting_id TBD from Innotronic
@@ -113,16 +110,14 @@ void InnotronicDeltaArm::step() {
             this->cal_state = cal_verify_right;
         }
         break;
-    case cal_verify_right:
-        {
-            double angle = this->motor->get_property("angle")->number_value;
-            echo("%s: right reference verify, angle=%.4f", this->name.c_str(), angle);
-            this->properties.at("calibrated_right")->boolean_value = true;
-            this->properties.at("calibrating")->boolean_value = false;
-            this->cal_state = cal_idle;
-            echo("%s: right calibration complete", this->name.c_str());
-        }
-        break;
+    case cal_verify_right: {
+        double angle = this->motor->get_property("angle_m2")->number_value;
+        echo("%s: right reference verify, angle=%.4f", this->name.c_str(), angle);
+        this->properties.at("calibrated_right")->boolean_value = true;
+        this->properties.at("calibrating")->boolean_value = false;
+        this->cal_state = cal_idle;
+        echo("%s: right calibration complete", this->name.c_str());
+    } break;
     case cal_idle:
         break;
     }
@@ -174,11 +169,7 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
             if (motor_nr < 1 || motor_nr > 2) {
                 throw std::runtime_error("motor number must be 1 or 2");
             }
-            if (motor_nr == 1) {
-                this->motor->send_single_motor_control(0x05, 0x00);
-            } else {
-                this->motor->send_single_motor_control(0x00, 0x05);
-            }
+            this->motor->reference_drive_stop(motor_nr);
             echo("%s: brake motor %d", this->name.c_str(), motor_nr);
         }
     } else if (method_name == "off") {
