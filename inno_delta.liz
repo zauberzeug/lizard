@@ -1,0 +1,26 @@
+rdyp = Output(15)
+en3 = Output(12)
+bluetooth = Bluetooth("innotronic-delta-test")
+bluetooth.deactivate_pin()
+
+serial = Serial(26, 27, 115200, 1)
+p0 = Expander(serial,25,14)
+
+
+can = Can(32, 33, 250000)
+delta_motor = InnotronicMotor(can, 5)
+delta_motor.switch_to_delta_mode()
+
+delta_arm_left_endstop = p0.Input(33)
+delta_arm_right_endstop = p0.Input(32)
+delta_arm_left_endstop.inverted=true
+delta_arm_right_endstop.inverted=true
+
+delta = InnotronicDeltaArm(delta_motor, delta_arm_left_endstop, delta_arm_right_endstop)
+
+core.output("core.millis delta_motor.angle_m1:3 delta_motor.angle_m2:3 delta_motor.angular_vel_m1:3 delta_motor.angular_vel_m2:3 delta_arm_left_endstop.active delta_arm_right_endstop.active delta_motor.state core.heap")
+core.mute()
+can.unmute()
+
+rdyp.on()
+en3.on()
