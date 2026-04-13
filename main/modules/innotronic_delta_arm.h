@@ -11,12 +11,15 @@ private:
     const Input_ptr right_endstop;
     bool enabled = true;
 
-    enum CalibrationState { cal_idle, cal_left, cal_right, cal_both, cal_verify_left, cal_verify_right, cal_verify_both };
+    enum CalibrationState { cal_idle, cal_left, cal_right, cal_both };
     CalibrationState cal_state = cal_idle;
     bool both_left_done = false;
     bool both_right_done = false;
+    int last_ref_m1 = 0;
+    int last_ref_m2 = 0;
 
     bool is_motor_active(bool left) const;
+    bool is_calibrated() const;
     bool can_move(int16_t left_ticks, int16_t right_ticks) const;
     void start_reference(const std::string &side);
     void enable();

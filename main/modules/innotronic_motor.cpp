@@ -49,6 +49,7 @@ void InnotronicMotor::subscribe_to_can() {
     this->can->subscribe((this->node_id << 5) | 0x12, std::static_pointer_cast<Module>(this->shared_from_this()));
     this->can->subscribe((this->node_id << 5) | 0x13, std::static_pointer_cast<Module>(this->shared_from_this()));
     this->can->subscribe((this->node_id << 5) | 0x14, std::static_pointer_cast<Module>(this->shared_from_this()));
+    this->can->subscribe((this->node_id << 5) | 0x15, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
 void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
@@ -108,6 +109,32 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
         int16_t raw_vel_m2;
         std::memcpy(&raw_vel_m2, data + 6, 2);
         this->properties.at("angular_vel_m2")->number_value = raw_vel_m2 * 0.01;
+        break;
+    }
+    case 0x15: {
+        // CurrentAngleCurrent CmdID 0x15: per-motor angle and current (position controller mode)
+        // Byte 0-1: angle motor 1 (int16, hall ticks)
+        // Byte 2-3: angle motor 2 (int16, hall ticks)
+        // Byte 4-5: current motor 1 (int16, 0.095 A/LSB)
+        // Byte 6-7: current motor 2 (int16, 0.095 A/LSB)
+        int16_t raw_angle_m1;
+        std::memcpy(&raw_angle_m1, data, 2);
+        this->properties.at("angle_m1")->number_value = raw_angle_m1;
+        int16_t raw_angle_m2;
+        std::memcpy(&raw_angle_m2, data + 2, 2);
+        this->properties.at("angle_m2")->number_value = raw_angle_m2;
+        int16_t raw_current_m1;
+        std::memcpy(&raw_current_m1, data + 4, 2);
+        this->properties.at("current_m1")->number_value = raw_current_m1 * 0.095;
+        int16_t raw_current_m2;
+        std::memcpy(&raw_current_m2, data + 6, 2);
+        this->properties.at("current_m2")->number_value = raw_current_m2 * 0.095;
+        if (this->properties.at("debug")->boolean_value) {
+            echo("CAN RX [NodeID=%ld, CmdID=0x15]: angle_m1=%d angle_m2=%d current_m1=%.2fA current_m2=%.2fA",
+                 this->node_id, raw_angle_m1, raw_angle_m2,
+                 this->properties.at("current_m1")->number_value,
+                 this->properties.at("current_m2")->number_value);
+        }
         break;
     }
     case 0x14: {

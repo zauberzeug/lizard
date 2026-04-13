@@ -5,6 +5,10 @@
 
 static constexpr double VELOCITY_ACTIVE_THRESHOLD = 0.01; // rad/s, 1 raw digit = 0.01 rad/s
 
+static constexpr int REF_OK = 1;
+static constexpr int REF_OVERCURRENT = 2;
+static constexpr int REF_END = 4;
+
 REGISTER_MODULE_DEFAULTS(InnotronicDeltaArm)
 
 const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
@@ -25,6 +29,11 @@ InnotronicDeltaArm::InnotronicDeltaArm(const std::string name, const InnotronicM
 bool InnotronicDeltaArm::is_motor_active(bool left) const {
     double vel = this->motor->get_property(left ? "angular_vel_m1" : "angular_vel_m2")->number_value;
     return std::abs(vel) >= VELOCITY_ACTIVE_THRESHOLD;
+}
+
+bool InnotronicDeltaArm::is_calibrated() const {
+    return this->properties.at("calibrated_left")->boolean_value &&
+           this->properties.at("calibrated_right")->boolean_value;
 }
 
 bool InnotronicDeltaArm::can_move(int16_t left_ticks, int16_t right_ticks) const {
@@ -49,6 +58,11 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         echo("%s: already calibrating, ignoring reference(%s)", this->name.c_str(), side.c_str());
         return;
     }
+    // Reset ref results so stale values from previous runs don't cause immediate abort
+    this->motor->get_property("ref_result_m1")->integer_value = 0;
+    this->motor->get_property("ref_result_m2")->integer_value = 0;
+    this->last_ref_m1 = 0;
+    this->last_ref_m2 = 0;
     if (side == "left") {
         this->cal_state = cal_left;
         this->properties.at("calibrating")->boolean_value = true;
@@ -94,63 +108,84 @@ void InnotronicDeltaArm::step() {
         echo("%s: right endstop triggered, braking right motor", this->name.c_str());
     }
 
+    // Latch ref results: 0x14 arrives per-motor in separate messages,
+    // each only setting its own nibble (the other is NONE/0).
+    // We keep the highest non-zero result seen for each motor.
+    int ref_m1 = this->motor->get_property("ref_result_m1")->integer_value;
+    int ref_m2 = this->motor->get_property("ref_result_m2")->integer_value;
+    if (ref_m1 != 0) {
+        this->last_ref_m1 = ref_m1;
+    }
+    if (ref_m2 != 0) {
+        this->last_ref_m2 = ref_m2;
+    }
+
     // Calibration state machine
     switch (this->cal_state) {
     case cal_left:
-        if (left_endstop_active) {
-            // #PLACEHOLDER - ref_stop configure command for motor 1, setting_id TBD from Innotronic
-            echo("%s: left endstop reached, sending ref_stop(1)", this->name.c_str());
-            this->cal_state = cal_verify_left;
-        }
-        break;
-    case cal_verify_left: {
-        double angle = this->motor->get_property("angle_m1")->number_value;
-        echo("%s: left reference verify, angle=%.4f", this->name.c_str(), angle);
-        this->properties.at("calibrated_left")->boolean_value = true;
-        this->properties.at("calibrating")->boolean_value = false;
-        this->cal_state = cal_idle;
-        echo("%s: left calibration complete", this->name.c_str());
-    } break;
-    case cal_right:
-        if (right_endstop_active) {
-            // #PLACEHOLDER - ref_stop configure command for motor 2, setting_id TBD from Innotronic
-            echo("%s: right endstop reached, sending ref_stop(2)", this->name.c_str());
-            this->cal_state = cal_verify_right;
-        }
-        break;
-    case cal_verify_right: {
-        double angle = this->motor->get_property("angle_m2")->number_value;
-        echo("%s: right reference verify, angle=%.4f", this->name.c_str(), angle);
-        this->properties.at("calibrated_right")->boolean_value = true;
-        this->properties.at("calibrating")->boolean_value = false;
-        this->cal_state = cal_idle;
-        echo("%s: right calibration complete", this->name.c_str());
-    } break;
-    case cal_both:
-        if (left_endstop_active && !this->both_left_done) {
+        if (this->last_ref_m1 == REF_OVERCURRENT || this->last_ref_m1 == REF_END) {
+            echo("%s: left reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_m1);
+            this->properties.at("calibrating")->boolean_value = false;
+            this->cal_state = cal_idle;
+        } else if (left_endstop_active) {
             this->motor->reference_drive_stop(1);
-            this->both_left_done = true;
-            echo("%s: left endstop reached during both-reference", this->name.c_str());
+            this->last_ref_m1 = REF_OK;
+            this->properties.at("calibrated_left")->boolean_value = true;
+            this->properties.at("calibrating")->boolean_value = false;
+            this->cal_state = cal_idle;
+            echo("%s: left endstop reached, calibration complete", this->name.c_str());
         }
-        if (right_endstop_active && !this->both_right_done) {
+        break;
+    case cal_right:
+        if (this->last_ref_m2 == REF_OVERCURRENT || this->last_ref_m2 == REF_END) {
+            echo("%s: right reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_m2);
+            this->properties.at("calibrating")->boolean_value = false;
+            this->cal_state = cal_idle;
+        } else if (right_endstop_active) {
             this->motor->reference_drive_stop(2);
-            this->both_right_done = true;
-            echo("%s: right endstop reached during both-reference", this->name.c_str());
+            this->last_ref_m2 = REF_OK;
+            this->properties.at("calibrated_right")->boolean_value = true;
+            this->properties.at("calibrating")->boolean_value = false;
+            this->cal_state = cal_idle;
+            echo("%s: right endstop reached, calibration complete", this->name.c_str());
+        }
+        break;
+    case cal_both:
+        if (!this->both_left_done) {
+            if (this->last_ref_m1 == REF_OVERCURRENT || this->last_ref_m1 == REF_END) {
+                echo("%s: left reference failed during both-reference (ref_result=%d)", this->name.c_str(), this->last_ref_m1);
+                this->both_left_done = true;
+            } else if (left_endstop_active) {
+                this->motor->reference_drive_stop(1);
+                this->last_ref_m1 = REF_OK;
+                this->both_left_done = true;
+                echo("%s: left endstop reached during both-reference", this->name.c_str());
+            }
+        }
+        if (!this->both_right_done) {
+            if (this->last_ref_m2 == REF_OVERCURRENT || this->last_ref_m2 == REF_END) {
+                echo("%s: right reference failed during both-reference (ref_result=%d)", this->name.c_str(), this->last_ref_m2);
+                this->both_right_done = true;
+            } else if (right_endstop_active) {
+                this->motor->reference_drive_stop(2);
+                this->last_ref_m2 = REF_OK;
+                this->both_right_done = true;
+                echo("%s: right endstop reached during both-reference", this->name.c_str());
+            }
         }
         if (this->both_left_done && this->both_right_done) {
-            this->cal_state = cal_verify_both;
+            // Both sides resolved — mark calibration results directly
+            if (this->last_ref_m1 == REF_OK) {
+                this->properties.at("calibrated_left")->boolean_value = true;
+            }
+            if (this->last_ref_m2 == REF_OK) {
+                this->properties.at("calibrated_right")->boolean_value = true;
+            }
+            this->properties.at("calibrating")->boolean_value = false;
+            this->cal_state = cal_idle;
+            echo("%s: both calibration done (m1=%d m2=%d)", this->name.c_str(), this->last_ref_m1, this->last_ref_m2);
         }
         break;
-    case cal_verify_both: {
-        double angle_m1 = this->motor->get_property("angle_m1")->number_value;
-        double angle_m2 = this->motor->get_property("angle_m2")->number_value;
-        echo("%s: both reference verify, angle_m1=%.4f angle_m2=%.4f", this->name.c_str(), angle_m1, angle_m2);
-        this->properties.at("calibrated_left")->boolean_value = true;
-        this->properties.at("calibrated_right")->boolean_value = true;
-        this->properties.at("calibrating")->boolean_value = false;
-        this->cal_state = cal_idle;
-        echo("%s: both calibration complete", this->name.c_str());
-    } break;
     case cal_idle:
         break;
     }
@@ -165,6 +200,10 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer, integer, integer, integer);
+        if (!this->is_calibrated()) {
+            echo("%s: not calibrated, ignoring position command", this->name.c_str());
+            return;
+        }
         int16_t left_ticks = static_cast<int16_t>(arguments[0]->evaluate_integer());
         int16_t right_ticks = static_cast<int16_t>(arguments[1]->evaluate_integer());
         uint16_t speed_left = arguments.size() > 2 ? static_cast<uint16_t>(arguments[2]->evaluate_integer()) : 0xFFFF;
@@ -174,15 +213,53 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
             this->motor->send_delta_angle_cmd(0x20, right_ticks, speed_right);
         }
     } else if (method_name == "move_a") {
-        // move_a: left down (-80), right up (80), speed 10
-        Module::expect(arguments, 0);
-        this->motor->send_delta_angle_cmd(0x10, -80, 10);
-        this->motor->send_delta_angle_cmd(0x20, 80, 10);
+        if (arguments.size() > 1) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer);
+        if (!this->is_calibrated()) {
+            echo("%s: not calibrated, ignoring move_a", this->name.c_str());
+            return;
+        }
+        uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
+        this->motor->send_delta_angle_cmd(0x10, -80, speed);
+        this->motor->send_delta_angle_cmd(0x20, 80, speed);
     } else if (method_name == "move_b") {
-        // move_b: left up (10), right down (-10), speed 10
-        Module::expect(arguments, 0);
-        this->motor->send_delta_angle_cmd(0x10, -10, 10);
-        this->motor->send_delta_angle_cmd(0x20, 10, 10);
+        if (arguments.size() > 1) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer);
+        if (!this->is_calibrated()) {
+            echo("%s: not calibrated, ignoring move_b", this->name.c_str());
+            return;
+        }
+        uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
+        this->motor->send_delta_angle_cmd(0x10, -10, speed);
+        this->motor->send_delta_angle_cmd(0x20, 10, speed);
+    } else if (method_name == "move_c") {
+        if (arguments.size() > 1) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer);
+        if (!this->is_calibrated()) {
+            echo("%s: not calibrated, ignoring move_c", this->name.c_str());
+            return;
+        }
+        uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
+        this->motor->send_delta_angle_cmd(0x10, -20, speed);
+        this->motor->send_delta_angle_cmd(0x20, 50, speed);
+    } else if (method_name == "move_d") {
+        if (arguments.size() > 1) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer);
+        if (!this->is_calibrated()) {
+            echo("%s: not calibrated, ignoring move_d", this->name.c_str());
+            return;
+        }
+        uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
+        this->motor->send_delta_angle_cmd(0x10, -50, speed);
+        this->motor->send_delta_angle_cmd(0x20, 20, speed);
     } else if (method_name == "reference") {
         Module::expect(arguments, 1, string);
         std::string side = arguments[0]->evaluate_string();
