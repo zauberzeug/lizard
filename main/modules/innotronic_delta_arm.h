@@ -20,6 +20,7 @@ private:
 
     bool is_motor_active(bool left) const;
     bool is_calibrated() const;
+    void move_to(int16_t left_ticks, int16_t right_ticks, uint16_t speed_left, uint16_t speed_right);
     bool can_move(int16_t left_ticks, int16_t right_ticks) const;
     void start_reference(const std::string &side);
     void enable();

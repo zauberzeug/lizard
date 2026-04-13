@@ -18,6 +18,7 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
         {"calibrated_left", std::make_shared<BooleanVariable>(false)},
         {"calibrated_right", std::make_shared<BooleanVariable>(false)},
         {"cal_speed", std::make_shared<IntegerVariable>(20)},
+        {"tick_limit", std::make_shared<IntegerVariable>(5)},
     };
 }
 
@@ -36,6 +37,17 @@ bool InnotronicDeltaArm::is_calibrated() const {
            this->properties.at("calibrated_right")->boolean_value;
 }
 
+void InnotronicDeltaArm::move_to(int16_t left_ticks, int16_t right_ticks, uint16_t speed_left, uint16_t speed_right) {
+    if (!this->is_calibrated()) {
+        echo("%s: not calibrated, ignoring move command", this->name.c_str());
+        return;
+    }
+    if (this->can_move(left_ticks, right_ticks)) {
+        this->motor->send_delta_angle_cmd(0x10, left_ticks, speed_left);
+        this->motor->send_delta_angle_cmd(0x20, right_ticks, speed_right);
+    }
+}
+
 bool InnotronicDeltaArm::can_move(int16_t left_ticks, int16_t right_ticks) const {
     if (!this->enabled) {
         return false;
@@ -49,6 +61,19 @@ bool InnotronicDeltaArm::can_move(int16_t left_ticks, int16_t right_ticks) const
     if (right_endstop_active && right_ticks < 0) {
         echo("%s: right endstop triggered, blocking negative motion", this->name.c_str());
         return false;
+    }
+    int tick_limit = this->properties.at("tick_limit")->integer_value;
+    if (tick_limit > 0) {
+        if (left_ticks > 0 || left_ticks < -tick_limit) {
+            echo("%s: left motor target %d out of range [-%d, 0]",
+                 this->name.c_str(), left_ticks, tick_limit);
+            return false;
+        }
+        if (right_ticks < 0 || right_ticks > tick_limit) {
+            echo("%s: right motor target %d out of range [0, %d]",
+                 this->name.c_str(), right_ticks, tick_limit);
+            return false;
+        }
     }
     return true;
 }
@@ -79,7 +104,7 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         this->both_right_done = false;
         this->properties.at("calibrating")->boolean_value = true;
         this->motor->reference_drive_start(1, true);
-        this->motor->reference_drive_start(2, true);
+        this->motor->reference_drive_start(2, false);
         echo("%s: reference both started", this->name.c_str());
     } else {
         throw std::runtime_error("reference side must be \"left\", \"right\" or \"both\"");
@@ -195,71 +220,43 @@ void InnotronicDeltaArm::step() {
 
 void InnotronicDeltaArm::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "position") {
-        // position(left_ticks, right_ticks, [speed_left, speed_right])
         if (arguments.size() < 2 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer, integer, integer, integer);
-        if (!this->is_calibrated()) {
-            echo("%s: not calibrated, ignoring position command", this->name.c_str());
-            return;
-        }
         int16_t left_ticks = static_cast<int16_t>(arguments[0]->evaluate_integer());
         int16_t right_ticks = static_cast<int16_t>(arguments[1]->evaluate_integer());
         uint16_t speed_left = arguments.size() > 2 ? static_cast<uint16_t>(arguments[2]->evaluate_integer()) : 0xFFFF;
         uint16_t speed_right = arguments.size() > 3 ? static_cast<uint16_t>(arguments[3]->evaluate_integer()) : 0xFFFF;
-        if (this->can_move(left_ticks, right_ticks)) {
-            this->motor->send_delta_angle_cmd(0x10, left_ticks, speed_left);
-            this->motor->send_delta_angle_cmd(0x20, right_ticks, speed_right);
-        }
+        this->move_to(left_ticks, right_ticks, speed_left, speed_right);
     } else if (method_name == "move_a") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer);
-        if (!this->is_calibrated()) {
-            echo("%s: not calibrated, ignoring move_a", this->name.c_str());
-            return;
-        }
         uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
-        this->motor->send_delta_angle_cmd(0x10, -80, speed);
-        this->motor->send_delta_angle_cmd(0x20, 80, speed);
+        this->move_to(-80, 80, speed, speed);
     } else if (method_name == "move_b") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer);
-        if (!this->is_calibrated()) {
-            echo("%s: not calibrated, ignoring move_b", this->name.c_str());
-            return;
-        }
         uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
-        this->motor->send_delta_angle_cmd(0x10, -10, speed);
-        this->motor->send_delta_angle_cmd(0x20, 10, speed);
+        this->move_to(-10, 10, speed, speed);
     } else if (method_name == "move_c") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer);
-        if (!this->is_calibrated()) {
-            echo("%s: not calibrated, ignoring move_c", this->name.c_str());
-            return;
-        }
         uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
-        this->motor->send_delta_angle_cmd(0x10, -20, speed);
-        this->motor->send_delta_angle_cmd(0x20, 50, speed);
+        this->move_to(-20, 50, speed, speed);
     } else if (method_name == "move_d") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer);
-        if (!this->is_calibrated()) {
-            echo("%s: not calibrated, ignoring move_d", this->name.c_str());
-            return;
-        }
         uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
-        this->motor->send_delta_angle_cmd(0x10, -50, speed);
-        this->motor->send_delta_angle_cmd(0x20, 20, speed);
+        this->move_to(-50, 20, speed, speed);
     } else if (method_name == "reference") {
         Module::expect(arguments, 1, string);
         std::string side = arguments[0]->evaluate_string();
