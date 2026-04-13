@@ -9,9 +9,9 @@ private:
     const InnotronicMotor_ptr right_motor;
 
     bool initialized = false;
-    unsigned long int last_micros;
-    double last_left_position;
-    double last_right_position;
+    unsigned long int last_micros = 0;
+    double last_left_position = 0;
+    double last_right_position = 0;
     bool enabled = true;
 
 public:

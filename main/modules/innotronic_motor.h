@@ -22,6 +22,7 @@ private:
 public:
     void send_delta_angle_cmd(uint8_t motor_select, int16_t position_ticks, uint16_t speed_limit = 0xFFFF);
     void send_single_motor_control(uint8_t cmd_motor1, uint8_t cmd_motor2);
+    void request_angle();
     void send_reference_drive(uint8_t motor, uint8_t cmd);
     void reference_drive_start(uint8_t motor, bool clockwise = true);
     void reference_drive_stop(uint8_t motor);
