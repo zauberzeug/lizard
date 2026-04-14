@@ -38,6 +38,7 @@ public:
     double get_position() override;
     void position(const double position, const double speed, const double acceleration) override;
     double get_speed() override;
+    double get_m1_speed();
     void speed(const double speed, const double acceleration) override;
     void enable() override;
     void disable() override;

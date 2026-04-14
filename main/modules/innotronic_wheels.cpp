@@ -1,5 +1,4 @@
 #include "innotronic_wheels.h"
-#include "../utils/timing.h"
 #include <memory>
 
 REGISTER_MODULE_DEFAULTS(InnotronicWheels)
@@ -19,23 +18,10 @@ InnotronicWheels::InnotronicWheels(const std::string name, const InnotronicMotor
 }
 
 void InnotronicWheels::step() {
-    if (!this->initialized || micros_since(this->last_micros) >= 100000) {
-        double left_position = this->left_motor->get_position();
-        double right_position = this->right_motor->get_position();
-
-        if (this->initialized) {
-            unsigned long int d_micros = micros_since(this->last_micros);
-            double left_speed = (left_position - this->last_left_position) / d_micros * 1000000;
-            double right_speed = (right_position - this->last_right_position) / d_micros * 1000000;
-            this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
-            this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
-        }
-
-        this->last_micros = micros();
-        this->last_left_position = left_position;
-        this->last_right_position = right_position;
-        this->initialized = true;
-    }
+    double left_speed = this->left_motor->get_m1_speed();
+    double right_speed = this->right_motor->get_m1_speed();
+    this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
+    this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
 
     if (this->properties.at("enabled")->boolean_value != this->enabled) {
         if (this->properties.at("enabled")->boolean_value) {

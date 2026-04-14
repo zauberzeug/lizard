@@ -430,6 +430,12 @@ double InnotronicMotor::get_speed() {
     return this->properties.at("angular_vel")->number_value * m_per_rad * sign;
 }
 
+double InnotronicMotor::get_m1_speed() {
+    // angular_vel_m1 comes from cyclic 0x12 and already has the reversed sign applied
+    double m_per_rad = this->properties.at("m_per_rad")->number_value;
+    return this->properties.at("angular_vel_m1")->number_value * m_per_rad;
+}
+
 void InnotronicMotor::speed(const double speed, const double acceleration) {
     double m_per_rad = this->properties.at("m_per_rad")->number_value;
     float angular_vel = static_cast<float>(speed / m_per_rad);

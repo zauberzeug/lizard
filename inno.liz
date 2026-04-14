@@ -8,8 +8,9 @@ can = Can(32, 33, 250000)
 left = InnotronicMotor(can, 5)
 right = InnotronicMotor(can, 37)
 left.reversed = true
-left.m_per_rad = 0.08275
-right.m_per_rad = 0.08275
+# calculated after tests
+left.m_per_rad = 0.0788
+right.m_per_rad = 0.0788
 wheels = InnotronicWheels(left, right)
 wheels.width = 0.502
 
