@@ -18,11 +18,12 @@ The `broadcast` method is used internally with [port expanders](#expander).
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
 It is automatically created right after the boot sequence.
 
-| Properties    | Description                                             | Data type |
-| ------------- | ------------------------------------------------------- | --------- |
-| `core.debug`  | Whether to output debug information to the command line | `bool`    |
-| `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
-| `core.heap`   | Free heap memory (bytes)                                | `int`     |
+| Properties              | Description                                                     | Data type |
+| ----------------------- | --------------------------------------------------------------- | --------- |
+| `core.debug`            | Whether to output debug information to the command line         | `bool`    |
+| `core.millis`           | Time since booting the microcontroller (ms)                     | `int`     |
+| `core.heap`             | Free heap memory (bytes)                                        | `int`     |
+| `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
 
 | Methods                          | Description                                        | Arguments    |
 | -------------------------------- | -------------------------------------------------- | ------------ |
@@ -38,6 +39,7 @@ It is automatically created right after the boot sequence.
 | `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
 | `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
 | `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
+| `core.heartbeat()`               | Reset `last_message_age` without producing output  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -1004,7 +1006,7 @@ It supports both track drive mode (speed/relative angle) and delta arm mode (per
 | `motor.angular_vel_m2` | Motor 2 angular velocity (rad/s)                 | `float`   |
 | `motor.angle_m1`       | Motor 1 angle (hall ticks)                       | `float`   |
 | `motor.angle_m2`       | Motor 2 angle (hall ticks)                       | `float`   |
-| `motor.motor_ticks`    | Hall ticks per revolution (600 drive, 200 delta) | `int`     |
+| `motor.motor_ticks`    | Hall ticks per revolution (600 drive, 300 delta) | `int`     |
 | `motor.temperature`    | Controller temperature (°C)                      | `int`     |
 | `motor.state`          | Current switch state                             | `int`     |
 | `motor.error_codes`    | Error bitmask as hex string                      | `str`     |
@@ -1027,8 +1029,8 @@ It supports both track drive mode (speed/relative angle) and delta arm mode (per
 | `motor.single_motor_control(cmd_m1, cmd_m2)`      | Per-motor control (0x00=noop, 0x05=brake, 0x10=cal CW, 0x20=cal CCW) | `int`, `int`                           |
 | `motor.reference_drive_start(motor[, clockwise])` | Start reference drive for motor 1 or 2                               | `int`\[, `bool`\]                      |
 | `motor.reference_drive_stop(motor)`               | Stop reference drive (brake)                                         | `int`                                  |
-| `motor.request_angle()`                           | Request current angle from controller                                |                                        |
 | `motor.switch_to_delta_mode()`                    | Switch to delta arm motor mode                                       |                                        |
+| `motor.switch_to_drive_mode()`                    | Switch to drive mode                                                 |                                        |
 | `motor.on()`                                      | Turn motor on                                                        |                                        |
 | `motor.off()`                                     | Turn motor off                                                       |                                        |
 | `motor.stop()`                                    | Brake the motor                                                      |                                        |

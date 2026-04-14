@@ -62,7 +62,7 @@ Per-motor position command for delta arm motors.
 Setting IDs:
 
 - 0x01: Set CAN node ID. Value1 = new base address (`new_node_id << 5`), Value2 = 0
-- 0x02: Switch to delta arm motor mode. Value1 = 0, Value2 = 0
+- 0x02: Switch between drive and delta arm mode. Value1 = 0xA5A5 (drive) or 0xB5B5 (delta arm), Value2 = 0
 
 ### 0x0C ReferenceDriveCmd / SingleMotorControl
 
@@ -78,7 +78,9 @@ Both bytes can be set simultaneously to drive both motors at once.
 
 ## Status Messages (Motor -> Lizard)
 
-### 0x11 MotorStatus (cyclic, default 100ms)
+### 0x11 MotorStatus (cyclic)
+
+Sent automatically by the motor controller.
 
 | Byte | Type   | Description                        |
 | ---- | ------ | ---------------------------------- |
@@ -99,26 +101,20 @@ ErrorCode bits (from firmware):
 - 0x0040: CONNECTION_ERROR (motor B not connected)
 - 0x0080: HW_I_FAULT (hardware overcurrent)
 
-### 0x12 CurrentAngle (on request)
+### 0x12 DriveStatus (cyclic in drive mode, ~100ms)
 
-Request by sending CAN ID with DLC=0. Response:
-
-| Byte | Type  | Description                |
-| ---- | ----- | -------------------------- |
-| 0-1  | int16 | Angle motor 1 (hall ticks) |
-| 2-3  | int16 | Angle motor 2 (hall ticks) |
-| 4-7  |       | Unused                     |
-
-Note: The spec defines this as a single angle in pi/9000 rad units. Actual firmware returns hall ticks for both motors.
-
-### 0x13 MotorDetail (cyclic, ~1s interval)
+Per-motor speed and current. Replaces the old 0x13 layout (fields reordered: speed first, current after).
 
 | Byte | Type  | Description                            |
 | ---- | ----- | -------------------------------------- |
-| 0-1  | int16 | Current motor 1, 0.095 A per LSB       |
-| 2-3  | int16 | Current motor 2, 0.095 A per LSB       |
-| 4-5  | int16 | AngularVel motor 1, 0.01 rad/s per LSB |
-| 6-7  | int16 | AngularVel motor 2, 0.01 rad/s per LSB |
+| 0-1  | int16 | AngularVel motor 1, 0.01 rad/s per LSB |
+| 2-3  | int16 | AngularVel motor 2, 0.01 rad/s per LSB |
+| 4-5  | int16 | Current motor 1, 0.001 A per LSB       |
+| 6-7  | int16 | Current motor 2, 0.001 A per LSB       |
+
+### 0x13
+
+~was removed~
 
 ### 0x14 ReferenceDriveResult (event-based)
 
@@ -135,3 +131,15 @@ Result values per motor:
 - 1: OK, reference position stored
 - 2: Overcurrent, current limit reached
 - 4: Ref end, max rotation (300 digits) reached without endstop
+
+### 0x15 CurrentAngleCurrent (cyclic in delta mode, ~100ms)
+
+Sent automatically when the motor controller is in delta arm mode.
+Combines per-motor angle and current into a single frame (position controller mode).
+
+| Byte | Type  | Description                      |
+| ---- | ----- | -------------------------------- |
+| 0-1  | int16 | Angle motor 1 (hall ticks)       |
+| 2-3  | int16 | Angle motor 2 (hall ticks)       |
+| 4-5  | int16 | Current motor 1, 0.001 A per LSB |
+| 6-7  | int16 | Current motor 2, 0.001 A per LSB |
