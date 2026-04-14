@@ -111,6 +111,30 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
         }
         break;
     }
+    case 0x14: {
+        // ReferenceFeedback CmdID 0x14: reference drive completion
+        // Byte 0: MSB nibble = motor 1 result, LSB nibble = motor 2 result
+        // Values: 0 = no result, 1 = ok, 2 = overcurrent, 4 = ref_end (motor keeps spinning)
+        uint8_t ref_m1 = (data[0] >> 4) & 0x0F;
+        uint8_t ref_m2 = data[0] & 0x0F;
+        this->properties.at("ref_result_m1")->integer_value = ref_m1;
+        this->properties.at("ref_result_m2")->integer_value = ref_m2;
+        auto ref_str = [](uint8_t v) -> const char * {
+            switch (v) {
+            case REF_OK:
+                return "OK";
+            case REF_OVERCURRENT:
+                return "OVERCURRENT";
+            case REF_END:
+                return "REF_END";
+            default:
+                return "NONE";
+            }
+        };
+        echo("[%lu] CAN RX [NodeID=%ld, CmdID=0x14]: Reference Result Motor1: %s Motor2: %s",
+             millis(), this->node_id, ref_str(ref_m1), ref_str(ref_m2));
+        break;
+    }
     case 0x15: {
         // CurrentAngleCurrent CmdID 0x15: per-motor angle and current (position controller mode)
         // Byte 0-1: angle motor 1 (int16, hall ticks)
@@ -135,30 +159,6 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
                  this->properties.at("current_m1")->number_value,
                  this->properties.at("current_m2")->number_value);
         }
-        break;
-    }
-    case 0x14: {
-        // ReferenceFeedback CmdID 0x14: reference drive completion
-        // Byte 0: MSB nibble = motor 1 result, LSB nibble = motor 2 result
-        // Values: 0 = no result, 1 = ok, 2 = overcurrent, 4 = ref_end (motor keeps spinning)
-        uint8_t ref_m1 = (data[0] >> 4) & 0x0F;
-        uint8_t ref_m2 = data[0] & 0x0F;
-        this->properties.at("ref_result_m1")->integer_value = ref_m1;
-        this->properties.at("ref_result_m2")->integer_value = ref_m2;
-        auto ref_str = [](uint8_t v) -> const char * {
-            switch (v) {
-            case REF_OK:
-                return "OK";
-            case REF_OVERCURRENT:
-                return "OVERCURRENT";
-            case REF_END:
-                return "REF_END";
-            default:
-                return "NONE";
-            }
-        };
-        echo("[%lu] CAN RX [NodeID=%ld, CmdID=0x14]: Reference Result Motor1: %s Motor2: %s",
-             millis(), this->node_id, ref_str(ref_m1), ref_str(ref_m2));
         break;
     }
     }
