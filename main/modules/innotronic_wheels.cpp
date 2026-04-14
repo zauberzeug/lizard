@@ -20,9 +20,6 @@ InnotronicWheels::InnotronicWheels(const std::string name, const InnotronicMotor
 
 void InnotronicWheels::step() {
     if (!this->initialized || micros_since(this->last_micros) >= 100000) {
-        this->left_motor->request_angle();
-        this->right_motor->request_angle();
-
         double left_position = this->left_motor->get_position();
         double right_position = this->right_motor->get_position();
 
