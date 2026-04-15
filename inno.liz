@@ -7,6 +7,8 @@ bluetooth.deactivate_pin()
 can = Can(32, 33, 250000)
 left = InnotronicMotor(can, 5)
 right = InnotronicMotor(can, 37)
+left.switch_to_drive_mode()
+right.switch_to_drive_mode()
 left.reversed = true
 # calculated after tests
 left.m_per_rad = 0.0788
@@ -15,8 +17,8 @@ wheels = InnotronicWheels(left, right)
 wheels.width = 0.502
 
 core.output("core.millis left.angular_vel:3 right.angular_vel:3 left.angle_m1:3 right.angle_m1:3 left.state right.state core.heap")
-# core.mute()
-# can.unmute()
+core.mute()
+can.unmute()
 
 rdyp.on()
 en3.on()

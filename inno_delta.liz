@@ -10,6 +10,7 @@ p0 = Expander(serial,25,14)
 can = Can(32, 33, 250000)
 delta_motor = InnotronicMotor(can, 5)
 delta_motor.switch_to_delta_mode()
+delta_motor.debug=true
 
 delta_arm_left_endstop = p0.Input(33)
 delta_arm_right_endstop = p0.Input(32)
@@ -21,7 +22,7 @@ delta.tick_limit=90
 
 #core.output("core.millis delta_motor.angle_m1:3 delta_motor.angle_m2:3 delta_motor.angular_vel_m1:3 delta_motor.angular_vel_m2:3 delta_arm_left_endstop.active delta_arm_right_endstop.active delta_motor.state core.heap")
 core.output("core.millis delta_motor.angle_m1:3 delta_motor.angle_m2:3 delta_motor.angular_vel_m1:3 delta_motor.angular_vel_m2:3 delta_motor.current_m1:3 delta_motor.current_m2:3")
-#core.mute()
+core.mute()
 #can.unmute()
 
 rdyp.on()
