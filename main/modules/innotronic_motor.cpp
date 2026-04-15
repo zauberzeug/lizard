@@ -258,6 +258,9 @@ void InnotronicMotor::reference_drive_start(uint8_t motor, bool clockwise) {
 }
 
 void InnotronicMotor::reference_drive_stop(uint8_t motor) {
+    if (this->properties.at("debug")->boolean_value) {
+        echo("%s: stopping reference drive on motor %d", this->name.c_str(), motor);
+    }
     this->send_reference_drive(motor, 0x05);
 }
 

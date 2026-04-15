@@ -15,8 +15,11 @@ private:
     CalibrationState cal_state = cal_idle;
     bool both_left_done = false;
     bool both_right_done = false;
+    bool m1_brake_sent = false;
+    bool m2_brake_sent = false;
     int last_ref_m1 = 0;
     int last_ref_m2 = 0;
+    unsigned long cal_started_at = 0;
 
     bool is_motor_active(bool left) const;
     bool is_calibrated() const;

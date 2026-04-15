@@ -1,4 +1,5 @@
 #include "innotronic_delta_arm.h"
+#include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <cmath>
 #include <stdexcept>
@@ -6,8 +7,6 @@
 static constexpr double VELOCITY_ACTIVE_THRESHOLD = 0.01; // rad/s, 1 raw digit = 0.01 rad/s
 
 static constexpr int REF_OK = 1;
-static constexpr int REF_OVERCURRENT = 2;
-static constexpr int REF_END = 4;
 
 REGISTER_MODULE_DEFAULTS(InnotronicDeltaArm)
 
@@ -17,7 +16,7 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
         {"calibrating", std::make_shared<BooleanVariable>(false)},
         {"calibrated_left", std::make_shared<BooleanVariable>(false)},
         {"calibrated_right", std::make_shared<BooleanVariable>(false)},
-        {"cal_speed", std::make_shared<IntegerVariable>(20)},
+        {"cal_timeout", std::make_shared<NumberVariable>(10.0)},
         {"tick_limit", std::make_shared<IntegerVariable>(5)},
     };
 }
@@ -88,6 +87,9 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
     this->motor->get_property("ref_result_m2")->integer_value = 0;
     this->last_ref_m1 = 0;
     this->last_ref_m2 = 0;
+    this->m1_brake_sent = false;
+    this->m2_brake_sent = false;
+    this->cal_started_at = millis();
     if (side == "left") {
         this->cal_state = cal_left;
         this->properties.at("calibrating")->boolean_value = true;
@@ -96,7 +98,7 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
     } else if (side == "right") {
         this->cal_state = cal_right;
         this->properties.at("calibrating")->boolean_value = true;
-        this->motor->reference_drive_start(2, true);
+        this->motor->reference_drive_start(2, false);
         echo("%s: reference right started", this->name.c_str());
     } else if (side == "both") {
         this->cal_state = cal_both;
@@ -145,57 +147,78 @@ void InnotronicDeltaArm::step() {
         this->last_ref_m2 = ref_m2;
     }
 
-    // Calibration state machine
+    // Calibration timeout: brake both motors and abort if we've been calibrating too long
+    if (this->cal_state != cal_idle) {
+        double timeout_s = this->properties.at("cal_timeout")->number_value;
+        if (timeout_s > 0 && millis_since(this->cal_started_at) > static_cast<unsigned long>(timeout_s * 1000)) {
+            this->motor->reference_drive_stop(1);
+            this->motor->reference_drive_stop(2);
+            this->properties.at("calibrating")->boolean_value = false;
+            this->cal_state = cal_idle;
+            echo("%s: calibration timeout after %.1fs", this->name.c_str(), timeout_s);
+        }
+    }
+
+    // Calibration state machine — endstop only triggers the brake; "done" is driven
+    // by the motor's own 0x14 ReferenceFeedback (last_ref_mX becoming non-zero).
     switch (this->cal_state) {
     case cal_left:
-        if (this->last_ref_m1 == REF_OVERCURRENT || this->last_ref_m1 == REF_END) {
-            echo("%s: left reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_m1);
+        if (this->last_ref_m1 != 0) {
+            if (this->last_ref_m1 == REF_OK) {
+                this->properties.at("calibrated_left")->boolean_value = true;
+                echo("%s: left endstop reached, calibration complete", this->name.c_str());
+            } else {
+                echo("%s: left reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_m1);
+            }
             this->properties.at("calibrating")->boolean_value = false;
             this->cal_state = cal_idle;
-        } else if (left_endstop_active) {
+        } else if (left_endstop_active && !this->m1_brake_sent) {
             this->motor->reference_drive_stop(1);
-            this->last_ref_m1 = REF_OK;
-            this->properties.at("calibrated_left")->boolean_value = true;
-            this->properties.at("calibrating")->boolean_value = false;
-            this->cal_state = cal_idle;
-            echo("%s: left endstop reached, calibration complete", this->name.c_str());
+            this->m1_brake_sent = true;
+            echo("%s: left endstop reached, waiting for motor confirmation", this->name.c_str());
         }
         break;
     case cal_right:
-        if (this->last_ref_m2 == REF_OVERCURRENT || this->last_ref_m2 == REF_END) {
-            echo("%s: right reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_m2);
+        if (this->last_ref_m2 != 0) {
+            if (this->last_ref_m2 == REF_OK) {
+                this->properties.at("calibrated_right")->boolean_value = true;
+                echo("%s: right endstop reached, calibration complete", this->name.c_str());
+            } else {
+                echo("%s: right reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_m2);
+            }
             this->properties.at("calibrating")->boolean_value = false;
             this->cal_state = cal_idle;
-        } else if (right_endstop_active) {
+        } else if (right_endstop_active && !this->m2_brake_sent) {
             this->motor->reference_drive_stop(2);
-            this->last_ref_m2 = REF_OK;
-            this->properties.at("calibrated_right")->boolean_value = true;
-            this->properties.at("calibrating")->boolean_value = false;
-            this->cal_state = cal_idle;
-            echo("%s: right endstop reached, calibration complete", this->name.c_str());
+            this->m2_brake_sent = true;
+            echo("%s: right endstop reached, waiting for motor confirmation", this->name.c_str());
         }
         break;
     case cal_both:
         if (!this->both_left_done) {
-            if (this->last_ref_m1 == REF_OVERCURRENT || this->last_ref_m1 == REF_END) {
-                echo("%s: left reference failed during both-reference (ref_result=%d)", this->name.c_str(), this->last_ref_m1);
+            if (this->last_ref_m1 != 0) {
+                if (this->last_ref_m1 == REF_OK) {
+                    echo("%s: left endstop reached during both-reference", this->name.c_str());
+                } else {
+                    echo("%s: left reference failed during both-reference (ref_result=%d)", this->name.c_str(), this->last_ref_m1);
+                }
                 this->both_left_done = true;
-            } else if (left_endstop_active) {
+            } else if (left_endstop_active && !this->m1_brake_sent) {
                 this->motor->reference_drive_stop(1);
-                this->last_ref_m1 = REF_OK;
-                this->both_left_done = true;
-                echo("%s: left endstop reached during both-reference", this->name.c_str());
+                this->m1_brake_sent = true;
             }
         }
         if (!this->both_right_done) {
-            if (this->last_ref_m2 == REF_OVERCURRENT || this->last_ref_m2 == REF_END) {
-                echo("%s: right reference failed during both-reference (ref_result=%d)", this->name.c_str(), this->last_ref_m2);
+            if (this->last_ref_m2 != 0) {
+                if (this->last_ref_m2 == REF_OK) {
+                    echo("%s: right endstop reached during both-reference", this->name.c_str());
+                } else {
+                    echo("%s: right reference failed during both-reference (ref_result=%d)", this->name.c_str(), this->last_ref_m2);
+                }
                 this->both_right_done = true;
-            } else if (right_endstop_active) {
+            } else if (right_endstop_active && !this->m2_brake_sent) {
                 this->motor->reference_drive_stop(2);
-                this->last_ref_m2 = REF_OK;
-                this->both_right_done = true;
-                echo("%s: right endstop reached during both-reference", this->name.c_str());
+                this->m2_brake_sent = true;
             }
         }
         if (this->both_left_done && this->both_right_done) {
