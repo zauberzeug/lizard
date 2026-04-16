@@ -367,12 +367,18 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
         this->properties.at("loop")->boolean_value = false;
         this->start_reference(side);
     } else if (method_name == "loop") {
-        Module::expect(arguments, 1, boolean);
+        if (arguments.size() < 1 || arguments.size() > 2) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, boolean, integer);
         bool enable_loop = arguments[0]->evaluate_boolean();
         if (enable_loop && !this->is_calibrated()) {
             echo("%s: not calibrated, cannot start loop", this->name.c_str());
             this->properties.at("loop")->boolean_value = false;
             return;
+        }
+        if (arguments.size() > 1) {
+            this->properties.at("loop_speed")->integer_value = arguments[1]->evaluate_integer();
         }
         this->properties.at("loop")->boolean_value = enable_loop;
         if (enable_loop) {
