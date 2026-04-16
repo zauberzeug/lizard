@@ -1,5 +1,4 @@
 #include "mks_servo_motor.h"
-#include "../utils/uart.h"
 #include <algorithm>
 
 REGISTER_MODULE_DEFAULTS(MksServoMotor)
