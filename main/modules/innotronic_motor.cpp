@@ -216,22 +216,28 @@ void InnotronicMotor::send_rel_angle_cmd(float angle, uint16_t vel_limit, uint8_
     this->can->send(can_id, data);
 }
 
-void InnotronicMotor::send_delta_angle_cmd(uint8_t motor_select, int16_t position_ticks, uint16_t speed_limit) {
+void InnotronicMotor::send_delta_angle_cmd(uint8_t motor_select, int16_t pos1, uint8_t spd1, int16_t pos2, uint8_t spd2) {
     if (!this->enabled) {
         return;
     }
     // AngleCmd CmdID 0x03: per-motor position command
-    // Byte 0: motor select (0x10 = left, 0x20 = right)
+    // Byte 0: motor select (0x10 = left, 0x20 = right, 0x30 = both)
     // Byte 1-2: position in hall ticks (int16, ±150, 150 = 180°)
-    // Byte 3-4: speed limit (uint16)
-    // Byte 5-7: reserved
+    // Byte 3: speed limit (uint8, 1-50, 1 = fast, 50 = slow)
+    // Byte 4-5: position for motor 2 if motor_select is 0x30 (int16, ±150, 150 = 180°)
+    // Byte 6: speed limit for motor 2 if motor_select is 0x30
+    // Byte 7: reserved
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     data[0] = motor_select;
-    std::memcpy(data + 1, &position_ticks, 2);
-    std::memcpy(data + 3, &speed_limit, 2);
+    std::memcpy(data + 1, &pos1, 2);
+    data[3] = spd1;
+    if (motor_select == 0x30) {
+        std::memcpy(data + 4, &pos2, 2);
+        data[6] = spd2;
+    }
     uint32_t can_id = (this->node_id << 5) | 0x03;
-    // echo("CAN TX [NodeID=%ld, CmdID=0x03]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (angle_cmd motor=0x%02x ticks=%d speed=%d)",
-    //      this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], motor_select, position_ticks, speed_limit);
+    // echo("CAN TX [NodeID=%ld, CmdID=0x03]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (angle_cmd motor=0x%02x)",
+    //      this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], motor_select);
     this->can->send(can_id, data);
 }
 
@@ -343,14 +349,18 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         int32_t value2 = static_cast<int32_t>(arguments[2]->evaluate_integer());
         this->configure(setting_id, value1, value2);
     } else if (method_name == "delta_angle") {
-        if (arguments.size() < 2 || arguments.size() > 3) {
+        // delta_angle(motor_select, pos1, [speed1], [pos2], [speed2])
+        // motor_select: 0x10 = left only, 0x20 = right only, 0x30 = both
+        if (arguments.size() < 2 || arguments.size() > 5) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, integer, integer, integer);
+        Module::expect(arguments, -1, integer, integer, integer, integer, integer);
         uint8_t motor_select = static_cast<uint8_t>(arguments[0]->evaluate_integer());
-        int16_t position_ticks = static_cast<int16_t>(arguments[1]->evaluate_integer());
-        uint16_t speed_limit = arguments.size() > 2 ? static_cast<uint16_t>(arguments[2]->evaluate_integer()) : 0xFFFF;
-        this->send_delta_angle_cmd(motor_select, position_ticks, speed_limit);
+        int16_t pos1 = static_cast<int16_t>(arguments[1]->evaluate_integer());
+        uint8_t spd1 = arguments.size() > 2 ? static_cast<uint8_t>(arguments[2]->evaluate_integer()) : 10;
+        int16_t pos2 = arguments.size() > 3 ? static_cast<int16_t>(arguments[3]->evaluate_integer()) : 0;
+        uint8_t spd2 = arguments.size() > 4 ? static_cast<uint8_t>(arguments[4]->evaluate_integer()) : 10;
+        this->send_delta_angle_cmd(motor_select, pos1, spd1, pos2, spd2);
     } else if (method_name == "switch_to_delta_mode") {
         Module::expect(arguments, 0);
         this->properties.at("motor_ticks")->integer_value = DELTA_MOTOR_TICKS;
