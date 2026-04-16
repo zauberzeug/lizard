@@ -1,4 +1,5 @@
 #include "mks_servo_motor.h"
+#include "../utils/uart.h"
 #include <algorithm>
 
 REGISTER_MODULE_DEFAULTS(MksServoMotor)
@@ -57,6 +58,12 @@ void MksServoMotor::disable() {
 void MksServoMotor::send_set_mode(uint8_t mode) {
     mode = std::clamp(mode, (uint8_t)0x00, MAX_MODE);
     uint8_t data[] = {0x82, mode};
+    this->send(data, 2);
+}
+
+void MksServoMotor::send_set_bitrate(uint8_t rate) {
+    rate = std::clamp(rate, (uint8_t)0x00, MAX_BITRATE);
+    uint8_t data[] = {0x8A, rate};
     this->send(data, 2);
 }
 
@@ -158,6 +165,21 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
     } else if (method_name == "set_mode") {
         Module::expect(arguments, 1, integer);
         this->send_set_mode((uint8_t)arguments[0]->evaluate_integer());
+    } else if (method_name == "set_bitrate") {
+        Module::expect(arguments, 1, string);
+        std::string rate = arguments[0]->evaluate_string();
+        std::transform(rate.begin(), rate.end(), rate.begin(), ::toupper);
+        if (rate == "125K") {
+            this->send_set_bitrate(BITRATE_125K);
+        } else if (rate == "250K") {
+            this->send_set_bitrate(BITRATE_250K);
+        } else if (rate == "500K") {
+            this->send_set_bitrate(BITRATE_500K);
+        } else if (rate == "1M") {
+            this->send_set_bitrate(BITRATE_1M);
+        } else {
+            echo("%s set_bitrate: unknown rate '%s', expected 125K/250K/500K/1M", this->name.c_str(), rate.c_str());
+        }
     } else if (method_name == "zero") {
         Module::expect(arguments, 0);
         this->send_coord_zero();
