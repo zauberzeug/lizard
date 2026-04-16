@@ -21,9 +21,12 @@ private:
     int last_ref_m2 = 0;
     unsigned long cal_started_at = 0;
 
+    int loop_step = 0;
+    unsigned long last_loop_move_at = 0;
+
     bool is_motor_active(bool left) const;
     bool is_calibrated() const;
-    void move_to(int16_t left_ticks, int16_t right_ticks, uint16_t speed_left, uint16_t speed_right);
+    void move_to(int16_t left_ticks, int16_t right_ticks, uint8_t speed_left, uint8_t speed_right);
     bool can_move(int16_t left_ticks, int16_t right_ticks) const;
     void start_reference(const std::string &side);
     void enable();

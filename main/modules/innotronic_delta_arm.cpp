@@ -18,6 +18,12 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
         {"calibrated_right", std::make_shared<BooleanVariable>(false)},
         {"cal_timeout", std::make_shared<NumberVariable>(10.0)},
         {"tick_limit", std::make_shared<IntegerVariable>(5)},
+        {"loop", std::make_shared<BooleanVariable>(false)},
+        {"loop_speed", std::make_shared<IntegerVariable>(10)},
+        {"loop_interval", std::make_shared<NumberVariable>(3.0)},
+        {"loop_top", std::make_shared<IntegerVariable>(20)},
+        {"loop_bottom", std::make_shared<IntegerVariable>(50)},
+        {"loop_spread", std::make_shared<IntegerVariable>(40)},
     };
 }
 
@@ -36,14 +42,13 @@ bool InnotronicDeltaArm::is_calibrated() const {
            this->properties.at("calibrated_right")->boolean_value;
 }
 
-void InnotronicDeltaArm::move_to(int16_t left_ticks, int16_t right_ticks, uint16_t speed_left, uint16_t speed_right) {
+void InnotronicDeltaArm::move_to(int16_t left_ticks, int16_t right_ticks, uint8_t speed_left, uint8_t speed_right) {
     if (!this->is_calibrated()) {
         echo("%s: not calibrated, ignoring move command", this->name.c_str());
         return;
     }
     if (this->can_move(left_ticks, right_ticks)) {
-        this->motor->send_delta_angle_cmd(0x10, left_ticks, speed_left);
-        this->motor->send_delta_angle_cmd(0x20, right_ticks, speed_right);
+        this->motor->send_delta_angle_cmd(0x30, left_ticks, speed_left, right_ticks, speed_right);
     }
 }
 
@@ -238,6 +243,28 @@ void InnotronicDeltaArm::step() {
         break;
     }
 
+    // Box loop test: cycle through 4 corners around a (unten) and b (oben)
+    // Order: links von b → rechts von b → rechts von a → links von a
+    if (this->properties.at("loop")->boolean_value && this->cal_state == cal_idle) {
+        double interval_s = this->properties.at("loop_interval")->number_value;
+        if (millis_since(this->last_loop_move_at) >= static_cast<unsigned long>(interval_s * 1000)) {
+            int top = this->properties.at("loop_top")->integer_value;
+            int bottom = this->properties.at("loop_bottom")->integer_value;
+            int spread = this->properties.at("loop_spread")->integer_value;
+            int16_t box[4][2] = {
+                {static_cast<int16_t>(-top - spread), static_cast<int16_t>(top)},           // links von b
+                {static_cast<int16_t>(-top), static_cast<int16_t>(top + spread)},           // rechts von b
+                {static_cast<int16_t>(-bottom), static_cast<int16_t>(bottom + spread)},     // rechts von a
+                {static_cast<int16_t>(-bottom - spread), static_cast<int16_t>(bottom)},     // links von a
+            };
+            int step = this->loop_step % 4;
+            uint8_t speed = static_cast<uint8_t>(this->properties.at("loop_speed")->integer_value);
+            this->move_to(box[step][0], box[step][1], speed, speed);
+            this->loop_step++;
+            this->last_loop_move_at = millis();
+        }
+    }
+
     Module::step();
 }
 
@@ -249,44 +276,62 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
         Module::expect(arguments, -1, integer, integer, integer, integer);
         int16_t left_ticks = static_cast<int16_t>(arguments[0]->evaluate_integer());
         int16_t right_ticks = static_cast<int16_t>(arguments[1]->evaluate_integer());
-        uint16_t speed_left = arguments.size() > 2 ? static_cast<uint16_t>(arguments[2]->evaluate_integer()) : 0xFFFF;
-        uint16_t speed_right = arguments.size() > 3 ? static_cast<uint16_t>(arguments[3]->evaluate_integer()) : 0xFFFF;
+        uint8_t speed_left = arguments.size() > 2 ? static_cast<uint8_t>(arguments[2]->evaluate_integer()) : 10;
+        uint8_t speed_right = arguments.size() > 3 ? static_cast<uint8_t>(arguments[3]->evaluate_integer()) : 10;
         this->move_to(left_ticks, right_ticks, speed_left, speed_right);
     } else if (method_name == "move_a") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer);
-        uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
+        uint8_t speed = arguments.size() > 0 ? static_cast<uint8_t>(arguments[0]->evaluate_integer()) : 10;
         this->move_to(-80, 80, speed, speed);
     } else if (method_name == "move_b") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer);
-        uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
+        uint8_t speed = arguments.size() > 0 ? static_cast<uint8_t>(arguments[0]->evaluate_integer()) : 10;
         this->move_to(-10, 10, speed, speed);
     } else if (method_name == "move_c") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer);
-        uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
+        uint8_t speed = arguments.size() > 0 ? static_cast<uint8_t>(arguments[0]->evaluate_integer()) : 10;
         this->move_to(-20, 50, speed, speed);
     } else if (method_name == "move_d") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
         }
         Module::expect(arguments, -1, integer);
-        uint16_t speed = arguments.size() > 0 ? static_cast<uint16_t>(arguments[0]->evaluate_integer()) : 10;
+        uint8_t speed = arguments.size() > 0 ? static_cast<uint8_t>(arguments[0]->evaluate_integer()) : 10;
         this->move_to(-50, 20, speed, speed);
     } else if (method_name == "reference") {
         Module::expect(arguments, 1, string);
         std::string side = arguments[0]->evaluate_string();
+        this->properties.at("loop")->boolean_value = false;
         this->start_reference(side);
+    } else if (method_name == "loop") {
+        Module::expect(arguments, 1, boolean);
+        bool enable_loop = arguments[0]->evaluate_boolean();
+        if (enable_loop && !this->is_calibrated()) {
+            echo("%s: not calibrated, cannot start loop", this->name.c_str());
+            this->properties.at("loop")->boolean_value = false;
+            return;
+        }
+        this->properties.at("loop")->boolean_value = enable_loop;
+        if (enable_loop) {
+            this->loop_step = 0;
+            this->last_loop_move_at = 0;
+            echo("%s: loop started", this->name.c_str());
+        } else {
+            echo("%s: loop stopped", this->name.c_str());
+        }
     } else if (method_name == "stop") {
         // stop() = stop both, stop(1) or stop(2) = stop individual motor
         if (arguments.size() == 0) {
+            this->properties.at("loop")->boolean_value = false;
             if (this->cal_state != cal_idle) {
                 this->cal_state = cal_idle;
                 this->properties.at("calibrating")->boolean_value = false;
@@ -326,6 +371,7 @@ void InnotronicDeltaArm::enable() {
 }
 
 void InnotronicDeltaArm::disable() {
+    this->properties.at("loop")->boolean_value = false;
     this->motor->stop();
     this->motor->disable();
     this->enabled = false;
