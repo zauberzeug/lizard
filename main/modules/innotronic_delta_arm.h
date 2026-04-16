@@ -11,7 +11,7 @@ private:
     const Input_ptr right_endstop;
     bool enabled = true;
 
-    enum CalibrationState { cal_idle, cal_left, cal_right, cal_both };
+    enum CalibrationState { cal_idle, cal_left, cal_right, cal_both, cal_backoff };
     CalibrationState cal_state = cal_idle;
     bool both_left_done = false;
     bool both_right_done = false;
@@ -20,6 +20,9 @@ private:
     int last_ref_m1 = 0;
     int last_ref_m2 = 0;
     unsigned long cal_started_at = 0;
+    std::string pending_ref_side;
+    unsigned long last_backoff_at = 0;
+    bool backoff_last_was_left = false;
 
     int loop_step = 0;
     unsigned long last_loop_move_at = 0;

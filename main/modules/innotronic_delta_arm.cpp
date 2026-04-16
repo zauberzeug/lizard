@@ -87,6 +87,9 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         echo("%s: already calibrating, ignoring reference(%s)", this->name.c_str(), side.c_str());
         return;
     }
+    if (side != "left" && side != "right" && side != "both") {
+        throw std::runtime_error("reference side must be \"left\", \"right\" or \"both\"");
+    }
     // Reset ref results so stale values from previous runs don't cause immediate abort
     this->motor->get_property("ref_result_m1")->integer_value = 0;
     this->motor->get_property("ref_result_m2")->integer_value = 0;
@@ -95,6 +98,22 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
     this->m1_brake_sent = false;
     this->m2_brake_sent = false;
     this->cal_started_at = millis();
+
+    // If the relevant endstop is already active, nudge the motor away first.
+    // The reference drive would otherwise immediately re-brake and fail (overcurrent).
+    bool left_active = this->left_endstop && this->left_endstop->get_property("active")->boolean_value;
+    bool right_active = this->right_endstop && this->right_endstop->get_property("active")->boolean_value;
+    bool needs_left_backoff = (side == "left" || side == "both") && left_active;
+    bool needs_right_backoff = (side == "right" || side == "both") && right_active;
+    if (needs_left_backoff || needs_right_backoff) {
+        this->cal_state = cal_backoff;
+        this->pending_ref_side = side;
+        this->last_backoff_at = 0;
+        this->properties.at("calibrating")->boolean_value = true;
+        echo("%s: endstop active, backing off before reference %s", this->name.c_str(), side.c_str());
+        return;
+    }
+
     if (side == "left") {
         this->cal_state = cal_left;
         this->properties.at("calibrating")->boolean_value = true;
@@ -105,7 +124,7 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         this->properties.at("calibrating")->boolean_value = true;
         this->motor->reference_drive_start(2, false);
         echo("%s: reference right started", this->name.c_str());
-    } else if (side == "both") {
+    } else { // "both"
         this->cal_state = cal_both;
         this->both_left_done = false;
         this->both_right_done = false;
@@ -113,8 +132,6 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         this->motor->reference_drive_start(1, true);
         this->motor->reference_drive_start(2, false);
         echo("%s: reference both started", this->name.c_str());
-    } else {
-        throw std::runtime_error("reference side must be \"left\", \"right\" or \"both\"");
     }
 }
 
@@ -239,6 +256,43 @@ void InnotronicDeltaArm::step() {
             echo("%s: both calibration done (m1=%d m2=%d)", this->name.c_str(), this->last_ref_m1, this->last_ref_m2);
         }
         break;
+    case cal_backoff: {
+        // Nudge motors away from their endstops before the real reference drive starts.
+        // Left endstop is hit at positive angle_m1 → back off negative.
+        // Right endstop is hit at negative angle_m2 → back off positive.
+        bool need_left = (this->pending_ref_side == "left" || this->pending_ref_side == "both");
+        bool need_right = (this->pending_ref_side == "right" || this->pending_ref_side == "both");
+        bool left_clear = !need_left || !left_endstop_active;
+        bool right_clear = !need_right || !right_endstop_active;
+        if (left_clear && right_clear) {
+            std::string side = this->pending_ref_side;
+            this->pending_ref_side.clear();
+            this->cal_state = cal_idle;
+            this->properties.at("calibrating")->boolean_value = false;
+            echo("%s: endstops cleared, starting reference %s", this->name.c_str(), side.c_str());
+            this->start_reference(side);
+            break;
+        }
+        if (millis_since(this->last_backoff_at) >= 200) {
+            constexpr int16_t BACKOFF_STEP_TICKS = 3;
+            constexpr uint8_t BACKOFF_SPEED = 30;
+            bool nudge_left = need_left && left_endstop_active;
+            bool nudge_right = need_right && right_endstop_active;
+            // Only one motor per tick — alternate when both endstops are still active.
+            bool pick_left = nudge_left && (!nudge_right || !this->backoff_last_was_left);
+            if (pick_left) {
+                int16_t target_m1 = static_cast<int16_t>(this->motor->get_property("angle_m1")->number_value) - BACKOFF_STEP_TICKS;
+                this->motor->send_delta_angle_cmd(0x10, target_m1, BACKOFF_SPEED);
+                this->backoff_last_was_left = true;
+            } else if (nudge_right) {
+                int16_t target_m2 = static_cast<int16_t>(this->motor->get_property("angle_m2")->number_value) + BACKOFF_STEP_TICKS;
+                this->motor->send_delta_angle_cmd(0x20, target_m2, BACKOFF_SPEED);
+                this->backoff_last_was_left = false;
+            }
+            this->last_backoff_at = millis();
+        }
+        break;
+    }
     case cal_idle:
         break;
     }
