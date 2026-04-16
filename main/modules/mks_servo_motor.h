@@ -22,6 +22,7 @@ private:
     void enable();
     void disable();
     void send_set_mode(uint8_t mode);
+    void send_set_bitrate(uint8_t rate);
     void send_working_current(int64_t ma);
     void send_holding_current(int64_t pct);
     void send_speed_internal(int64_t speed, int64_t direction, int64_t acc);
@@ -49,6 +50,13 @@ public:
     static constexpr uint8_t MODE_SR_CLOSE = 0x04;
     static constexpr uint8_t MODE_SR_vFOC = 0x05;
     static constexpr uint8_t MAX_MODE = MODE_SR_vFOC;
+
+    // CAN bitrates (0x8A command).
+    static constexpr uint8_t BITRATE_125K = 0x00;
+    static constexpr uint8_t BITRATE_250K = 0x01;
+    static constexpr uint8_t BITRATE_500K = 0x02;
+    static constexpr uint8_t BITRATE_1M = 0x03;
+    static constexpr uint8_t MAX_BITRATE = BITRATE_1M;
 
     // Status codes exposed via the "status" property (readable from Lizard).
     static constexpr int64_t STATUS_OK = 0;
