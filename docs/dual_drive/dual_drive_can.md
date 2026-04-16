@@ -34,14 +34,18 @@ Relative angle command for track drives.
 
 ### 0x03 AngleCmd (Delta Arm)
 
-Per-motor position command for delta arm motors.
+Per-motor position command for delta arm motors. Either a single motor (0x10 / 0x20) or both motors in one frame (0x30).
 
-| Byte | Type   | Description                                                 |
-| ---- | ------ | ----------------------------------------------------------- |
-| 0    | uint8  | Motor select: 0x10 = left (motor 1), 0x20 = right (motor 2) |
-| 1-2  | int16  | Position in hall ticks (+-150, where 150 = 180 degrees)     |
-| 3-4  | uint16 | Speed limit (lower = slower, 0xFFFF = unlimited)            |
-| 5-7  |        | Reserved                                                    |
+| Byte | Type  | Description                                                                       |
+| ---- | ----- | --------------------------------------------------------------------------------- |
+| 0    | uint8 | Motor select: 0x10 = left (motor 1), 0x20 = right (motor 2), 0x30 = both          |
+| 1-2  | int16 | Position in hall ticks (+-150, where 150 = 180 degrees) — motor 1 if 0x30         |
+| 3    | uint8 | Speed limit 1-50 (1 = fast, 50 = slow) — motor 1 if 0x30                          |
+| 4-5  | int16 | Position motor 2 in hall ticks, only used if motor_select = 0x30                  |
+| 6    | uint8 | Speed limit motor 2 (1-50, 1 = fast, 50 = slow), only used if motor_select = 0x30 |
+| 7    |       | Reserved                                                                          |
+
+When `motor_select` is 0x10 or 0x20, bytes 4-7 are ignored. When 0x30, a single frame drives both motors with independent positions and speeds.
 
 ### 0x0A SwitchState
 
