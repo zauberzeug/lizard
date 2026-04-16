@@ -40,7 +40,19 @@ public:
     static constexpr int64_t MAX_HOLDING_RATIO = 9;
     static constexpr int64_t MAX_SPEED = 3000;
     static constexpr int64_t MAX_ACC = 255;
-    static constexpr uint8_t MAX_MODE = 0x05;
+
+    // Working modes (0x82 command).
+    static constexpr uint8_t MODE_CR_OPEN = 0x00;
+    static constexpr uint8_t MODE_CR_CLOSE = 0x01;
+    static constexpr uint8_t MODE_CR_vFOC = 0x02;
+    static constexpr uint8_t MODE_SR_OPEN = 0x03;
+    static constexpr uint8_t MODE_SR_CLOSE = 0x04;
+    static constexpr uint8_t MODE_SR_vFOC = 0x05;
+    static constexpr uint8_t MAX_MODE = MODE_SR_vFOC;
+
+    // Status codes exposed via the "status" property (readable from Lizard).
+    static constexpr int64_t STATUS_OK = 0;
+    static constexpr int64_t STATUS_SET_MODE_FAILED = 1;
 
     MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id);
     void subscribe_to_can();

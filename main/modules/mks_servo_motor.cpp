@@ -1,4 +1,5 @@
 #include "mks_servo_motor.h"
+#include "../utils/uart.h"
 #include <algorithm>
 
 REGISTER_MODULE_DEFAULTS(MksServoMotor)
@@ -10,6 +11,7 @@ const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
         {"working_current", std::make_shared<IntegerVariable>(1700)},
         {"enabled", std::make_shared<BooleanVariable>(true)},
         {"position_error", std::make_shared<NumberVariable>()},
+        {"status", std::make_shared<IntegerVariable>(STATUS_OK)},
     };
 }
 
@@ -17,6 +19,7 @@ MksServoMotor::MksServoMotor(const std::string name, const Can_ptr can, const ui
     : Module(mks_servo_motor, name), can(can), can_id(can_id) {
     this->properties = MksServoMotor::get_defaults();
     this->send_working_current(1700);
+    this->send_set_mode(MODE_SR_vFOC); // required for 0xF5/0xF6 bus motion commands
 }
 
 void MksServoMotor::subscribe_to_can() {
@@ -244,5 +247,14 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
                       ((int32_t)data[3] << 8) |
                       (int32_t)data[4];
         this->properties.at("position_error")->number_value = (double)val * 360.0 / POSITION_ERROR_COUNTS_PER_TURN;
+    } else if (data[0] == 0x82 && count == 3) {
+        // CRC validation
+        uint8_t crc = (uint8_t)(this->can_id & 0xFF) + data[0] + data[1];
+        if ((crc & 0xFF) != data[2]) {
+            return;
+        }
+        if (data[1] == 0x00) {
+            this->properties.at("status")->integer_value = STATUS_SET_MODE_FAILED;
+        }
     }
 }
