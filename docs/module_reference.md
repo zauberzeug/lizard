@@ -162,9 +162,13 @@ When the output is disabled, it will deactivate and ignore on/off or level comma
 
 The PWM output module is associated with a digital output pin that is connected to an LED, actuator or other output signal.
 
-| Constructor            | Description                            | Arguments |
-| ---------------------- | -------------------------------------- | --------- |
-| `pwm = PwmOutput(pin)` | `pin` is the corresponding GPIO number | `int`     |
+| Constructor                        | Description                            | Arguments  |
+| ---------------------------------- | -------------------------------------- | ---------- |
+| `pwm = PwmOutput(pin[, lt[, lc]])` | `pin` is the corresponding GPIO number | 1–3x `int` |
+
+The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
+When using multiple PWM outputs, set different channel IDs to avoid conflicts.
+Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
 
 | Properties         | Description                              | Data type |
 | ------------------ | ---------------------------------------- | --------- |
