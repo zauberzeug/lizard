@@ -276,6 +276,8 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
         }
         if (data[1] == 0x00) {
             this->properties.at("status")->integer_value = STATUS_SET_MODE_FAILED;
+        } else {
+            this->properties.at("status")->integer_value = STATUS_OK;
         }
     }
 }
