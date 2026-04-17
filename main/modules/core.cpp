@@ -166,6 +166,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 0);
         Module::broadcast_paused = false;
         echo("broadcasts resumed");
+    } else if (method_name == "heartbeat") {
+        Module::expect(arguments, 0);
+        this->keep_alive();
     } else {
         Module::call(method_name, arguments);
     }

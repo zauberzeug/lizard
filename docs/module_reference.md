@@ -18,11 +18,12 @@ The `broadcast` method is used internally with [port expanders](#expander).
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
 It is automatically created right after the boot sequence.
 
-| Properties    | Description                                             | Data type |
-| ------------- | ------------------------------------------------------- | --------- |
-| `core.debug`  | Whether to output debug information to the command line | `bool`    |
-| `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
-| `core.heap`   | Free heap memory (bytes)                                | `int`     |
+| Properties              | Description                                                     | Data type |
+| ----------------------- | --------------------------------------------------------------- | --------- |
+| `core.debug`            | Whether to output debug information to the command line         | `bool`    |
+| `core.millis`           | Time since booting the microcontroller (ms)                     | `int`     |
+| `core.heap`             | Free heap memory (bytes)                                        | `int`     |
+| `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
 
 | Methods                          | Description                                        | Arguments    |
 | -------------------------------- | -------------------------------------------------- | ------------ |
@@ -38,6 +39,7 @@ It is automatically created right after the boot sequence.
 | `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
 | `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
 | `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
+| `core.heartbeat()`               | Reset `last_message_age` without producing output  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
