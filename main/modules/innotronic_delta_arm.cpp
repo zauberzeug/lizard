@@ -257,9 +257,8 @@ void InnotronicDeltaArm::step() {
         }
         break;
     case cal_backoff: {
-        // Nudge motors away from their endstops before the real reference drive starts.
-        // Left endstop is hit at positive angle_m1 → back off negative.
-        // Right endstop is hit at negative angle_m2 → back off positive.
+        // Back off a few ticks in the "down" (operating-range) direction.
+        // Down is negative for motor 1 (left) and positive for motor 2 (right) — same sign as move_a().
         bool need_left = (this->pending_ref_side == "left" || this->pending_ref_side == "both");
         bool need_right = (this->pending_ref_side == "right" || this->pending_ref_side == "both");
         bool left_clear = !need_left || !left_endstop_active;
@@ -274,18 +273,22 @@ void InnotronicDeltaArm::step() {
             break;
         }
         if (millis_since(this->last_backoff_at) >= 200) {
-            constexpr int16_t BACKOFF_STEP_TICKS = 3;
-            constexpr uint8_t BACKOFF_SPEED = 30;
+            constexpr int16_t BACKOFF_STEP_TICKS = 10;
+            constexpr uint8_t BACKOFF_SPEED = 20;
             bool nudge_left = need_left && left_endstop_active;
             bool nudge_right = need_right && right_endstop_active;
             // Only one motor per tick — alternate when both endstops are still active.
             bool pick_left = nudge_left && (!nudge_right || !this->backoff_last_was_left);
             if (pick_left) {
-                int16_t target_m1 = static_cast<int16_t>(this->motor->get_property("angle_m1")->number_value) - BACKOFF_STEP_TICKS;
+                int16_t a1 = static_cast<int16_t>(this->motor->get_property("angle_m1")->number_value);
+                int16_t target_m1 = a1 - BACKOFF_STEP_TICKS;
+                echo("%s: backoff left angle=%d -> %d", this->name.c_str(), a1, target_m1);
                 this->motor->send_delta_angle_cmd(0x10, target_m1, BACKOFF_SPEED);
                 this->backoff_last_was_left = true;
             } else if (nudge_right) {
-                int16_t target_m2 = static_cast<int16_t>(this->motor->get_property("angle_m2")->number_value) + BACKOFF_STEP_TICKS;
+                int16_t a2 = static_cast<int16_t>(this->motor->get_property("angle_m2")->number_value);
+                int16_t target_m2 = a2 + BACKOFF_STEP_TICKS;
+                echo("%s: backoff right angle=%d -> %d", this->name.c_str(), a2, target_m2);
                 this->motor->send_delta_angle_cmd(0x20, target_m2, BACKOFF_SPEED);
                 this->backoff_last_was_left = false;
             }
