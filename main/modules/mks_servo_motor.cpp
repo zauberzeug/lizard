@@ -64,7 +64,7 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
 void MksServoMotor::send_set_bitrate(uint8_t rate) {
     rate = std::clamp(rate, (uint8_t)0x00, MAX_BITRATE);
     uint8_t data[] = {0x8A, rate};
-    this->send(data, 2);
+    this->send(data, 2); // fire-and-forget: the drive changes bitrate immediately, so no response is received
 }
 
 void MksServoMotor::send_working_current(int64_t ma) {
