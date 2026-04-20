@@ -4,7 +4,8 @@
 #include <cmath>
 #include <stdexcept>
 
-static constexpr double VELOCITY_ACTIVE_THRESHOLD = 0.01; // rad/s, 1 raw digit = 0.01 rad/s
+static constexpr int DELTA_MOTOR_TICKS = 300;
+static constexpr double DEG_PER_DELTA_TICK = 360.0 / DELTA_MOTOR_TICKS; // 1.2°/tick
 
 static constexpr int REF_OK = 1;
 
@@ -18,6 +19,11 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
         {"calibrated_right", std::make_shared<BooleanVariable>(false)},
         {"cal_timeout", std::make_shared<NumberVariable>(10.0)},
         {"tick_limit", std::make_shared<IntegerVariable>(5)},
+        {"active", std::make_shared<BooleanVariable>(false)},
+        {"angle_left", std::make_shared<NumberVariable>()},
+        {"angle_right", std::make_shared<NumberVariable>()},
+        {"position_tol", std::make_shared<IntegerVariable>(1)},
+        {"stable_ms", std::make_shared<IntegerVariable>(100)},
         {"loop", std::make_shared<BooleanVariable>(false)},
         {"loop_speed", std::make_shared<IntegerVariable>(10)},
         {"loop_interval", std::make_shared<NumberVariable>(3.0)},
@@ -32,11 +38,6 @@ InnotronicDeltaArm::InnotronicDeltaArm(const std::string name, const InnotronicM
     this->properties = InnotronicDeltaArm::get_defaults();
 }
 
-bool InnotronicDeltaArm::is_motor_active(bool left) const {
-    double vel = this->motor->get_property(left ? "angular_vel_m1" : "angular_vel_m2")->number_value;
-    return std::abs(vel) >= VELOCITY_ACTIVE_THRESHOLD;
-}
-
 bool InnotronicDeltaArm::is_calibrated() const {
     return this->properties.at("calibrated_left")->boolean_value &&
            this->properties.at("calibrated_right")->boolean_value;
@@ -49,6 +50,11 @@ void InnotronicDeltaArm::move_to(int16_t left_ticks, int16_t right_ticks, uint8_
     }
     if (this->can_move(left_ticks, right_ticks)) {
         this->motor->send_delta_angle_cmd(0x30, left_ticks, speed_left, right_ticks, speed_right);
+        this->target_left_ticks = left_ticks;
+        this->target_right_ticks = right_ticks;
+        this->was_in_tol = false;
+        this->stable_since = 0;
+        this->properties.at("active")->boolean_value = true;
     }
 }
 
@@ -98,6 +104,7 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
     this->m1_brake_sent = false;
     this->m2_brake_sent = false;
     this->cal_started_at = millis();
+    this->properties.at("active")->boolean_value = false;
 
     // If the relevant endstop is already active, nudge the motor away first.
     // The reference drive would otherwise immediately re-brake and fail (overcurrent).
@@ -147,15 +154,48 @@ void InnotronicDeltaArm::step() {
     bool left_endstop_active = this->left_endstop && this->left_endstop->get_property("active")->boolean_value;
     bool right_endstop_active = this->right_endstop && this->right_endstop->get_property("active")->boolean_value;
 
-    // Brake motor when endstop triggers and motor is drawing current
-    if (left_endstop_active && this->is_motor_active(true)) {
-        this->motor->reference_drive_stop(1);
-        echo("%s: left endstop triggered, braking left motor", this->name.c_str());
+    // Export current motor angles in degrees (delta mode: 0x15 CAN msg updates angle_mX as int16 ticks)
+    double cur_m1 = this->motor->get_property("angle_m1")->number_value;
+    double cur_m2 = this->motor->get_property("angle_m2")->number_value;
+    this->properties.at("angle_left")->number_value = cur_m1 * DEG_PER_DELTA_TICK;
+    this->properties.at("angle_right")->number_value = cur_m2 * DEG_PER_DELTA_TICK;
+
+    // Active / target-reached tracking (tick-based, no velocity feedback in delta mode)
+    if (this->properties.at("active")->boolean_value) {
+        int tol = this->properties.at("position_tol")->integer_value;
+        int16_t cur_l = static_cast<int16_t>(cur_m1);
+        int16_t cur_r = static_cast<int16_t>(cur_m2);
+        bool in_tol = std::abs(cur_l - this->target_left_ticks) <= tol &&
+                      std::abs(cur_r - this->target_right_ticks) <= tol;
+        if (in_tol) {
+            if (!this->was_in_tol) {
+                this->stable_since = millis();
+                this->was_in_tol = true;
+            } else if (millis_since(this->stable_since) >=
+                       static_cast<unsigned long>(this->properties.at("stable_ms")->integer_value)) {
+                this->properties.at("active")->boolean_value = false;
+                this->was_in_tol = false;
+            }
+        } else {
+            this->was_in_tol = false;
+        }
     }
-    if (right_endstop_active && this->is_motor_active(false)) {
-        this->motor->reference_drive_stop(2);
-        echo("%s: right endstop triggered, braking right motor", this->name.c_str());
+
+    // Endstop safety: brake once on rising edge while a user move is active
+    if (this->properties.at("active")->boolean_value) {
+        if (left_endstop_active && !this->left_endstop_prev) {
+            this->motor->reference_drive_stop(1);
+            this->properties.at("active")->boolean_value = false;
+            echo("%s: left endstop triggered during move", this->name.c_str());
+        }
+        if (right_endstop_active && !this->right_endstop_prev) {
+            this->motor->reference_drive_stop(2);
+            this->properties.at("active")->boolean_value = false;
+            echo("%s: right endstop triggered during move", this->name.c_str());
+        }
     }
+    this->left_endstop_prev = left_endstop_active;
+    this->right_endstop_prev = right_endstop_active;
 
     // Latch ref results: 0x14 arrives per-motor in separate messages,
     // each only setting its own nibble (the other is NONE/0).
@@ -330,11 +370,15 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
         if (arguments.size() < 2 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");
         }
-        Module::expect(arguments, -1, integer, integer, integer, integer);
-        int16_t left_ticks = static_cast<int16_t>(arguments[0]->evaluate_integer());
-        int16_t right_ticks = static_cast<int16_t>(arguments[1]->evaluate_integer());
+        // position(left_deg, right_deg[, speed_left[, speed_right]])
+        // Degrees are truncated toward 0 into int16 ticks — conservative vs. rounding
+        // (e.g. left_deg=-108.96° -> -90.8 ticks -> -90; right_deg=108.96° -> 90.8 -> 90).
+        double left_deg = arguments[0]->evaluate_number();
+        double right_deg = arguments[1]->evaluate_number();
         uint8_t speed_left = arguments.size() > 2 ? static_cast<uint8_t>(arguments[2]->evaluate_integer()) : 10;
         uint8_t speed_right = arguments.size() > 3 ? static_cast<uint8_t>(arguments[3]->evaluate_integer()) : 10;
+        int16_t left_ticks = static_cast<int16_t>(left_deg / DEG_PER_DELTA_TICK);
+        int16_t right_ticks = static_cast<int16_t>(right_deg / DEG_PER_DELTA_TICK);
         this->move_to(left_ticks, right_ticks, speed_left, speed_right);
     } else if (method_name == "move_a") {
         if (arguments.size() > 1) {
@@ -401,6 +445,7 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
                 echo("%s: calibration aborted", this->name.c_str());
             }
             this->motor->stop();
+            this->properties.at("active")->boolean_value = false;
         } else {
             Module::expect(arguments, 1, integer);
             int motor_nr = arguments[0]->evaluate_integer();
@@ -439,4 +484,5 @@ void InnotronicDeltaArm::disable() {
     this->motor->disable();
     this->enabled = false;
     this->properties.at("enabled")->boolean_value = false;
+    this->properties.at("active")->boolean_value = false;
 }
