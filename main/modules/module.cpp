@@ -445,7 +445,7 @@ void Module::step() {
             pos += property->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
             pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ";");
         }
-        echo(buffer);
+        echo("%s", buffer);
     }
 }
 

@@ -63,16 +63,16 @@ when delta.active and not delta_active_last then
 end
 when not delta.active and delta_active_last then
     # Final angle push once the move settles, then flip the flag
-    bus.send(0, "!!delta_angle_left=", delta.angle_left)
-    bus.send(0, "!!delta_angle_right=", delta.angle_right)
+    bus.send(0, "!!delta_angle_left=%.3f", delta.angle_left)
+    bus.send(0, "!!delta_angle_right=%.3f", delta.angle_right)
     bus.send(0, "!!delta_active=false")
     delta_active_last = false
 end
 
 # Stream angles at ~10 Hz while a move is active
 when delta.active and core.millis - delta_last_angle_msg > 100 then
-    bus.send(0, "!!delta_angle_left=", delta.angle_left)
-    bus.send(0, "!!delta_angle_right=", delta.angle_right)
+    bus.send(0, "!!delta_angle_left=%.3f", delta.angle_left)
+    bus.send(0, "!!delta_angle_right=%.3f", delta.angle_right)
     delta_last_angle_msg = core.millis
 end
 
