@@ -33,6 +33,8 @@ private:
     unsigned long stable_since = 0;
     bool left_endstop_prev = false;
     bool right_endstop_prev = false;
+    unsigned long stall_since = 0;
+    bool was_stalling = false;
 
     bool is_calibrated() const;
     void move_to(int16_t left_ticks, int16_t right_ticks, uint8_t speed_left, uint8_t speed_right);

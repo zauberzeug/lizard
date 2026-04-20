@@ -27,52 +27,62 @@ bool delta_cal_left_last = false
 bool delta_cal_right_last = false
 bool delta_calibrating_last = false
 bool delta_active_last = false
+bool delta_stalled_last = false
 int delta_last_angle_msg = 0
 
 when delta.calibrated_left and not delta_cal_left_last then
-    bus.send(0, "!delta_cal_left=true")
+    bus.send(0, "!!delta_cal_left=true")
     delta_cal_left_last = true
 end
 when not delta.calibrated_left and delta_cal_left_last then
-    bus.send(0, "!delta_cal_left=false")
+    bus.send(0, "!!delta_cal_left=false")
     delta_cal_left_last = false
 end
 
 when delta.calibrated_right and not delta_cal_right_last then
-    bus.send(0, "!delta_cal_right=true")
+    bus.send(0, "!!delta_cal_right=true")
     delta_cal_right_last = true
 end
 when not delta.calibrated_right and delta_cal_right_last then
-    bus.send(0, "!delta_cal_right=false")
+    bus.send(0, "!!delta_cal_right=false")
     delta_cal_right_last = false
 end
 
 when delta.calibrating and not delta_calibrating_last then
-    bus.send(0, "!delta_calibrating=true")
+    bus.send(0, "!!delta_calibrating=true")
     delta_calibrating_last = true
 end
 when not delta.calibrating and delta_calibrating_last then
-    bus.send(0, "!delta_calibrating=false")
+    bus.send(0, "!!delta_calibrating=false")
     delta_calibrating_last = false
 end
 
 when delta.active and not delta_active_last then
-    bus.send(0, "!delta_active=true")
+    bus.send(0, "!!delta_active=true")
     delta_active_last = true
 end
 when not delta.active and delta_active_last then
     # Final angle push once the move settles, then flip the flag
-    bus.send(0, "!delta_angle_left=", delta.angle_left)
-    bus.send(0, "!delta_angle_right=", delta.angle_right)
-    bus.send(0, "!delta_active=false")
+    bus.send(0, "!!delta_angle_left=", delta.angle_left)
+    bus.send(0, "!!delta_angle_right=", delta.angle_right)
+    bus.send(0, "!!delta_active=false")
     delta_active_last = false
 end
 
 # Stream angles at ~10 Hz while a move is active
 when delta.active and core.millis - delta_last_angle_msg > 100 then
-    bus.send(0, "!delta_angle_left=", delta.angle_left)
-    bus.send(0, "!delta_angle_right=", delta.angle_right)
+    bus.send(0, "!!delta_angle_left=", delta.angle_left)
+    bus.send(0, "!!delta_angle_right=", delta.angle_right)
     delta_last_angle_msg = core.millis
+end
+
+when delta.stalled and not delta_stalled_last then
+    bus.send(0, "!!delta_stalled=true")
+    delta_stalled_last = true
+end
+when not delta.stalled and delta_stalled_last then
+    bus.send(0, "!!delta_stalled=false")
+    delta_stalled_last = false
 end
 
 rdyp.on()

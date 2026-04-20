@@ -24,6 +24,9 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
         {"angle_right", std::make_shared<NumberVariable>()},
         {"position_tol", std::make_shared<IntegerVariable>(1)},
         {"stable_ms", std::make_shared<IntegerVariable>(100)},
+        {"stalled", std::make_shared<BooleanVariable>(false)},
+        {"stall_current", std::make_shared<NumberVariable>(3.0)},
+        {"stall_ms", std::make_shared<IntegerVariable>(200)},
         {"loop", std::make_shared<BooleanVariable>(false)},
         {"loop_speed", std::make_shared<IntegerVariable>(10)},
         {"loop_interval", std::make_shared<NumberVariable>(3.0)},
@@ -54,6 +57,9 @@ void InnotronicDeltaArm::move_to(int16_t left_ticks, int16_t right_ticks, uint8_
         this->target_right_ticks = right_ticks;
         this->was_in_tol = false;
         this->stable_since = 0;
+        this->was_stalling = false;
+        this->stall_since = 0;
+        this->properties.at("stalled")->boolean_value = false;
         this->properties.at("active")->boolean_value = true;
     }
 }
@@ -105,6 +111,8 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
     this->m2_brake_sent = false;
     this->cal_started_at = millis();
     this->properties.at("active")->boolean_value = false;
+    this->properties.at("stalled")->boolean_value = false;
+    this->was_stalling = false;
 
     // If the relevant endstop is already active, nudge the motor away first.
     // The reference drive would otherwise immediately re-brake and fail (overcurrent).
@@ -196,6 +204,39 @@ void InnotronicDeltaArm::step() {
     }
     this->left_endstop_prev = left_endstop_active;
     this->right_endstop_prev = right_endstop_active;
+
+    // Stall guard: if overcurrent persists during an active move, brake + disable.
+    // angular_vel is not valid in delta mode, so we use current-threshold only and
+    // rely on the duration filter (stall_ms) to ignore brief inrush spikes.
+    if (this->properties.at("active")->boolean_value && this->cal_state == cal_idle) {
+        double i_max = this->properties.at("stall_current")->number_value;
+        double i_m1 = this->motor->get_property("current_m1")->number_value;
+        double i_m2 = this->motor->get_property("current_m2")->number_value;
+        bool overcurrent = std::abs(i_m1) > i_max || std::abs(i_m2) > i_max;
+        if (overcurrent) {
+            if (!this->was_stalling) {
+                this->stall_since = millis();
+                this->was_stalling = true;
+            } else if (millis_since(this->stall_since) >=
+                       static_cast<unsigned long>(this->properties.at("stall_ms")->integer_value)) {
+                this->motor->stop();
+                this->motor->disable();
+                this->properties.at("active")->boolean_value = false;
+                this->properties.at("stalled")->boolean_value = true;
+                // Position drifts on forced stop — invalidate calibration so a
+                // recovery requires an explicit reference drive.
+                this->properties.at("calibrated_left")->boolean_value = false;
+                this->properties.at("calibrated_right")->boolean_value = false;
+                this->enabled = false;
+                this->properties.at("enabled")->boolean_value = false;
+                this->was_stalling = false;
+                echo("%s: stall detected (i_m1=%.2fA i_m2=%.2fA > %.2fA) — motor off, recalibrate",
+                     this->name.c_str(), i_m1, i_m2, i_max);
+            }
+        } else {
+            this->was_stalling = false;
+        }
+    }
 
     // Latch ref results: 0x14 arrives per-motor in separate messages,
     // each only setting its own nibble (the other is NONE/0).
