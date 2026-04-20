@@ -69,12 +69,36 @@ void SerialBus::step() {
 
 void SerialBus::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "send") {
-        Module::expect(arguments, 2, integer, string);
+        // bus.send(receiver, part, ...) — parts are concatenated.
+        // Strings are taken literally; integers/numbers/booleans are stringified.
+        if (arguments.size() < 2) {
+            throw std::runtime_error("send expects at least 2 arguments (receiver, payload, ...)");
+        }
+        if ((arguments[0]->type & integer) == 0) {
+            throw std::runtime_error("receiver ID must be an integer");
+        }
         const int receiver = arguments[0]->evaluate_integer();
         if (receiver <= 0 || receiver >= 255) {
             throw std::runtime_error("receiver ID must be between 0 and 255");
         }
-        const std::string payload = arguments[1]->evaluate_string();
+        std::string payload;
+        char buf[32];
+        for (size_t i = 1; i < arguments.size(); ++i) {
+            const auto &arg = arguments[i];
+            if ((arg->type & string) != 0) {
+                payload += arg->evaluate_string();
+            } else if ((arg->type & boolean) != 0) {
+                payload += arg->evaluate_boolean() ? "true" : "false";
+            } else if ((arg->type & integer) != 0) {
+                std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(arg->evaluate_integer()));
+                payload += buf;
+            } else if ((arg->type & number) != 0) {
+                std::snprintf(buf, sizeof(buf), "%g", arg->evaluate_number());
+                payload += buf;
+            } else {
+                throw std::runtime_error("send: unsupported argument type");
+            }
+        }
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
