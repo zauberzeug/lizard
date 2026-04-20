@@ -132,7 +132,7 @@ bool Can::receive() {
                 pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ",%02x", message.data[i]);
             }
         }
-        echo(buffer);
+        echo("%s", buffer);
     }
 
     return true;
