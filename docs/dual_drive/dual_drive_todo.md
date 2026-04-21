@@ -17,7 +17,6 @@
 
 - [ ] estop results in a need to restart the esp32, since CAN is not waking up again
 - [ ] 0x11 MotorStatus: voltage scaling factor fixed (0.01 → 0.001) — verify on hardware
-- [ ] Stall detection should also consider position change, not just current — high current with position movement is normal load, high current without position change is a real stall
 
 ## Questions
 
