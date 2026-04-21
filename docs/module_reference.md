@@ -39,7 +39,7 @@ It is automatically created right after the boot sequence.
 | `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
 | `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
 | `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
-| `core.heartbeat()`               | Reset `last_message_age` without producing output  |              |
+| `core.keep_alive()`              | Reset `last_message_age` without producing output  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -164,9 +164,13 @@ When the output is disabled, it will deactivate and ignore on/off or level comma
 
 The PWM output module is associated with a digital output pin that is connected to an LED, actuator or other output signal.
 
-| Constructor            | Description                            | Arguments |
-| ---------------------- | -------------------------------------- | --------- |
-| `pwm = PwmOutput(pin)` | `pin` is the corresponding GPIO number | `int`     |
+| Constructor                        | Description                            | Arguments  |
+| ---------------------------------- | -------------------------------------- | ---------- |
+| `pwm = PwmOutput(pin[, lt[, lc]])` | `pin` is the corresponding GPIO number | 1–3x `int` |
+
+The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
+When using multiple PWM outputs, set different channel IDs to avoid conflicts.
+Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
 
 | Properties         | Description                              | Data type |
 | ------------------ | ---------------------------------------- | --------- |

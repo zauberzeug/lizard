@@ -25,6 +25,9 @@ The following example stops a motor when there is no serial communication for 50
 when core.last_message_age > 500 then motor.stop(); end
 ```
 
+Any successfully interpreted input message resets `last_message_age`.
+If the host controller has no command to send but wants to signal that it is still alive, it can call `core.keep_alive()`, which resets the timer silently without producing any output.
+
 ## Expander watchdog
 
 The `expander` module provides a watchdog feature that restarts the port expander when it gets stuck and does not send messages anymore.
