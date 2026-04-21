@@ -5,6 +5,13 @@
 #include "motor.h"
 #include <memory>
 
+static constexpr int DRIVE_MOTOR_TICKS = 600;
+static constexpr int DELTA_MOTOR_TICKS = 300;
+
+static constexpr uint8_t REF_OK = 1;
+static constexpr uint8_t REF_OVERCURRENT = 2;
+static constexpr uint8_t REF_END = 4;
+
 class InnotronicMotor;
 using InnotronicMotor_ptr = std::shared_ptr<InnotronicMotor>;
 

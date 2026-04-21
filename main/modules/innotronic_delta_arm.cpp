@@ -4,10 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 
-static constexpr int DELTA_MOTOR_TICKS = 300;
 static constexpr double DEG_PER_DELTA_TICK = 360.0 / DELTA_MOTOR_TICKS; // 1.2°/tick
-
-static constexpr int REF_OK = 1;
 
 REGISTER_MODULE_DEFAULTS(InnotronicDeltaArm)
 
@@ -250,13 +247,17 @@ void InnotronicDeltaArm::step() {
         this->last_ref_m2 = ref_m2;
     }
 
-    // Calibration timeout: brake both motors and abort if we've been calibrating too long
+    // Calibration timeout: brake both motors and abort if we've been calibrating too long.
+    // reference_drive_stop sends 0x05 which also stores the current position as 0-reference.
+    // That's fine for the motor (it always needs some 0-ref) but lizard must not treat it as calibrated.
     if (this->cal_state != cal_idle) {
         double timeout_s = this->properties.at("cal_timeout")->number_value;
         if (timeout_s > 0 && millis_since(this->cal_started_at) > static_cast<unsigned long>(timeout_s * 1000)) {
             this->motor->reference_drive_stop(1);
             this->motor->reference_drive_stop(2);
             this->properties.at("calibrating")->boolean_value = false;
+            this->properties.at("calibrated_left")->boolean_value = false;
+            this->properties.at("calibrated_right")->boolean_value = false;
             this->cal_state = cal_idle;
             echo("%s: calibration timeout after %.1fs", this->name.c_str(), timeout_s);
         }

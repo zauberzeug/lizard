@@ -81,15 +81,13 @@ Recovery if CAN node ID was misconfigured (CAN IDs shifted): send Configure to c
 
 Controls individual motors for reference drive and endstop signalling.
 
-| Byte | Type  | Description                                                                                                                |
-| ---- | ----- | -------------------------------------------------------------------------------------------------------------------------- |
-| 0    | uint8 | Command motor 1: 0x00 = no action, 0x05 = endstop reached (stops ref drive), 0x10 = calibration CW, 0x20 = calibration CCW |
-| 1    | uint8 | Command motor 2: same values as above                                                                                      |
-| 2-7  |       | Reserved                                                                                                                   |
+| Byte | Type  | Description                                                                                                                                  |
+| ---- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | uint8 | Command motor 1: 0x00 = no action, 0x05 = brake (stores 0-reference if a ref drive is active), 0x10 = calibration CW, 0x20 = calibration CCW |
+| 1    | uint8 | Command motor 2: same values as above                                                                                                        |
+| 2-7  |       | Reserved                                                                                                                                     |
 
 Both bytes can be set simultaneously to drive both motors at once.
-
-Note: 0x05 also brakes the motor as a side effect, but the primary meaning per spec is "endstop reached, store current position as 0-reference". Naming in firmware should be updated.
 
 ## Status Messages (Motor -> Lizard)
 
