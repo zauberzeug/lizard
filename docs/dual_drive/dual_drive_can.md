@@ -5,6 +5,13 @@ CAN ID formula: `CanID = (NodeID << 5) | CmdID`
 - CAN 2.0A, 8-byte frames, little-endian
 - Baudrate: 250 kbit/s (current firmware, doc says 1 Mbit/s)
 
+Motor resolution (hall ticks per full revolution):
+
+- Drive mode: 600 ticks / revolution
+- Delta arm mode: 300 ticks / revolution (new delta motor will also be 600)
+
+Every command frame is acknowledged by the motor controller with an empty CAN frame echoing the same CanID. Not currently used for verification, but useful for debugging.
+
 ## Commands (Lizard -> Motor)
 
 ### 0x01 Speed
@@ -72,15 +79,17 @@ Recovery if CAN node ID was misconfigured (CAN IDs shifted): send Configure to c
 
 ### 0x0C ReferenceDriveCmd / SingleMotorControl
 
-Controls individual motors for reference drive and braking.
+Controls individual motors for reference drive and endstop signalling.
 
-| Byte | Type  | Description                                                                                    |
-| ---- | ----- | ---------------------------------------------------------------------------------------------- |
-| 0    | uint8 | Command motor 1: 0x00 = no action, 0x05 = brake, 0x10 = calibration CW, 0x20 = calibration CCW |
-| 1    | uint8 | Command motor 2: same values as above                                                          |
-| 2-7  |       | Reserved                                                                                       |
+| Byte | Type  | Description                                                                                                                |
+| ---- | ----- | -------------------------------------------------------------------------------------------------------------------------- |
+| 0    | uint8 | Command motor 1: 0x00 = no action, 0x05 = endstop reached (stops ref drive), 0x10 = calibration CW, 0x20 = calibration CCW |
+| 1    | uint8 | Command motor 2: same values as above                                                                                      |
+| 2-7  |       | Reserved                                                                                                                   |
 
 Both bytes can be set simultaneously to drive both motors at once.
+
+Note: 0x05 also brakes the motor as a side effect, but the primary meaning per spec is "endstop reached, store current position as 0-reference". Naming in firmware should be updated.
 
 ## Status Messages (Motor -> Lizard)
 
@@ -149,3 +158,7 @@ Combines per-motor angle and current into a single frame (position controller mo
 | 2-3  | int16 | Angle motor 2 (hall ticks)       |
 | 4-5  | int16 | Current motor 1, 0.001 A per LSB |
 | 6-7  | int16 | Current motor 2, 0.001 A per LSB |
+
+## Device Protection
+
+Temperature-based current derating: above 60°C, the 7A motor current limit is reduced by 1A per °C.
