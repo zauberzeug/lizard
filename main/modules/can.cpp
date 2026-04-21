@@ -235,19 +235,23 @@ void Can::reset_can_bus() {
         throw std::runtime_error("could not get TWAI status");
     }
 
-    echo("CAN bus state before reset: %s",
-         status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
-         : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
-         : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
-         : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
-                                                      : "UNKNOWN");
+    auto state_name = [](twai_state_t s) {
+        return s == TWAI_STATE_STOPPED      ? "STOPPED"
+               : s == TWAI_STATE_RUNNING    ? "RUNNING"
+               : s == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+               : s == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                            : "UNKNOWN";
+    };
 
-    if (status_info.state != TWAI_STATE_STOPPED) {
+    echo("CAN bus state before reset: %s", state_name(status_info.state));
+
+    // BUS_OFF: must go through recovery directly (twai_stop would fail).
+    // RUNNING: stop first so we can reinitialise cleanly.
+    // RECOVERING: wait for recovery to finish, then start.
+    // STOPPED: just start.
+    if (status_info.state == TWAI_STATE_RUNNING) {
         if (twai_stop() != ESP_OK) {
             throw std::runtime_error("could not stop TWAI driver");
-        }
-        if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_STOPPED) {
-            throw std::runtime_error("TWAI driver didn't stop properly");
         }
     }
 
@@ -255,31 +259,30 @@ void Can::reset_can_bus() {
         if (twai_initiate_recovery() != ESP_OK) {
             throw std::runtime_error("could not initiate recovery");
         }
+    }
 
+    if (status_info.state == TWAI_STATE_BUS_OFF || status_info.state == TWAI_STATE_RECOVERING) {
         const unsigned long start_time = millis();
         const unsigned long timeout_ms = 500;
-
         while (true) {
             if (twai_get_status_info(&status_info) != ESP_OK) {
                 throw std::runtime_error("failed to get status during recovery");
             }
-
             if (status_info.state != TWAI_STATE_RECOVERING) {
-                echo("Recovery completed, state: %s",
-                     status_info.state == TWAI_STATE_STOPPED   ? "STOPPED"
-                     : status_info.state == TWAI_STATE_RUNNING ? "RUNNING"
-                     : status_info.state == TWAI_STATE_BUS_OFF ? "BUS_OFF"
-                                                               : "UNKNOWN");
+                echo("Recovery completed, state: %s", state_name(status_info.state));
                 break;
             }
-
             if (millis_since(start_time) > timeout_ms) {
                 throw std::runtime_error("recovery timeout");
             }
-
             delay(20);
         }
     }
+
+    // Drop any queued TX frames from before the fault — they would otherwise
+    // immediately reproduce the bus-off condition after start.
+    twai_clear_transmit_queue();
+    twai_clear_receive_queue();
 
     echo("Starting TWAI driver...");
     if (twai_start() != ESP_OK) {

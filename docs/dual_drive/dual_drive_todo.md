@@ -17,6 +17,8 @@
 ## Lizard Problems
 
 - [ ] estop results in a need to restart the esp32, since CAN is not waking up again
+  - [ ] verify fix: `reset_can_bus()` now handles BUS_OFF via `twai_initiate_recovery()` directly (previously tried `twai_stop()` from BUS_OFF, which fails and skipped recovery). Also clears TX/RX queues before restart so stale frames don't re-trigger bus-off. Test on hardware with the scenarios from `can fehler.md`.
+- [ ] Can Bus reports off (randomly?) — may also be addressed by the `reset_can_bus()` fix above; verify on hardware
 - [ ] 0x11 MotorStatus: voltage scaling factor fixed (0.01 → 0.001) — verify on hardware
 
 ## Questions
