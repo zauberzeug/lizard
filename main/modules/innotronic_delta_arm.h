@@ -27,20 +27,20 @@ private:
     int loop_step = 0;
     unsigned long last_loop_move_at = 0;
 
-    int16_t target_left_ticks = 0;
-    int16_t target_right_ticks = 0;
+    double target_left_deg = 0.0;
+    double target_right_deg = 0.0;
     bool was_in_tol = false;
     unsigned long stable_since = 0;
     bool left_endstop_prev = false;
     bool right_endstop_prev = false;
     unsigned long stall_since = 0;
     bool was_stalling = false;
-    int16_t stall_start_angle_m1 = 0;
-    int16_t stall_start_angle_m2 = 0;
+    double stall_start_deg_m1 = 0.0;
+    double stall_start_deg_m2 = 0.0;
 
     bool is_calibrated() const;
-    void move_to(int16_t left_ticks, int16_t right_ticks, uint8_t speed_left, uint8_t speed_right);
-    bool can_move(int16_t left_ticks, int16_t right_ticks) const;
+    void move_to(double left_deg, double right_deg, uint8_t speed_left, uint8_t speed_right);
+    bool can_move(double left_deg, double right_deg) const;
     void start_reference(const std::string &side);
     void enable();
     void disable();

@@ -5,7 +5,8 @@
 - [ ] SwitchState: shipped in 2.41 firmware but untested — verify delta arm behaviour
   - [ ] off -> on drives up sometimes (should not) — switch_state 1
 - [ ] Understandable speed values in 0x03 AngleCmd (currently 1-50, no physical unit)
-- [ ] Robot is driving "slow"
+- [ ] Robot is driving "slow" and unstable on low speeds
+- [ ] Can Bus reports off (randomly?)
 
 ## Later
 

@@ -15,7 +15,7 @@ delta_arm_left_endstop.inverted=true
 delta_arm_right_endstop.inverted=true
 
 delta = InnotronicDeltaArm(delta_motor, delta_arm_left_endstop, delta_arm_right_endstop)
-delta.tick_limit=90
+delta.deg_limit=108
 
 core.output("core.millis delta_motor.angle_m1:3 delta_motor.angle_m2:3 delta_motor.angular_vel_m1:3 delta_motor.angular_vel_m2:3 delta_arm_left_endstop.active delta_arm_right_endstop.active delta_motor.state core.heap")
 #core.output("core.millis delta_motor.angle_m1:3 delta_motor.angle_m2:3 delta_motor.angular_vel_m1:3 delta_motor.angular_vel_m2:3 delta_motor.current_m1:3 delta_motor.current_m2:3")
