@@ -24,7 +24,7 @@ const std::map<std::string, Variable_ptr> InnotronicMotor::get_defaults() {
         {"enabled", std::make_shared<BooleanVariable>(true)},
         {"m_per_rad", std::make_shared<NumberVariable>(1.0)},
         {"reversed", std::make_shared<BooleanVariable>(false)},
-        {"rad_limit", std::make_shared<NumberVariable>(6.0)}, // take testet on robot currently with 600 on 02.04.2026
+        {"rad_limit", std::make_shared<NumberVariable>(7.8)}, // take testet on robot currently with 600 on 02.04.2026
         {"ref_result_m1", std::make_shared<IntegerVariable>(0)},
         {"ref_result_m2", std::make_shared<IntegerVariable>(0)},
         {"debug", std::make_shared<BooleanVariable>(false)},
