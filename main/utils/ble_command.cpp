@@ -406,14 +406,13 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
 
     ble_svc_gap_device_name_set(ble_device_name.data());
 
+    running = true;
     nimble_port_freertos_init(run_host_task);
 
     if (!idle_timer) {
         idle_timer = xTimerCreate("ble_idle", pdMS_TO_TICKS(IDLE_TIMEOUT_MS),
                                   pdFALSE, nullptr, on_idle_timeout);
     }
-
-    running = true;
 }
 
 int send(const std::string_view &data) {
