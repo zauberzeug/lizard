@@ -82,10 +82,16 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------- | ---------------------------------------------- | --------------- |
 | `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
 
-| Methods                             | Description                                                | Arguments    |
-| ----------------------------------- | ---------------------------------------------------------- | ------------ |
-| `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
-| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
+| Methods                                           | Description                                                | Arguments                           |
+| ------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------- |
+| `bus.send(receiver, payload)`                     | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str`                        |
+| `bus.make_coordinator(peer_ids...)`               | Set the list of peer IDs, making this node the coordinator | `int`s                              |
+| `bus.subscribe(node, "module.property", default)` | Subscribe to a remote property                             | `int`, `str`, `int`/`number`/`bool` |
+
+Subscriptions let the coordinator monitor properties on peer nodes.
+The peer reads the property every cycle and sends its current value back to the coordinator.
+The value is stored as `bus.module_property_node` (e.g. `bus.test_level_1` for `"test.level"` on node `1`).
+If the peer restarts, subscriptions are automatically re-sent once it responds again.
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.

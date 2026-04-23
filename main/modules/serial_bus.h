@@ -7,6 +7,8 @@
 #include "module.h"
 #include "serial.h"
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
 
 class SerialBus;
@@ -37,8 +39,15 @@ private:
         size_t length;
         char payload[PAYLOAD_CAPACITY];
     };
+    struct Subscription {
+        uint8_t node;
+        Variable_ptr property; // null = coordinator-side, non-null = peer-side
+        std::string path;      // coordinator: "module.prop:local_name", peer: "local_name"
+    };
 
     std::vector<uint8_t> peer_ids;
+    bool peer_timed_out[255] = {};
+    std::vector<Subscription> subscriptions;
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
@@ -58,6 +67,8 @@ private:
     void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
     bool send_outgoing_queue();
     void send_message(const uint8_t receiver, const char *payload, const size_t length) const;
+    void subscribe(uint8_t node, const std::string &path);
+    void send_subscription_updates();
 
     void print_to_incoming_queue(const char *format, ...) const;
     void handle_echo(const char *line);
