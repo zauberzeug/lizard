@@ -7,7 +7,7 @@ serial = Serial(26, 27, 115200, 1)
 p0 = Expander(serial,25,14)
 
 
-can = Can(32, 33, 250000)
+can = Can(32, 33, 500000)
 delta_motor = InnotronicMotor(can, 5)
 delta_motor.switch_to_delta_mode()
 delta_motor.debug=true

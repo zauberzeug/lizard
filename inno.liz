@@ -7,7 +7,7 @@ bluetooth.deactivate_pin()
 #bus = SerialBus(serial_plexus, 1)
 #bus.make_coordinator(3)
 
-can = Can(32, 33, 250000)
+can = Can(32, 33, 500000)
 left = InnotronicMotor(can, 5)
 right = InnotronicMotor(can, 37)
 left.switch_to_drive_mode()

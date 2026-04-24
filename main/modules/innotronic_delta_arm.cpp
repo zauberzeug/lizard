@@ -95,6 +95,10 @@ bool InnotronicDeltaArm::can_move(double left_deg, double right_deg) const {
 }
 
 void InnotronicDeltaArm::start_reference(const std::string &side) {
+    if (!this->enabled) {
+        echo("%s: not enabled, ignoring reference(%s)", this->name.c_str(), side.c_str());
+        return;
+    }
     if (this->cal_state != cal_idle) {
         echo("%s: already calibrating, ignoring reference(%s)", this->name.c_str(), side.c_str());
         return;
@@ -233,6 +237,7 @@ void InnotronicDeltaArm::step() {
                 this->motor->disable();
                 this->properties.at("active")->boolean_value = false;
                 this->properties.at("stalled")->boolean_value = true;
+                this->properties.at("loop")->boolean_value = false;
                 // Position drifts on forced stop — invalidate calibration so a
                 // recovery requires an explicit reference drive.
                 this->properties.at("calibrated_left")->boolean_value = false;

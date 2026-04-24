@@ -27,6 +27,7 @@ const std::map<std::string, Variable_ptr> InnotronicMotor::get_defaults() {
         {"rad_limit", std::make_shared<NumberVariable>(7.8)}, // take testet on robot currently with 600 on 02.04.2026
         {"ref_result_m1", std::make_shared<IntegerVariable>(0)},
         {"ref_result_m2", std::make_shared<IntegerVariable>(0)},
+        {"version", std::make_shared<IntegerVariable>(0)},
         {"debug", std::make_shared<BooleanVariable>(false)},
     };
 }
@@ -58,35 +59,37 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
         // Temperature in degrees Celsius
         this->properties.at("temperature")->integer_value = static_cast<int8_t>(data[4]);
         this->properties.at("state")->integer_value = data[5];
-        uint16_t raw_error;
-        std::memcpy(&raw_error, data + 6, 2);
+        // Byte 6: ErrorCodes bitmask, Byte 7: firmware version
+        uint8_t raw_error = data[6];
         char hex_buf[7];
         snprintf(hex_buf, sizeof(hex_buf), "0x%04x", raw_error);
         this->properties.at("error_codes")->string_value = hex_buf;
+        this->properties.at("version")->integer_value = data[7];
         if (this->properties.at("debug")->boolean_value) {
-            echo("[%lu] CAN RX [NodeID=%ld, CmdID=0x11]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (vel %.2f rad/s, voltage %.2f V, temp %d C, state %d, error %s)",
+            echo("[%lu] CAN RX [NodeID=%ld, CmdID=0x11]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (vel %.2f rad/s, voltage %.2f V, temp %d C, state %d, error %s, version %d)",
                  millis(), this->node_id, id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
                  this->properties.at("angular_vel")->number_value,
                  this->properties.at("voltage")->number_value,
                  (int)this->properties.at("temperature")->integer_value,
                  (int)this->properties.at("state")->integer_value,
-                 hex_buf);
+                 hex_buf,
+                 (int)data[7]);
         }
         break;
     }
     case 0x12: {
-        // DriveStatus CmdID 0x12 (cyclic, ~100ms in drive mode): per-motor speed and current.
+        // DriveStatus CmdID 0x12 (cyclic, ~100ms in drive mode): motor 1 speed, relative position, and per-motor current.
         // Byte 0-1: angular_vel motor 1 (int16, 0.01 rad/s)
-        // Byte 2-3: angular_vel motor 2 (int16, 0.01 rad/s)
+        // Byte 2-3: current relative position (int16, hall ticks, wraps from -32768 to 32767 — no reset on speed = 0 or direction reversal)
         // Byte 4-5: current motor 1 (int16, milliamps)
         // Byte 6-7: current motor 2 (int16, milliamps)
         double sign = this->reversed ? -1.0 : 1.0;
         int16_t raw_vel_m1;
         std::memcpy(&raw_vel_m1, data, 2);
         this->properties.at("angular_vel_m1")->number_value = raw_vel_m1 * 0.01 * sign;
-        int16_t raw_vel_m2;
-        std::memcpy(&raw_vel_m2, data + 2, 2);
-        this->properties.at("angular_vel_m2")->number_value = raw_vel_m2 * 0.01 * sign;
+        int16_t raw_position;
+        std::memcpy(&raw_position, data + 2, 2);
+        this->properties.at("angle_m1")->number_value = raw_position;
         int16_t raw_current_m1;
         std::memcpy(&raw_current_m1, data + 4, 2);
         this->properties.at("current_m1")->number_value = raw_current_m1 * 0.001;
@@ -94,10 +97,10 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
         std::memcpy(&raw_current_m2, data + 6, 2);
         this->properties.at("current_m2")->number_value = raw_current_m2 * 0.001;
         if (this->properties.at("debug")->boolean_value) {
-            echo("[%lu] CAN RX [NodeID=%ld, CmdID=0x12]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (vel_m1 %.2f rad/s, vel_m2 %.2f rad/s, current_m1 %.3f A, current_m2 %.3f A)",
+            echo("[%lu] CAN RX [NodeID=%ld, CmdID=0x12]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (vel_m1 %.2f rad/s, position %d ticks, current_m1 %.3f A, current_m2 %.3f A)",
                  millis(), this->node_id, id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
                  this->properties.at("angular_vel_m1")->number_value,
-                 this->properties.at("angular_vel_m2")->number_value,
+                 raw_position,
                  this->properties.at("current_m1")->number_value,
                  this->properties.at("current_m2")->number_value);
         }
@@ -205,6 +208,34 @@ void InnotronicMotor::send_rel_angle_cmd(float angle, uint16_t vel_limit, uint8_
     uint32_t can_id = (this->node_id << 5) | 0x02;
     // echo("CAN TX [NodeID=%ld, CmdID=0x02]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (rel_angle %.3f rad, raw %d)",
     //      this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], angle, raw_angle);
+    this->can->send(can_id, data);
+}
+
+void InnotronicMotor::send_drive_ticks_cmd(float angular_vel, int16_t ticks) {
+    // DriveTicksCmd CmdID 0x04: relative move in hall ticks for drive mode.
+    // Byte 0-1: angular velocity (int16, 0.01 rad/s)
+    // Byte 2-3: relative ticks (int16, hall ticks)
+    // Byte 4-7: reserved
+    if (!this->enabled) {
+        return;
+    }
+    float rad_limit = this->properties.at("rad_limit")->number_value;
+    if (angular_vel > rad_limit) {
+        angular_vel = rad_limit;
+    } else if (angular_vel < -rad_limit) {
+        angular_vel = -rad_limit;
+    }
+    float sign = this->reversed ? -1.0f : 1.0f;
+    int16_t raw_vel = static_cast<int16_t>(angular_vel * sign / 0.01);
+    int16_t raw_ticks = static_cast<int16_t>(ticks * sign);
+    uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    std::memcpy(data, &raw_vel, 2);
+    std::memcpy(data + 2, &raw_ticks, 2);
+    uint32_t can_id = (this->node_id << 5) | 0x04;
+    if (this->properties.at("debug")->boolean_value) {
+        echo("[%lu] CAN TX [NodeID=%ld, CmdID=0x04]: 0x%03lx: %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x (speed %.2f rad/s, ticks %d)",
+             millis(), this->node_id, can_id, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], angular_vel, raw_ticks);
+    }
     this->can->send(can_id, data);
 }
 
@@ -327,6 +358,12 @@ void InnotronicMotor::call(const std::string method_name, const std::vector<Cons
         uint8_t acc_limit = arguments.size() > 2 ? static_cast<uint8_t>(arguments[2]->evaluate_number()) : 0x00;
         int8_t jerk_limit_exp = arguments.size() > 3 ? static_cast<int8_t>(arguments[3]->evaluate_number()) : (int8_t)0x00;
         this->send_rel_angle_cmd(angle, vel_limit, acc_limit, jerk_limit_exp);
+    } else if (method_name == "drive_ticks") {
+        // drive_ticks(speed, ticks): relative drive command in hall ticks
+        Module::expect(arguments, 2, numbery, integer);
+        float angular_vel = arguments[0]->evaluate_number();
+        int16_t ticks = static_cast<int16_t>(arguments[1]->evaluate_integer());
+        this->send_drive_ticks_cmd(angular_vel, ticks);
     } else if (method_name == "configure_node_id") {
         // arg0: new node ID (0-63)
         Module::expect(arguments, 1, integer);

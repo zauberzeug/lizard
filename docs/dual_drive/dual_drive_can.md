@@ -39,6 +39,16 @@ Relative angle command for track drives.
 | 5    | int8   | JerkLimExp (0x00 = default, 0xFF = unlimited)     |
 | 6-7  |        | Reserved                                          |
 
+### 0x04 DriveTicks
+
+Relative move in hall ticks for drive mode (e.g. "drive 5 cm at speed X"). The motor tracks the ticks against its internal position counter (see 0x12 bytes 2-3).
+
+| Byte | Type  | Description                              |
+| ---- | ----- | ---------------------------------------- |
+| 0-1  | int16 | AngularVel, 0.01 rad/s per LSB           |
+| 2-3  | int16 | Relative position in hall ticks (signed) |
+| 4-7  |       | Reserved                                 |
+
 ### 0x03 AngleCmd (Delta Arm)
 
 Per-motor position command for delta arm motors. Either a single motor (0x10 / 0x20) or both motors in one frame (0x30).
@@ -95,15 +105,16 @@ Both bytes can be set simultaneously to drive both motors at once.
 
 Sent automatically by the motor controller.
 
-| Byte | Type   | Description                        |
-| ---- | ------ | ---------------------------------- |
-| 0-1  | int16  | AngularVel, 0.01 rad/s per LSB     |
-| 2-3  | int16  | Voltage, 0.01 V per LSB            |
-| 4    | int8   | Temperature in degrees C           |
-| 5    | uint8  | State (matches SwitchState values) |
-| 6-7  | uint16 | ErrorCodes bitmask                 |
+| Byte | Type  | Description                        |
+| ---- | ----- | ---------------------------------- |
+| 0-1  | int16 | AngularVel, 0.01 rad/s per LSB     |
+| 2-3  | int16 | Voltage, 0.01 V per LSB            |
+| 4    | int8  | Temperature in degrees C           |
+| 5    | uint8 | State (matches SwitchState values) |
+| 6    | uint8 | ErrorCodes bitmask (see below)     |
+| 7    | uint8 | Firmware version                   |
 
-Note: Bytes 2-3 were originally current in the spec but are voltage in actual firmware.
+Note: Bytes 2-3 were originally current in the spec but are voltage in actual firmware. ErrorCodes was historically a uint16 at bytes 6-7; since all defined bits are in the low byte, byte 7 is now repurposed for the firmware version.
 
 ErrorCode bits (from firmware):
 
@@ -116,14 +127,16 @@ ErrorCode bits (from firmware):
 
 ### 0x12 DriveStatus (cyclic in drive mode, ~100ms)
 
-Per-motor speed and current. Replaces the old 0x13 layout (fields reordered: speed first, current after).
+Motor 1 speed, relative position, and per-motor current. Replaces the old 0x13 layout (fields reordered: speed first, current after).
 
 | Byte | Type  | Description                            |
 | ---- | ----- | -------------------------------------- |
 | 0-1  | int16 | AngularVel motor 1, 0.01 rad/s per LSB |
-| 2-3  | int16 | AngularVel motor 2, 0.01 rad/s per LSB |
+| 2-3  | int16 | Current relative position (hall ticks) |
 | 4-5  | int16 | Current motor 1, 0.001 A per LSB       |
 | 6-7  | int16 | Current motor 2, 0.001 A per LSB       |
+
+Note: AngularVel is only reported for motor 1 (both motors run synchronously in drive mode). Bytes 2-3 carry the current relative position in hall ticks (tracked against the last RelAngle command). The value is a signed 16-bit counter that wraps from 32767 back to -32768 — it is not reset on speed = 0 or on direction reversal.
 
 ### 0x13
 
