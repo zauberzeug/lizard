@@ -82,10 +82,10 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------- | ---------------------------------------------- | --------------- |
 | `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
 
-| Methods                             | Description                                                | Arguments    |
-| ----------------------------------- | ---------------------------------------------------------- | ------------ |
-| `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
-| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
+| Methods                             | Description                                                                                                                                             | Arguments         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string/bool, `%b` bool, `%%` literal `%` | `int`, `str`, ... |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                              | `int`s            |
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
@@ -990,6 +990,117 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | `wheels.disable()`              | Disable both motors                             |                  |
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
+
+## Dual Drive Motor
+
+The DualDriveMotor module controls an Innotronic Twin MC motor controller via CAN bus.
+It supports both track drive mode (speed/relative angle) and delta arm mode (per-motor position in hall ticks).
+
+| Constructor                            | Description            | Arguments         |
+| -------------------------------------- | ---------------------- | ----------------- |
+| `motor = DualDriveMotor(can, node_id)` | CAN module and node ID | CAN module, `int` |
+
+| Properties             | Description                                      | Data type |
+| ---------------------- | ------------------------------------------------ | --------- |
+| `motor.voltage`        | Board voltage (V)                                | `float`   |
+| `motor.angular_vel`    | Angular velocity (rad/s)                         | `float`   |
+| `motor.current_m1`     | Motor 1 current (A)                              | `float`   |
+| `motor.current_m2`     | Motor 2 current (A)                              | `float`   |
+| `motor.angular_vel_m1` | Motor 1 angular velocity (rad/s)                 | `float`   |
+| `motor.angular_vel_m2` | Motor 2 angular velocity (rad/s)                 | `float`   |
+| `motor.angle_m1`       | Motor 1 angle (hall ticks)                       | `float`   |
+| `motor.angle_m2`       | Motor 2 angle (hall ticks)                       | `float`   |
+| `motor.motor_ticks`    | Hall ticks per revolution (600 drive, 300 delta) | `int`     |
+| `motor.temperature`    | Controller temperature (°C)                      | `int`     |
+| `motor.state`          | Current switch state                             | `int`     |
+| `motor.error_codes`    | Error bitmask as hex string                      | `str`     |
+| `motor.ref_result_m1`  | Reference drive result motor 1 (0/1/2/4)         | `int`     |
+| `motor.ref_result_m2`  | Reference drive result motor 2 (0/1/2/4)         | `int`     |
+| `motor.enabled`        | Whether the motor is enabled                     | `bool`    |
+| `motor.reversed`       | Reverse motor direction                          | `bool`    |
+| `motor.m_per_rad`      | Meters per radian for position/speed conversion  | `float`   |
+| `motor.rad_limit`      | Maximum angular velocity limit (rad/s)           | `float`   |
+| `motor.debug`          | Enable CAN debug output                          | `bool`    |
+
+| Methods                                           | Description                                                          | Arguments                              |
+| ------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------- |
+| `motor.speed(vel[, acc, jerk])`                   | Set target speed (rad/s)                                             | `float`\[, `float`, `float`\]          |
+| `motor.rel_angle(angle[, vel, acc, jerk])`        | Move by relative angle (rad)                                         | `float`\[, `float`, `float`, `float`\] |
+| `motor.delta_angle(motor_select, ticks[, speed])` | Move single motor to position in hall ticks                          | `int`, `int`\[, `int`\]                |
+| `motor.switch_state(state)`                       | Set state: 1=off, 2=brake, 3=on                                      | `int`                                  |
+| `motor.configure(setting_id, value1, value2)`     | Send configure command                                               | `int`, `int`, `int`                    |
+| `motor.configure_node_id(new_id)`                 | Set CAN node ID                                                      | `int`                                  |
+| `motor.single_motor_control(cmd_m1, cmd_m2)`      | Per-motor control (0x00=noop, 0x05=brake, 0x10=cal CW, 0x20=cal CCW) | `int`, `int`                           |
+| `motor.reference_drive_start(motor[, clockwise])` | Start reference drive for motor 1 or 2                               | `int`\[, `bool`\]                      |
+| `motor.reference_drive_stop(motor)`               | Stop reference drive (brake)                                         | `int`                                  |
+| `motor.switch_to_delta_mode()`                    | Switch to delta arm motor mode                                       |                                        |
+| `motor.switch_to_drive_mode()`                    | Switch to drive mode                                                 |                                        |
+| `motor.on()`                                      | Turn motor on                                                        |                                        |
+| `motor.off()`                                     | Turn motor off                                                       |                                        |
+| `motor.stop()`                                    | Brake the motor                                                      |                                        |
+| `motor.enable()`                                  | Enable the motor                                                     |                                        |
+| `motor.disable()`                                 | Disable the motor                                                    |                                        |
+
+Reference result values: 0=none, 1=OK, 2=overcurrent, 4=ref_end (max rotation reached).
+
+## Dual Drive Delta Arm
+
+The DualDriveDeltaArm module controls a delta arm (parallel kinematics) using a DualDriveMotor in delta mode.
+It manages calibration via reference drives and endstop detection, and blocks drive commands until calibrated.
+
+| Constructor                                                   | Description                                | Arguments                    |
+| ------------------------------------------------------------- | ------------------------------------------ | ---------------------------- |
+| `arm = DualDriveDeltaArm(motor, left_endstop, right_endstop)` | Motor module and two endstop input modules | DualDriveMotor, Input, Input |
+
+| Properties             | Description                         | Data type |
+| ---------------------- | ----------------------------------- | --------- |
+| `arm.enabled`          | Whether the arm is enabled          | `bool`    |
+| `arm.calibrating`      | Whether a reference drive is active | `bool`    |
+| `arm.calibrated_left`  | Left side calibration status        | `bool`    |
+| `arm.calibrated_right` | Right side calibration status       | `bool`    |
+| `arm.cal_speed`        | Reference drive speed               | `int`     |
+
+| Methods                                         | Description                                                     | Arguments                      |
+| ----------------------------------------------- | --------------------------------------------------------------- | ------------------------------ |
+| `arm.position(left, right[, speed_l, speed_r])` | Move to position in hall ticks (requires calibration)           | `int`, `int`\[, `int`, `int`\] |
+| `arm.move_a()`                                  | Test move: left -80, right +80, speed 10 (requires calibration) |                                |
+| `arm.move_b()`                                  | Test move: left -10, right +10, speed 10 (requires calibration) |                                |
+| `arm.reference(side)`                           | Start reference drive: "left", "right" or "both"                | `str`                          |
+| `arm.stop()`                                    | Stop both motors and abort calibration                          |                                |
+| `arm.stop(motor)`                               | Brake individual motor (1 or 2)                                 | `int`                          |
+| `arm.on()`                                      | Turn motor on                                                   |                                |
+| `arm.off()`                                     | Turn motor off                                                  |                                |
+| `arm.enable()`                                  | Enable the arm                                                  |                                |
+| `arm.disable()`                                 | Disable the arm                                                 |                                |
+
+The calibration state machine watches both the endstop GPIOs and the motor controller's reference drive result (0x14).
+If the motor reports overcurrent or ref_end, calibration is aborted.
+Drive commands (`position`, `move_a`, `move_b`) are blocked until both sides are calibrated.
+
+## Dual Drive Wheels
+
+The DualDriveWheels module combines two DualDriveMotor modules for differential steering.
+
+| Constructor                                         | Description       | Arguments                  |
+| --------------------------------------------------- | ----------------- | -------------------------- |
+| `wheels = DualDriveWheels(left_motor, right_motor)` | Two motor modules | two DualDriveMotor modules |
+
+| Properties             | Description                    | Data type |
+| ---------------------- | ------------------------------ | --------- |
+| `wheels.width`         | Wheel distance (m)             | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
+| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
+
+| Methods                         | Description                                     | Arguments        |
+| ------------------------------- | ----------------------------------------------- | ---------------- |
+| `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
+| `wheels.off()`                  | Turn both motors off                            |                  |
+| `wheels.stop()`                 | Brake both motors                               |                  |
+| `wheels.enable()`               | Enable both motors                              |                  |
+| `wheels.disable()`              | Disable both motors                             |                  |
+
+When the wheels are disabled, they will stop and ignore movement commands.
 
 ## Analog Unit
 

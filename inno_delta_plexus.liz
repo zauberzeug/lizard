@@ -1,0 +1,89 @@
+rdyp = Output(6)
+en3 = Output(12)
+
+serial = Serial(39, 40, 115200, 1)
+bus = SerialBus(serial, 3)
+
+can = Can(14, 13, 250000)
+delta_motor = InnotronicMotor(can, 5)
+delta_motor.switch_to_delta_mode()
+delta_motor.debug=true
+
+delta_arm_left_endstop = Input(17)
+delta_arm_right_endstop = Input(15)
+delta_arm_left_endstop.inverted=true
+delta_arm_right_endstop.inverted=true
+
+delta = InnotronicDeltaArm(delta_motor, delta_arm_left_endstop, delta_arm_right_endstop)
+delta.deg_limit=108
+
+core.output("core.millis delta_motor.angle_m1:3 delta_motor.angle_m2:3 delta_motor.angular_vel_m1:3 delta_motor.angular_vel_m2:3 delta_arm_left_endstop.active delta_arm_right_endstop.active delta_motor.state core.heap")
+#core.output("core.millis delta_motor.angle_m1:3 delta_motor.angle_m2:3 delta_motor.angular_vel_m1:3 delta_motor.angular_vel_m2:3 delta_motor.current_m1:3 delta_motor.current_m2:3")
+#core.mute()
+#can.unmute()
+
+# --- Push delta state changes to the brain (receiver 0) via "!"-prefix (process_line on brain) ---
+bool delta_cal_left_last = false
+bool delta_cal_right_last = false
+bool delta_calibrating_last = false
+bool delta_active_last = false
+bool delta_stalled_last = false
+int delta_last_angle_msg = 0
+
+when delta.calibrated_left and not delta_cal_left_last then
+    bus.send(1, "!!delta_cal_left=true")
+    delta_cal_left_last = true
+end
+when not delta.calibrated_left and delta_cal_left_last then
+    bus.send(1, "!!delta_cal_left=false")
+    delta_cal_left_last = false
+end
+
+when delta.calibrated_right and not delta_cal_right_last then
+    bus.send(1, "!!delta_cal_right=true")
+    delta_cal_right_last = true
+end
+when not delta.calibrated_right and delta_cal_right_last then
+    bus.send(1, "!!delta_cal_right=false")
+    delta_cal_right_last = false
+end
+
+when delta.calibrating and not delta_calibrating_last then
+    bus.send(1, "!!delta_calibrating=true")
+    delta_calibrating_last = true
+end
+when not delta.calibrating and delta_calibrating_last then
+    bus.send(1, "!!delta_calibrating=false")
+    delta_calibrating_last = false
+end
+
+when delta.active and not delta_active_last then
+    bus.send(1, "!!delta_active=true")
+    delta_active_last = true
+end
+when not delta.active and delta_active_last then
+    # Final angle push once the move settles, then flip the flag
+    bus.send(1, "!!delta_angle_left=%.3f", delta.angle_left)
+    bus.send(1, "!!delta_angle_right=%.3f", delta.angle_right)
+    bus.send(1, "!!delta_active=false")
+    delta_active_last = false
+end
+
+# Stream angles at ~10 Hz while a move is active
+when delta.active and core.millis - delta_last_angle_msg > 100 then
+    bus.send(1, "!!delta_angle_left=%.3f", delta.angle_left)
+    bus.send(1, "!!delta_angle_right=%.3f", delta.angle_right)
+    delta_last_angle_msg = core.millis
+end
+
+when delta.stalled and not delta_stalled_last then
+    bus.send(1, "!!delta_stalled=true")
+    delta_stalled_last = true
+end
+when not delta.stalled and delta_stalled_last then
+    bus.send(1, "!!delta_stalled=false")
+    delta_stalled_last = false
+end
+
+rdyp.on()
+en3.on()

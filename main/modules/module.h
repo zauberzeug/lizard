@@ -50,6 +50,9 @@ enum ModuleType {
     temperature_sensor,
     proxy,
     serial_bus,
+    innotronic_motor,
+    innotronic_wheels,
+    innotronic_delta_arm,
 };
 
 class Module;
