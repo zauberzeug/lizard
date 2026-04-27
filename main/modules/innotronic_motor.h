@@ -21,6 +21,9 @@ private:
     const Can_ptr can;
     bool enabled = true;
     bool reversed = false;
+    int16_t last_raw_position = 0;
+    bool has_last_raw_position = false;
+    int64_t accumulated_ticks = 0;
 
     void send_speed_cmd(float angular_vel, uint8_t acc_limit = 0xFF, int8_t jerk_limit_exp = (int8_t)0xFF);
     void send_rel_angle_cmd(float angle, uint16_t vel_limit = 0xFFFF, uint8_t acc_limit = 0xFF, int8_t jerk_limit_exp = (int8_t)0xFF);

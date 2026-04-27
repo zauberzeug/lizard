@@ -90,6 +90,18 @@ void InnotronicMotor::handle_can_msg(const uint32_t id, const int count, const u
         int16_t raw_position;
         std::memcpy(&raw_position, data + 2, 2);
         this->properties.at("angle_m1")->number_value = raw_position;
+        if (this->has_last_raw_position) {
+            int32_t delta = static_cast<int32_t>(raw_position) - static_cast<int32_t>(this->last_raw_position);
+            if (delta > 32767) {
+                delta -= 65536;
+            } else if (delta < -32768) {
+                delta += 65536;
+            }
+            this->accumulated_ticks += delta;
+        } else {
+            this->has_last_raw_position = true;
+        }
+        this->last_raw_position = raw_position;
         int16_t raw_current_m1;
         std::memcpy(&raw_current_m1, data + 4, 2);
         this->properties.at("current_m1")->number_value = raw_current_m1 * 0.001;
@@ -452,9 +464,12 @@ void InnotronicMotor::stop() {
 }
 
 double InnotronicMotor::get_position() {
-    // Not supported: drive mode has no position feedback (0x12 is speed only);
-    // delta mode angles are read directly from angle_m1/angle_m2 by InnotronicDeltaArm.
-    return 0.0;
+    // Drive mode: 0x12 bytes 2-3 are an int16 hall-tick counter that wraps at +-32768.
+    // Wraparound is unfolded into accumulated_ticks on each 0x12 frame; convert to meters via motor_ticks and m_per_rad.
+    double motor_ticks = this->properties.at("motor_ticks")->integer_value;
+    double m_per_rad = this->properties.at("m_per_rad")->number_value;
+    double sign = this->reversed ? -1.0 : 1.0;
+    return static_cast<double>(this->accumulated_ticks) / motor_ticks * 2.0 * M_PI * m_per_rad * sign;
 }
 
 void InnotronicMotor::position(const double position, const double speed, const double acceleration) {
