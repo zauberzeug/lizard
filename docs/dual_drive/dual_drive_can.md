@@ -83,7 +83,9 @@ When `motor_select` is 0x10 or 0x20, bytes 4-7 are ignored. When 0x30, a single 
 Setting IDs:
 
 - 0x01: Set CAN node ID. Value1 = new base address (`new_node_id << 5`), Value2 = 0
-- 0x02: Switch between drive and delta arm mode. Value1 = 0xA5A5 (drive) or 0xB5B5 (delta arm), Value2 = 0
+- 0x02: Switch operating mode. Value1 = 0xA5A5 (drive) / 0xB5B5 (delta arm) / 0xC5C5 (new delta arm motor), Value2 = 0
+- 0x03: Set drive motor parameter. Value1 = parameter selector, Value2 = value (parameter list TBD)
+- 0x04: Set cyclic interval for status message. Value1 = target CmdID (0x11, 0x12, 0x15), Value2 = interval in ms
 
 Recovery if CAN node ID was misconfigured (CAN IDs shifted): send Configure to current base + 0x0B with Value1 set to the desired base. Example to restore NodeID=5 from base=0: `can.send(0x00b, 1, 0, 0xa0, 0, 0, 0, 0, 0)`.
 
