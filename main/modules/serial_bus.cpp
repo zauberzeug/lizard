@@ -151,8 +151,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
 
 void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
-    int remaining = 16;
-    while (remaining-- > 0 && this->serial->has_buffered_lines()) {
+    while (this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
         if (bool ok; (check(buffer, len, &ok), !ok)) {
             this->print_to_incoming_queue("warning: serial bus %s checksum mismatch: %s", this->name.c_str(), buffer);
