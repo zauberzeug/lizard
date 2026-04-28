@@ -34,10 +34,10 @@ std::string format_args(const std::string &fmt,
             std::snprintf(buf, sizeof(buf), sub.c_str(), static_cast<int>(arg->evaluate_integer()));
         } else if (spec == 'f') {
             std::snprintf(buf, sizeof(buf), sub.c_str(), arg->evaluate_number());
+        } else if (arg->type & boolean) {
+            std::snprintf(buf, sizeof(buf), sub.c_str(), arg->evaluate_boolean() ? "true" : "false");
         } else {
-            const std::string s = (arg->type & boolean) ? (arg->evaluate_boolean() ? "true" : "false")
-                                                        : arg->evaluate_string();
-            std::snprintf(buf, sizeof(buf), sub.c_str(), s.c_str());
+            std::snprintf(buf, sizeof(buf), sub.c_str(), arg->evaluate_string().c_str());
         }
         out += buf;
     }
