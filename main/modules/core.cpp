@@ -52,7 +52,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             }
             pos += argument->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
         }
-        echo(buffer);
+        echo("%s", buffer);
     } else if (method_name == "output") {
         Module::expect(arguments, 1, string);
         this->output_list.clear();

@@ -1,5 +1,6 @@
 #include "serial_bus.h"
 
+#include "../utils/format.h"
 #include "../utils/otb.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -69,12 +70,22 @@ void SerialBus::step() {
 
 void SerialBus::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "send") {
-        Module::expect(arguments, 2, integer, string);
+        // bus.send(receiver, fmt[, args...]) — printf-style formatting.
+        // See utils/format.h for supported specifiers.
+        if (arguments.size() < 2) {
+            throw std::runtime_error("send expects at least 2 arguments (receiver, format[, args...])");
+        }
+        if ((arguments[0]->type & integer) == 0) {
+            throw std::runtime_error("receiver ID must be an integer");
+        }
+        if ((arguments[1]->type & string) == 0) {
+            throw std::runtime_error("format must be a string");
+        }
         const int receiver = arguments[0]->evaluate_integer();
         if (receiver <= 0 || receiver >= 255) {
             throw std::runtime_error("receiver ID must be between 0 and 255");
         }
-        const std::string payload = arguments[1]->evaluate_string();
+        const std::string payload = format_args(arguments[1]->evaluate_string(), arguments, 2);
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
@@ -140,7 +151,8 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
 
 void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
-    while (this->serial->has_buffered_lines()) {
+    int remaining = 16;
+    while (remaining-- > 0 && this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
         if (bool ok; (check(buffer, len, &ok), !ok)) {
             this->print_to_incoming_queue("warning: serial bus %s checksum mismatch: %s", this->name.c_str(), buffer);

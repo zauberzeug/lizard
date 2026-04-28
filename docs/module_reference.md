@@ -82,10 +82,10 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------- | ---------------------------------------------- | --------------- |
 | `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
 
-| Methods                             | Description                                                | Arguments    |
-| ----------------------------------- | ---------------------------------------------------------- | ------------ |
-| `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
-| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
+| Methods                             | Description                                                                                                                                             | Arguments         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string/bool, `%b` bool, `%%` literal `%` | `int`, `str`, ... |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                              | `int`s            |
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
@@ -990,6 +990,163 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | `wheels.disable()`              | Disable both motors                             |                  |
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
+
+## Innotronic Drive Motor
+
+The InnotronicDriveMotor module controls an Innotronic Twin MC motor controller in track drive mode (speed control on motor 1).
+The constructor sends the firmware-mode-switch (`0xA5A5`) so the controller is in drive mode regardless of its previous state.
+Currently only the G350 motor (600 hall ticks per revolution) is supported in this mode.
+
+| Constructor                                  | Description            | Arguments         |
+| -------------------------------------------- | ---------------------- | ----------------- |
+| `motor = InnotronicDriveMotor(can, node_id)` | CAN module and node ID | CAN module, `int` |
+
+| Properties          | Description                                       | Data type |
+| ------------------- | ------------------------------------------------- | --------- |
+| `motor.voltage`     | Board voltage (V)                                 | `float`   |
+| `motor.temperature` | Controller temperature (°C)                       | `int`     |
+| `motor.state`       | Current switch state                              | `int`     |
+| `motor.error_codes` | Error bitmask as hex string                       | `str`     |
+| `motor.version`     | Firmware version reported by controller           | `int`     |
+| `motor.speed`       | Current speed (m/s, sign- and `m_per_rad`-scaled) | `float`   |
+| `motor.current_m1`  | Motor 1 current (A)                               | `float`   |
+| `motor.current_m2`  | Motor 2 current (A)                               | `float`   |
+| `motor.m_per_rad`   | Meters per radian for speed conversion            | `float`   |
+| `motor.reversed`    | Reverse motor direction                           | `bool`    |
+| `motor.rad_limit`   | Maximum angular velocity limit (rad/s)            | `float`   |
+| `motor.enabled`     | Whether the motor is enabled                      | `bool`    |
+| `motor.debug`       | Enable CAN debug output                           | `bool`    |
+
+| Methods                                       | Description                       | Arguments                     |
+| --------------------------------------------- | --------------------------------- | ----------------------------- |
+| `motor.speed(vel[, acc, jerk])`               | Set target angular velocity rad/s | `float`\[, `float`, `float`\] |
+| `motor.drive_ticks(vel, ticks)`               | Relative move in hall ticks       | `float`, `int`                |
+| `motor.switch_state(state)`                   | Set state: 1=off, 2=brake, 3=on   | `int`                         |
+| `motor.configure(setting_id, value1, value2)` | Send raw configure command        | `int`, `int`, `int`           |
+| `motor.configure_node_id(new_id)`             | Set CAN node ID                   | `int`                         |
+| `motor.on()`                                  | Turn motor on                     |                               |
+| `motor.off()`                                 | Turn motor off                    |                               |
+| `motor.stop()`                                | Brake the motor                   |                               |
+| `motor.enable()`                              | Enable the motor                  |                               |
+| `motor.disable()`                             | Disable the motor                 |                               |
+
+## Innotronic Delta Motor
+
+The InnotronicDeltaMotor module controls an Innotronic Twin MC motor controller in delta arm mode (per-motor position in hall ticks).
+The third constructor argument selects the firmware operating mode and the hall-ticks-per-revolution count; it is required.
+
+| Constructor                                              | Description                            | Arguments                |
+| -------------------------------------------------------- | -------------------------------------- | ------------------------ |
+| `motor = InnotronicDeltaMotor(can, node_id, motor_type)` | CAN module, node ID, and motor variant | CAN module, `int`, `str` |
+
+Supported `motor_type` strings:
+
+| `motor_type`     | Description                               | Ticks/rev | Firmware mode |
+| ---------------- | ----------------------------------------- | --------- | ------------- |
+| `"windmeile"`    | First-generation delta arm motor          | 300       | `0xB5B5`      |
+| `"g350"`         | Drive motor used as delta arm motor       | 600       | `0xD5D5`      |
+| `"g250r-t-14.2"` | Newer delta arm motor (14.2:1 gear ratio) | unknown   | `0xC5C5`      |
+
+The `g250r-t-14.2` variant currently throws at construction because its hall ticks per revolution have not yet been measured.
+The 12.5:1 g250r-t variant is intentionally not supported.
+
+| Properties            | Description                              | Data type |
+| --------------------- | ---------------------------------------- | --------- |
+| `motor.voltage`       | Board voltage (V)                        | `float`   |
+| `motor.temperature`   | Controller temperature (°C)              | `int`     |
+| `motor.state`         | Current switch state                     | `int`     |
+| `motor.error_codes`   | Error bitmask as hex string              | `str`     |
+| `motor.version`       | Firmware version reported by controller  | `int`     |
+| `motor.angle_m1`      | Motor 1 angle (hall ticks)               | `float`   |
+| `motor.angle_m2`      | Motor 2 angle (hall ticks)               | `float`   |
+| `motor.current_m1`    | Motor 1 current (A)                      | `float`   |
+| `motor.current_m2`    | Motor 2 current (A)                      | `float`   |
+| `motor.ref_result_m1` | Reference drive result motor 1 (0/1/2/4) | `int`     |
+| `motor.ref_result_m2` | Reference drive result motor 2 (0/1/2/4) | `int`     |
+| `motor.reversed`      | Reverse motor direction                  | `bool`    |
+| `motor.enabled`       | Whether the motor is enabled             | `bool`    |
+| `motor.debug`         | Enable CAN debug output                  | `bool`    |
+
+| Methods                                                     | Description                                                          | Arguments                              |
+| ----------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------- |
+| `motor.rel_angle(angle[, vel, acc, jerk])`                  | Move by relative angle (rad)                                         | `float`\[, `float`, `float`, `float`\] |
+| `motor.delta_angle(motor_select, pos1[, spd1, pos2, spd2])` | Per-motor position cmd (0x10=left, 0x20=right, 0x30=both)            | `int`, `int`\[, `int`, `int`, `int`\]  |
+| `motor.reference_drive_start(motor[, clockwise])`           | Start reference drive for motor 1 or 2                               | `int`\[, `bool`\]                      |
+| `motor.reference_drive_stop(motor)`                         | Stop reference drive (brake, also stores current pos as 0-reference) | `int`                                  |
+| `motor.single_motor_control(cmd_m1, cmd_m2)`                | Per-motor control (0x00=noop, 0x05=brake, 0x10=cal CW, 0x20=cal CCW) | `int`, `int`                           |
+| `motor.switch_state(state)`                                 | Set state: 1=off, 2=brake, 3=on                                      | `int`                                  |
+| `motor.configure(setting_id, value1, value2)`               | Send raw configure command                                           | `int`, `int`, `int`                    |
+| `motor.configure_node_id(new_id)`                           | Set CAN node ID                                                      | `int`                                  |
+| `motor.on()`                                                | Turn motor on                                                        |                                        |
+| `motor.off()`                                               | Turn motor off                                                       |                                        |
+| `motor.stop()`                                              | Brake the motor                                                      |                                        |
+| `motor.enable()`                                            | Enable the motor                                                     |                                        |
+| `motor.disable()`                                           | Disable the motor                                                    |                                        |
+
+Reference result values: 0=none, 1=OK, 2=overcurrent, 4=ref_end (max rotation reached).
+
+## Innotronic Delta Arm
+
+The InnotronicDeltaArm module controls a delta arm (parallel kinematics) using an InnotronicDeltaMotor.
+It manages calibration via reference drives and endstop detection, blocks drive commands until calibrated, and stops the motor on stall (overcurrent without position progress).
+
+| Constructor                                                    | Description                                | Arguments                          |
+| -------------------------------------------------------------- | ------------------------------------------ | ---------------------------------- |
+| `arm = InnotronicDeltaArm(motor, left_endstop, right_endstop)` | Motor module and two endstop input modules | InnotronicDeltaMotor, Input, Input |
+
+| Properties             | Description                                                  | Data type |
+| ---------------------- | ------------------------------------------------------------ | --------- |
+| `arm.enabled`          | Whether the arm is enabled                                   | `bool`    |
+| `arm.calibrating`      | Whether a reference drive is active                          | `bool`    |
+| `arm.calibrated_left`  | Left side calibration status                                 | `bool`    |
+| `arm.calibrated_right` | Right side calibration status                                | `bool`    |
+| `arm.active`           | Whether a `position` move is in progress (cleared on settle) | `bool`    |
+| `arm.stalled`          | Latched after a stall; clears on next successful reference   | `bool`    |
+| `arm.angle_left`       | Current left motor angle (degrees)                           | `float`   |
+| `arm.angle_right`      | Current right motor angle (degrees)                          | `float`   |
+| `arm.deg_limit`        | Per-side range from zero, in degrees (0 = no limit)          | `float`   |
+| `arm.cal_timeout`      | Calibration timeout (seconds; 0 = no timeout)                | `float`   |
+| `arm.stall_current`    | Current threshold for stall detection (A)                    | `float`   |
+
+| Methods                                         | Description                                            | Arguments                          |
+| ----------------------------------------------- | ------------------------------------------------------ | ---------------------------------- |
+| `arm.position(left, right[, speed_l, speed_r])` | Move to position in degrees (requires calibration)     | `float`, `float`\[, `int`, `int`\] |
+| `arm.reference(side)`                           | Start reference drive: `"left"`, `"right"` or `"both"` | `str`                              |
+| `arm.stop()`                                    | Stop both motors and abort calibration                 |                                    |
+| `arm.stop(motor)`                               | Brake individual motor (1 or 2)                        | `int`                              |
+| `arm.on()`                                      | Turn motor on                                          |                                    |
+| `arm.off()`                                     | Turn motor off                                         |                                    |
+| `arm.enable()`                                  | Enable the arm                                         |                                    |
+| `arm.disable()`                                 | Disable the arm                                        |                                    |
+
+The calibration state machine watches both the endstop GPIOs and the motor controller's reference drive result (0x14).
+If an endstop is already triggered when `reference` is called, the arm first nudges away from it before starting the reference drive.
+On stall (overcurrent above `stall_current` for ~200 ms with no position progress) the motor is disabled and calibration is invalidated; a fresh `reference` is required to recover.
+
+## Innotronic Wheels
+
+The InnotronicWheels module combines two InnotronicDriveMotor modules for differential steering.
+
+| Constructor                                          | Description       | Arguments                        |
+| ---------------------------------------------------- | ----------------- | -------------------------------- |
+| `wheels = InnotronicWheels(left_motor, right_motor)` | Two motor modules | two InnotronicDriveMotor modules |
+
+| Properties             | Description                    | Data type |
+| ---------------------- | ------------------------------ | --------- |
+| `wheels.width`         | Wheel distance (m)             | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
+| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
+
+| Methods                         | Description                                     | Arguments        |
+| ------------------------------- | ----------------------------------------------- | ---------------- |
+| `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
+| `wheels.off()`                  | Turn both motors off                            |                  |
+| `wheels.stop()`                 | Brake both motors                               |                  |
+| `wheels.enable()`               | Enable both motors                              |                  |
+| `wheels.disable()`              | Disable both motors                             |                  |
+
+When the wheels are disabled, they will stop and ignore movement commands.
 
 ## Analog Unit
 
