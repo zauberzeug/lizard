@@ -37,10 +37,16 @@ std::string format_args(const std::string &fmt,
             std::snprintf(buf, sizeof(buf), sub.c_str(), static_cast<int>(arg->evaluate_integer()));
         } else if (spec == 'f') {
             std::snprintf(buf, sizeof(buf), sub.c_str(), arg->evaluate_number());
-        } else if (arg->type & boolean) {
-            std::snprintf(buf, sizeof(buf), sub.c_str(), arg->evaluate_boolean() ? "true" : "false");
+        } else if (spec == 's') {
+            if (arg->type & boolean) {
+                std::snprintf(buf, sizeof(buf), sub.c_str(), arg->evaluate_boolean() ? "true" : "false");
+            } else if (arg->type & string) {
+                std::snprintf(buf, sizeof(buf), sub.c_str(), arg->evaluate_string().c_str());
+            } else {
+                throw std::runtime_error("format: '%s' expects a string or boolean argument");
+            }
         } else {
-            std::snprintf(buf, sizeof(buf), sub.c_str(), arg->evaluate_string().c_str());
+            throw std::runtime_error("format: unsupported specifier '" + sub + "'");
         }
         out += buf;
     }
