@@ -10,7 +10,7 @@ std::string format_args(const std::string &fmt,
                         size_t args_start) {
     std::string out;
     size_t arg_idx = args_start;
-    char buf[64];
+    char buf[256];
     for (size_t i = 0; i < fmt.size();) {
         if (fmt[i] != '%') {
             out += fmt[i++];
