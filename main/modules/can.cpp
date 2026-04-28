@@ -223,15 +223,12 @@ void Can::reset_can_bus() {
         throw std::runtime_error("could not get TWAI status");
     }
 
-    auto state_name = [](twai_state_t s) {
-        return s == TWAI_STATE_STOPPED      ? "STOPPED"
-               : s == TWAI_STATE_RUNNING    ? "RUNNING"
-               : s == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
-               : s == TWAI_STATE_RECOVERING ? "RECOVERING"
-                                            : "UNKNOWN";
-    };
-
-    echo("CAN bus state before reset: %s", state_name(status_info.state));
+    echo("CAN bus state before reset: %s",
+         status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
+         : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
+         : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+         : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                      : "UNKNOWN");
 
     // Uninstall and reinstall the driver to avoid ESP-IDF assertion failure
     // in twai_handle_tx_buffer_frame during twai_initiate_recovery() when
