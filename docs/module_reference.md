@@ -722,6 +722,7 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.working_current` | Working current (mA, 0-3000, default: 1700) | `int`     |
 | `motor.enabled`         | Whether the motor is enabled                | `bool`    |
 | `motor.position_error`  | Last read position error (degrees)          | `float`   |
+| `motor.status`          | Status code (0 = OK, 1 = set_mode failed)   | `int`     |
 
 | Methods                               | Description                                                                   | Arguments             |
 | ------------------------------------- | ----------------------------------------------------------------------------- | --------------------- |
@@ -730,7 +731,8 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.set_mode(mode)`                | Set working mode (see [working modes](#working-modes))                        | `int`                 |
 | `motor.zero()`                        | Set current position as zero                                                  |                       |
 | `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                              | `int`                 |
-| `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10;) | `int`                 |
+| `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10)  | `int`                 |
+| `motor.set_bitrate(rate)`             | Set CAN bitrate ("125K", "250K", "500K" or "1M")                             | `str`                 |
 | `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                        | `float`, `int`, `int` |
 | `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                  | `int`, `int`, `int`   |
 | `motor.stop(acc)`                     | Stop motor with given deceleration (0-255)                                    | `int`                 |
@@ -764,6 +766,19 @@ The MKS SERVO42D/57D supports the following working modes:
 
 The `set_mode()` method sets the working mode of the motor.
 For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
+The constructor automatically sets SR_vFOC mode (0x05), which is required for the bus motion commands (`position()`, `speed()`, `stop()`).
+
+**CAN Bitrate**
+
+The `set_bitrate()` method changes the CAN bitrate on the motor.
+The motor applies the new bitrate immediately, so you must also change the CAN bus baud rate on the ESP32 side to continue communication.
+
+| Rate   | Description |
+| ------ | ----------- |
+| "125K" | 125 kbit/s  |
+| "250K" | 250 kbit/s  |
+| "500K" | 500 kbit/s  |
+| "1M"   | 1 Mbit/s    |
 
 ## Motor Axis
 
