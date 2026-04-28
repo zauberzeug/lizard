@@ -29,7 +29,10 @@ std::string format_args(const std::string &fmt,
             continue;
         }
         const std::string sub = fmt.substr(start, i - start);
-        const auto &arg = arguments.at(arg_idx++);
+        if (arg_idx >= arguments.size()) {
+            throw std::runtime_error("format: '" + sub + "' has no matching argument");
+        }
+        const auto &arg = arguments[arg_idx++];
         if (spec == 'd') {
             std::snprintf(buf, sizeof(buf), sub.c_str(), static_cast<int>(arg->evaluate_integer()));
         } else if (spec == 'f') {
