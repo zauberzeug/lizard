@@ -239,6 +239,7 @@ void Can::reset_can_bus() {
         }
     } else if (status_info.state == TWAI_STATE_RECOVERING) {
         const unsigned long start_time = millis();
+        const unsigned long timeout_ms = 500;
         while (true) {
             if (twai_get_status_info(&status_info) != ESP_OK) {
                 throw std::runtime_error("failed to get status during recovery");
@@ -247,7 +248,7 @@ void Can::reset_can_bus() {
             if (status_info.state != TWAI_STATE_RECOVERING) {
                 break;
             }
-            if (millis_since(start_time) > 500) {
+            if (millis_since(start_time) > timeout_ms) {
                 throw std::runtime_error("recovery timeout");
             }
 
