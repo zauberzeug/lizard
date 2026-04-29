@@ -152,8 +152,9 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         this->cal_state = cal_both;
         this->both_left_done = false;
         this->both_right_done = false;
-        this->motor->reference_drive_start(1, true);
-        this->motor->reference_drive_start(2, false);
+        // Combined frame instead of two separate sends — some firmware revisions only honor "both"
+        // when m1 and m2 commands arrive in the same 0x0C frame.
+        this->motor->send_single_motor_control(0x10, 0x20);
         echo("%s: reference both started", this->name.c_str());
     }
 }
@@ -360,17 +361,18 @@ void InnotronicDeltaArm::step() {
             bool nudge_right = need_right && right_endstop_active;
             // Only one motor per tick — alternate when both endstops are still active.
             bool pick_left = nudge_left && (!nudge_right || !this->backoff_last_was_left);
+            int16_t a1 = static_cast<int16_t>(cur_m1);
+            int16_t a2 = static_cast<int16_t>(cur_m2);
             if (pick_left) {
-                int16_t a1 = static_cast<int16_t>(cur_m1);
                 int16_t target_m1 = a1 - BACKOFF_STEP_TICKS;
-                echo("%s: backoff left angle=%d -> %d", this->name.c_str(), a1, target_m1);
-                this->motor->send_delta_angle_cmd(0x10, target_m1, BACKOFF_SPEED);
+                echo("%s: backoff left angle=%d -> %d (m2 hold=%d)", this->name.c_str(), a1, target_m1, a2);
+                // Use 0x30 with m2 = current angle so the firmware doesn't interpret bytes 4-5 as pos2=0.
+                this->motor->send_delta_angle_cmd(0x30, target_m1, BACKOFF_SPEED, a2, BACKOFF_SPEED);
                 this->backoff_last_was_left = true;
             } else if (nudge_right) {
-                int16_t a2 = static_cast<int16_t>(cur_m2);
                 int16_t target_m2 = a2 + BACKOFF_STEP_TICKS;
-                echo("%s: backoff right angle=%d -> %d", this->name.c_str(), a2, target_m2);
-                this->motor->send_delta_angle_cmd(0x20, target_m2, BACKOFF_SPEED);
+                echo("%s: backoff right angle=%d -> %d (m1 hold=%d)", this->name.c_str(), a2, target_m2, a1);
+                this->motor->send_delta_angle_cmd(0x30, a1, BACKOFF_SPEED, target_m2, BACKOFF_SPEED);
                 this->backoff_last_was_left = false;
             }
             this->last_backoff_at = millis();
