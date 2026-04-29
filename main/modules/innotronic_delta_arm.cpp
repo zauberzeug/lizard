@@ -197,19 +197,9 @@ void InnotronicDeltaArm::step() {
         }
     }
 
-    // Endstop safety: brake once on rising edge while a user move is active.
-    if (this->properties.at("active")->boolean_value) {
-        if (left_endstop_active && !this->left_endstop_prev) {
-            this->motor->reference_drive_stop(1);
-            this->properties.at("active")->boolean_value = false;
-            echo("%s: left endstop triggered during move", this->name.c_str());
-        }
-        if (right_endstop_active && !this->right_endstop_prev) {
-            this->motor->reference_drive_stop(2);
-            this->properties.at("active")->boolean_value = false;
-            echo("%s: right endstop triggered during move", this->name.c_str());
-        }
-    }
+    // Endstop safety is handled at move start by can_move() (blocks moves that would
+    // drive past an already-active endstop) and physically by the motor firmware itself.
+    // No runtime brake here — it would interfere with normal home parking at (0,0).
     this->left_endstop_prev = left_endstop_active;
     this->right_endstop_prev = right_endstop_active;
 
