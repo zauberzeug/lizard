@@ -24,45 +24,44 @@ const std::map<std::string, Variable_ptr> Can::get_defaults() {
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(can, name) {
-    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
-    twai_timing_config_t t_config;
-    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+    this->g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
+    this->f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
     switch (baud_rate) {
     case 1000000:
-        t_config = TWAI_TIMING_CONFIG_1MBITS();
+        this->t_config = TWAI_TIMING_CONFIG_1MBITS();
         break;
     case 800000:
-        t_config = TWAI_TIMING_CONFIG_800KBITS();
+        this->t_config = TWAI_TIMING_CONFIG_800KBITS();
         break;
     case 500000:
-        t_config = TWAI_TIMING_CONFIG_500KBITS();
+        this->t_config = TWAI_TIMING_CONFIG_500KBITS();
         break;
     case 250000:
-        t_config = TWAI_TIMING_CONFIG_250KBITS();
+        this->t_config = TWAI_TIMING_CONFIG_250KBITS();
         break;
     case 125000:
-        t_config = TWAI_TIMING_CONFIG_125KBITS();
+        this->t_config = TWAI_TIMING_CONFIG_125KBITS();
         break;
     case 100000:
-        t_config = TWAI_TIMING_CONFIG_100KBITS();
+        this->t_config = TWAI_TIMING_CONFIG_100KBITS();
         break;
     case 50000:
-        t_config = TWAI_TIMING_CONFIG_50KBITS();
+        this->t_config = TWAI_TIMING_CONFIG_50KBITS();
         break;
     case 25000:
-        t_config = TWAI_TIMING_CONFIG_25KBITS();
+        this->t_config = TWAI_TIMING_CONFIG_25KBITS();
         break;
     default:
         throw std::runtime_error("invalid baud rate");
     }
 
-    g_config.rx_queue_len = 20;
-    g_config.tx_queue_len = 20;
+    this->g_config.rx_queue_len = 20;
+    this->g_config.tx_queue_len = 20;
 
     this->properties = Can::get_defaults();
 
-    ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
+    ESP_ERROR_CHECK(twai_driver_install(&this->g_config, &this->t_config, &this->f_config));
     ESP_ERROR_CHECK(twai_start());
 }
 
@@ -89,6 +88,14 @@ void Can::step() {
     this->properties.at("arb_lost_count")->integer_value = status_info.arb_lost_count;
     this->properties.at("bus_error_count")->integer_value = status_info.bus_error_count;
 
+    if (status_info.state == TWAI_STATE_BUS_OFF) {
+        try {
+            this->reset_can_bus();
+        } catch (const std::exception &e) {
+            echo("CAN recovery failed: %s", e.what());
+        }
+    }
+
     Module::step();
 }
 
@@ -101,19 +108,6 @@ bool Can::receive() {
     }
 
     if (result != ESP_OK) {
-        // reset if bus is off
-        twai_status_info_t status_info;
-        if (twai_get_status_info(&status_info) == ESP_OK) {
-            if (status_info.state == TWAI_STATE_BUS_OFF) {
-                try {
-                    this->reset_can_bus();
-                } catch (const std::exception &e) {
-                    echo("CAN recovery failed: %s", e.what());
-                }
-            }
-        } else {
-            echo("CAN receive error: %d (could not get status info)", result);
-        }
         return false;
     }
 
@@ -139,6 +133,11 @@ bool Can::receive() {
 }
 
 void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
+    twai_status_info_t status_info;
+    if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
+        return;
+    }
+
     twai_message_t message;
     message.identifier = id;
     message.flags = rtr ? TWAI_MSG_FLAG_RTR : TWAI_MSG_FLAG_NONE;
@@ -147,18 +146,7 @@ void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t
         message.data[i] = data[i];
     }
 
-    if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
-        try {
-            echo("CAN send failed, attempting bus reset...");
-            const_cast<Can *>(this)->reset_can_bus();
-
-            if (twai_transmit(&message, pdMS_TO_TICKS(0)) != ESP_OK) {
-                throw std::runtime_error("could not send CAN message even after bus reset");
-            }
-        } catch (const std::exception &e) {
-            throw std::runtime_error(std::string("Failed to send CAN message: ") + e.what());
-        }
-    }
+    twai_transmit(&message, pdMS_TO_TICKS(0));
 }
 
 void Can::send(uint32_t id,
@@ -242,34 +230,19 @@ void Can::reset_can_bus() {
          : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
                                                       : "UNKNOWN");
 
-    if (status_info.state != TWAI_STATE_STOPPED) {
+    if (status_info.state == TWAI_STATE_RUNNING) {
         if (twai_stop() != ESP_OK) {
             throw std::runtime_error("could not stop TWAI driver");
         }
-        if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_STOPPED) {
-            throw std::runtime_error("TWAI driver didn't stop properly");
-        }
-    }
-
-    if (status_info.state == TWAI_STATE_BUS_OFF) {
-        if (twai_initiate_recovery() != ESP_OK) {
-            throw std::runtime_error("could not initiate recovery");
-        }
-
+    } else if (status_info.state == TWAI_STATE_RECOVERING) {
         const unsigned long start_time = millis();
         const unsigned long timeout_ms = 500;
-
         while (true) {
             if (twai_get_status_info(&status_info) != ESP_OK) {
                 throw std::runtime_error("failed to get status during recovery");
             }
 
             if (status_info.state != TWAI_STATE_RECOVERING) {
-                echo("Recovery completed, state: %s",
-                     status_info.state == TWAI_STATE_STOPPED   ? "STOPPED"
-                     : status_info.state == TWAI_STATE_RUNNING ? "RUNNING"
-                     : status_info.state == TWAI_STATE_BUS_OFF ? "BUS_OFF"
-                                                               : "UNKNOWN");
                 break;
             }
 
@@ -281,11 +254,18 @@ void Can::reset_can_bus() {
         }
     }
 
-    echo("Starting TWAI driver...");
+    // Tear down and rebuild the driver instead of calling twai_initiate_recovery():
+    // ESP-IDF v5.3.1 asserts tx_msg_count >= 0 in the TX ISR while leaving BUS_OFF,
+    // which would call abort() from interrupt context.
+    if (twai_driver_uninstall() != ESP_OK) {
+        throw std::runtime_error("could not uninstall TWAI driver");
+    }
+    if (twai_driver_install(&this->g_config, &this->t_config, &this->f_config) != ESP_OK) {
+        throw std::runtime_error("could not reinstall TWAI driver");
+    }
     if (twai_start() != ESP_OK) {
         throw std::runtime_error("could not start TWAI driver");
     }
-
     if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
         throw std::runtime_error("TWAI driver didn't start properly");
     }
