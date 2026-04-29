@@ -230,9 +230,8 @@ void Can::reset_can_bus() {
          : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
                                                       : "UNKNOWN");
 
-    // Uninstall and reinstall the driver to avoid ESP-IDF assertion failure
-    // in twai_handle_tx_buffer_frame during twai_initiate_recovery() when
-    // in BUS_OFF state (tx_msg_count goes negative).
+    // Uninstall and reinstall the driver to avoid ESP-IDF assertion failure in twai_handle_tx_buffer_frame
+    // during twai_initiate_recovery() when in BUS_OFF state (tx_msg_count goes negative).
     if (status_info.state == TWAI_STATE_RUNNING) {
         if (twai_stop() != ESP_OK) {
             throw std::runtime_error("could not stop TWAI driver");
@@ -248,6 +247,7 @@ void Can::reset_can_bus() {
             if (status_info.state != TWAI_STATE_RECOVERING) {
                 break;
             }
+
             if (millis_since(start_time) > timeout_ms) {
                 throw std::runtime_error("recovery timeout");
             }
