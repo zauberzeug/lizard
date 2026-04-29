@@ -730,19 +730,19 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.position_error`  | Last read position error (degrees)          | `float`   |
 | `motor.status`          | Status code (0 = OK, 1 = set_mode failed)   | `int`     |
 
-| Methods                               | Description                                                                   | Arguments             |
-| ------------------------------------- | ----------------------------------------------------------------------------- | --------------------- |
-| `motor.enable()`                      | Enable the motor                                                              |                       |
-| `motor.disable()`                     | Disable the motor                                                             |                       |
-| `motor.set_mode(mode)`                | Set working mode (see [working modes](#working-modes))                        | `int`                 |
-| `motor.zero()`                        | Set current position as zero                                                  |                       |
-| `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                              | `int`                 |
-| `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10)  | `int`                 |
+| Methods                               | Description                                                                  | Arguments             |
+| ------------------------------------- | ---------------------------------------------------------------------------- | --------------------- |
+| `motor.enable()`                      | Enable the motor                                                             |                       |
+| `motor.disable()`                     | Disable the motor                                                            |                       |
+| `motor.set_mode(mode)`                | Set working mode (see [working modes](#working-modes))                       | `int`                 |
+| `motor.zero()`                        | Set current position as zero                                                 |                       |
+| `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                             | `int`                 |
+| `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10) | `int`                 |
 | `motor.set_bitrate(rate)`             | Set CAN bitrate ("125K", "250K", "500K" or "1M")                             | `str`                 |
-| `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                        | `float`, `int`, `int` |
-| `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                  | `int`, `int`, `int`   |
-| `motor.stop(acc)`                     | Stop motor with given deceleration (0-255)                                    | `int`                 |
-| `motor.read_position_error()`         | Request position error from motor via CAN                                     |                       |
+| `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                       | `float`, `int`, `int` |
+| `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                 | `int`, `int`, `int`   |
+| `motor.stop(acc)`                     | Stop motor with given deceleration (0-255)                                   | `int`                 |
+| `motor.read_position_error()`         | Request position error from motor via CAN                                    |                       |
 
 The `position()` method moves the motor to an absolute coordinate position (in degrees from the zero point)
 with a given speed in RPM (0-3000) and acceleration (0-255).
