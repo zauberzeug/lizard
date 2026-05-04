@@ -135,6 +135,11 @@ bool Can::receive() {
 void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
     twai_status_info_t status_info;
     if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
+        static unsigned long last_drop_log = 0;
+        if (millis_since(last_drop_log) > 1000) {
+            echo("CAN send dropped: bus not RUNNING");
+            last_drop_log = millis();
+        }
         return;
     }
 
