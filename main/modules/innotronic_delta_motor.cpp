@@ -22,7 +22,7 @@ InnotronicDeltaMotor::MotorConfig InnotronicDeltaMotor::config_for(const std::st
     // Known delta arm motors and their firmware operating-mode words (Configure 0x0B / setting 0x02):
     //   "windmeile"     — first delta arm,           300 ticks/rev, mode 0xB5B5
     //   "g350"          — drive motor used as delta, 600 ticks/rev, mode 0xD5D5
-    //   "g250r-t-14.2"  — new delta arm 14.2:1 gear, ticks unknown, mode 0xC5C5
+    //   "g250r-t"       — new delta arm 14.2:1 gear, 678 ticks/rev, currently mode 0xB5B5 (later 0xC5C5)
     // The 12.5:1 g250r-t variant is intentionally not listed — may never be implemented.
     if (motor_type == "windmeile") {
         return {300, 0xB5B5};
@@ -30,8 +30,8 @@ InnotronicDeltaMotor::MotorConfig InnotronicDeltaMotor::config_for(const std::st
     if (motor_type == "g350") {
         return {600, 0xD5D5};
     }
-    if (motor_type == "g250r-t-14.2") {
-        throw std::runtime_error("delta motor_type \"g250r-t-14.2\": ticks per revolution not yet known — measure and update innotronic_delta_motor.cpp");
+    if (motor_type == "g250r-t") {
+        return {678, 0xB5B5};
     }
     throw std::runtime_error("unknown delta motor_type: " + motor_type);
 }
