@@ -88,13 +88,14 @@ void Can::step() {
     this->properties.at("arb_lost_count")->integer_value = status_info.arb_lost_count;
     this->properties.at("bus_error_count")->integer_value = status_info.bus_error_count;
 
-    if (status_info.state == TWAI_STATE_BUS_OFF) {
+    if (status_info.state == TWAI_STATE_BUS_OFF && this->previous_state != TWAI_STATE_BUS_OFF) {
         try {
             this->reset_can_bus();
         } catch (const std::exception &e) {
             echo("CAN recovery failed: %s", e.what());
         }
     }
+    this->previous_state = status_info.state;
 
     Module::step();
 }
