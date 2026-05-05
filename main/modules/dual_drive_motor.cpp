@@ -112,9 +112,8 @@ void DualDriveMotor::send_drive_ticks_cmd(float angular_vel, int16_t ticks) {
     }
     const float rad_limit = this->properties.at("rad_limit")->number_value;
     angular_vel = std::clamp(angular_vel, -rad_limit, rad_limit);
-    const double s = this->sign();
-    int16_t raw_vel = static_cast<int16_t>(angular_vel * s / 0.01f);
-    int16_t raw_ticks = static_cast<int16_t>(ticks * s);
+    int16_t raw_vel = static_cast<int16_t>(angular_vel * this->sign() / 0.01f);
+    int16_t raw_ticks = static_cast<int16_t>(ticks * this->sign());
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     std::memcpy(data, &raw_vel, 2);
     std::memcpy(data + 2, &raw_ticks, 2);
