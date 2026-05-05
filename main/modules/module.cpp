@@ -11,6 +11,8 @@
 #include "d1_motor.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "dual_drive_motor.h"
+#include "dual_drive_wheels.h"
 #include "dunker_motor.h"
 #include "dunker_wheels.h"
 #include "expander.h"
@@ -356,6 +358,28 @@ Module_ptr Module::create(const std::string type,
         MksServoMotor_ptr module = std::make_shared<MksServoMotor>(name, can_module, motor_id);
         module->subscribe_to_can();
         return module;
+    } else if (type == "DualDriveMotor") {
+        Module::expect(arguments, 2, identifier, integer);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t node_id = arguments[1]->evaluate_integer();
+        DualDriveMotor_ptr motor = std::make_shared<DualDriveMotor>(name, can_module, node_id);
+        motor->subscribe_to_can();
+        return motor;
+    } else if (type == "DualDriveWheels") {
+        Module::expect(arguments, 2, identifier, identifier);
+        std::string left_name = arguments[0]->evaluate_identifier();
+        std::string right_name = arguments[1]->evaluate_identifier();
+        Module_ptr left_module = Global::get_module(left_name);
+        Module_ptr right_module = Global::get_module(right_name);
+        if (left_module->type != dual_drive_motor) {
+            throw std::runtime_error("module \"" + left_name + "\" is no dual drive motor");
+        }
+        if (right_module->type != dual_drive_motor) {
+            throw std::runtime_error("module \"" + right_name + "\" is no dual drive motor");
+        }
+        const DualDriveMotor_ptr left_motor = std::static_pointer_cast<DualDriveMotor>(left_module);
+        const DualDriveMotor_ptr right_motor = std::static_pointer_cast<DualDriveMotor>(right_module);
+        return std::make_shared<DualDriveWheels>(name, left_motor, right_motor);
     } else if (type == "DunkerMotor") {
         Module::expect(arguments, 2, identifier, integer);
         const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");

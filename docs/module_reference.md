@@ -991,6 +991,70 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
 
+## Dual Drive Motor
+
+The DualDriveMotor module controls a Twin MC motor controller in track drive mode (speed control on motor 1).
+The constructor sends the firmware-mode-switch (`0xA5A5`) so the controller is in drive mode regardless of its previous state.
+Currently only the G350 motor (600 hall ticks per revolution) is supported in this mode.
+
+| Constructor                            | Description            | Arguments         |
+| -------------------------------------- | ---------------------- | ----------------- |
+| `motor = DualDriveMotor(can, node_id)` | CAN module and node ID | CAN module, `int` |
+
+| Properties          | Description                                       | Data type |
+| ------------------- | ------------------------------------------------- | --------- |
+| `motor.voltage`     | Board voltage (V)                                 | `float`   |
+| `motor.temperature` | Controller temperature (°C)                       | `int`     |
+| `motor.state`       | Current switch state                              | `int`     |
+| `motor.error_codes` | Error bitmask as hex string                       | `str`     |
+| `motor.version`     | Firmware version reported by controller           | `int`     |
+| `motor.speed`       | Current speed (m/s, sign- and `m_per_rad`-scaled) | `float`   |
+| `motor.current_m1`  | Motor 1 current (A)                               | `float`   |
+| `motor.current_m2`  | Motor 2 current (A)                               | `float`   |
+| `motor.m_per_rad`   | Meters per radian for speed conversion            | `float`   |
+| `motor.reversed`    | Reverse motor direction                           | `bool`    |
+| `motor.rad_limit`   | Maximum angular velocity limit (rad/s)            | `float`   |
+| `motor.enabled`     | Whether the motor is enabled                      | `bool`    |
+| `motor.debug`       | Enable CAN debug output                           | `bool`    |
+
+| Methods                                       | Description                       | Arguments                     |
+| --------------------------------------------- | --------------------------------- | ----------------------------- |
+| `motor.speed(vel[, acc, jerk])`               | Set target angular velocity rad/s | `float`\[, `float`, `float`\] |
+| `motor.drive_ticks(vel, ticks)`               | Relative move in hall ticks       | `float`, `int`                |
+| `motor.switch_state(state)`                   | Set state: 1=off, 2=brake, 3=on   | `int`                         |
+| `motor.configure(setting_id, value1, value2)` | Send raw configure command        | `int`, `int`, `int`           |
+| `motor.configure_node_id(new_id)`             | Set CAN node ID                   | `int`                         |
+| `motor.on()`                                  | Turn motor on                     |                               |
+| `motor.off()`                                 | Turn motor off                    |                               |
+| `motor.stop()`                                | Brake the motor                   |                               |
+| `motor.enable()`                              | Enable the motor                  |                               |
+| `motor.disable()`                             | Disable the motor                 |                               |
+
+## Dual Drive Wheels
+
+The DualDriveWheels module combines two DualDriveMotor modules for differential steering.
+
+| Constructor                                         | Description       | Arguments                  |
+| --------------------------------------------------- | ----------------- | -------------------------- |
+| `wheels = DualDriveWheels(left_motor, right_motor)` | Two motor modules | two DualDriveMotor modules |
+
+| Properties             | Description                    | Data type |
+| ---------------------- | ------------------------------ | --------- |
+| `wheels.width`         | Wheel distance (m)             | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
+| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
+
+| Methods                         | Description                                     | Arguments        |
+| ------------------------------- | ----------------------------------------------- | ---------------- |
+| `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
+| `wheels.off()`                  | Turn both motors off                            |                  |
+| `wheels.stop()`                 | Brake both motors                               |                  |
+| `wheels.enable()`               | Enable both motors                              |                  |
+| `wheels.disable()`              | Disable both motors                             |                  |
+
+When the wheels are disabled, they will stop and ignore movement commands.
+
 ## Analog Unit
 
 The AnalogUnit module owns an ADC oneshot unit and is shared by one or more `Analog` or `TemperatureSensor` modules.
