@@ -59,6 +59,10 @@ void DualDriveMotorBase::send_switch_state(uint8_t state) {
     this->can->send(can_id, data);
 }
 
+void DualDriveMotorBase::stop() {
+    this->send_switch_state(2);
+}
+
 void DualDriveMotorBase::configure(uint8_t setting_id, uint16_t value1, int32_t value2) {
     // Configure 0x0B: Byte 0 = setting_id, Bytes 2-3 = value1 u16, Bytes 4-7 = value2 i32
     // setting_id: 0x00=ACK, 0x01=Set CanID, 0x02=Switch Operating Mode
@@ -81,7 +85,7 @@ void DualDriveMotorBase::call(const std::string method_name, const std::vector<C
         this->send_switch_state(1);
     } else if (method_name == "stop") {
         Module::expect(arguments, 0);
-        this->send_switch_state(2);
+        this->stop();
     } else if (method_name == "on") {
         Module::expect(arguments, 0);
         this->send_switch_state(3);

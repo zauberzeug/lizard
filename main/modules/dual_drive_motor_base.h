@@ -23,6 +23,7 @@ protected:
 public:
     DualDriveMotorBase(const ModuleType type, const std::string name, const Can_ptr can, const uint32_t node_id);
 
+    void stop();
     void configure(uint8_t setting_id, uint16_t value1, int32_t value2);
     void configure_node_id(uint8_t new_node_id);
 

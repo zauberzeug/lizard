@@ -1,6 +1,7 @@
 #include "dual_drive_motor.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
@@ -25,12 +26,8 @@ DualDriveMotor::DualDriveMotor(const std::string name, const Can_ptr can, const 
     this->configure(0x02, 0xA5A5, 0);
 }
 
-bool DualDriveMotor::is_reversed() const {
-    return this->properties.at("reversed")->boolean_value;
-}
-
 double DualDriveMotor::sign() const {
-    return this->is_reversed() ? -1.0 : 1.0;
+    return this->properties.at("reversed")->boolean_value ? -1.0 : 1.0;
 }
 
 void DualDriveMotor::subscribe_to_can() {
@@ -95,11 +92,7 @@ void DualDriveMotor::send_speed_cmd(float angular_vel) {
         return;
     }
     const float rad_limit = this->properties.at("rad_limit")->number_value;
-    if (angular_vel > rad_limit) {
-        angular_vel = rad_limit;
-    } else if (angular_vel < -rad_limit) {
-        angular_vel = -rad_limit;
-    }
+    angular_vel = std::clamp(angular_vel, -rad_limit, rad_limit);
     int16_t raw_vel = static_cast<int16_t>(angular_vel * this->sign() / 0.01f);
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     std::memcpy(data, &raw_vel, 2);
@@ -118,11 +111,7 @@ void DualDriveMotor::send_drive_ticks_cmd(float angular_vel, int16_t ticks) {
         return;
     }
     const float rad_limit = this->properties.at("rad_limit")->number_value;
-    if (angular_vel > rad_limit) {
-        angular_vel = rad_limit;
-    } else if (angular_vel < -rad_limit) {
-        angular_vel = -rad_limit;
-    }
+    angular_vel = std::clamp(angular_vel, -rad_limit, rad_limit);
     const double s = this->sign();
     int16_t raw_vel = static_cast<int16_t>(angular_vel * s / 0.01f);
     int16_t raw_ticks = static_cast<int16_t>(ticks * s);
@@ -160,7 +149,7 @@ void DualDriveMotor::call(const std::string method_name, const std::vector<Const
 }
 
 void DualDriveMotor::stop() {
-    this->send_switch_state(2);
+    DualDriveMotorBase::stop();
 }
 
 double DualDriveMotor::get_position() {

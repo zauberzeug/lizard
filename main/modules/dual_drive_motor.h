@@ -15,7 +15,6 @@ private:
     bool has_last_raw_position = false;
     int64_t accumulated_ticks = 0;
 
-    bool is_reversed() const;
     double sign() const;
 
     void send_speed_cmd(float angular_vel);
