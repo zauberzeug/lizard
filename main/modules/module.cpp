@@ -11,6 +11,8 @@
 #include "d1_motor.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "dual_drive_delta_arm.h"
+#include "dual_drive_delta_motor.h"
 #include "dunker_motor.h"
 #include "dunker_wheels.h"
 #include "expander.h"
@@ -378,6 +380,23 @@ Module_ptr Module::create(const std::string type,
         const DunkerMotor_ptr left_motor = std::static_pointer_cast<DunkerMotor>(left_module);
         const DunkerMotor_ptr right_motor = std::static_pointer_cast<DunkerMotor>(right_module);
         return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
+    } else if (type == "DualDriveDeltaMotor") {
+        Module::expect(arguments, 3, identifier, integer, string);
+        const Can_ptr can_module = get_module_paramter<Can>(arguments[0], can, "can connection");
+        const int64_t node_id = arguments[1]->evaluate_integer();
+        if (node_id < 0 || node_id > 0x3F) {
+            throw std::runtime_error("node ID must be between 0 and 63");
+        }
+        const std::string motor_type = arguments[2]->evaluate_string();
+        DualDriveDeltaMotor_ptr motor = std::make_shared<DualDriveDeltaMotor>(name, can_module, node_id, motor_type);
+        motor->subscribe_to_can();
+        return motor;
+    } else if (type == "DualDriveDeltaArm") {
+        Module::expect(arguments, 3, identifier, identifier, identifier);
+        const DualDriveDeltaMotor_ptr motor = get_module_paramter<DualDriveDeltaMotor>(arguments[0], dual_drive_delta_motor, "dual drive delta motor");
+        const Input_ptr left_endstop = get_module_paramter<Input>(arguments[1], input, "input");
+        const Input_ptr right_endstop = get_module_paramter<Input>(arguments[2], input, "input");
+        return std::make_shared<DualDriveDeltaArm>(name, motor, left_endstop, right_endstop);
     } else if (type == "Analog") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");

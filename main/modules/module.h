@@ -50,6 +50,8 @@ enum ModuleType {
     temperature_sensor,
     proxy,
     serial_bus,
+    dual_drive_delta_motor,
+    dual_drive_delta_arm,
 };
 
 class Module;
