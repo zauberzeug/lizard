@@ -88,9 +88,9 @@ void DualDriveMotor::handle_can_msg(const uint32_t id, const int count, const ui
     }
 }
 
-void DualDriveMotor::send_speed_cmd(float angular_vel, uint8_t acc_limit, int8_t jerk_limit_exp) {
+void DualDriveMotor::send_speed_cmd(float angular_vel) {
     // SpeedCmd 0x01: target speed.
-    // Bytes: [0-1] vel int16 0.01 rad/s, [2] acc_limit (0=default), [3] jerk_limit_exp (0=default)
+    // Bytes: [0-1] vel int16 0.01 rad/s, [2] acc_limit, [3] jerk_limit_exp (acceleration not yet supported by firmware)
     if (!this->is_enabled()) {
         return;
     }
@@ -103,8 +103,6 @@ void DualDriveMotor::send_speed_cmd(float angular_vel, uint8_t acc_limit, int8_t
     int16_t raw_vel = static_cast<int16_t>(angular_vel * this->sign() / 0.01f);
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     std::memcpy(data, &raw_vel, 2);
-    data[2] = acc_limit;
-    data[3] = static_cast<uint8_t>(jerk_limit_exp);
     uint32_t can_id = (this->node_id << 5) | 0x01;
     if (this->is_debug()) {
         echo("[%lu] CAN TX [NodeID=%ld, CmdID=0x01]: speed %.2f rad/s, raw %d",
@@ -139,16 +137,18 @@ void DualDriveMotor::send_drive_ticks_cmd(float angular_vel, int16_t ticks) {
     this->can->send(can_id, data);
 }
 
+void DualDriveMotor::drive_meters(float linear_speed, float distance) {
+    const float m_per_rad = this->properties.at("m_per_rad")->number_value;
+    const float angular_vel = linear_speed / m_per_rad;
+    const int16_t ticks = static_cast<int16_t>(distance / m_per_rad * MOTOR_TICKS / (2.0f * M_PI));
+    this->send_drive_ticks_cmd(angular_vel, ticks);
+}
+
 void DualDriveMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "speed") {
-        if (arguments.size() < 1 || arguments.size() > 3) {
-            throw std::runtime_error("unexpected number of arguments");
-        }
-        Module::expect(arguments, -1, numbery, numbery, numbery);
+        Module::expect(arguments, 1, numbery);
         float angular_vel = arguments[0]->evaluate_number();
-        uint8_t acc_limit = arguments.size() > 1 ? static_cast<uint8_t>(arguments[1]->evaluate_number()) : 0x00;
-        int8_t jerk_limit_exp = arguments.size() > 2 ? static_cast<int8_t>(arguments[2]->evaluate_number()) : (int8_t)0x00;
-        this->send_speed_cmd(angular_vel, acc_limit, jerk_limit_exp);
+        this->send_speed_cmd(angular_vel);
     } else if (method_name == "drive_ticks") {
         Module::expect(arguments, 2, numbery, integer);
         float angular_vel = arguments[0]->evaluate_number();
@@ -179,10 +179,10 @@ double DualDriveMotor::get_speed() {
 }
 
 void DualDriveMotor::speed(const double speed, const double acceleration) {
+    // acceleration parameter currently ignored: not yet supported by firmware.
     const double m_per_rad = this->properties.at("m_per_rad")->number_value;
     float angular_vel = static_cast<float>(speed / m_per_rad);
-    uint8_t acc_limit = acceleration > 0 ? static_cast<uint8_t>(acceleration) : 0xFF;
-    this->send_speed_cmd(angular_vel, acc_limit);
+    this->send_speed_cmd(angular_vel);
 }
 
 void DualDriveMotor::enable() {

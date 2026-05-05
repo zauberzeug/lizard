@@ -1017,18 +1017,18 @@ Currently only the G350 motor (600 hall ticks per revolution) is supported in th
 | `motor.enabled`     | Whether the motor is enabled                      | `bool`    |
 | `motor.debug`       | Enable CAN debug output                           | `bool`    |
 
-| Methods                                       | Description                       | Arguments                     |
-| --------------------------------------------- | --------------------------------- | ----------------------------- |
-| `motor.speed(vel[, acc, jerk])`               | Set target angular velocity rad/s | `float`\[, `float`, `float`\] |
-| `motor.drive_ticks(vel, ticks)`               | Relative move in hall ticks       | `float`, `int`                |
-| `motor.switch_state(state)`                   | Set state: 1=off, 2=brake, 3=on   | `int`                         |
-| `motor.configure(setting_id, value1, value2)` | Send raw configure command        | `int`, `int`, `int`           |
-| `motor.configure_node_id(new_id)`             | Set CAN node ID                   | `int`                         |
-| `motor.on()`                                  | Turn motor on                     |                               |
-| `motor.off()`                                 | Turn motor off                    |                               |
-| `motor.stop()`                                | Brake the motor                   |                               |
-| `motor.enable()`                              | Enable the motor                  |                               |
-| `motor.disable()`                             | Disable the motor                 |                               |
+| Methods                                       | Description                       | Arguments           |
+| --------------------------------------------- | --------------------------------- | ------------------- |
+| `motor.speed(vel)`                            | Set target angular velocity rad/s | `float`             |
+| `motor.drive_ticks(vel, ticks)`               | Relative move in hall ticks       | `float`, `int`      |
+| `motor.switch_state(state)`                   | Set state: 1=off, 2=brake, 3=on   | `int`               |
+| `motor.configure(setting_id, value1, value2)` | Send raw configure command        | `int`, `int`, `int` |
+| `motor.configure_node_id(new_id)`             | Set CAN node ID                   | `int`               |
+| `motor.on()`                                  | Turn motor on                     |                     |
+| `motor.off()`                                 | Turn motor off                    |                     |
+| `motor.stop()`                                | Brake the motor                   |                     |
+| `motor.enable()`                              | Enable the motor                  |                     |
+| `motor.disable()`                             | Disable the motor                 |                     |
 
 ## Dual Drive Wheels
 
@@ -1048,6 +1048,7 @@ The DualDriveWheels module combines two DualDriveMotor modules for differential 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
 | `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
+| `wheels.drive(speed, distance)` | Drive straight `distance` (m) at `speed` (m/s)  | `float`, `float` |
 | `wheels.off()`                  | Turn both motors off                            |                  |
 | `wheels.stop()`                 | Brake both motors                               |                  |
 | `wheels.enable()`               | Enable both motors                              |                  |

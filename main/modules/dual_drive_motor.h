@@ -18,7 +18,7 @@ private:
     bool is_reversed() const;
     double sign() const;
 
-    void send_speed_cmd(float angular_vel, uint8_t acc_limit = 0x00, int8_t jerk_limit_exp = 0x00);
+    void send_speed_cmd(float angular_vel);
     void send_drive_ticks_cmd(float angular_vel, int16_t ticks);
 
 public:
@@ -27,6 +27,8 @@ public:
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+
+    void drive_meters(float linear_speed, float distance);
 
     void stop() override;
     double get_position() override;

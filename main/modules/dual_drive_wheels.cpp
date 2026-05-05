@@ -50,6 +50,14 @@ void DualDriveWheels::call(const std::string method_name, const std::vector<Cons
             this->left_motor->speed(linear - angular * width / 2.0, 0);
             this->right_motor->speed(linear + angular * width / 2.0, 0);
         }
+    } else if (method_name == "drive") {
+        Module::expect(arguments, 2, numbery, numbery);
+        if (this->is_enabled()) {
+            const float linear_speed = arguments[0]->evaluate_number();
+            const float distance = arguments[1]->evaluate_number();
+            this->left_motor->drive_meters(linear_speed, distance);
+            this->right_motor->drive_meters(linear_speed, distance);
+        }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->left_motor->disable();
