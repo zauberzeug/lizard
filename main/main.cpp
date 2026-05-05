@@ -351,7 +351,7 @@ void process_line(const char *line, const int len) {
             process_lizard(line + 2);
             break;
         case '"':
-            echo(line + 2);
+            echo("%s", line + 2);
             break;
         default:
             throw std::runtime_error("unrecognized control command");

@@ -132,6 +132,8 @@ Install Python requirements:
 python3 -m pip install -r requirements.txt
 ```
 
+On macOS, use `requirements-macos.txt` instead, which omits `gpiod` (not available on macOS).
+
 Install UART drivers: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
 
 Get all sub modules:
