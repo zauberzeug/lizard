@@ -20,12 +20,12 @@ const std::map<std::string, Variable_ptr> DualDriveDeltaMotor::get_defaults() {
 
 DualDriveDeltaMotor::MotorConfig DualDriveDeltaMotor::config_for(const std::string &motor_type) {
     // Known delta arm motors and their firmware operating-mode words (Configure 0x0B / setting 0x02):
-    //   "windmeile"     — first delta arm,           300 ticks/rev, mode 0xB5B5
+    //   "windmeile"     — first delta arm,           266 ticks/rev, mode 0xB5B5
     //   "g350"          — drive motor used as delta, 600 ticks/rev, mode 0xD5D5
     //   "g250r-t"       — new delta arm 14.2:1 gear, 678 ticks/rev, currently mode 0xB5B5 (later 0xC5C5)
     // The 12.5:1 g250r-t variant is intentionally not listed — may never be implemented.
     if (motor_type == "windmeile") {
-        return {300, 0xB5B5};
+        return {266, 0xB5B5};
     }
     if (motor_type == "g350") {
         return {600, 0xD5D5};
@@ -76,10 +76,14 @@ void DualDriveDeltaMotor::handle_can_msg(const uint32_t id, const int count, con
         this->properties.at("ref_result_m2")->integer_value = ref_m2;
         auto ref_str = [](uint8_t v) -> const char * {
             switch (v) {
-            case REF_OK: return "OK";
-            case REF_OVERCURRENT: return "OVERCURRENT";
-            case REF_END: return "REF_END";
-            default: return "NONE";
+            case REF_OK:
+                return "OK";
+            case REF_OVERCURRENT:
+                return "OVERCURRENT";
+            case REF_END:
+                return "REF_END";
+            default:
+                return "NONE";
             }
         };
         echo("[%lu] CAN RX [NodeID=%ld, CmdID=0x14]: Reference Result Motor1: %s Motor2: %s",
