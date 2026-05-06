@@ -751,6 +751,9 @@ If acceleration is 0, the motor stops immediately.
 The `read_position_error()` method requests the current position error from the motor via CAN.
 The result is available in the `position_error` property (in degrees) once the motor responds.
 
+The `set_bitrate()` method changes the CAN bitrate on the motor.
+The motor switches to the new bitrate immediately, which means communication with the motor is lost until the Lizard CAN bus is also reconfigured to match the new bitrate.
+
 **Working Modes**
 
 The MKS SERVO42D/57D supports the following working modes:
@@ -767,18 +770,6 @@ The MKS SERVO42D/57D supports the following working modes:
 The `set_mode()` method sets the working mode of the motor.
 For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
 The constructor automatically sets SR_vFOC mode (0x05), which is required for the bus motion commands (`position()`, `speed()`, `stop()`).
-
-**CAN Bitrate**
-
-The `set_bitrate()` method changes the CAN bitrate on the motor.
-The motor applies the new bitrate immediately, so you must also change the CAN bus baud rate on the ESP32 side to continue communication.
-
-| Rate   | Description |
-| ------ | ----------- |
-| "125K" | 125 kbit/s  |
-| "250K" | 250 kbit/s  |
-| "500K" | 500 kbit/s  |
-| "1M"   | 1 Mbit/s    |
 
 ## Motor Axis
 
