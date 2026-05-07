@@ -197,7 +197,7 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
         if (twai_stop() != ESP_OK) {
             throw std::runtime_error("could not stop TWAI driver");
         }
-    } else if (method_name == "recover" || method_name == "reset") {
+    } else if (method_name == "reset") {
         Module::expect(arguments, 0);
         try {
             this->reset_can_bus();
