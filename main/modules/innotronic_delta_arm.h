@@ -27,7 +27,7 @@ private:
 
     double target_left_deg = 0.0;
     double target_right_deg = 0.0;
-    bool was_in_tol = false;
+    bool is_settling = false;
     unsigned long stable_since = 0;
     bool left_endstop_prev = false;
     bool right_endstop_prev = false;

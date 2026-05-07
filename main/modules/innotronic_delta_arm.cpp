@@ -6,7 +6,7 @@
 
 // Detection-tuning constants — fixed enough that runtime tuning isn't needed.
 static constexpr double POSITION_TOL_FACTOR = 1.5;  // tolerance multiplier applied to deg_per_tick
-static constexpr unsigned long STABLE_MS = 100;     // hold time inside tolerance before active=false
+static constexpr unsigned long STABLE_MS = 100;     // hold time inside tolerance before state→0
 static constexpr double STALL_POS_TOL_DEG = 2.4;    // position drift allowed within stall window
 static constexpr unsigned long STALL_MS = 200;      // overcurrent + no movement → stall
 static constexpr int16_t BACKOFF_STEP_TICKS = 10;
@@ -21,7 +21,7 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
         {"calibrating", std::make_shared<BooleanVariable>(false)},
         {"calibrated_left", std::make_shared<BooleanVariable>(false)},
         {"calibrated_right", std::make_shared<BooleanVariable>(false)},
-        {"active", std::make_shared<BooleanVariable>(false)},
+        {"state", std::make_shared<IntegerVariable>(0)},
         {"stalled", std::make_shared<BooleanVariable>(false)},
         {"angle_left", std::make_shared<NumberVariable>()},
         {"angle_right", std::make_shared<NumberVariable>()},
@@ -64,12 +64,12 @@ void InnotronicDeltaArm::move_to(double left_deg, double right_deg, uint8_t spee
     this->motor->send_delta_angle_cmd(0x30, left_ticks, speed_left, right_ticks, speed_right);
     this->target_left_deg = left_deg;
     this->target_right_deg = right_deg;
-    this->was_in_tol = false;
+    this->is_settling = false;
     this->stable_since = 0;
     this->was_stalling = false;
     this->stall_since = 0;
     this->properties.at("stalled")->boolean_value = false;
-    this->properties.at("active")->boolean_value = true;
+    this->properties.at("state")->integer_value = 1;
 }
 
 bool InnotronicDeltaArm::can_move(double left_deg, double right_deg) const {
@@ -120,7 +120,7 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
     this->m1_brake_sent = false;
     this->m2_brake_sent = false;
     this->cal_started_at = millis();
-    this->properties.at("active")->boolean_value = false;
+    this->properties.at("state")->integer_value = 0;
     this->properties.at("stalled")->boolean_value = false;
     this->was_stalling = false;
 
@@ -180,21 +180,32 @@ void InnotronicDeltaArm::step() {
     this->properties.at("angle_left")->number_value = cur_l_deg;
     this->properties.at("angle_right")->number_value = cur_r_deg;
 
-    // Active / target-reached tracking (no velocity feedback in delta mode).
-    if (this->properties.at("active")->boolean_value) {
+    // Move-state tracking (no velocity feedback in delta mode).
+    // state: 0=idle, 1=received (ack), 2=moving.
+    // The first step after move_to defers any transition by leveraging is_settling=false
+    // (reset in move_to). This guarantees state=1 is broadcast at least once.
+    int64_t state = this->properties.at("state")->integer_value;
+    if (state >= 1) {
         double tolerance_window_deg = this->deg_per_tick * POSITION_TOL_FACTOR;
         bool in_tol = std::abs(cur_l_deg - this->target_left_deg) <= tolerance_window_deg &&
                       std::abs(cur_r_deg - this->target_right_deg) <= tolerance_window_deg;
-        if (in_tol) {
-            if (!this->was_in_tol) {
+        if (state == 1 && !this->is_settling) {
+            // First step after move_to: ensure state=1 broadcasts before any transition.
+            this->stable_since = millis();
+            this->is_settling = true;
+        } else if (in_tol) {
+            if (!this->is_settling) {
                 this->stable_since = millis();
-                this->was_in_tol = true;
+                this->is_settling = true;
             } else if (millis_since(this->stable_since) >= STABLE_MS) {
-                this->properties.at("active")->boolean_value = false;
-                this->was_in_tol = false;
+                this->properties.at("state")->integer_value = 0;
+                this->is_settling = false;
             }
         } else {
-            this->was_in_tol = false;
+            if (state == 1) {
+                this->properties.at("state")->integer_value = 2;
+            }
+            this->is_settling = false;
         }
     }
 
@@ -206,7 +217,7 @@ void InnotronicDeltaArm::step() {
 
     // Stall guard: overcurrent AND position not moving.
     // High current while moving = legitimate load; high current with no progress = real stall.
-    if (this->properties.at("active")->boolean_value && this->cal_state == cal_idle) {
+    if (this->properties.at("state")->integer_value >= 1 && this->cal_state == cal_idle) {
         const double i_max = this->properties.at("stall_current")->number_value;
         const double i_m1 = this->motor->get_property("current_m1")->number_value;
         const double i_m2 = this->motor->get_property("current_m2")->number_value;
@@ -398,7 +409,7 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
                 echo("%s: calibration aborted", this->name.c_str());
             }
             this->motor->stop();
-            this->properties.at("active")->boolean_value = false;
+            this->properties.at("state")->integer_value = 0;
         } else {
             Module::expect(arguments, 1, integer);
             int motor_nr = arguments[0]->evaluate_integer();
@@ -436,5 +447,5 @@ void InnotronicDeltaArm::disable() {
     this->motor->disable();
     this->properties.at("enabled")->boolean_value = false;
     this->last_applied_enabled = false;
-    this->properties.at("active")->boolean_value = false;
+    this->properties.at("state")->integer_value = 0;
 }
