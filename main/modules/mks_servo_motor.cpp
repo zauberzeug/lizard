@@ -1,7 +1,16 @@
 #include "mks_servo_motor.h"
+#include "module_helpers.h"
 #include <algorithm>
 
-REGISTER_MODULE_DEFAULTS(MksServoMotor)
+static Module_ptr create_mks_servo_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const Can_ptr can = get_module_argument<Can>(arguments[0], "Can");
+    const int64_t motor_id = arguments[1]->evaluate_integer();
+    auto motor = std::make_shared<MksServoMotor>(name, can, motor_id);
+    motor->subscribe_to_can();
+    return motor;
+}
+REGISTER_MODULE(MksServoMotor, &create_mks_servo_motor)
 
 const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
     return {
@@ -14,7 +23,7 @@ const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
 }
 
 MksServoMotor::MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id)
-    : Module(mks_servo_motor, name), can(can), can_id(can_id) {
+    : Module("MksServoMotor", name), can(can), can_id(can_id) {
     this->properties = MksServoMotor::get_defaults();
     this->send_working_current(1700);
 }

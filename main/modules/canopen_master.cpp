@@ -1,6 +1,12 @@
 #include "canopen_master.h"
+#include "module_helpers.h"
 
-REGISTER_MODULE_DEFAULTS(CanOpenMaster)
+static Module_ptr create_canopen_master(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 1, identifier);
+    const Can_ptr can = get_module_argument<Can>(arguments[0], "Can");
+    return std::make_shared<CanOpenMaster>(name, can);
+}
+REGISTER_MODULE(CanOpenMaster, &create_canopen_master)
 
 const std::map<std::string, Variable_ptr> CanOpenMaster::get_defaults() {
     return {
@@ -9,7 +15,7 @@ const std::map<std::string, Variable_ptr> CanOpenMaster::get_defaults() {
 }
 
 CanOpenMaster::CanOpenMaster(const std::string &name, const Can_ptr can)
-    : Module(canopen_master, name), can(can) {
+    : Module("CanOpenMaster", name), can(can) {
     this->properties = CanOpenMaster::get_defaults();
 }
 

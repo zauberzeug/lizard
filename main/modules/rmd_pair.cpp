@@ -1,9 +1,17 @@
 #include "rmd_pair.h"
+#include "module_helpers.h"
+#include "rmd_motor.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include <math.h>
 
-REGISTER_MODULE_DEFAULTS(RmdPair)
+static Module_ptr create_rmd_pair(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, identifier);
+    const RmdMotor_ptr rmd1 = get_module_argument<RmdMotor>(arguments[0], "RmdMotor");
+    const RmdMotor_ptr rmd2 = get_module_argument<RmdMotor>(arguments[1], "RmdMotor");
+    return std::make_shared<RmdPair>(name, rmd1, rmd2);
+}
+REGISTER_MODULE(RmdPair, &create_rmd_pair)
 
 const std::map<std::string, Variable_ptr> RmdPair::get_defaults() {
     return {
@@ -14,7 +22,7 @@ const std::map<std::string, Variable_ptr> RmdPair::get_defaults() {
 }
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)
-    : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
+    : Module("RmdPair", name), rmd1(rmd1), rmd2(rmd2) {
     this->properties = RmdPair::get_defaults();
 }
 

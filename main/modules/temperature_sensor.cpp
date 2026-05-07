@@ -1,14 +1,27 @@
 #include "temperature_sensor.h"
 #include "../utils/uart.h"
+#include "analog_unit.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "module_helpers.h"
 #include <cmath>
 
-REGISTER_MODULE_DEFAULTS(TemperatureSensor)
+static Module_ptr create_temperature_sensor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() < 3 || arguments.size() > 4) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, identifier, integer, integer, numbery);
+    const AnalogUnit_ptr unit = get_module_argument<AnalogUnit>(arguments[0], "AnalogUnit");
+    const gpio_num_t temp_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+    const gpio_num_t ref_pin = (gpio_num_t)arguments[2]->evaluate_integer();
+    const float attenuation = arguments.size() > 3 ? arguments[3]->evaluate_number() : 12;
+    return std::make_shared<TemperatureSensor>(name, unit, temp_pin, ref_pin, attenuation);
+}
+REGISTER_MODULE(TemperatureSensor, &create_temperature_sensor)
 
 const std::map<std::string, Variable_ptr> TemperatureSensor::get_defaults() {
     return {
@@ -21,7 +34,7 @@ const std::map<std::string, Variable_ptr> TemperatureSensor::get_defaults() {
 }
 
 TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_ptr unit, gpio_num_t temp_pin, gpio_num_t ref_pin, float attenuation_level)
-    : Module(temperature_sensor, name), unit(unit), temp_pin(temp_pin), ref_pin(ref_pin) {
+    : Module("TemperatureSensor", name), unit(unit), temp_pin(temp_pin), ref_pin(ref_pin) {
     this->properties = TemperatureSensor::get_defaults();
 
     if (!unit) {

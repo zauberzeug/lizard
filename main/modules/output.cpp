@@ -1,9 +1,20 @@
 #include "output.h"
+#include "mcp23017.h"
+#include "module_helpers.h"
 #include "utils/timing.h"
 #include <math.h>
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(Output)
+static Module_ptr create_output(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() == 1) {
+        Module::expect(arguments, 1, integer);
+        return std::make_shared<GpioOutput>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+    }
+    Module::expect(arguments, 2, identifier, integer);
+    const Mcp23017_ptr mcp = get_module_argument<Mcp23017>(arguments[0], "Mcp23017");
+    return std::make_shared<McpOutput>(name, mcp, arguments[1]->evaluate_integer());
+}
+REGISTER_MODULE(Output, &create_output)
 
 const std::map<std::string, Variable_ptr> Output::get_defaults() {
     return {
@@ -15,7 +26,7 @@ const std::map<std::string, Variable_ptr> Output::get_defaults() {
     };
 }
 
-Output::Output(const std::string name) : Module(output, name) {
+Output::Output(const std::string name) : Module("Output", name) {
     this->properties = Output::get_defaults();
 }
 

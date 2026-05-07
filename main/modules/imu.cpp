@@ -1,8 +1,21 @@
 #include "imu.h"
 #include "i2c_bus.h"
+#include "module_helpers.h"
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(Imu)
+static Module_ptr create_imu(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() > 5) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, integer, integer, integer, integer, integer);
+    const i2c_port_t port = arguments.size() > 0 ? (i2c_port_t)arguments[0]->evaluate_integer() : I2C_NUM_0;
+    const gpio_num_t sda_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : DEFAULT_I2C_SDA_PIN;
+    const gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : DEFAULT_I2C_SCL_PIN;
+    const uint8_t address = arguments.size() > 3 ? arguments[3]->evaluate_integer() : 0x28;
+    const int clk_speed = arguments.size() > 4 ? arguments[4]->evaluate_integer() : 100000;
+    return std::make_shared<Imu>(name, port, sda_pin, scl_pin, address, clk_speed);
+}
+REGISTER_MODULE(Imu, &create_imu)
 
 const std::map<std::string, Variable_ptr> Imu::get_defaults() {
     return {
@@ -38,7 +51,7 @@ const std::map<std::string, Variable_ptr> Imu::get_defaults() {
 }
 
 Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
-    : Module(imu, name), i2c_port(i2c_port), address(address) {
+    : Module("Imu", name), i2c_port(i2c_port), address(address) {
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     this->bno = std::make_shared<BNO055>((i2c_port_t)i2c_port, address);
     try {

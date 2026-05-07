@@ -1,10 +1,19 @@
 #include "d1_motor.h"
 #include "canopen.h"
+#include "module_helpers.h"
 #include "uart.h"
 #include "utils/timing.h"
 #include <cinttypes>
 
-REGISTER_MODULE_DEFAULTS(D1Motor)
+static Module_ptr create_d1_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const Can_ptr can = get_module_argument<Can>(arguments[0], "Can");
+    const int64_t node_id = arguments[1]->evaluate_integer();
+    auto motor = std::make_shared<D1Motor>(name, can, node_id);
+    motor->subscribe_to_can();
+    return motor;
+}
+REGISTER_MODULE(D1Motor, &create_d1_motor)
 
 const std::map<std::string, Variable_ptr> D1Motor::get_defaults() {
     return {
@@ -23,7 +32,7 @@ const std::map<std::string, Variable_ptr> D1Motor::get_defaults() {
 }
 
 D1Motor::D1Motor(const std::string &name, Can_ptr can, int64_t node_id)
-    : Module(d1_motor, name), can(can), node_id(check_node_id(node_id)) {
+    : Module("D1Motor", name), can(can), node_id(check_node_id(node_id)) {
     this->properties = D1Motor::get_defaults();
 }
 

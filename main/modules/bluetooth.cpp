@@ -3,14 +3,19 @@
 #include "../utils/uart.h"
 #include "uart.h"
 
-REGISTER_MODULE_DEFAULTS(Bluetooth)
+static Module_ptr create_bluetooth(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler message_handler) {
+    Module::expect(arguments, 1, string);
+    const std::string device_name = arguments[0]->evaluate_string();
+    return std::make_shared<Bluetooth>(name, device_name, message_handler);
+}
+REGISTER_MODULE(Bluetooth, &create_bluetooth)
 
 const std::map<std::string, Variable_ptr> Bluetooth::get_defaults() {
     return {};
 }
 
 Bluetooth::Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler)
-    : Module(bluetooth, name), device_name(device_name) {
+    : Module("Bluetooth", name), device_name(device_name) {
     ZZ::BleCommand::init(device_name, [message_handler](const std::string_view &message) {
         try {
             std::string message_string(message.data(), message.length());

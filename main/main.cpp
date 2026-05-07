@@ -207,7 +207,7 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                if (expander_module->type != expander) {
+                if (expander_module->type != "Expander") {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
                 const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);

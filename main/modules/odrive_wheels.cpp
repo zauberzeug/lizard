@@ -1,8 +1,16 @@
 #include "odrive_wheels.h"
 #include "../utils/timing.h"
+#include "module_helpers.h"
+#include "odrive_motor.h"
 #include <memory>
 
-REGISTER_MODULE_DEFAULTS(ODriveWheels)
+static Module_ptr create_odrive_wheels(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, identifier);
+    const ODriveMotor_ptr left_motor = get_module_argument<ODriveMotor>(arguments[0], "ODriveMotor");
+    const ODriveMotor_ptr right_motor = get_module_argument<ODriveMotor>(arguments[1], "ODriveMotor");
+    return std::make_shared<ODriveWheels>(name, left_motor, right_motor);
+}
+REGISTER_MODULE(ODriveWheels, &create_odrive_wheels)
 
 const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
     return {
@@ -14,7 +22,7 @@ const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
 }
 
 ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor)
-    : Module(odrive_wheels, name), left_motor(left_motor), right_motor(right_motor) {
+    : Module("ODriveWheels", name), left_motor(left_motor), right_motor(right_motor) {
     this->properties = ODriveWheels::get_defaults();
 }
 

@@ -1,5 +1,7 @@
 #include "expander.h"
 
+#include "module_helpers.h"
+#include "serial.h"
 #include "storage.h"
 #include "utils/serial-replicator.h"
 #include "utils/string_utils.h"
@@ -9,7 +11,17 @@
 #include <cstring>
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(Expander)
+static Module_ptr create_expander(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler message_handler) {
+    if (arguments.size() != 1 && arguments.size() != 3) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, identifier, integer, integer);
+    const ConstSerial_ptr serial = get_module_argument<const Serial>(arguments[0], "Serial");
+    const gpio_num_t boot_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : GPIO_NUM_NC;
+    const gpio_num_t enable_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_NC;
+    return std::make_shared<Expander>(name, serial, boot_pin, enable_pin, message_handler);
+}
+REGISTER_MODULE(Expander, &create_expander)
 
 const std::map<std::string, Variable_ptr> Expander::get_defaults() {
     return {
@@ -26,7 +38,7 @@ Expander::Expander(const std::string name,
                    const gpio_num_t boot_pin,
                    const gpio_num_t enable_pin,
                    MessageHandler message_handler)
-    : Module(expander, name),
+    : Module("Expander", name),
       serial(serial),
       boot_pin(boot_pin),
       enable_pin(enable_pin),

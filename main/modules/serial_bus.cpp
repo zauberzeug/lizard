@@ -5,6 +5,8 @@
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "module_helpers.h"
+#include "serial.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -21,14 +23,23 @@ static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
 
-REGISTER_MODULE_DEFAULTS(SerialBus)
+static Module_ptr create_serial_bus(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const ConstSerial_ptr serial = get_module_argument<const Serial>(arguments[0], "Serial");
+    const long node_id = arguments[1]->evaluate_integer();
+    if (node_id <= 0 || node_id >= 255) {
+        throw std::runtime_error("node ID must be between 0 and 255");
+    }
+    return std::make_shared<SerialBus>(name, serial, node_id);
+}
+REGISTER_MODULE(SerialBus, &create_serial_bus)
 
 const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
     return {};
 }
 
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
-    : Module(serial_bus, name), serial(serial), node_id(node_id) {
+    : Module("SerialBus", name), serial(serial), node_id(node_id) {
     this->properties = SerialBus::get_defaults();
     this->serial->enable_line_detection();
 

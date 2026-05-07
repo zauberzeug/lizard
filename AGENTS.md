@@ -174,18 +174,34 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     std::string get_output() const override;
+    static const std::map<std::string, Variable_ptr> get_defaults();
 };
 ```
 
-2. **Implement** (`my_module.cpp`):
+2. **Implement and self-register** (`my_module.cpp`):
 
 ```cpp
 #include "my_module.h"
+#include "module_helpers.h"  // only if you need get_module_argument<T>(...) for dependency lookup
+
+static Module_ptr create_my_module(const std::string &name,
+                                   const std::vector<ConstExpression_ptr> &arguments,
+                                   MessageHandler) {
+    Module::expect(arguments, /* expected count */, /* arg types */);
+    // Look up dependency modules (if any) via get_module_argument<T>(arguments[N], "TypeName")
+    return std::make_shared<MyModule>(name, /* args */);
+}
+REGISTER_MODULE(MyModule, &create_my_module)
+
+const std::map<std::string, Variable_ptr> MyModule::get_defaults() {
+    return {
+        {"some_property", std::make_shared<NumberVariable>(0.0)},
+    };
+}
 
 MyModule::MyModule(const std::string name, /* args */)
-    : Module(my_module, name) {
-    // Initialize properties
-    this->properties["some_property"] = std::make_shared<NumberVariable>(0.0);
+    : Module("MyModule", name) {
+    this->properties = MyModule::get_defaults();
 }
 
 void MyModule::step() {
@@ -203,13 +219,9 @@ void MyModule::call(const std::string method_name, const std::vector<ConstExpres
 }
 ```
 
-3. **Register in module factory** (`module.cpp`):
+The `REGISTER_MODULE` macro adds the module to the global factory registry at static-init time. There is **no central file to edit** — registration is local to your module's `.cpp`. If your module exposes no defaults, return an empty map from `get_defaults()`.
 
-   - Add to `ModuleType` enum in `module.h`
-   - Add creation logic in `Module::create()` in `module.cpp`
-   - Include the header in `module.cpp`
-
-4. **Document in `docs/module_reference.md`**:
+3. **Document in `docs/module_reference.md`**:
 
 ```markdown
 ## My Module
@@ -312,13 +324,9 @@ The main loop runs every **10ms** (`delay(10)` in `app_main`). Any operation tha
 
 ### Module Registration
 
-When adding a new module, you must:
+Modules self-register via `REGISTER_MODULE(ClassName, &create_X)` in their own `.cpp`. The macro registers both the factory and the static `ClassName::get_defaults()` method under the class name as a string key. Forgetting the macro causes the DSL to report `unknown module type "ClassName"`. Two modules trying to register under the same string throw a hard error at static-init time, so collisions are caught at first boot rather than silently shadowing.
 
-1. Add to `ModuleType` enum in `module.h`
-2. Add creation case in `Module::create()` in `module.cpp`
-3. Include the header in `module.cpp`
-
-Forgetting any step causes "unknown module type" errors.
+The class must define a `static get_defaults()` method (return an empty map if there are no defaults) and pass the type-name string to the `Module(...)` base constructor.
 
 ### Argument Validation
 
@@ -434,7 +442,7 @@ Before claiming a task complete, verify:
 3. No blocking operations in main loop?
 4. Debug code removed?
 5. Memory management correct (no leaks, no dangling pointers)?
-6. New module registered in `Module::create()` if applicable?
+6. New module self-registered via `REGISTER_MODULE(...)` in its own `.cpp` if applicable?
 7. New module documented in `docs/module_reference.md` if applicable?
 
 ---
@@ -478,7 +486,7 @@ Prefer one structured top-level comment with suggested diffs over many line-by-l
 2. **Unnecessary complexity**: simpler design meets requirements
 3. **Resource hygiene**: unclosed handles, missing RAII, leaked FreeRTOS resources
 4. **Platform issues**: hardcoded values without ESP32/ESP32-S3 guards
-5. **Missing registration**: new module not added to `Module::create()` or `ModuleType` enum
+5. **Missing registration**: new module without a `REGISTER_MODULE(ClassName, &create_X)` line in its `.cpp`
 6. **Missing documentation**: new module not documented in `docs/module_reference.md`
 
 #### CLEANUP (suggest quick diffs)

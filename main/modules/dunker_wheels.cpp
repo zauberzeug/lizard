@@ -1,7 +1,15 @@
 #include "dunker_wheels.h"
+#include "dunker_motor.h"
+#include "module_helpers.h"
 #include <memory>
 
-REGISTER_MODULE_DEFAULTS(DunkerWheels)
+static Module_ptr create_dunker_wheels(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, identifier);
+    const DunkerMotor_ptr left_motor = get_module_argument<DunkerMotor>(arguments[0], "DunkerMotor");
+    const DunkerMotor_ptr right_motor = get_module_argument<DunkerMotor>(arguments[1], "DunkerMotor");
+    return std::make_shared<DunkerWheels>(name, left_motor, right_motor);
+}
+REGISTER_MODULE(DunkerWheels, &create_dunker_wheels)
 
 const std::map<std::string, Variable_ptr> DunkerWheels::get_defaults() {
     return {
@@ -13,7 +21,7 @@ const std::map<std::string, Variable_ptr> DunkerWheels::get_defaults() {
 }
 
 DunkerWheels::DunkerWheels(const std::string name, const DunkerMotor_ptr left_motor, const DunkerMotor_ptr right_motor)
-    : Module(dunker_wheels, name), left_motor(left_motor), right_motor(right_motor) {
+    : Module("DunkerWheels", name), left_motor(left_motor), right_motor(right_motor) {
     this->properties = DunkerWheels::get_defaults();
 }
 

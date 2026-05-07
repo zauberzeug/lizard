@@ -16,7 +16,7 @@
 #include <stdexcept>
 #include <stdlib.h>
 
-Core::Core(const std::string name) : Module(core, name) {
+Core::Core(const std::string name) : Module("Core", name) {
     this->properties["debug"] = std::make_shared<BooleanVariable>(false);
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
