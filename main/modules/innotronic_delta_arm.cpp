@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 // Detection-tuning constants — fixed enough that runtime tuning isn't needed.
+static constexpr double POSITION_TOL_FACTOR = 1.5;  // tolerance multiplier applied to deg_per_tick
 static constexpr unsigned long STABLE_MS = 100;     // hold time inside tolerance before active=false
 static constexpr double STALL_POS_TOL_DEG = 2.4;    // position drift allowed within stall window
 static constexpr unsigned long STALL_MS = 200;      // overcurrent + no movement → stall
@@ -181,8 +182,9 @@ void InnotronicDeltaArm::step() {
 
     // Active / target-reached tracking (no velocity feedback in delta mode).
     if (this->properties.at("active")->boolean_value) {
-        bool in_tol = std::abs(cur_l_deg - this->target_left_deg) <= this->deg_per_tick &&
-                      std::abs(cur_r_deg - this->target_right_deg) <= this->deg_per_tick;
+        double tolerance_window_deg = this->deg_per_tick * POSITION_TOL_FACTOR;
+        bool in_tol = std::abs(cur_l_deg - this->target_left_deg) <= tolerance_window_deg &&
+                      std::abs(cur_r_deg - this->target_right_deg) <= tolerance_window_deg;
         if (in_tol) {
             if (!this->was_in_tol) {
                 this->stable_since = millis();
