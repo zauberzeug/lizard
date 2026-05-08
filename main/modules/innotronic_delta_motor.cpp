@@ -148,6 +148,10 @@ void InnotronicDeltaMotor::send_delta_angle_cmd(uint8_t motor_select, int16_t po
         data[6] = spd2;
     }
     uint32_t can_id = (this->node_id << 5) | 0x03;
+    if (this->is_debug()) {
+        echo("[%lu] CAN TX [NodeID=%ld, CmdID=0x03]: motor_select 0x%02X, pos1 %d, spd1 %u, pos2 %d, spd2 %u",
+             millis(), this->node_id, motor_select, pos1, spd1, pos2, spd2);
+    }
     this->can->send(can_id, data);
 }
 
