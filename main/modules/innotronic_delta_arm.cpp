@@ -25,8 +25,6 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
         {"stalled", std::make_shared<BooleanVariable>(false)},
         {"angle_left", std::make_shared<NumberVariable>()},
         {"angle_right", std::make_shared<NumberVariable>()},
-        {"current_left", std::make_shared<NumberVariable>()},
-        {"current_right", std::make_shared<NumberVariable>()},
         {"deg_limit", std::make_shared<NumberVariable>(60.0)},
         {"cal_timeout", std::make_shared<NumberVariable>(10.0)},
         {"stall_current", std::make_shared<NumberVariable>(3.0)},
@@ -216,10 +214,6 @@ void InnotronicDeltaArm::step() {
     double cur_r_deg = cur_right_ticks * this->deg_per_tick;
     this->properties.at("angle_left")->number_value = cur_l_deg;
     this->properties.at("angle_right")->number_value = cur_r_deg;
-    double cur_i_m1 = this->motor->get_property("current_m1")->number_value;
-    double cur_i_m2 = this->motor->get_property("current_m2")->number_value;
-    this->properties.at("current_left")->number_value = this->is_motors_swapped() ? cur_i_m2 : cur_i_m1;
-    this->properties.at("current_right")->number_value = this->is_motors_swapped() ? cur_i_m1 : cur_i_m2;
 
     // Move-state tracking (no velocity feedback in delta mode).
     // state: 0=idle, 1=received (ack), 2=moving.
@@ -260,9 +254,9 @@ void InnotronicDeltaArm::step() {
     // High current while moving = legitimate load; high current with no progress = real stall.
     if (this->properties.at("state")->integer_value >= 1 && this->cal_state == cal_idle) {
         const double i_max = this->properties.at("stall_current")->number_value;
-        const double i_left = this->properties.at("current_left")->number_value;
-        const double i_right = this->properties.at("current_right")->number_value;
-        const bool overcurrent = std::abs(i_left) > i_max || std::abs(i_right) > i_max;
+        const double i_m1 = this->motor->get_property("current_m1")->number_value;
+        const double i_m2 = this->motor->get_property("current_m2")->number_value;
+        const bool overcurrent = std::abs(i_m1) > i_max || std::abs(i_m2) > i_max;
         if (overcurrent) {
             if (!this->was_stalling) {
                 this->stall_since = millis();
@@ -282,8 +276,8 @@ void InnotronicDeltaArm::step() {
                 this->properties.at("calibrated_left")->boolean_value = false;
                 this->properties.at("calibrated_right")->boolean_value = false;
                 this->was_stalling = false;
-                echo("%s: stall detected (i_left=%.2fA i_right=%.2fA > %.2fA, no position change) — motor off, recalibrate",
-                     this->name.c_str(), i_left, i_right, i_max);
+                echo("%s: stall detected (i_m1=%.2fA i_m2=%.2fA > %.2fA, no position change) — motor off, recalibrate",
+                     this->name.c_str(), i_m1, i_m2, i_max);
                 this->disable();
             }
         } else {
