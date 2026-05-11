@@ -25,9 +25,15 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
         {"stalled", std::make_shared<BooleanVariable>(false)},
         {"angle_left", std::make_shared<NumberVariable>()},
         {"angle_right", std::make_shared<NumberVariable>()},
+        {"current_left", std::make_shared<NumberVariable>()},
+        {"current_right", std::make_shared<NumberVariable>()},
         {"deg_limit", std::make_shared<NumberVariable>(60.0)},
         {"cal_timeout", std::make_shared<NumberVariable>(10.0)},
         {"stall_current", std::make_shared<NumberVariable>(3.0)},
+        // Set true if motor channel 1 is wired to the physical right motor (and m2 to the left).
+        // Channel-mapping flips for moves, references, backoff, angle/current reporting; the
+        // CW-for-left / CCW-for-right reference directions stay bound to the physical side.
+        {"motors_swapped", std::make_shared<BooleanVariable>(false)},
     };
 }
 
@@ -47,6 +53,26 @@ bool InnotronicDeltaArm::is_calibrated() const {
            this->properties.at("calibrated_right")->boolean_value;
 }
 
+bool InnotronicDeltaArm::is_motors_swapped() const {
+    return this->properties.at("motors_swapped")->boolean_value;
+}
+
+int InnotronicDeltaArm::channel_for_left() const {
+    return this->is_motors_swapped() ? 2 : 1;
+}
+
+int InnotronicDeltaArm::channel_for_right() const {
+    return this->is_motors_swapped() ? 1 : 2;
+}
+
+uint8_t InnotronicDeltaArm::select_for_left() const {
+    return this->is_motors_swapped() ? 0x20 : 0x10;
+}
+
+uint8_t InnotronicDeltaArm::select_for_right() const {
+    return this->is_motors_swapped() ? 0x10 : 0x20;
+}
+
 bool InnotronicDeltaArm::endstop_active(const Input_ptr &input) const {
     return input && input->get_property("active")->boolean_value;
 }
@@ -61,7 +87,11 @@ void InnotronicDeltaArm::move_to(double left_deg, double right_deg, uint8_t spee
     }
     int16_t left_ticks = static_cast<int16_t>(left_deg / this->deg_per_tick);
     int16_t right_ticks = static_cast<int16_t>(right_deg / this->deg_per_tick);
-    this->motor->send_delta_angle_cmd(0x30, left_ticks, speed_left, right_ticks, speed_right);
+    if (this->is_motors_swapped()) {
+        this->motor->send_delta_angle_cmd(0x30, right_ticks, speed_right, left_ticks, speed_left);
+    } else {
+        this->motor->send_delta_angle_cmd(0x30, left_ticks, speed_left, right_ticks, speed_right);
+    }
     this->target_left_deg = left_deg;
     this->target_right_deg = right_deg;
     this->is_settling = false;
@@ -115,10 +145,10 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
     // Reset ref results so stale values from previous runs don't cause immediate abort.
     this->motor->get_property("ref_result_m1")->integer_value = 0;
     this->motor->get_property("ref_result_m2")->integer_value = 0;
-    this->last_ref_m1 = 0;
-    this->last_ref_m2 = 0;
-    this->m1_brake_sent = false;
-    this->m2_brake_sent = false;
+    this->last_ref_left = 0;
+    this->last_ref_right = 0;
+    this->brake_sent_left = false;
+    this->brake_sent_right = false;
     this->cal_started_at = millis();
     this->properties.at("state")->integer_value = 0;
     this->properties.at("stalled")->boolean_value = false;
@@ -140,21 +170,25 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
     }
 
     this->properties.at("calibrating")->boolean_value = true;
+    // CW finds the left endstop, CCW finds the right endstop — these directions are bound to the
+    // physical mount, not to a channel number. Only the channel mapping flips when motors_swapped.
     if (side == "left") {
         this->cal_state = cal_left;
-        this->motor->reference_drive_start(1, true);
+        this->motor->reference_drive_start(this->channel_for_left(), true);
         echo("%s: reference left started", this->name.c_str());
     } else if (side == "right") {
         this->cal_state = cal_right;
-        this->motor->reference_drive_start(2, false);
+        this->motor->reference_drive_start(this->channel_for_right(), false);
         echo("%s: reference right started", this->name.c_str());
     } else {
         this->cal_state = cal_both;
         this->both_left_done = false;
         this->both_right_done = false;
         // Combined frame instead of two separate sends — some firmware revisions only honor "both"
-        // when m1 and m2 commands arrive in the same 0x0C frame.
-        this->motor->send_single_motor_control(0x10, 0x20);
+        // when m1 and m2 commands arrive in the same 0x0C frame. 0x10=CW, 0x20=CCW.
+        uint8_t cmd_m1 = this->is_motors_swapped() ? 0x20 : 0x10;
+        uint8_t cmd_m2 = this->is_motors_swapped() ? 0x10 : 0x20;
+        this->motor->send_single_motor_control(cmd_m1, cmd_m2);
         echo("%s: reference both started", this->name.c_str());
     }
 }
@@ -173,12 +207,19 @@ void InnotronicDeltaArm::step() {
     bool right_endstop_active = this->endstop_active(this->right_endstop);
 
     // Export current motor angles in degrees (delta mode: 0x15 reports angle_mX as int16 ticks).
+    // motors_swapped routes the physical-side reading to the correct logical side.
     double cur_m1 = this->motor->get_property("angle_m1")->number_value;
     double cur_m2 = this->motor->get_property("angle_m2")->number_value;
-    double cur_l_deg = cur_m1 * this->deg_per_tick;
-    double cur_r_deg = cur_m2 * this->deg_per_tick;
+    double cur_left_ticks = this->is_motors_swapped() ? cur_m2 : cur_m1;
+    double cur_right_ticks = this->is_motors_swapped() ? cur_m1 : cur_m2;
+    double cur_l_deg = cur_left_ticks * this->deg_per_tick;
+    double cur_r_deg = cur_right_ticks * this->deg_per_tick;
     this->properties.at("angle_left")->number_value = cur_l_deg;
     this->properties.at("angle_right")->number_value = cur_r_deg;
+    double cur_i_m1 = this->motor->get_property("current_m1")->number_value;
+    double cur_i_m2 = this->motor->get_property("current_m2")->number_value;
+    this->properties.at("current_left")->number_value = this->is_motors_swapped() ? cur_i_m2 : cur_i_m1;
+    this->properties.at("current_right")->number_value = this->is_motors_swapped() ? cur_i_m1 : cur_i_m2;
 
     // Move-state tracking (no velocity feedback in delta mode).
     // state: 0=idle, 1=received (ack), 2=moving.
@@ -219,21 +260,21 @@ void InnotronicDeltaArm::step() {
     // High current while moving = legitimate load; high current with no progress = real stall.
     if (this->properties.at("state")->integer_value >= 1 && this->cal_state == cal_idle) {
         const double i_max = this->properties.at("stall_current")->number_value;
-        const double i_m1 = this->motor->get_property("current_m1")->number_value;
-        const double i_m2 = this->motor->get_property("current_m2")->number_value;
-        const bool overcurrent = std::abs(i_m1) > i_max || std::abs(i_m2) > i_max;
+        const double i_left = this->properties.at("current_left")->number_value;
+        const double i_right = this->properties.at("current_right")->number_value;
+        const bool overcurrent = std::abs(i_left) > i_max || std::abs(i_right) > i_max;
         if (overcurrent) {
             if (!this->was_stalling) {
                 this->stall_since = millis();
-                this->stall_start_deg_m1 = cur_l_deg;
-                this->stall_start_deg_m2 = cur_r_deg;
+                this->stall_start_l_deg = cur_l_deg;
+                this->stall_start_r_deg = cur_r_deg;
                 this->was_stalling = true;
-            } else if (std::abs(cur_l_deg - this->stall_start_deg_m1) > STALL_POS_TOL_DEG ||
-                       std::abs(cur_r_deg - this->stall_start_deg_m2) > STALL_POS_TOL_DEG) {
+            } else if (std::abs(cur_l_deg - this->stall_start_l_deg) > STALL_POS_TOL_DEG ||
+                       std::abs(cur_r_deg - this->stall_start_r_deg) > STALL_POS_TOL_DEG) {
                 // Motor still moving despite overcurrent — restart the window.
                 this->stall_since = millis();
-                this->stall_start_deg_m1 = cur_l_deg;
-                this->stall_start_deg_m2 = cur_r_deg;
+                this->stall_start_l_deg = cur_l_deg;
+                this->stall_start_r_deg = cur_r_deg;
             } else if (millis_since(this->stall_since) >= STALL_MS) {
                 this->properties.at("stalled")->boolean_value = true;
                 // Position drifts on forced stop — invalidate calibration so a
@@ -241,8 +282,8 @@ void InnotronicDeltaArm::step() {
                 this->properties.at("calibrated_left")->boolean_value = false;
                 this->properties.at("calibrated_right")->boolean_value = false;
                 this->was_stalling = false;
-                echo("%s: stall detected (i_m1=%.2fA i_m2=%.2fA > %.2fA, no position change) — motor off, recalibrate",
-                     this->name.c_str(), i_m1, i_m2, i_max);
+                echo("%s: stall detected (i_left=%.2fA i_right=%.2fA > %.2fA, no position change) — motor off, recalibrate",
+                     this->name.c_str(), i_left, i_right, i_max);
                 this->disable();
             }
         } else {
@@ -252,13 +293,16 @@ void InnotronicDeltaArm::step() {
 
     // Latch ref results: 0x14 arrives per-motor in separate messages, each only
     // setting its own nibble (the other is NONE/0). Keep the highest non-zero seen.
+    // Route physical-channel result to logical side based on motors_swapped.
     int ref_m1 = this->motor->get_property("ref_result_m1")->integer_value;
     int ref_m2 = this->motor->get_property("ref_result_m2")->integer_value;
-    if (ref_m1 != 0) {
-        this->last_ref_m1 = ref_m1;
+    int ref_left = this->is_motors_swapped() ? ref_m2 : ref_m1;
+    int ref_right = this->is_motors_swapped() ? ref_m1 : ref_m2;
+    if (ref_left != 0) {
+        this->last_ref_left = ref_left;
     }
-    if (ref_m2 != 0) {
-        this->last_ref_m2 = ref_m2;
+    if (ref_right != 0) {
+        this->last_ref_right = ref_right;
     }
 
     // Calibration timeout: brake both motors and abort if too long.
@@ -279,72 +323,74 @@ void InnotronicDeltaArm::step() {
     // by the motor's own 0x14 ReferenceFeedback (last_ref_mX becoming non-zero).
     switch (this->cal_state) {
     case cal_left:
-        if (this->last_ref_m1 != 0) {
-            if (this->last_ref_m1 == REF_OK) {
+        if (this->last_ref_left != 0) {
+            if (this->last_ref_left == REF_OK) {
                 this->properties.at("calibrated_left")->boolean_value = true;
                 echo("%s: left endstop reached, calibration complete", this->name.c_str());
             } else {
-                echo("%s: left reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_m1);
+                echo("%s: left reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_left);
             }
             this->properties.at("calibrating")->boolean_value = false;
             this->cal_state = cal_idle;
-        } else if (left_endstop_active && !this->m1_brake_sent) {
-            this->motor->reference_drive_stop(1);
-            this->m1_brake_sent = true;
+        } else if (left_endstop_active && !this->brake_sent_left) {
+            this->motor->reference_drive_stop(this->channel_for_left());
+            this->brake_sent_left = true;
             echo("%s: left endstop reached, waiting for motor confirmation", this->name.c_str());
         }
         break;
     case cal_right:
-        if (this->last_ref_m2 != 0) {
-            if (this->last_ref_m2 == REF_OK) {
+        if (this->last_ref_right != 0) {
+            if (this->last_ref_right == REF_OK) {
                 this->properties.at("calibrated_right")->boolean_value = true;
                 echo("%s: right endstop reached, calibration complete", this->name.c_str());
             } else {
-                echo("%s: right reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_m2);
+                echo("%s: right reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_right);
             }
             this->properties.at("calibrating")->boolean_value = false;
             this->cal_state = cal_idle;
-        } else if (right_endstop_active && !this->m2_brake_sent) {
-            this->motor->reference_drive_stop(2);
-            this->m2_brake_sent = true;
+        } else if (right_endstop_active && !this->brake_sent_right) {
+            this->motor->reference_drive_stop(this->channel_for_right());
+            this->brake_sent_right = true;
             echo("%s: right endstop reached, waiting for motor confirmation", this->name.c_str());
         }
         break;
     case cal_both:
         if (!this->both_left_done) {
-            if (this->last_ref_m1 != 0) {
+            if (this->last_ref_left != 0) {
                 echo("%s: left endstop reached during both-reference (ref_result=%d)",
-                     this->name.c_str(), this->last_ref_m1);
+                     this->name.c_str(), this->last_ref_left);
                 this->both_left_done = true;
-            } else if (left_endstop_active && !this->m1_brake_sent) {
-                this->motor->reference_drive_stop(1);
-                this->m1_brake_sent = true;
+            } else if (left_endstop_active && !this->brake_sent_left) {
+                this->motor->reference_drive_stop(this->channel_for_left());
+                this->brake_sent_left = true;
             }
         }
         if (!this->both_right_done) {
-            if (this->last_ref_m2 != 0) {
+            if (this->last_ref_right != 0) {
                 echo("%s: right endstop reached during both-reference (ref_result=%d)",
-                     this->name.c_str(), this->last_ref_m2);
+                     this->name.c_str(), this->last_ref_right);
                 this->both_right_done = true;
-            } else if (right_endstop_active && !this->m2_brake_sent) {
-                this->motor->reference_drive_stop(2);
-                this->m2_brake_sent = true;
+            } else if (right_endstop_active && !this->brake_sent_right) {
+                this->motor->reference_drive_stop(this->channel_for_right());
+                this->brake_sent_right = true;
             }
         }
         if (this->both_left_done && this->both_right_done) {
-            if (this->last_ref_m1 == REF_OK) {
+            if (this->last_ref_left == REF_OK) {
                 this->properties.at("calibrated_left")->boolean_value = true;
             }
-            if (this->last_ref_m2 == REF_OK) {
+            if (this->last_ref_right == REF_OK) {
                 this->properties.at("calibrated_right")->boolean_value = true;
             }
             this->properties.at("calibrating")->boolean_value = false;
             this->cal_state = cal_idle;
-            echo("%s: both calibration done (m1=%d m2=%d)", this->name.c_str(), this->last_ref_m1, this->last_ref_m2);
+            echo("%s: both calibration done (left=%d right=%d)",
+                 this->name.c_str(), this->last_ref_left, this->last_ref_right);
         }
         break;
     case cal_backoff: {
-        // Back off a few ticks in the operating-range direction (negative for m1, positive for m2).
+        // Back off in the operating-range direction (left mount: negative ticks, right mount: positive).
+        // The (channel ↔ side) mapping flips on motors_swapped; the per-mount tick sign stays.
         bool need_left = (this->pending_ref_side == "left" || this->pending_ref_side == "both");
         bool need_right = (this->pending_ref_side == "right" || this->pending_ref_side == "both");
         bool left_clear = !need_left || !left_endstop_active;
@@ -363,17 +409,17 @@ void InnotronicDeltaArm::step() {
             bool nudge_right = need_right && right_endstop_active;
             // Only one motor per tick — alternate when both endstops are still active.
             bool pick_left = nudge_left && (!nudge_right || !this->backoff_last_was_left);
-            int16_t a1 = static_cast<int16_t>(cur_m1);
-            int16_t a2 = static_cast<int16_t>(cur_m2);
+            int16_t a_left = static_cast<int16_t>(cur_left_ticks);
+            int16_t a_right = static_cast<int16_t>(cur_right_ticks);
             if (pick_left) {
-                int16_t target_m1 = a1 - BACKOFF_STEP_TICKS;
-                echo("%s: backoff left angle=%d -> %d", this->name.c_str(), a1, target_m1);
-                this->motor->send_delta_angle_cmd(0x10, target_m1, BACKOFF_SPEED);
+                int16_t target = a_left - BACKOFF_STEP_TICKS;
+                echo("%s: backoff left angle=%d -> %d", this->name.c_str(), a_left, target);
+                this->motor->send_delta_angle_cmd(this->select_for_left(), target, BACKOFF_SPEED);
                 this->backoff_last_was_left = true;
             } else if (nudge_right) {
-                int16_t target_m2 = a2 + BACKOFF_STEP_TICKS;
-                echo("%s: backoff right angle=%d -> %d", this->name.c_str(), a2, target_m2);
-                this->motor->send_delta_angle_cmd(0x20, target_m2, BACKOFF_SPEED);
+                int16_t target = a_right + BACKOFF_STEP_TICKS;
+                echo("%s: backoff right angle=%d -> %d", this->name.c_str(), a_right, target);
+                this->motor->send_delta_angle_cmd(this->select_for_right(), target, BACKOFF_SPEED);
                 this->backoff_last_was_left = false;
             }
             this->last_backoff_at = millis();

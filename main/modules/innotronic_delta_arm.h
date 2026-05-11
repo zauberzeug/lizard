@@ -16,10 +16,10 @@ private:
     CalibrationState cal_state = cal_idle;
     bool both_left_done = false;
     bool both_right_done = false;
-    bool m1_brake_sent = false;
-    bool m2_brake_sent = false;
-    int last_ref_m1 = 0;
-    int last_ref_m2 = 0;
+    bool brake_sent_left = false;
+    bool brake_sent_right = false;
+    int last_ref_left = 0;
+    int last_ref_right = 0;
     unsigned long cal_started_at = 0;
     std::string pending_ref_side;
     unsigned long last_backoff_at = 0;
@@ -33,11 +33,17 @@ private:
     bool right_endstop_prev = false;
     unsigned long stall_since = 0;
     bool was_stalling = false;
-    double stall_start_deg_m1 = 0.0;
-    double stall_start_deg_m2 = 0.0;
+    double stall_start_l_deg = 0.0;
+    double stall_start_r_deg = 0.0;
 
     bool is_enabled() const;
     bool is_calibrated() const;
+    bool is_motors_swapped() const;
+    // Channel/select helpers route logical left/right to physical m1/m2 depending on motors_swapped.
+    int channel_for_left() const;
+    int channel_for_right() const;
+    uint8_t select_for_left() const;
+    uint8_t select_for_right() const;
     bool endstop_active(const Input_ptr &input) const;
     void move_to(double left_deg, double right_deg, uint8_t speed_left, uint8_t speed_right);
     bool can_move(double left_deg, double right_deg) const;
