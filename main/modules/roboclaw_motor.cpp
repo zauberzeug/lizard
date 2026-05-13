@@ -7,7 +7,7 @@
 
 static Module_ptr create_roboclaw_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 2, identifier, integer);
-    const RoboClaw_ptr roboclaw = get_module_argument<RoboClaw>(arguments[0], "RoboClaw");
+    const RoboClaw_ptr roboclaw = get_module_argument<RoboClaw>(arguments[0]);
     const int64_t motor_number = arguments[1]->evaluate_integer();
     return std::make_shared<RoboClawMotor>(name, roboclaw, motor_number);
 }
@@ -21,7 +21,7 @@ const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
 }
 
 RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number)
-    : Module("RoboClawMotor", name), motor_number(constrain(motor_number, 1, 2)), roboclaw(roboclaw) {
+    : Module(name), motor_number(constrain(motor_number, 1, 2)), roboclaw(roboclaw) {
     if (this->motor_number != motor_number) {
         throw std::runtime_error("illegal motor number");
     }

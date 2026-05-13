@@ -15,7 +15,7 @@ static Module_ptr create_temperature_sensor(const std::string &name, const std::
         throw std::runtime_error("unexpected number of arguments");
     }
     Module::expect(arguments, -1, identifier, integer, integer, numbery);
-    const AnalogUnit_ptr unit = get_module_argument<AnalogUnit>(arguments[0], "AnalogUnit");
+    const AnalogUnit_ptr unit = get_module_argument<AnalogUnit>(arguments[0]);
     const gpio_num_t temp_pin = (gpio_num_t)arguments[1]->evaluate_integer();
     const gpio_num_t ref_pin = (gpio_num_t)arguments[2]->evaluate_integer();
     const float attenuation = arguments.size() > 3 ? arguments[3]->evaluate_number() : 12;
@@ -34,7 +34,7 @@ const std::map<std::string, Variable_ptr> TemperatureSensor::get_defaults() {
 }
 
 TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_ptr unit, gpio_num_t temp_pin, gpio_num_t ref_pin, float attenuation_level)
-    : Module("TemperatureSensor", name), unit(unit), temp_pin(temp_pin), ref_pin(ref_pin) {
+    : Module(name), unit(unit), temp_pin(temp_pin), ref_pin(ref_pin) {
     this->properties = TemperatureSensor::get_defaults();
 
     if (!unit) {

@@ -26,7 +26,7 @@ const std::map<std::string, Variable_ptr> Mcp23017::get_defaults() {
 }
 
 Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
-    : Module("Mcp23017", name), i2c_port(i2c_port), address(address) {
+    : Module(name), i2c_port(i2c_port), address(address) {
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     this->properties = Mcp23017::get_defaults();
 

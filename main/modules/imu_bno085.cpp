@@ -129,7 +129,7 @@ void ImuBno085::apply_mode(const std::string &mode) {
 
 ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin,
                      gpio_num_t int_pin, gpio_num_t rst_pin, uint8_t address, int clk_speed)
-    : Module("ImuBno085", name), i2c_port(i2c_port), sda_pin(sda_pin), scl_pin(scl_pin),
+    : Module(name), i2c_port(i2c_port), sda_pin(sda_pin), scl_pin(scl_pin),
       int_pin(int_pin), rst_pin(rst_pin), address(address), clk_speed(clk_speed) {
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     bno = std::make_unique<Bno08x>(rst_pin);

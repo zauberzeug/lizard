@@ -15,7 +15,7 @@ static Module_ptr create_analog(const std::string &name, const std::vector<Const
         throw std::runtime_error("unexpected number of arguments");
     }
     Module::expect(arguments, -1, identifier, integer, numbery);
-    const AnalogUnit_ptr unit = get_module_argument<AnalogUnit>(arguments[0], "AnalogUnit");
+    const AnalogUnit_ptr unit = get_module_argument<AnalogUnit>(arguments[0]);
     const gpio_num_t pin = (gpio_num_t)arguments[1]->evaluate_integer();
     const float attenuation = arguments.size() > 2 ? arguments[2]->evaluate_number() : 12;
     return std::make_shared<Analog>(name, unit, pin, attenuation);
@@ -30,7 +30,7 @@ const std::map<std::string, Variable_ptr> Analog::get_defaults() {
 }
 
 Analog::Analog(const std::string name, const AnalogUnit_ptr unit, gpio_num_t pin, float attenuation_level)
-    : Module("Analog", name), pin(pin), unit(unit) {
+    : Module(name), pin(pin), unit(unit) {
     this->properties = Analog::get_defaults();
 
     if (!unit) {

@@ -6,8 +6,8 @@
 
 static Module_ptr create_roboclaw_wheels(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 2, identifier, identifier);
-    const RoboClawMotor_ptr left_motor = get_module_argument<RoboClawMotor>(arguments[0], "RoboClawMotor");
-    const RoboClawMotor_ptr right_motor = get_module_argument<RoboClawMotor>(arguments[1], "RoboClawMotor");
+    const RoboClawMotor_ptr left_motor = get_module_argument<RoboClawMotor>(arguments[0]);
+    const RoboClawMotor_ptr right_motor = get_module_argument<RoboClawMotor>(arguments[1]);
     return std::make_shared<RoboClawWheels>(name, left_motor, right_motor);
 }
 REGISTER_MODULE(RoboClawWheels, &create_roboclaw_wheels)
@@ -23,7 +23,7 @@ const std::map<std::string, Variable_ptr> RoboClawWheels::get_defaults() {
 }
 
 RoboClawWheels::RoboClawWheels(const std::string name, const RoboClawMotor_ptr left_motor, const RoboClawMotor_ptr right_motor)
-    : Module("RoboClawWheels", name), left_motor(left_motor), right_motor(right_motor) {
+    : Module(name), left_motor(left_motor), right_motor(right_motor) {
     this->properties = RoboClawWheels::get_defaults();
 }
 

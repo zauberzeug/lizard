@@ -25,7 +25,7 @@ static constexpr const char DONE_CMD[] = "__DONE__";
 
 static Module_ptr create_serial_bus(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 2, identifier, integer);
-    const ConstSerial_ptr serial = get_module_argument<const Serial>(arguments[0], "Serial");
+    const ConstSerial_ptr serial = get_module_argument<const Serial>(arguments[0]);
     const long node_id = arguments[1]->evaluate_integer();
     if (node_id <= 0 || node_id >= 255) {
         throw std::runtime_error("node ID must be between 0 and 255");
@@ -39,7 +39,7 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
 }
 
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
-    : Module("SerialBus", name), serial(serial), node_id(node_id) {
+    : Module(name), serial(serial), node_id(node_id) {
     this->properties = SerialBus::get_defaults();
     this->serial->enable_line_detection();
 

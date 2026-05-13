@@ -51,7 +51,7 @@ const std::map<std::string, Variable_ptr> Imu::get_defaults() {
 }
 
 Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
-    : Module("Imu", name), i2c_port(i2c_port), address(address) {
+    : Module(name), i2c_port(i2c_port), address(address) {
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     this->bno = std::make_shared<BNO055>((i2c_port_t)i2c_port, address);
     try {

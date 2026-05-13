@@ -9,7 +9,7 @@
 
 static Module_ptr create_rmd_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 3, identifier, integer, integer);
-    const Can_ptr can = get_module_argument<Can>(arguments[0], "Can");
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
     const uint8_t motor_id = arguments[1]->evaluate_integer();
     const int ratio = arguments[2]->evaluate_integer();
     auto motor = std::make_shared<RmdMotor>(name, can, motor_id, ratio);
@@ -30,7 +30,7 @@ const std::map<std::string, Variable_ptr> RmdMotor::get_defaults() {
 }
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
-    : Module("RmdMotor", name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
+    : Module(name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
     this->properties = RmdMotor::get_defaults();
 }
 

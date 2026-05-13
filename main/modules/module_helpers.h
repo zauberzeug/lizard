@@ -2,8 +2,9 @@
 
 #include "../compilation/expression.h"
 #include "../global.h"
-#include "module.h"
 #include "driver/gpio.h"
+#include "module.h"
+#include "proxy.h"
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -17,11 +18,14 @@
 #endif
 
 template <typename M>
-inline std::shared_ptr<M> get_module_argument(const ConstExpression_ptr &arg, const std::string &type) {
+inline std::shared_ptr<M> get_module_argument(const ConstExpression_ptr &arg) {
     const std::string name = arg->evaluate_identifier();
     const Module_ptr module = Global::get_module(name);
-    if (module->type != type && module->type != "Proxy") {
-        throw std::runtime_error("module \"" + name + "\" is no " + type);
+    if (auto typed = std::dynamic_pointer_cast<M>(module)) {
+        return typed;
     }
-    return std::static_pointer_cast<M>(module);
+    if (std::dynamic_pointer_cast<Proxy>(module)) {
+        return std::static_pointer_cast<M>(module);
+    }
+    throw std::runtime_error("module \"" + name + "\" is no " + M::TYPE);
 }

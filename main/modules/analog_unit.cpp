@@ -16,7 +16,7 @@ const std::map<std::string, Variable_ptr> AnalogUnit::get_defaults() {
 }
 
 AnalogUnit::AnalogUnit(const std::string name, uint8_t unit_id)
-    : Module("AnalogUnit", name) {
+    : Module(name) {
     if (unit_id < 1 || unit_id > 2) {
         echo("error: invalid unit, using default 1");
         unit_id = 1;

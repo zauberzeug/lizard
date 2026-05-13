@@ -12,7 +12,7 @@ static Module_ptr create_input(const std::string &name, const std::vector<ConstE
         return std::make_shared<GpioInput>(name, (gpio_num_t)arguments[0]->evaluate_integer());
     }
     Module::expect(arguments, 2, identifier, integer);
-    const Mcp23017_ptr mcp = get_module_argument<Mcp23017>(arguments[0], "Mcp23017");
+    const Mcp23017_ptr mcp = get_module_argument<Mcp23017>(arguments[0]);
     return std::make_shared<McpInput>(name, mcp, arguments[1]->evaluate_integer());
 }
 REGISTER_MODULE(Input, &create_input)
@@ -26,7 +26,7 @@ const std::map<std::string, Variable_ptr> Input::get_defaults() {
     };
 }
 
-Input::Input(const std::string name) : Module("Input", name) {
+Input::Input(const std::string name) : Module(name) {
     this->properties = Input::get_defaults();
 }
 

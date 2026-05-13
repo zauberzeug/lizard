@@ -50,7 +50,7 @@ static const std::string PROP_CTRL_HALT{"ctrl_halt"};
 
 static Module_ptr create_canopen_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 2, identifier, integer);
-    const Can_ptr can = get_module_argument<Can>(arguments[0], "Can");
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
     const int64_t node_id = arguments[1]->evaluate_integer();
     auto motor = std::make_shared<CanOpenMotor>(name, can, node_id);
     motor->subscribe_to_can();
@@ -83,7 +83,7 @@ const std::map<std::string, Variable_ptr> CanOpenMotor::get_defaults() {
 }
 
 CanOpenMotor::CanOpenMotor(const std::string &name, Can_ptr can, int64_t node_id)
-    : Module("CanOpenMotor", name), can(can), node_id(check_node_id(node_id)),
+    : Module(name), can(can), node_id(check_node_id(node_id)),
       current_op_mode_disp(OP_MODE_NONE), current_op_mode(OP_MODE_NONE) {
 
     this->properties = CanOpenMotor::get_defaults();

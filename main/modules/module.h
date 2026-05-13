@@ -18,13 +18,13 @@ using ModuleFactory = std::function<Module_ptr(const std::string &name,
                                                MessageHandler message_handler)>;
 using DefaultsFunction = std::function<std::map<std::string, Variable_ptr>()>;
 
-#define REGISTER_MODULE(class_name, factory_fn)                                            \
-    namespace {                                                                            \
-    struct RegisterModule_##class_name {                                                   \
-        RegisterModule_##class_name() {                                                    \
-            Module::register_module(#class_name, (factory_fn), &class_name::get_defaults); \
-        }                                                                                  \
-    } register_module_##class_name;                                                        \
+#define REGISTER_MODULE(class_name, factory_fn)                                                 \
+    namespace {                                                                                 \
+    struct RegisterModule_##class_name {                                                        \
+        RegisterModule_##class_name() {                                                         \
+            Module::register_module(class_name::TYPE, (factory_fn), &class_name::get_defaults); \
+        }                                                                                       \
+    } register_module_##class_name;                                                             \
     } // namespace
 
 class Module {
@@ -38,10 +38,10 @@ protected:
 
 public:
     static bool broadcast_paused;
-    const std::string type;
     const std::string name;
 
-    Module(const std::string type, const std::string name);
+    Module(const std::string name);
+    virtual ~Module() = default;
     static void expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...);
     static Module_ptr create(const std::string type,
                              const std::string name,

@@ -170,6 +170,8 @@ using MyModule_ptr = std::shared_ptr<MyModule>;
 
 class MyModule : public Module {
 public:
+    static inline constexpr const char *TYPE = "MyModule";
+
     MyModule(const std::string name, /* constructor args */);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
@@ -177,6 +179,8 @@ public:
     static const std::map<std::string, Variable_ptr> get_defaults();
 };
 ```
+
+`TYPE` is the identifier users will type in Lizard scripts (`my = MyModule(...)`). Keeping it as a separate constant means renaming the C++ class doesn't silently break existing scripts in the wild.
 
 2. **Implement and self-register** (`my_module.cpp`):
 
@@ -188,7 +192,7 @@ static Module_ptr create_my_module(const std::string &name,
                                    const std::vector<ConstExpression_ptr> &arguments,
                                    MessageHandler) {
     Module::expect(arguments, /* expected count */, /* arg types */);
-    // Look up dependency modules (if any) via get_module_argument<T>(arguments[N], "TypeName")
+    // Look up dependency modules (if any) via get_module_argument<T>(arguments[N])
     return std::make_shared<MyModule>(name, /* args */);
 }
 REGISTER_MODULE(MyModule, &create_my_module)
@@ -200,7 +204,7 @@ const std::map<std::string, Variable_ptr> MyModule::get_defaults() {
 }
 
 MyModule::MyModule(const std::string name, /* args */)
-    : Module("MyModule", name) {
+    : Module(name) {
     this->properties = MyModule::get_defaults();
 }
 
@@ -219,7 +223,7 @@ void MyModule::call(const std::string method_name, const std::vector<ConstExpres
 }
 ```
 
-The `REGISTER_MODULE` macro adds the module to the global factory registry at static-init time. There is **no central file to edit** — registration is local to your module's `.cpp`. If your module exposes no defaults, return an empty map from `get_defaults()`.
+The `REGISTER_MODULE` macro adds the module to the global factory registry at static-init time, keyed off `MyModule::TYPE`. There is **no central file to edit** — registration is local to your module's `.cpp`. If your module exposes no defaults, return an empty map from `get_defaults()`.
 
 3. **Document in `docs/module_reference.md`**:
 
@@ -324,9 +328,26 @@ The main loop runs every **10ms** (`delay(10)` in `app_main`). Any operation tha
 
 ### Module Registration
 
-Modules self-register via `REGISTER_MODULE(ClassName, &create_X)` in their own `.cpp`. The macro registers both the factory and the static `ClassName::get_defaults()` method under the class name as a string key. Forgetting the macro causes the DSL to report `unknown module type "ClassName"`. Two modules trying to register under the same string throw a hard error at static-init time, so collisions are caught at first boot rather than silently shadowing.
+Modules self-register via `REGISTER_MODULE(ClassName, &create_X)` in their own `.cpp`. The macro keys off the class's `static constexpr const char *TYPE` constant — both the factory and the static `ClassName::get_defaults()` method are registered under that string. Forgetting either the macro or the `TYPE` constant causes the DSL to report `unknown module type "ClassName"`. Two modules trying to register under the same `TYPE` throw a hard error at static-init time, so collisions are caught at first boot rather than silently shadowing.
 
-The class must define a `static get_defaults()` method (return an empty map if there are no defaults) and pass the type-name string to the `Module(...)` base constructor.
+The class must define `static const std::map<std::string, Variable_ptr> get_defaults()` (return an empty map if there are no defaults) and pass only the instance name to the `Module(name)` base constructor — the runtime type identity comes from RTTI on the polymorphic `Module`.
+
+#### `WHOLE_ARCHIVE` for out-of-tree components
+
+`REGISTER_MODULE` works by emitting a static-init object in an unnamed namespace. From the linker's point of view that object is unreferenced — so without `--whole-archive` the entire object file gets dropped at link time, the static initializer never runs, and the DSL reports `unknown module type "ClassName"` for a module whose code is otherwise compiled and present in the source tree.
+
+In-tree modules in `main/modules/` survive because ESP-IDF whole-archive-links the `main` component by default. **An out-of-tree component that uses `REGISTER_MODULE` must opt in explicitly**:
+
+```cmake
+idf_component_register(
+    SRCS "my_module.cpp"
+    INCLUDE_DIRS "."
+    REQUIRES main
+    WHOLE_ARCHIVE
+)
+```
+
+This is the canonical footgun for self-registration patterns — easy to miss and silently broken when missing.
 
 ### Argument Validation
 

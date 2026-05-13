@@ -7,7 +7,7 @@
 
 static Module_ptr create_dunker_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 2, identifier, integer);
-    const Can_ptr can = get_module_argument<Can>(arguments[0], "Can");
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
     const int64_t node_id = arguments[1]->evaluate_integer();
     auto motor = std::make_shared<DunkerMotor>(name, can, node_id);
     motor->subscribe_to_can();
@@ -27,7 +27,7 @@ const std::map<std::string, Variable_ptr> DunkerMotor::get_defaults() {
 }
 
 DunkerMotor::DunkerMotor(const std::string &name, Can_ptr can, int64_t node_id)
-    : Module("DunkerMotor", name), can(can), node_id(check_node_id(node_id)) {
+    : Module(name), can(can), node_id(check_node_id(node_id)) {
     this->properties = DunkerMotor::get_defaults();
 }
 

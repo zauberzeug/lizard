@@ -15,7 +15,7 @@ const std::map<std::string, Variable_ptr> Bluetooth::get_defaults() {
 }
 
 Bluetooth::Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler)
-    : Module("Bluetooth", name), device_name(device_name) {
+    : Module(name), device_name(device_name) {
     ZZ::BleCommand::init(device_name, [message_handler](const std::string_view &message) {
         try {
             std::string message_string(message.data(), message.length());

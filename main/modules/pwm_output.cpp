@@ -31,7 +31,7 @@ PwmOutput::PwmOutput(const std::string name,
                      const gpio_num_t pin,
                      const ledc_timer_t ledc_timer,
                      const ledc_channel_t ledc_channel)
-    : Module("PwmOutput", name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
+    : Module(name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
     gpio_reset_pin(pin);
 
     this->properties = PwmOutput::get_defaults();

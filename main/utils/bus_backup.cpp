@@ -13,10 +13,10 @@ namespace bus_backup {
 
 void save_if_present() {
     for (const auto &[name, module] : Global::modules) {
-        if (module->type != "SerialBus") {
+        const auto bus = std::dynamic_pointer_cast<SerialBus>(module);
+        if (!bus) {
             continue;
         }
-        const auto bus = std::static_pointer_cast<SerialBus>(module);
         nvs_handle handle;
         if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
             return;
@@ -37,7 +37,7 @@ void save_if_present() {
 
 void restore_if_needed() {
     for (const auto &[name, module] : Global::modules) {
-        if (module->type == "SerialBus") {
+        if (std::dynamic_pointer_cast<SerialBus>(module)) {
             return;
         }
     }
@@ -62,7 +62,7 @@ void restore_if_needed() {
     try {
         std::vector<std::string> serials_to_remove;
         for (const auto &[name, module] : Global::modules) {
-            if (module->type == "Serial") {
+            if (std::dynamic_pointer_cast<Serial>(module)) {
                 serials_to_remove.push_back(name);
             }
         }

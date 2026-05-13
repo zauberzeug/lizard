@@ -12,7 +12,7 @@ static Module_ptr create_linear_motor(const std::string &name, const std::vector
         return std::make_shared<GpioLinearMotor>(name, move_in, move_out, end_in, end_out);
     }
     Module::expect(arguments, 5, identifier, integer, integer, integer, integer);
-    const Mcp23017_ptr mcp = get_module_argument<Mcp23017>(arguments[0], "Mcp23017");
+    const Mcp23017_ptr mcp = get_module_argument<Mcp23017>(arguments[0]);
     const uint8_t move_in = (uint8_t)arguments[1]->evaluate_integer();
     const uint8_t move_out = (uint8_t)arguments[2]->evaluate_integer();
     const uint8_t end_in = (uint8_t)arguments[3]->evaluate_integer();
@@ -29,7 +29,7 @@ const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
     };
 }
 
-LinearMotor::LinearMotor(const std::string name) : Module("LinearMotor", name) {
+LinearMotor::LinearMotor(const std::string name) : Module(name) {
     this->properties = LinearMotor::get_defaults();
 }
 

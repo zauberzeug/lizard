@@ -3,6 +3,7 @@
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include <stdarg.h>
+#include <typeinfo>
 
 namespace {
 
@@ -22,7 +23,7 @@ ModuleRegistry &get_registry() {
 
 bool Module::broadcast_paused = false;
 
-Module::Module(const std::string type, const std::string name) : type(type), name(name) {
+Module::Module(const std::string name) : name(name) {
 }
 
 void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
@@ -84,7 +85,7 @@ void Module::call(const std::string method_name, const std::vector<ConstExpressi
         Module::expect(arguments, 1, identifier);
         std::string target_name = arguments[0]->evaluate_identifier();
         Module_ptr target_module = Global::get_module(target_name);
-        if (this->type != target_module->type) {
+        if (typeid(*this) != typeid(*target_module)) {
             throw std::runtime_error("shadow module is not of same type");
         }
         if (this != target_module.get()) {
