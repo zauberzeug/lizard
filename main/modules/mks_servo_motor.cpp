@@ -64,13 +64,13 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
 void MksServoMotor::send_set_bitrate(uint8_t rate) {
     rate = std::clamp(rate, (uint8_t)0x00, MAX_BITRATE);
     uint8_t data[] = {0x8A, rate};
-    this->send(data, 2); // fire-and-forget: the drive changes bitrate immediately, so no response is received
+    this->send(data, 2);
 }
 
-void MksServoMotor::send_set_can_id(uint16_t new_id) {
-    new_id = std::clamp(new_id, MIN_CAN_ID, MAX_CAN_ID);
+void MksServoMotor::send_set_can_id(int64_t new_id) {
+    new_id = std::clamp(new_id, (int64_t)MIN_CAN_ID, (int64_t)MAX_CAN_ID);
     uint8_t data[] = {0x8B, (uint8_t)(new_id >> 8), (uint8_t)(new_id & 0xFF)};
-    this->send(data, 3); // fire-and-forget: after the drive saves the new ID it stops responding on the old one
+    this->send(data, 3);
 }
 
 void MksServoMotor::send_working_current(int64_t ma) {
@@ -188,13 +188,7 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         }
     } else if (method_name == "set_can_id") {
         Module::expect(arguments, 1, integer);
-        int64_t new_id = arguments[0]->evaluate_integer();
-        if (new_id < MIN_CAN_ID || new_id > MAX_CAN_ID) {
-            echo("%s set_can_id: id %lld out of range %u-%u (0 is the broadcast address and not allowed here)",
-                 this->name.c_str(), (long long)new_id, MIN_CAN_ID, MAX_CAN_ID);
-        } else {
-            this->send_set_can_id((uint16_t)new_id);
-        }
+        this->send_set_can_id(arguments[0]->evaluate_integer());
     } else if (method_name == "zero") {
         Module::expect(arguments, 0);
         this->send_coord_zero();

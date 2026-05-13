@@ -23,7 +23,7 @@ private:
     void disable();
     void send_set_mode(uint8_t mode);
     void send_set_bitrate(uint8_t rate);
-    void send_set_can_id(uint16_t new_id);
+    void send_set_can_id(int64_t new_id);
     void send_working_current(int64_t ma);
     void send_holding_current(int64_t pct);
     void send_speed_internal(int64_t speed, int64_t direction, int64_t acc);
