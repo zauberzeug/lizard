@@ -23,6 +23,7 @@ private:
     void disable();
     void send_set_mode(uint8_t mode);
     void send_set_bitrate(uint8_t rate);
+    void send_set_can_id(uint16_t new_id);
     void send_working_current(int64_t ma);
     void send_holding_current(int64_t pct);
     void send_speed_internal(int64_t speed, int64_t direction, int64_t acc);
@@ -57,6 +58,12 @@ public:
     static constexpr uint8_t BITRATE_500K = 0x02;
     static constexpr uint8_t BITRATE_1M = 0x03;
     static constexpr uint8_t MAX_BITRATE = BITRATE_1M;
+
+    // Slave CAN ID range (0x8B command). 0 is the broadcast address and is
+    // intentionally excluded here so an individual motor isn't accidentally
+    // set to listen to everything.
+    static constexpr uint16_t MIN_CAN_ID = 1;
+    static constexpr uint16_t MAX_CAN_ID = 2047;
 
     // Status codes exposed via the "status" property (readable from Lizard).
     static constexpr int64_t STATUS_OK = 0;
