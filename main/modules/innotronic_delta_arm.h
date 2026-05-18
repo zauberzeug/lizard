@@ -16,6 +16,11 @@ private:
     CalibrationState cal_state = cal_idle;
     bool both_left_done = false;
     bool both_right_done = false;
+    // Hotfix: first reference after power-on yields a wrong calibration (motor left ends up
+    // off-position, twitching). Run "both" as a warmup (lifts both arms; result is ignored),
+    // then re-reference left and right individually — only those singles update calibrated_*.
+    // Flag is true throughout the whole both → left → right chain so each phase knows to advance.
+    bool in_both_sequence = false;
     bool brake_sent_left = false;
     bool brake_sent_right = false;
     int last_ref_left = 0;
