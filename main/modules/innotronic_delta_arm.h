@@ -29,6 +29,8 @@ private:
     std::string pending_ref_side;
     unsigned long last_backoff_at = 0;
     bool backoff_last_was_left = false;
+    double backoff_start_left_deg = 0.0;
+    double backoff_start_right_deg = 0.0;
 
     double target_left_deg = 0.0;
     double target_right_deg = 0.0;

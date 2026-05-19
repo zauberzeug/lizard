@@ -12,6 +12,9 @@ static constexpr unsigned long STALL_MS = 200;      // overcurrent + no movement
 static constexpr int16_t BACKOFF_STEP_TICKS = 10;
 static constexpr uint8_t BACKOFF_SPEED = 20;
 static constexpr unsigned long BACKOFF_INTERVAL_MS = 200;
+// If the motor has moved this far away from its backoff-start position and the endstop is
+// still reporting active, the sensor is assumed stuck (e.g. broken cable) and we abort.
+static constexpr double MAX_BACKOFF_DEG = 10.0;
 
 REGISTER_MODULE_DEFAULTS(InnotronicDeltaArm)
 
@@ -162,6 +165,10 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         this->cal_state = cal_backoff;
         this->pending_ref_side = side;
         this->last_backoff_at = 0;
+        const double cur_m1 = this->motor->get_property("angle_m1")->number_value;
+        const double cur_m2 = this->motor->get_property("angle_m2")->number_value;
+        this->backoff_start_left_deg = (this->is_motors_swapped() ? cur_m2 : cur_m1) * this->deg_per_tick;
+        this->backoff_start_right_deg = (this->is_motors_swapped() ? cur_m1 : cur_m2) * this->deg_per_tick;
         this->properties.at("calibrating")->boolean_value = true;
         echo("%s: endstop active, backing off before reference %s", this->name.c_str(), side.c_str());
         return;
@@ -432,6 +439,23 @@ void InnotronicDeltaArm::step() {
             this->properties.at("calibrating")->boolean_value = false;
             echo("%s: endstops cleared, starting reference %s", this->name.c_str(), side.c_str());
             this->start_reference(side);
+            break;
+        }
+        // If we have moved past MAX_BACKOFF_DEG and the endstop is still active, the sensor is stuck.
+        // Surfacing this early prevents driving the arm into mechanical limits (e.g. the floor when the
+        // arm sits low at power-on) during the otherwise 10s cal_timeout window.
+        const double left_travel = std::abs(cur_l_deg - this->backoff_start_left_deg);
+        const double right_travel = std::abs(cur_r_deg - this->backoff_start_right_deg);
+        const bool left_stuck = need_left && !left_clear && left_travel > MAX_BACKOFF_DEG;
+        const bool right_stuck = need_right && !right_clear && right_travel > MAX_BACKOFF_DEG;
+        if (left_stuck || right_stuck) {
+            echo("%s: endstop did not clear after %.1f° backoff (left=%.1f° right=%.1f°) — suspected stuck sensor, disabling",
+                 this->name.c_str(), MAX_BACKOFF_DEG, left_travel, right_travel);
+            this->pending_ref_side.clear();
+            this->cal_state = cal_idle;
+            this->in_both_sequence = false;
+            this->properties.at("calibrating")->boolean_value = false;
+            this->disable();
             break;
         }
         if (millis_since(this->last_backoff_at) >= BACKOFF_INTERVAL_MS) {
