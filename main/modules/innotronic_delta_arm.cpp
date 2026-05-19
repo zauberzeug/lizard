@@ -179,7 +179,7 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         this->motor->reference_drive_start(this->channel_for_right(), false);
         echo("%s: reference right started", this->name.c_str());
     } else {
-        // Hotfix: warmup-both lifts both arms; its REF_OK is not trusted (first reference
+        // Hotfix: warmup-both lifts both arms; its result is not trusted (first reference
         // after power-on leaves motor left off-position). After the warmup we re-reference
         // left and right individually — only those singles update calibrated_*. Combined
         // frame: some firmware revs only honor "both" when m1 and m2 arrive in the same
@@ -326,13 +326,14 @@ void InnotronicDeltaArm::step() {
     switch (this->cal_state) {
     case cal_left:
         if (this->last_ref_left != 0) {
-            if (this->last_ref_left == REF_OK) {
+            const bool ok = this->last_ref_left == REF_OK;
+            if (ok) {
                 this->properties.at("calibrated_left")->boolean_value = true;
                 echo("%s: left endstop reached, calibration complete", this->name.c_str());
             } else {
-                echo("%s: left reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_left);
+                echo("%s: left reference failed (ref_result=%d) — disabling", this->name.c_str(), this->last_ref_left);
             }
-            if (this->in_both_sequence && this->last_ref_left == REF_OK) {
+            if (this->in_both_sequence && ok) {
                 // Hotfix step 3: single-left succeeded, now run single-right to finish the chain.
                 this->cal_state = cal_idle;
                 this->start_reference("right");
@@ -344,6 +345,9 @@ void InnotronicDeltaArm::step() {
                 this->in_both_sequence = false;
                 this->properties.at("calibrating")->boolean_value = false;
                 this->cal_state = cal_idle;
+                if (!ok) {
+                    this->disable();
+                }
             }
         } else if (left_endstop_active && !this->brake_sent_left) {
             this->motor->reference_drive_stop(this->channel_for_left());
@@ -353,15 +357,19 @@ void InnotronicDeltaArm::step() {
         break;
     case cal_right:
         if (this->last_ref_right != 0) {
-            if (this->last_ref_right == REF_OK) {
+            const bool ok = this->last_ref_right == REF_OK;
+            if (ok) {
                 this->properties.at("calibrated_right")->boolean_value = true;
                 echo("%s: right endstop reached, calibration complete", this->name.c_str());
             } else {
-                echo("%s: right reference failed (ref_result=%d)", this->name.c_str(), this->last_ref_right);
+                echo("%s: right reference failed (ref_result=%d) — disabling", this->name.c_str(), this->last_ref_right);
             }
             this->in_both_sequence = false;
             this->properties.at("calibrating")->boolean_value = false;
             this->cal_state = cal_idle;
+            if (!ok) {
+                this->disable();
+            }
         } else if (right_endstop_active && !this->brake_sent_right) {
             this->motor->reference_drive_stop(this->channel_for_right());
             this->brake_sent_right = true;
@@ -390,13 +398,13 @@ void InnotronicDeltaArm::step() {
             }
         }
         if (this->both_left_done && this->both_right_done) {
-            const bool warmup_ok = this->last_ref_left == REF_OK && this->last_ref_right == REF_OK;
             echo("%s: warmup both done (left=%d right=%d)",
                  this->name.c_str(), this->last_ref_left, this->last_ref_right);
-            if (this->in_both_sequence && warmup_ok) {
-                // Hotfix step 2: warmup acknowledged, now run the trustworthy single-left.
-                // start_reference handles the endstop backoff (arm is sitting at the endstop
-                // after the warmup) and resets the per-phase ref tracking state.
+            if (this->in_both_sequence) {
+                // Hotfix step 2: warmup acknowledged (result is intentionally not validated —
+                // REF_OVERCURRENT during the first lift-up is expected), now run the trustworthy
+                // single-left. start_reference handles the endstop backoff (arm may be sitting
+                // at the endstop after the warmup) and resets the per-phase ref tracking state.
                 this->cal_state = cal_idle;
                 this->start_reference("left");
                 if (this->cal_state == cal_idle) {
@@ -405,7 +413,6 @@ void InnotronicDeltaArm::step() {
                     this->properties.at("calibrating")->boolean_value = false;
                 }
             } else {
-                this->in_both_sequence = false;
                 this->properties.at("calibrating")->boolean_value = false;
                 this->cal_state = cal_idle;
             }
