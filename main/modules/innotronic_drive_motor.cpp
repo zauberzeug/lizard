@@ -10,6 +10,7 @@ REGISTER_MODULE_DEFAULTS(InnotronicDriveMotor)
 const std::map<std::string, Variable_ptr> InnotronicDriveMotor::get_defaults() {
     auto defaults = InnotronicMotorBase::common_defaults();
     defaults["speed"] = std::make_shared<NumberVariable>();
+    defaults["position"] = std::make_shared<NumberVariable>();
     defaults["m_per_rad"] = std::make_shared<NumberVariable>(1.0);
     defaults["reversed"] = std::make_shared<BooleanVariable>(false);
     defaults["rad_limit"] = std::make_shared<NumberVariable>(7.8);
@@ -68,6 +69,8 @@ void InnotronicDriveMotor::handle_can_msg(const uint32_t id, const int count, co
             this->has_last_raw_position = true;
         }
         this->last_raw_position = raw_position;
+        this->properties.at("position")->number_value =
+            static_cast<double>(this->accumulated_ticks) / MOTOR_TICKS * 2.0 * M_PI * m_per_rad * this->sign();
 
         int16_t raw_current_m1, raw_current_m2;
         std::memcpy(&raw_current_m1, data + 4, 2);
@@ -164,10 +167,7 @@ void InnotronicDriveMotor::stop() {
 }
 
 double InnotronicDriveMotor::get_position() {
-    // The int16 hall counter from 0x12 wraps at ±32768; we unfold it into
-    // accumulated_ticks on each frame. Convert to meters via motor_ticks and m_per_rad.
-    const double m_per_rad = this->properties.at("m_per_rad")->number_value;
-    return static_cast<double>(this->accumulated_ticks) / MOTOR_TICKS * 2.0 * M_PI * m_per_rad * this->sign();
+    return this->properties.at("position")->number_value;
 }
 
 void InnotronicDriveMotor::position(const double position, const double speed, const double acceleration) {

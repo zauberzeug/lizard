@@ -9,6 +9,11 @@ private:
     const InnotronicDriveMotor_ptr right_motor;
     bool last_applied_enabled = true;
 
+    bool position_initialized = false;
+    unsigned long int last_micros = 0;
+    double last_left_position = 0.0;
+    double last_right_position = 0.0;
+
     bool is_enabled() const;
 
 public:

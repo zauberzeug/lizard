@@ -1,4 +1,5 @@
 #include "innotronic_wheels.h"
+#include "../utils/timing.h"
 #include <memory>
 
 REGISTER_MODULE_DEFAULTS(InnotronicWheels)
@@ -8,6 +9,10 @@ const std::map<std::string, Variable_ptr> InnotronicWheels::get_defaults() {
         {"width", std::make_shared<NumberVariable>(1.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
+        {"calculated_linear_speed", std::make_shared<NumberVariable>()},
+        {"calculated_angular_speed", std::make_shared<NumberVariable>()},
+        {"traveled_distance", std::make_shared<NumberVariable>()},
+        {"heading", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
@@ -27,6 +32,24 @@ void InnotronicWheels::step() {
     const double width = this->properties.at("width")->number_value;
     this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
     this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / width;
+
+    const double left_position = this->left_motor->get_position();
+    const double right_position = this->right_motor->get_position();
+    this->properties.at("traveled_distance")->number_value = (left_position + right_position) / 2;
+    this->properties.at("heading")->number_value = (right_position - left_position) / width;
+    if (this->position_initialized) {
+        const unsigned long int d_micros = micros_since(this->last_micros);
+        if (d_micros > 0) {
+            const double left_calc = (left_position - this->last_left_position) / d_micros * 1000000;
+            const double right_calc = (right_position - this->last_right_position) / d_micros * 1000000;
+            this->properties.at("calculated_linear_speed")->number_value = (left_calc + right_calc) / 2;
+            this->properties.at("calculated_angular_speed")->number_value = (right_calc - left_calc) / width;
+        }
+    }
+    this->last_micros = micros();
+    this->last_left_position = left_position;
+    this->last_right_position = right_position;
+    this->position_initialized = true;
 
     bool desired = this->is_enabled();
     if (desired != this->last_applied_enabled) {
