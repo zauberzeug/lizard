@@ -332,17 +332,17 @@ Modules self-register via `REGISTER_MODULE(ClassName, &create_X)` in their own `
 
 The class must define `static const std::map<std::string, Variable_ptr> get_defaults()` (return an empty map if there are no defaults) and pass only the instance name to the `Module(name)` base constructor — the runtime type identity comes from RTTI on the polymorphic `Module`.
 
-#### `WHOLE_ARCHIVE` for out-of-tree components
+#### `WHOLE_ARCHIVE` is mandatory
 
-`REGISTER_MODULE` works by emitting a static-init object in an unnamed namespace. From the linker's point of view that object is unreferenced — so without `--whole-archive` the entire object file gets dropped at link time, the static initializer never runs, and the DSL reports `unknown module type "ClassName"` for a module whose code is otherwise compiled and present in the source tree.
+`REGISTER_MODULE` works by emitting a static-init object in an unnamed namespace. From the linker's point of view that object is unreferenced — so without `--whole-archive` the entire object file gets dropped at link time, the static initializer never runs, and the DSL reports `unknown module type "ClassName"` for a module whose code is otherwise compiled and present in the source tree. **The build stays green; the failure shows up only at runtime when a startup script tries to instantiate the module.**
 
-In-tree modules in `main/modules/` survive because ESP-IDF whole-archive-links the `main` component by default. **An out-of-tree component that uses `REGISTER_MODULE` must opt in explicitly**:
+This applies equally to the `main` component (where Lizard's built-in modules live) and to any out-of-tree component that uses `REGISTER_MODULE`. ESP-IDF does **not** whole-archive `main` by default on v5.3, so the `WHOLE_ARCHIVE` flag has to be set explicitly in both places:
 
 ```cmake
 idf_component_register(
-    SRCS "my_module.cpp"
-    INCLUDE_DIRS "."
-    REQUIRES main
+    SRCS ${SRC_FILES}
+    INCLUDE_DIRS ...
+    REQUIRES ...
     WHOLE_ARCHIVE
 )
 ```

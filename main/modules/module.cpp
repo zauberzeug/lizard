@@ -26,7 +26,7 @@ bool Module::broadcast_paused = false;
 Module::Module(const std::string name) : name(name) {
 }
 
-void Module::Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
+void Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
     if (num >= 0 && arguments.size() != num) {
         throw std::runtime_error("expecting " + std::to_string(num) + " arguments, got " + std::to_string(arguments.size()));
     }
