@@ -1,4 +1,5 @@
 #include "roboclaw_motor.h"
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 
@@ -10,6 +11,9 @@ const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
     return {
         {"position", std::make_shared<IntegerVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
+        {"calibrated", std::make_shared<BooleanVariable>(false)},
+        {"limit_low", std::make_shared<IntegerVariable>()},
+        {"limit_high", std::make_shared<IntegerVariable>()},
     };
 }
 
@@ -52,6 +56,28 @@ void RoboClawMotor::call(const std::string method_name, const std::vector<ConstE
         if (!success) {
             throw std::runtime_error("could not reset position");
         }
+    } else if (method_name == "stop") {
+        Module::expect(arguments, 0);
+        this->stop();
+    } else if (method_name == "set_limits") {
+        Module::expect(arguments, 2, integer, integer);
+        this->set_limits(arguments[0]->evaluate_integer(), arguments[1]->evaluate_integer());
+    } else if (method_name == "position") {
+        if (arguments.size() < 1 || arguments.size() > 4) {
+            throw std::runtime_error("unexpected number of arguments");
+        }
+        Module::expect(arguments, -1, integer, numbery, numbery, numbery);
+        int32_t target = arguments[0]->evaluate_integer();
+        uint32_t speed = arguments.size() > 1
+                             ? static_cast<uint32_t>(std::abs((int32_t)arguments[1]->evaluate_number()))
+                             : DEFAULT_SPEED;
+        uint32_t accel = arguments.size() > 2
+                             ? static_cast<uint32_t>(std::abs((int32_t)arguments[2]->evaluate_number()))
+                             : DEFAULT_ACCEL;
+        uint32_t deccel = arguments.size() > 3
+                              ? static_cast<uint32_t>(std::abs((int32_t)arguments[3]->evaluate_number()))
+                              : DEFAULT_DECCEL;
+        this->position(target, speed, accel, deccel);
     } else if (method_name == "enable") {
         Module::expect(arguments, 0);
         this->enable();
@@ -108,4 +134,53 @@ void RoboClawMotor::disable() {
     this->speed(0);
     this->enabled = false;
     this->properties.at("enabled")->boolean_value = false;
+}
+
+void RoboClawMotor::stop() {
+    this->speed(0);
+}
+
+void RoboClawMotor::set_limits(int32_t low, int32_t high) {
+    if (low >= high) {
+        throw std::runtime_error("limit_low must be less than limit_high");
+    }
+    this->properties.at("limit_low")->integer_value = low;
+    this->properties.at("limit_high")->integer_value = high;
+    this->calibrated = true;
+    this->properties.at("calibrated")->boolean_value = true;
+}
+
+bool RoboClawMotor::is_calibrated() const {
+    return this->calibrated;
+}
+
+int32_t RoboClawMotor::get_limit_low() const {
+    return static_cast<int32_t>(this->properties.at("limit_low")->integer_value);
+}
+
+int32_t RoboClawMotor::get_limit_high() const {
+    return static_cast<int32_t>(this->properties.at("limit_high")->integer_value);
+}
+
+void RoboClawMotor::position(int32_t target, uint32_t speed, uint32_t accel, uint32_t deccel) {
+    if (!this->enabled) {
+        return;
+    }
+    if (!this->calibrated) {
+        throw std::runtime_error("motor is not calibrated, call set_limits(low, high) first");
+    }
+    const int32_t low = this->get_limit_low();
+    const int32_t high = this->get_limit_high();
+    target = constrain(target, low, high);
+
+    const int max_retries = 4;
+    for (int retries = 0; retries < max_retries; ++retries) {
+        bool success = this->motor_number == 1
+                           ? this->roboclaw->SpeedAccelDeccelPositionM1(accel, speed, deccel, target, 0)
+                           : this->roboclaw->SpeedAccelDeccelPositionM2(accel, speed, deccel, target, 0);
+        if (success) {
+            return;
+        }
+    }
+    throw std::runtime_error("could not set position after " + std::to_string(max_retries) + " retries");
 }

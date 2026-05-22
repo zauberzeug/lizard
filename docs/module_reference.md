@@ -639,20 +639,30 @@ The RoboClaw motor module controls a motor using a RoboClaw module.
 | --------------------------------------- | ----------------------------------- | ---------------------- |
 | `motor = RoboClawMotor(claw, motor_id)` | RoboClaw module and motor ID (1..2) | RoboClaw module, `int` |
 
-| Properties       | Description                               | Data type |
-| ---------------- | ----------------------------------------- | --------- |
-| `motor.position` | Multi-turn motor position (encoder ticks) | `int`     |
-| `motor.enabled`  | Whether the motor is enabled              | `bool`    |
+| Properties         | Description                                                | Data type |
+| ------------------ | ---------------------------------------------------------- | --------- |
+| `motor.position`   | Multi-turn motor position (encoder ticks)                  | `int`     |
+| `motor.enabled`    | Whether the motor is enabled                               | `bool`    |
+| `motor.calibrated` | Whether `set_limits` has been called (read-only)           | `bool`    |
+| `motor.limit_low`  | Lower position limit in encoder ticks (set via set_limits) | `int`     |
+| `motor.limit_high` | Upper position limit in encoder ticks (set via set_limits) | `int`     |
 
-| Methods               | Description                             | Arguments |
-| --------------------- | --------------------------------------- | --------- |
-| `motor.power(torque)` | Move with given `torque` (-1..1)        | `float`   |
-| `motor.speed(speed)`  | Move with given `speed` (-32767..32767) | `float`   |
-| `motor.zero()`        | Store position as zero position         |           |
-| `motor.enable()`      | Enable the motor                        |           |
-| `motor.disable()`     | Disable the motor                       |           |
+| Methods                                              | Description                                                       | Arguments  |
+| ---------------------------------------------------- | ----------------------------------------------------------------- | ---------- |
+| `motor.power(torque)`                                | Move with given `torque` (-1..1)                                  | `float`    |
+| `motor.speed(speed)`                                 | Move with given `speed` (-32767..32767)                           | `float`    |
+| `motor.position(target[, speed[, accel[, deccel]]])` | Move to absolute encoder position `target` (clamped to limits)    | 1–4× `int` |
+| `motor.set_limits(low, high)`                        | Define the allowed encoder range and mark the motor as calibrated | 2× `int`   |
+| `motor.stop()`                                       | Brake the motor (sets velocity command to 0)                      |            |
+| `motor.zero()`                                       | Store position as zero position                                   |            |
+| `motor.enable()`                                     | Enable the motor                                                  |            |
+| `motor.disable()`                                    | Disable the motor                                                 |            |
 
 When the motor is disabled, it will stop and ignore movement commands.
+
+`motor.position(target)` requires `set_limits(low, high)` to have been called first; otherwise it throws an error.
+When `speed`, `accel`, or `deccel` are omitted, hard-coded defaults of 5000 ticks/s, 20000 ticks/s², and 20000 ticks/s² are used.
+The position PID parameters of the RoboClaw must already be configured (e.g. via BasicMicro Motion Studio and stored in NVM) for the position command to work.
 
 ## RoboClaw Wheels
 
@@ -679,6 +689,41 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | `wheels.disable()`              | Disable both motors                             |                  |
 
 When the wheels are disabled, they will stop and ignore movement commands.
+
+## RoboClaw Scissor Lift
+
+The RoboClaw scissor lift module coordinates two RoboClaw motors to drive a scissor-lift mechanism to a percentage of its calibrated travel.
+Each underlying motor must be calibrated separately via `motor.set_limits(low, high)` before the lift can be commanded.
+0% corresponds to each motor's `limit_low`, 100% to its `limit_high`.
+
+| Constructor                                  | Description     | Arguments                  |
+| -------------------------------------------- | --------------- | -------------------------- |
+| `lift = RoboClawScissorLift(motor1, motor2)` | Two lift motors | two RoboClaw motor modules |
+
+| Properties      | Description                                          | Data type |
+| --------------- | ---------------------------------------------------- | --------- |
+| `lift.position` | Current height in percent, averaged over both motors | `float`   |
+| `lift.enabled`  | Whether the lift reacts to commands                  | `bool`    |
+
+| Methods                                              | Description                                              | Arguments    |
+| ---------------------------------------------------- | -------------------------------------------------------- | ------------ |
+| `lift.position(percent[, speed[, accel[, deccel]]])` | Drive both motors to `percent` of their calibrated range | 1–4× `float` |
+| `lift.stop()`                                        | Brake both motors                                        |              |
+| `lift.enable()`                                      | Enable both motors                                       |              |
+| `lift.disable()`                                     | Disable both motors                                      |              |
+
+Example:
+
+```
+serial = Serial(26, 27, 38400, 1)
+claw = RoboClaw(serial, 128)
+m1 = RoboClawMotor(claw, 1)
+m2 = RoboClawMotor(claw, 2)
+m1.set_limits(0, 50000)
+m2.set_limits(0, 49800)
+lift = RoboClawScissorLift(m1, m2)
+lift.position(50)
+```
 
 ## Stepper Motor
 

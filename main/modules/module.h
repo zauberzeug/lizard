@@ -37,6 +37,7 @@ enum ModuleType {
     roboclaw,
     roboclaw_motor,
     roboclaw_wheels,
+    roboclaw_scissor_lift,
     stepper_motor,
     motor_axis,
     canopen_motor,

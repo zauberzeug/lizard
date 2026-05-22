@@ -30,6 +30,7 @@
 #include "roboclaw.h"
 #include "roboclaw_motor.h"
 #include "roboclaw_wheels.h"
+#include "roboclaw_scissor_lift.h"
 #include "serial.h"
 #include "serial_bus.h"
 #include "stepper_motor.h"
@@ -303,6 +304,11 @@ Module_ptr Module::create(const std::string type,
         const RoboClawMotor_ptr left_motor = get_module_paramter<RoboClawMotor>(arguments[0], roboclaw_motor, "roboclaw motor");
         const RoboClawMotor_ptr right_motor = get_module_paramter<RoboClawMotor>(arguments[1], roboclaw_motor, "roboclaw motor");
         return std::make_shared<RoboClawWheels>(name, left_motor, right_motor);
+    } else if (type == "RoboClawScissorLift") {
+        Module::expect(arguments, 2, identifier, identifier);
+        const RoboClawMotor_ptr motor1 = get_module_paramter<RoboClawMotor>(arguments[0], roboclaw_motor, "roboclaw motor");
+        const RoboClawMotor_ptr motor2 = get_module_paramter<RoboClawMotor>(arguments[1], roboclaw_motor, "roboclaw motor");
+        return std::make_shared<RoboClawScissorLift>(name, motor1, motor2);
     } else if (type == "StepperMotor") {
         if (arguments.size() < 2 || arguments.size() > 4) {
             throw std::runtime_error("unexpected number of arguments");

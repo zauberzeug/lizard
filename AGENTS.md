@@ -70,16 +70,16 @@ end
 
 ## Available Module Types
 
-| Category              | Modules                                                                                                                                                          |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Core**              | `Core` (always present)                                                                                                                                          |
-| **I/O**               | `Input`, `Output`, `PwmOutput`, `Analog`, `AnalogUnit`                                                                                                           |
-| **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander`                                                                                                            |
-| **Motor Controllers** | `LinearMotor`, `ODriveMotor`, `ODriveWheels`, `RmdMotor`, `RmdPair`, `StepperMotor`, `RoboClawMotor`, `RoboClawWheels`, `D1Motor`, `DunkerMotor`, `DunkerWheels` |
-| **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                  |
-| **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                       |
-| **Expanders**         | `Mcp23017` (I2C GPIO expander)                                                                                                                                   |
-| **Utilities**         | `MotorAxis`, `Proxy`                                                                                                                                             |
+| Category              | Modules                                                                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Core**              | `Core` (always present)                                                                                                                                                                 |
+| **I/O**               | `Input`, `Output`, `PwmOutput`, `Analog`, `AnalogUnit`                                                                                                                                  |
+| **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander`                                                                                                                                   |
+| **Motor Controllers** | `LinearMotor`, `ODriveMotor`, `ODriveWheels`, `RmdMotor`, `RmdPair`, `StepperMotor`, `RoboClawMotor`, `RoboClawWheels`, `RoboClawScissorLift`, `D1Motor`, `DunkerMotor`, `DunkerWheels` |
+| **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                                         |
+| **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                                              |
+| **Expanders**         | `Mcp23017` (I2C GPIO expander)                                                                                                                                                          |
+| **Utilities**         | `MotorAxis`, `Proxy`                                                                                                                                                                    |
 
 ---
 
