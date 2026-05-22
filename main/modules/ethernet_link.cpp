@@ -150,6 +150,8 @@ void EthernetLink::accept_client() {
 
     for (size_t i = 0; i < MAX_CLIENTS; ++i) {
         if (this->client_fds[i] < 0) {
+            int yes = 1;
+            setsockopt(new_fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
             this->client_fds[i] = new_fd;
             this->client_buffer_lengths[i] = 0;
             this->get_property("clients")->integer_value++;

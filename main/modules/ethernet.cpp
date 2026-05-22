@@ -1,6 +1,7 @@
 #include "ethernet.h"
 
 #include "../utils/uart.h"
+#include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_event.h"
 #include "esp_mac.h"
@@ -62,6 +63,10 @@ Ethernet::Ethernet(const std::string name,
         if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
             throw std::runtime_error("could not create event loop");
         }
+        err = gpio_install_isr_service(0);
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+            throw std::runtime_error("could not install GPIO ISR service");
+        }
         netif_initialized = true;
     }
 
@@ -76,8 +81,6 @@ Ethernet::Ethernet(const std::string name,
     }
 
     spi_device_interface_config_t spi_devcfg = {};
-    spi_devcfg.command_bits = 16;
-    spi_devcfg.address_bits = 8;
     spi_devcfg.mode = 0;
     spi_devcfg.clock_speed_hz = 20 * 1000 * 1000;
     spi_devcfg.spics_io_num = cs_pin;
@@ -138,6 +141,8 @@ Ethernet::Ethernet(const std::string name,
         throw std::runtime_error("could not set static IP info");
     }
 
+    esp_netif_set_default_netif(this->netif);
+
     esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, on_eth_event, this);
     esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, on_ip_event, this);
 
@@ -157,8 +162,11 @@ void Ethernet::call(const std::string method_name, const std::vector<ConstExpres
         if (esp_netif_get_ip_info(this->netif, &ip_info) != ESP_OK) {
             throw std::runtime_error("could not read IP info");
         }
-        echo("ip=" IPSTR " gw=" IPSTR " mask=" IPSTR,
-             IP2STR(&ip_info.ip), IP2STR(&ip_info.gw), IP2STR(&ip_info.netmask));
+        uint8_t mac[6] = {};
+        esp_eth_ioctl(this->eth_handle, ETH_CMD_G_MAC_ADDR, mac);
+        echo("ip=" IPSTR " gw=" IPSTR " mask=" IPSTR " mac=%02x:%02x:%02x:%02x:%02x:%02x",
+             IP2STR(&ip_info.ip), IP2STR(&ip_info.gw), IP2STR(&ip_info.netmask),
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     } else {
         Module::call(method_name, arguments);
     }

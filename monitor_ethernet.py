@@ -102,6 +102,7 @@ async def receive_from(target: Target, label_width: int) -> None:
             continue
         line = verify_checksum(line)
         print(f'{label} {line}')
+        await asyncio.sleep(0)
 
 
 HELP_TEXT = """\

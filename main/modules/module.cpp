@@ -14,6 +14,7 @@
 #include "dunker_motor.h"
 #include "dunker_wheels.h"
 #include "ethernet.h"
+#include "ethernet_bus.h"
 #include "ethernet_link.h"
 #include "expander.h"
 #include "imu.h"
@@ -139,6 +140,15 @@ Module_ptr Module::create(const std::string type,
             throw std::runtime_error("port must be between 1 and 65535");
         }
         return std::make_shared<EthernetLink>(name, ethernet_module, static_cast<uint16_t>(port));
+    } else if (type == "EthernetBus") {
+        Module::expect(arguments, 1, identifier);
+        const std::string ethernet_name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(ethernet_name);
+        if (module->type != ethernet) {
+            throw std::runtime_error("module \"" + ethernet_name + "\" is no ethernet connection");
+        }
+        const ConstEthernet_ptr ethernet_module = std::static_pointer_cast<const Ethernet>(module);
+        return std::make_shared<EthernetBus>(name, ethernet_module);
     } else if (type == "Output") {
         if (arguments.size() == 1) {
             Module::expect(arguments, 1, integer);

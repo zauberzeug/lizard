@@ -52,6 +52,7 @@ enum ModuleType {
     serial_bus,
     ethernet,
     ethernet_link,
+    ethernet_bus,
 };
 
 class Module;
