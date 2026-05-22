@@ -21,5 +21,6 @@
       "source.fixAll.ruff": "always"
     }
   },
-  "idf.adapterTargetName": "esp32"
+  "idf.adapterTargetName": "esp32",
+  "idf.currentSetup": "/home/jens/esp/v5.3.1/esp-idf"
 }

@@ -19,7 +19,9 @@ idf_component_register(
         esp32-zeug
         esp_adc
         esp_driver_pcnt
+        esp_driver_spi
         esp_driver_uart
+        esp_eth
         esp_event
         esp_https_ota
         esp_netif

@@ -13,6 +13,8 @@
 #include "driver/ledc.h"
 #include "dunker_motor.h"
 #include "dunker_wheels.h"
+#include "ethernet.h"
+#include "ethernet_link.h"
 #include "expander.h"
 #include "imu.h"
 #include "imu_bno085.h"
@@ -112,6 +114,31 @@ Module_ptr Module::create(const std::string type,
         Module::expect(arguments, 1, string);
         std::string device_name = arguments[0]->evaluate_string();
         return std::make_shared<Bluetooth>(name, device_name, message_handler);
+    } else if (type == "Ethernet") {
+        Module::expect(arguments, 9, integer, integer, integer, integer, integer, integer, string, string, string);
+        const gpio_num_t miso = (gpio_num_t)arguments[0]->evaluate_integer();
+        const gpio_num_t mosi = (gpio_num_t)arguments[1]->evaluate_integer();
+        const gpio_num_t sclk = (gpio_num_t)arguments[2]->evaluate_integer();
+        const gpio_num_t cs = (gpio_num_t)arguments[3]->evaluate_integer();
+        const gpio_num_t int_pin = (gpio_num_t)arguments[4]->evaluate_integer();
+        const gpio_num_t rst = (gpio_num_t)arguments[5]->evaluate_integer();
+        const std::string ip = arguments[6]->evaluate_string();
+        const std::string gateway = arguments[7]->evaluate_string();
+        const std::string netmask = arguments[8]->evaluate_string();
+        return std::make_shared<Ethernet>(name, miso, mosi, sclk, cs, int_pin, rst, ip, gateway, netmask);
+    } else if (type == "EthernetLink") {
+        Module::expect(arguments, 2, identifier, integer);
+        const std::string ethernet_name = arguments[0]->evaluate_identifier();
+        Module_ptr module = Global::get_module(ethernet_name);
+        if (module->type != ethernet) {
+            throw std::runtime_error("module \"" + ethernet_name + "\" is no ethernet connection");
+        }
+        const ConstEthernet_ptr ethernet_module = std::static_pointer_cast<const Ethernet>(module);
+        const long port = arguments[1]->evaluate_integer();
+        if (port <= 0 || port > 65535) {
+            throw std::runtime_error("port must be between 1 and 65535");
+        }
+        return std::make_shared<EthernetLink>(name, ethernet_module, static_cast<uint16_t>(port));
     } else if (type == "Output") {
         if (arguments.size() == 1) {
             Module::expect(arguments, 1, integer);
