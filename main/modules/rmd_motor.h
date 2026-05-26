@@ -25,6 +25,8 @@ private:
               const unsigned long int timeout_ms = 3);
 
 public:
+    static inline constexpr const char *TYPE = "RmdMotor";
+
     RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio);
     void subscribe_to_can();
     void step() override;

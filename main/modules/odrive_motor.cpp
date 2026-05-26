@@ -1,8 +1,21 @@
 #include "odrive_motor.h"
+#include "module_helpers.h"
 #include <cstring>
 #include <memory>
 
-REGISTER_MODULE_DEFAULTS(ODriveMotor)
+static Module_ptr create_odrive_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() < 2 || arguments.size() > 3) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, identifier, integer, integer);
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
+    const uint32_t can_id = arguments[1]->evaluate_integer();
+    const int version = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 4;
+    auto motor = std::make_shared<ODriveMotor>(name, can, can_id, version);
+    motor->subscribe_to_can();
+    return motor;
+}
+REGISTER_MODULE(ODriveMotor, &create_odrive_motor)
 
 const std::map<std::string, Variable_ptr> ODriveMotor::get_defaults() {
     return {
@@ -20,7 +33,7 @@ const std::map<std::string, Variable_ptr> ODriveMotor::get_defaults() {
 }
 
 ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32_t can_id, const uint32_t version)
-    : Module(odrive_motor, name), can_id(can_id), can(can), version(version) {
+    : Module(name), can_id(can_id), can(can), version(version) {
     this->properties = ODriveMotor::get_defaults();
 }
 

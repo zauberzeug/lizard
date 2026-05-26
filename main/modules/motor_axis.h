@@ -15,6 +15,8 @@ private:
     void disable();
 
 public:
+    static inline constexpr const char *TYPE = "MotorAxis";
+
     MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

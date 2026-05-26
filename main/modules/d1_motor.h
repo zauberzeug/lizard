@@ -22,6 +22,8 @@ private:
     void wait();
 
 public:
+    static inline constexpr const char *TYPE = "D1Motor";
+
     D1Motor(const std::string &name, const Can_ptr can, int64_t node_id);
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

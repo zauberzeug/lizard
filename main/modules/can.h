@@ -17,6 +17,8 @@ private:
     twai_state_t previous_state = TWAI_STATE_RUNNING;
 
 public:
+    static inline constexpr const char *TYPE = "Can";
+
     Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

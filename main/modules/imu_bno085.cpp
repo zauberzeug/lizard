@@ -1,11 +1,26 @@
 #include "imu_bno085.h"
 #include "i2c_bus.h"
+#include "module_helpers.h"
 #include <algorithm>
 #include <stdexcept>
 
 #include "esp_log.h"
 
-REGISTER_MODULE_DEFAULTS(ImuBno085)
+static Module_ptr create_imu_bno085(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() > 7) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, integer, integer, integer, integer, integer, integer, integer);
+    const i2c_port_t port = arguments.size() > 0 ? (i2c_port_t)arguments[0]->evaluate_integer() : I2C_NUM_0;
+    const gpio_num_t sda_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : DEFAULT_I2C_SDA_PIN;
+    const gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : DEFAULT_I2C_SCL_PIN;
+    const gpio_num_t int_pin = arguments.size() > 3 ? (gpio_num_t)arguments[3]->evaluate_integer() : GPIO_NUM_26;
+    const gpio_num_t rst_pin = arguments.size() > 4 ? (gpio_num_t)arguments[4]->evaluate_integer() : GPIO_NUM_32;
+    const uint8_t address = arguments.size() > 5 ? arguments[5]->evaluate_integer() : 0x4A;
+    const int clk_speed = arguments.size() > 6 ? arguments[6]->evaluate_integer() : 400000;
+    return std::make_shared<ImuBno085>(name, port, sda_pin, scl_pin, int_pin, rst_pin, address, clk_speed);
+}
+REGISTER_MODULE(ImuBno085, &create_imu_bno085)
 
 namespace {
 constexpr char TAG[] = "ImuBno085";
@@ -114,7 +129,7 @@ void ImuBno085::apply_mode(const std::string &mode) {
 
 ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin,
                      gpio_num_t int_pin, gpio_num_t rst_pin, uint8_t address, int clk_speed)
-    : Module(imu_bno085, name), i2c_port(i2c_port), sda_pin(sda_pin), scl_pin(scl_pin),
+    : Module(name), i2c_port(i2c_port), sda_pin(sda_pin), scl_pin(scl_pin),
       int_pin(int_pin), rst_pin(rst_pin), address(address), clk_speed(clk_speed) {
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     bno = std::make_unique<Bno08x>(rst_pin);

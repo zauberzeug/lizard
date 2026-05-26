@@ -21,6 +21,8 @@ private:
     void check_strapping_pins(const char *buffer);
 
 public:
+    static inline constexpr const char *TYPE = "Expander";
+
     const ConstSerial_ptr serial;
     const gpio_num_t boot_pin;
     const gpio_num_t enable_pin;
