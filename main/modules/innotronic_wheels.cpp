@@ -11,6 +11,7 @@ const std::map<std::string, Variable_ptr> InnotronicWheels::get_defaults() {
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"calculated_linear_speed", std::make_shared<NumberVariable>()},
         {"calculated_angular_speed", std::make_shared<NumberVariable>()},
+        {"calculated_speed_timeout", std::make_shared<NumberVariable>(0.3)},
         {"traveled_distance", std::make_shared<NumberVariable>()},
         {"heading", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
@@ -37,19 +38,18 @@ void InnotronicWheels::step() {
     const double right_position = this->right_motor->get_position();
     this->properties.at("traveled_distance")->number_value = (left_position + right_position) / 2;
     this->properties.at("heading")->number_value = (right_position - left_position) / width;
-    if (this->position_initialized) {
-        const unsigned long int d_micros = micros_since(this->last_micros);
-        if (d_micros > 0) {
-            const double left_calc = (left_position - this->last_left_position) / d_micros * 1000000;
-            const double right_calc = (right_position - this->last_right_position) / d_micros * 1000000;
-            this->properties.at("calculated_linear_speed")->number_value = (left_calc + right_calc) / 2;
-            this->properties.at("calculated_angular_speed")->number_value = (right_calc - left_calc) / width;
-        }
-    }
-    this->last_micros = micros();
-    this->last_left_position = left_position;
-    this->last_right_position = right_position;
-    this->position_initialized = true;
+
+    const unsigned long int now = micros();
+    const double timeout_s = this->properties.at("calculated_speed_timeout")->number_value;
+    const unsigned long int timeout_us = timeout_s > 0
+        ? static_cast<unsigned long int>(timeout_s * 1e6)
+        : 0;
+    this->update_calc_side(this->left_state, left_position, now, timeout_us);
+    this->update_calc_side(this->right_state, right_position, now, timeout_us);
+    this->properties.at("calculated_linear_speed")->number_value =
+        (this->left_state.last_calc_speed + this->right_state.last_calc_speed) / 2;
+    this->properties.at("calculated_angular_speed")->number_value =
+        (this->right_state.last_calc_speed - this->left_state.last_calc_speed) / width;
 
     bool desired = this->is_enabled();
     if (desired != this->last_applied_enabled) {
@@ -104,4 +104,27 @@ void InnotronicWheels::disable() {
     this->right_motor->disable();
     this->properties.at("enabled")->boolean_value = false;
     this->last_applied_enabled = false;
+}
+
+void InnotronicWheels::update_calc_side(SideState &state, const double current_position,
+                                        const unsigned long int now_micros,
+                                        const unsigned long int timeout_micros) {
+    if (!state.initialized) {
+        state.initialized = true;
+        state.last_position = current_position;
+        state.last_update_micros = now_micros;
+        state.last_calc_speed = 0.0;
+        return;
+    }
+    if (current_position != state.last_position) {
+        const unsigned long int d_micros = now_micros - state.last_update_micros;
+        if (d_micros > 0) {
+            state.last_calc_speed =
+                (current_position - state.last_position) / static_cast<double>(d_micros) * 1e6;
+        }
+        state.last_position = current_position;
+        state.last_update_micros = now_micros;
+    } else if (timeout_micros > 0 && (now_micros - state.last_update_micros) > timeout_micros) {
+        state.last_calc_speed = 0.0;
+    }
 }
