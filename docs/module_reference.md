@@ -739,6 +739,7 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                             | `int`                 |
 | `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10) | `int`                 |
 | `motor.set_bitrate(rate)`             | Set CAN bitrate ("125K", "250K", "500K" or "1M")                             | `str`                 |
+| `motor.set_can_id(id)`                | Set motor's CAN ID (1-2047)                                                  | `int`                 |
 | `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                       | `float`, `int`, `int` |
 | `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                 | `int`, `int`, `int`   |
 | `motor.stop(acc)`                     | Stop motor with given deceleration (0-255)                                   | `int`                 |
@@ -785,6 +786,12 @@ The motor applies the new bitrate immediately, so you must also change the CAN b
 | "250K" | 250 kbit/s  |
 | "500K" | 500 kbit/s  |
 | "1M"   | 1 Mbit/s    |
+
+**CAN ID**
+
+The `set_can_id()` method changes the motor's CAN ID (range 1-2047, default 1).
+The new ID is persisted on the drive, so the motor only responds on the new ID afterwards — the Lizard script must be updated to construct the module with the new `can_id`.
+ID `0` is reserved as the broadcast address (all motors listen, none respond) and is therefore not accepted here.
 
 ## Motor Axis
 
