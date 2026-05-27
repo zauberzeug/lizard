@@ -14,6 +14,7 @@ private:
     bool enabled = true;
 
     void send(const uint8_t *data, uint8_t len);
+    bool crc_ok(const uint8_t *data, int count) const;
     void send_position_error_read();
     void send_position_read();
     void send_speed_read();

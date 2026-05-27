@@ -71,6 +71,8 @@ void MksServoMotor::send_set_can_id(int64_t new_id) {
     new_id = std::clamp(new_id, (int64_t)MIN_CAN_ID, (int64_t)MAX_CAN_ID);
     uint8_t data[] = {0x8B, (uint8_t)(new_id >> 8), (uint8_t)(new_id & 0xFF)};
     this->send(data, 3);
+    echo("%s set_can_id: motor now responds on CAN id %d - reconstruct the module with the new can_id",
+         this->name.c_str(), (int)new_id);
 }
 
 void MksServoMotor::send_working_current(int64_t ma) {
@@ -227,17 +229,22 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
     }
 }
 
+bool MksServoMotor::crc_ok(const uint8_t *data, int count) const {
+    // MKS checksum: low byte of the CAN id plus all data bytes except the
+    // trailing checksum byte itself, which sits at data[count - 1].
+    uint8_t crc = (uint8_t)(this->can_id & 0xFF);
+    for (int i = 0; i < count - 1; i++) {
+        crc += data[i];
+    }
+    return crc == data[count - 1];
+}
+
 void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     if (count < 1) {
         return;
     }
     if (data[0] == 0x31 && count == 8) {
-        // CRC validation
-        uint8_t crc = (uint8_t)(this->can_id & 0xFF);
-        for (int i = 0; i < 7; i++) {
-            crc += data[i];
-        }
-        if ((crc & 0xFF) != data[7]) {
+        if (!this->crc_ok(data, count)) {
             return;
         }
         // Extract 48-bit big-endian signed encoder value from data[1..6]
@@ -251,24 +258,14 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
         }
         this->properties.at("position")->number_value = (double)val * 360.0 / COUNTS_PER_TURN;
     } else if (data[0] == 0x32 && count == 4) {
-        // CRC validation
-        uint8_t crc = (uint8_t)(this->can_id & 0xFF);
-        for (int i = 0; i < 3; i++) {
-            crc += data[i];
-        }
-        if ((crc & 0xFF) != data[3]) {
+        if (!this->crc_ok(data, count)) {
             return;
         }
         // Extract 16-bit big-endian signed speed (RPM) from data[1..2]
         int16_t speed = (int16_t)((data[1] << 8) | data[2]);
         this->properties.at("speed")->integer_value = speed;
     } else if (data[0] == 0x39 && count == 6) {
-        // CRC validation
-        uint8_t crc = (uint8_t)(this->can_id & 0xFF);
-        for (int i = 0; i < 5; i++) {
-            crc += data[i];
-        }
-        if ((crc & 0xFF) != data[5]) {
+        if (!this->crc_ok(data, count)) {
             return;
         }
         // Extract 32-bit big-endian signed position error from data[1..4]
@@ -278,9 +275,7 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
                       (int32_t)data[4];
         this->properties.at("position_error")->number_value = (double)val * 360.0 / POSITION_ERROR_COUNTS_PER_TURN;
     } else if (data[0] == 0x82 && count == 3) {
-        // CRC validation
-        uint8_t crc = (uint8_t)(this->can_id & 0xFF) + data[0] + data[1];
-        if ((crc & 0xFF) != data[2]) {
+        if (!this->crc_ok(data, count)) {
             return;
         }
         if (data[1] == 0x00) {
