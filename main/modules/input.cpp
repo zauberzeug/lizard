@@ -1,10 +1,21 @@
 #include "input.h"
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
+#include "mcp23017.h"
+#include "module_helpers.h"
 #include <memory>
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(Input)
+static Module_ptr create_input(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() == 1) {
+        Module::expect(arguments, 1, integer);
+        return std::make_shared<GpioInput>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+    }
+    Module::expect(arguments, 2, identifier, integer);
+    const Mcp23017_ptr mcp = get_module_argument<Mcp23017>(arguments[0]);
+    return std::make_shared<McpInput>(name, mcp, arguments[1]->evaluate_integer());
+}
+REGISTER_MODULE(Input, &create_input)
 
 const std::map<std::string, Variable_ptr> Input::get_defaults() {
     return {
@@ -15,7 +26,7 @@ const std::map<std::string, Variable_ptr> Input::get_defaults() {
     };
 }
 
-Input::Input(const std::string name) : Module(input, name) {
+Input::Input(const std::string name) : Module(name) {
     this->properties = Input::get_defaults();
 }
 

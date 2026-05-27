@@ -1,7 +1,25 @@
 #include "linear_motor.h"
+#include "module_helpers.h"
 #include <memory>
 
-REGISTER_MODULE_DEFAULTS(LinearMotor)
+static Module_ptr create_linear_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() == 4) {
+        Module::expect(arguments, 4, integer, integer, integer, integer);
+        const gpio_num_t move_in = (gpio_num_t)arguments[0]->evaluate_integer();
+        const gpio_num_t move_out = (gpio_num_t)arguments[1]->evaluate_integer();
+        const gpio_num_t end_in = (gpio_num_t)arguments[2]->evaluate_integer();
+        const gpio_num_t end_out = (gpio_num_t)arguments[3]->evaluate_integer();
+        return std::make_shared<GpioLinearMotor>(name, move_in, move_out, end_in, end_out);
+    }
+    Module::expect(arguments, 5, identifier, integer, integer, integer, integer);
+    const Mcp23017_ptr mcp = get_module_argument<Mcp23017>(arguments[0]);
+    const uint8_t move_in = (uint8_t)arguments[1]->evaluate_integer();
+    const uint8_t move_out = (uint8_t)arguments[2]->evaluate_integer();
+    const uint8_t end_in = (uint8_t)arguments[3]->evaluate_integer();
+    const uint8_t end_out = (uint8_t)arguments[4]->evaluate_integer();
+    return std::make_shared<McpLinearMotor>(name, mcp, move_in, move_out, end_in, end_out);
+}
+REGISTER_MODULE(LinearMotor, &create_linear_motor)
 
 const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
     return {
@@ -11,7 +29,7 @@ const std::map<std::string, Variable_ptr> LinearMotor::get_defaults() {
     };
 }
 
-LinearMotor::LinearMotor(const std::string name) : Module(output, name) {
+LinearMotor::LinearMotor(const std::string name) : Module(name) {
     this->properties = LinearMotor::get_defaults();
 }
 

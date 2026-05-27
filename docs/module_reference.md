@@ -18,11 +18,12 @@ The `broadcast` method is used internally with [port expanders](#expander).
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
 It is automatically created right after the boot sequence.
 
-| Properties    | Description                                             | Data type |
-| ------------- | ------------------------------------------------------- | --------- |
-| `core.debug`  | Whether to output debug information to the command line | `bool`    |
-| `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
-| `core.heap`   | Free heap memory (bytes)                                | `int`     |
+| Properties              | Description                                                     | Data type |
+| ----------------------- | --------------------------------------------------------------- | --------- |
+| `core.debug`            | Whether to output debug information to the command line         | `bool`    |
+| `core.millis`           | Time since booting the microcontroller (ms)                     | `int`     |
+| `core.heap`             | Free heap memory (bytes)                                        | `int`     |
+| `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
 
 | Methods                          | Description                                        | Arguments    |
 | -------------------------------- | -------------------------------------------------- | ------------ |
@@ -38,6 +39,7 @@ It is automatically created right after the boot sequence.
 | `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
 | `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
 | `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
+| `core.keep_alive()`              | Reset `last_message_age` without producing output  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -80,10 +82,10 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------- | ---------------------------------------------- | --------------- |
 | `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
 
-| Methods                             | Description                                                | Arguments    |
-| ----------------------------------- | ---------------------------------------------------------- | ------------ |
-| `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
-| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
+| Methods                             | Description                                                                                                                                 | Arguments         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
@@ -162,9 +164,13 @@ When the output is disabled, it will deactivate and ignore on/off or level comma
 
 The PWM output module is associated with a digital output pin that is connected to an LED, actuator or other output signal.
 
-| Constructor            | Description                            | Arguments |
-| ---------------------- | -------------------------------------- | --------- |
-| `pwm = PwmOutput(pin)` | `pin` is the corresponding GPIO number | `int`     |
+| Constructor                        | Description                            | Arguments  |
+| ---------------------------------- | -------------------------------------- | ---------- |
+| `pwm = PwmOutput(pin[, lt[, lc]])` | `pin` is the corresponding GPIO number | 1–3x `int` |
+
+The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
+When using multiple PWM outputs, set different channel IDs to avoid conflicts.
+Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
 
 | Properties         | Description                              | Data type |
 | ------------------ | ---------------------------------------- | --------- |
@@ -405,7 +411,6 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | `can.get_status()`                                  | Print the driver status        |           |
 | `can.start()`                                       | Start the driver               |           |
 | `can.stop()`                                        | Stop the driver                |           |
-| `can.recover()`                                     | Recover the driver             |           |
 | `can.reset()`                                       | Reset the driver               |           |
 
 The method `get_status()` prints the following information:
@@ -424,8 +429,8 @@ The method `get_status()` prints the following information:
 After creating a CAN module, the driver is started automatically.
 The `start()` and `stop()` methods are primarily for debugging purposes.
 
-The `recover()` method can be used to recover the driver from a "BUS_OFF" state.
-In contrast, the `reset()` method will stop the driver, try to recover it and then start it again.
+The `reset()` method will stop the driver, try to recover it and then start it again.
+It can be used to recover the driver from a "BUS_OFF" state.
 
 ## Serial interface
 

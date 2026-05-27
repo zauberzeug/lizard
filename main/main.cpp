@@ -190,7 +190,7 @@ void process_tree(owl_tree *const tree, bool from_expander) {
             const ConstExpression_ptr expression = compile_expression(statement.expression);
             static char buffer[256];
             expression->print_to_buffer(buffer, sizeof(buffer));
-            echo(buffer);
+            echo("%s", buffer);
         } else if (!statement.constructor.empty) {
             const struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
             if (constructor.expander_name.empty) {
@@ -207,10 +207,10 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                if (expander_module->type != expander) {
+                const Expander_ptr expander = std::dynamic_pointer_cast<Expander>(expander_module);
+                if (!expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
-                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
                 Global::add_module(module_name, proxy);
@@ -351,7 +351,7 @@ void process_line(const char *line, const int len) {
             process_lizard(line + 2);
             break;
         case '"':
-            echo(line + 2);
+            echo("%s", line + 2);
             break;
         default:
             throw std::runtime_error("unrecognized control command");

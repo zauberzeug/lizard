@@ -13,6 +13,8 @@ private:
     const std::string device_name;
 
 public:
+    static inline constexpr const char *TYPE = "Bluetooth";
+
     Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler);
 
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

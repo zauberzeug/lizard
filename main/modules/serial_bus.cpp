@@ -1,9 +1,12 @@
 #include "serial_bus.h"
 
+#include "../utils/format.h"
 #include "../utils/otb.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "module_helpers.h"
+#include "serial.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -20,14 +23,23 @@ static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
 
-REGISTER_MODULE_DEFAULTS(SerialBus)
+static Module_ptr create_serial_bus(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const ConstSerial_ptr serial = get_module_argument<const Serial>(arguments[0]);
+    const long node_id = arguments[1]->evaluate_integer();
+    if (node_id <= 0 || node_id >= 255) {
+        throw std::runtime_error("node ID must be between 0 and 255");
+    }
+    return std::make_shared<SerialBus>(name, serial, node_id);
+}
+REGISTER_MODULE(SerialBus, &create_serial_bus)
 
 const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
     return {};
 }
 
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
-    : Module(serial_bus, name), serial(serial), node_id(node_id) {
+    : Module(name), serial(serial), node_id(node_id) {
     this->properties = SerialBus::get_defaults();
     this->serial->enable_line_detection();
 
@@ -69,12 +81,22 @@ void SerialBus::step() {
 
 void SerialBus::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "send") {
-        Module::expect(arguments, 2, integer, string);
+        // bus.send(receiver, fmt[, args...]) — printf-style formatting.
+        // See utils/format.h for supported specifiers.
+        if (arguments.size() < 2) {
+            throw std::runtime_error("send expects at least 2 arguments (receiver, format[, args...])");
+        }
+        if ((arguments[0]->type & integer) == 0) {
+            throw std::runtime_error("receiver ID must be an integer");
+        }
+        if ((arguments[1]->type & string) == 0) {
+            throw std::runtime_error("format must be a string");
+        }
         const int receiver = arguments[0]->evaluate_integer();
         if (receiver <= 0 || receiver >= 255) {
             throw std::runtime_error("receiver ID must be between 0 and 255");
         }
-        const std::string payload = arguments[1]->evaluate_string();
+        const std::string payload = format_args(arguments[1]->evaluate_string(), arguments, 2);
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {

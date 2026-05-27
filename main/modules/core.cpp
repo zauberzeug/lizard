@@ -16,7 +16,7 @@
 #include <stdexcept>
 #include <stdlib.h>
 
-Core::Core(const std::string name) : Module(core, name) {
+Core::Core(const std::string name) : Module(name) {
     this->properties["debug"] = std::make_shared<BooleanVariable>(false);
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
@@ -52,7 +52,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             }
             pos += argument->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
         }
-        echo(buffer);
+        echo("%s", buffer);
     } else if (method_name == "output") {
         Module::expect(arguments, 1, string);
         this->output_list.clear();
@@ -166,6 +166,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 0);
         Module::broadcast_paused = false;
         echo("broadcasts resumed");
+    } else if (method_name == "keep_alive") {
+        Module::expect(arguments, 0);
+        this->keep_alive();
     } else {
         Module::call(method_name, arguments);
     }
