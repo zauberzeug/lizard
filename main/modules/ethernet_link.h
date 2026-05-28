@@ -15,6 +15,8 @@ using ConstEthernetLink_ptr = std::shared_ptr<const EthernetLink>;
 
 class EthernetLink : public Module {
 public:
+    static inline constexpr const char *TYPE = "EthernetLink";
+
     static constexpr size_t LINE_BUFFER_SIZE = 1024;
     static constexpr size_t MAX_CLIENTS = 4;
 

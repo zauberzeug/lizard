@@ -13,6 +13,8 @@ using ConstEthernet_ptr = std::shared_ptr<const Ethernet>;
 
 class Ethernet : public Module {
 public:
+    static inline constexpr const char *TYPE = "Ethernet";
+
     Ethernet(const std::string name,
              gpio_num_t miso_pin,
              gpio_num_t mosi_pin,

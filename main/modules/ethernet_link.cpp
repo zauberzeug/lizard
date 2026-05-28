@@ -3,6 +3,7 @@
 #include "../utils/uart.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
+#include "module_helpers.h"
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
@@ -10,7 +11,16 @@
 
 extern void process_line(const char *line, const int len);
 
-REGISTER_MODULE_DEFAULTS(EthernetLink)
+static Module_ptr create_ethernet_link(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const Ethernet_ptr ethernet = get_module_argument<Ethernet>(arguments[0]);
+    const long port = arguments[1]->evaluate_integer();
+    if (port <= 0 || port > 65535) {
+        throw std::runtime_error("port must be between 1 and 65535");
+    }
+    return std::make_shared<EthernetLink>(name, ethernet, static_cast<uint16_t>(port));
+}
+REGISTER_MODULE(EthernetLink, &create_ethernet_link)
 
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
@@ -24,7 +34,7 @@ const std::map<std::string, Variable_ptr> EthernetLink::get_defaults() {
 EthernetLink::EthernetLink(const std::string name,
                            ConstEthernet_ptr ethernet,
                            uint16_t port)
-    : Module(ethernet_link, name), ethernet(ethernet), port(port) {
+    : Module(name), ethernet(ethernet), port(port) {
     this->properties = EthernetLink::get_defaults();
 
     for (size_t i = 0; i < MAX_CLIENTS; ++i) {

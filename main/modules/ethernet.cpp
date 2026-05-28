@@ -9,7 +9,20 @@
 #include <cstring>
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(Ethernet)
+static Module_ptr create_ethernet(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 9, integer, integer, integer, integer, integer, integer, string, string, string);
+    const gpio_num_t miso = (gpio_num_t)arguments[0]->evaluate_integer();
+    const gpio_num_t mosi = (gpio_num_t)arguments[1]->evaluate_integer();
+    const gpio_num_t sclk = (gpio_num_t)arguments[2]->evaluate_integer();
+    const gpio_num_t cs = (gpio_num_t)arguments[3]->evaluate_integer();
+    const gpio_num_t int_pin = (gpio_num_t)arguments[4]->evaluate_integer();
+    const gpio_num_t rst = (gpio_num_t)arguments[5]->evaluate_integer();
+    const std::string ip = arguments[6]->evaluate_string();
+    const std::string gateway = arguments[7]->evaluate_string();
+    const std::string netmask = arguments[8]->evaluate_string();
+    return std::make_shared<Ethernet>(name, miso, mosi, sclk, cs, int_pin, rst, ip, gateway, netmask);
+}
+REGISTER_MODULE(Ethernet, &create_ethernet)
 
 const std::map<std::string, Variable_ptr> Ethernet::get_defaults() {
     return {
@@ -52,7 +65,7 @@ Ethernet::Ethernet(const std::string name,
                    const std::string &ip,
                    const std::string &gateway,
                    const std::string &netmask)
-    : Module(ethernet, name) {
+    : Module(name) {
     this->properties = Ethernet::get_defaults();
 
     if (!netif_initialized) {

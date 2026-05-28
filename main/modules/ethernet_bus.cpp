@@ -3,12 +3,18 @@
 #include "../utils/format.h"
 #include "../utils/uart.h"
 #include "lwip/sockets.h"
+#include "module_helpers.h"
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(EthernetBus)
+static Module_ptr create_ethernet_bus(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 1, identifier);
+    const Ethernet_ptr ethernet = get_module_argument<Ethernet>(arguments[0]);
+    return std::make_shared<EthernetBus>(name, ethernet);
+}
+REGISTER_MODULE(EthernetBus, &create_ethernet_bus)
 
 static constexpr uint16_t DEFAULT_PEER_PORT = 8080;
 static constexpr int CONNECT_TIMEOUT_MS = 5000;
@@ -18,7 +24,7 @@ const std::map<std::string, Variable_ptr> EthernetBus::get_defaults() {
 }
 
 EthernetBus::EthernetBus(const std::string name, ConstEthernet_ptr ethernet)
-    : Module(ethernet_bus, name), ethernet(ethernet) {
+    : Module(name), ethernet(ethernet) {
     this->properties = EthernetBus::get_defaults();
 }
 

@@ -13,6 +13,8 @@ using ConstEthernetBus_ptr = std::shared_ptr<const EthernetBus>;
 
 class EthernetBus : public Module {
 public:
+    static inline constexpr const char *TYPE = "EthernetBus";
+
     EthernetBus(const std::string name, ConstEthernet_ptr ethernet);
 
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
