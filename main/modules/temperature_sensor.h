@@ -20,6 +20,8 @@ private:
     adc_cali_handle_t adc_cali_ref;
 
 public:
+    static inline constexpr const char *TYPE = "TemperatureSensor";
+
     TemperatureSensor(const std::string name, const AnalogUnit_ptr unit, gpio_num_t temp_pin, gpio_num_t ref_pin, float attenuation_level);
     void step() override;
     static const std::map<std::string, Variable_ptr> get_defaults();

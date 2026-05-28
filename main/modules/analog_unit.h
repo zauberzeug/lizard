@@ -12,6 +12,8 @@ private:
     adc_oneshot_unit_handle_t adc_handle;
 
 public:
+    static inline constexpr const char *TYPE = "AnalogUnit";
+
     AnalogUnit(const std::string name, uint8_t unit_id);
     adc_oneshot_unit_handle_t get_adc_handle() const { return this->adc_handle; }
     adc_unit_t get_adc_unit() const { return this->adc_unit; }

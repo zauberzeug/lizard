@@ -9,7 +9,15 @@
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
 
-REGISTER_MODULE_DEFAULTS(Serial)
+static Module_ptr create_serial(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 4, integer, integer, integer, integer);
+    const gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
+    const gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+    const long baud_rate = arguments[2]->evaluate_integer();
+    const uart_port_t uart_num = (uart_port_t)arguments[3]->evaluate_integer();
+    return std::make_shared<Serial>(name, rx_pin, tx_pin, baud_rate, uart_num);
+}
+REGISTER_MODULE(Serial, &create_serial)
 
 const std::map<std::string, Variable_ptr> Serial::get_defaults() {
     return {};
@@ -17,7 +25,7 @@ const std::map<std::string, Variable_ptr> Serial::get_defaults() {
 
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
-    : Module(serial, name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
+    : Module(name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
     this->properties = Serial::get_defaults();
 
     if (uart_is_driver_installed(uart_num)) {

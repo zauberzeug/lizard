@@ -5,7 +5,14 @@
 #include "driver/twai.h"
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(Can)
+static Module_ptr create_can(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 3, integer, integer, integer);
+    const gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
+    const gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+    const long baud_rate = arguments[2]->evaluate_integer();
+    return std::make_shared<Can>(name, rx_pin, tx_pin, baud_rate);
+}
+REGISTER_MODULE(Can, &create_can)
 
 const std::map<std::string, Variable_ptr> Can::get_defaults() {
     return {
@@ -23,7 +30,7 @@ const std::map<std::string, Variable_ptr> Can::get_defaults() {
 }
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
-    : Module(can, name) {
+    : Module(name) {
     this->g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
     this->f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 

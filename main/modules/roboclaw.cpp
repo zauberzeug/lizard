@@ -1,11 +1,19 @@
 #include "roboclaw.h"
+#include "module_helpers.h"
+#include "serial.h"
 #include "timing.h"
 
 #define MAXRETRY 2
 #define SetDWORDval(arg) (uint8_t)(((uint32_t)arg) >> 24), (uint8_t)(((uint32_t)arg) >> 16), (uint8_t)(((uint32_t)arg) >> 8), (uint8_t)arg
 #define SetWORDval(arg) (uint8_t)(((uint16_t)arg) >> 8), (uint8_t)arg
 
-REGISTER_MODULE_DEFAULTS(RoboClaw)
+static Module_ptr create_roboclaw(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const ConstSerial_ptr serial = get_module_argument<const Serial>(arguments[0]);
+    const uint8_t address = arguments[1]->evaluate_integer();
+    return std::make_shared<RoboClaw>(name, serial, address);
+}
+REGISTER_MODULE(RoboClaw, &create_roboclaw)
 
 const std::map<std::string, Variable_ptr> RoboClaw::get_defaults() {
     return {
@@ -14,7 +22,7 @@ const std::map<std::string, Variable_ptr> RoboClaw::get_defaults() {
 }
 
 RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address)
-    : Module(roboclaw, name), address(address), serial(serial) {
+    : Module(name), address(address), serial(serial) {
     this->properties = RoboClaw::get_defaults();
 }
 

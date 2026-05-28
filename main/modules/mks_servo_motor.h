@@ -31,6 +31,8 @@ private:
     void send_coord_zero();
 
 public:
+    static inline constexpr const char *TYPE = "MksServoMotor";
+
     static constexpr int32_t COUNTS_PER_TURN = 16384;
     static constexpr double COUNTS_PER_DEG = 16384.0 / 360.0;
     static constexpr double POSITION_ERROR_COUNTS_PER_TURN = 51200.0;
