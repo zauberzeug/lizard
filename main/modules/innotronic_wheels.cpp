@@ -73,6 +73,14 @@ void InnotronicWheels::call(const std::string method_name, const std::vector<Con
             this->left_motor->speed(linear - angular * width / 2.0, 0);
             this->right_motor->speed(linear + angular * width / 2.0, 0);
         }
+    } else if (method_name == "drive_meters") {
+        Module::expect(arguments, 2, numbery, numbery);
+        if (this->is_enabled()) {
+            const double meters = arguments[0]->evaluate_number();
+            const double speed = arguments[1]->evaluate_number();
+            this->left_motor->drive_meters(meters, speed);
+            this->right_motor->drive_meters(meters, speed);
+        }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->left_motor->disable();

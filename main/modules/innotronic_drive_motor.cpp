@@ -1,6 +1,7 @@
 #include "innotronic_drive_motor.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
@@ -183,6 +184,19 @@ void InnotronicDriveMotor::speed(const double speed, const double acceleration) 
     float angular_vel = static_cast<float>(speed / m_per_rad);
     uint8_t acc_limit = acceleration > 0 ? static_cast<uint8_t>(acceleration) : 0xFF;
     this->send_speed_cmd(angular_vel, acc_limit);
+}
+
+void InnotronicDriveMotor::drive_meters(const double meters, const double speed) {
+    const double m_per_rad = this->properties.at("m_per_rad")->number_value;
+    // Relative move: meters -> hall ticks (inverse of the position property). The
+    // protocol field is int16, so clamp to avoid wrap-around on large distances.
+    const double ticks_d = std::lround(meters * MOTOR_TICKS / (2.0 * M_PI * m_per_rad));
+    const int16_t ticks = static_cast<int16_t>(std::clamp(ticks_d, -32768.0, 32767.0));
+    // The drive only reaches the target when the velocity points the same way as
+    // the move, so the speed magnitude takes its sign from the travel direction.
+    // send_drive_ticks_cmd then applies sign() so both stay coupled when reversed.
+    const double angular_vel = std::copysign(std::abs(speed) / m_per_rad, meters);
+    this->send_drive_ticks_cmd(static_cast<float>(angular_vel), ticks);
 }
 
 void InnotronicDriveMotor::enable() {

@@ -33,6 +33,7 @@ public:
     void position(const double position, const double speed, const double acceleration) override;
     double get_speed() override;
     void speed(const double speed, const double acceleration) override;
+    void drive_meters(double meters, double speed);
     void enable() override;
     void disable() override;
 };
