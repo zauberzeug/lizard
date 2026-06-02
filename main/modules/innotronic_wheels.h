@@ -15,6 +15,7 @@ private:
     double last_right_position = 0.0;
 
     bool is_enabled() const;
+    bool is_drivable() const;
 
 public:
     InnotronicWheels(const std::string name, const InnotronicDriveMotor_ptr left_motor, const InnotronicDriveMotor_ptr right_motor);

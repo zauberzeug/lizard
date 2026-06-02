@@ -1,5 +1,6 @@
 #include "innotronic_wheels.h"
 #include "../utils/timing.h"
+#include "../utils/uart.h"
 #include <memory>
 
 REGISTER_MODULE_DEFAULTS(InnotronicWheels)
@@ -14,6 +15,10 @@ const std::map<std::string, Variable_ptr> InnotronicWheels::get_defaults() {
         {"traveled_distance", std::make_shared<NumberVariable>()},
         {"heading", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
+        // Safety gate fed by an external rule (e.g. delta arm endstops). When false,
+        // speed() is forced to 0 and drive_meters() is ignored. Defaults true so robots
+        // without such a rule are unaffected.
+        {"drivable", std::make_shared<BooleanVariable>(true)},
     };
 }
 
@@ -24,6 +29,10 @@ InnotronicWheels::InnotronicWheels(const std::string name, const InnotronicDrive
 
 bool InnotronicWheels::is_enabled() const {
     return this->properties.at("enabled")->boolean_value;
+}
+
+bool InnotronicWheels::is_drivable() const {
+    return this->properties.at("drivable")->boolean_value;
 }
 
 void InnotronicWheels::step() {
@@ -67,19 +76,31 @@ void InnotronicWheels::call(const std::string method_name, const std::vector<Con
     if (method_name == "speed") {
         Module::expect(arguments, 2, numbery, numbery);
         if (this->is_enabled()) {
-            const double linear = arguments[0]->evaluate_number();
-            const double angular = arguments[1]->evaluate_number();
-            const double width = this->properties.at("width")->number_value;
-            this->left_motor->speed(linear - angular * width / 2.0, 0);
-            this->right_motor->speed(linear + angular * width / 2.0, 0);
+            if (!this->is_drivable()) {
+                // Not drivable: force a stop instead of ignoring, so the continuous
+                // speed-command stream brakes the robot rather than holding its last speed.
+                this->left_motor->speed(0, 0);
+                this->right_motor->speed(0, 0);
+                echo("%s: not drivable, blocking speed command", this->name.c_str());
+            } else {
+                const double linear = arguments[0]->evaluate_number();
+                const double angular = arguments[1]->evaluate_number();
+                const double width = this->properties.at("width")->number_value;
+                this->left_motor->speed(linear - angular * width / 2.0, 0);
+                this->right_motor->speed(linear + angular * width / 2.0, 0);
+            }
         }
     } else if (method_name == "drive_meters") {
         Module::expect(arguments, 2, numbery, numbery);
         if (this->is_enabled()) {
-            const double meters = arguments[0]->evaluate_number();
-            const double speed = arguments[1]->evaluate_number();
-            this->left_motor->drive_meters(meters, speed);
-            this->right_motor->drive_meters(meters, speed);
+            if (!this->is_drivable()) {
+                echo("%s: not drivable, blocking drive_meters command", this->name.c_str());
+            } else {
+                const double meters = arguments[0]->evaluate_number();
+                const double speed = arguments[1]->evaluate_number();
+                this->left_motor->drive_meters(meters, speed);
+                this->right_motor->drive_meters(meters, speed);
+            }
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
