@@ -92,7 +92,7 @@ def serial_connection() -> serial.Serial:
             raise Exception('No serial port found')
 
     print(f'Connecting to {usb_path}')
-    return serial.Serial(usb_path, baudrate=115200, timeout=0.1)
+    return serial.Serial(usb_path, baudrate=921600, timeout=0.1)
 
 
 if __name__ == '__main__':

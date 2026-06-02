@@ -37,7 +37,7 @@ def read(*, timeout: float) -> Iterator[str]:
             continue
 
 
-with serial.Serial(args.device_path, baudrate=115200, timeout=1.0) as port:
+with serial.Serial(args.device_path, baudrate=921600, timeout=1.0) as port:
     startup = Path(args.config_file).read_text('utf-8') + '\n'
     checksum = sum(ord(c) for c in startup) % 0x10000
 

@@ -13,7 +13,7 @@ WINDOW = 8
 parser = argparse.ArgumentParser(description='Push firmware via SerialBus OTB')
 parser.add_argument('firmware', help='Path to firmware binary')
 parser.add_argument('--port', default='/dev/ttyUSB0', help='Serial port')
-parser.add_argument('--baud', type=int, default=115200, help='Baudrate')
+parser.add_argument('--baud', type=int, default=921600, help='Baudrate')
 parser.add_argument('--target', type=int, required=True, help='Bus ID of target node')
 parser.add_argument('--bus', default='bus', help='SerialBus module name')
 parser.add_argument('--expander', help='Expander to pause broadcasts on')

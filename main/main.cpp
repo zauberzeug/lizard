@@ -9,6 +9,8 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "global.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
@@ -33,6 +35,7 @@
 #include <vector>
 
 #define BUFFER_SIZE 1024
+#define LOOP_PERIOD_MS 10 // target main-loop period; the loop sleeps only the remainder of this window
 
 Core_ptr core_module;
 
@@ -391,7 +394,7 @@ void app_main() {
     vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
     const uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = 921600,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -425,6 +428,7 @@ void app_main() {
 
     printf("\nReady.\n");
 
+    TickType_t last_wake = xTaskGetTickCount();
     while (true) {
         try {
             process_uart();
@@ -458,6 +462,13 @@ void app_main() {
             }
         }
 
-        delay(10);
+        // Keep a fixed loop period without drift: sleep until the next period
+        // boundary. If the work already overran the period, xTaskDelayUntil does
+        // not block and returns pdFALSE; then yield at least 1 tick so the idle
+        // task can run and feed the task watchdog.
+        if (xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(LOOP_PERIOD_MS)) == pdFALSE) {
+            last_wake = xTaskGetTickCount();
+            delay(1);
+        }
     }
 }
