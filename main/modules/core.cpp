@@ -6,6 +6,7 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "driver/gpio.h"
+#include "driver/uart.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -33,6 +34,7 @@ void Core::step() {
 void Core::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "restart") {
         Module::expect(arguments, 0);
+        uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100)); // flush async TX buffer before reboot
         esp_restart();
     } else if (method_name == "version") {
         const esp_app_desc_t *app_desc = esp_app_get_description();
