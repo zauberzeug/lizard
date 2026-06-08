@@ -8,14 +8,11 @@ using RoboClawMotor_ptr = std::shared_ptr<RoboClawMotor>;
 
 class RoboClawMotor : public Module {
 private:
-    static constexpr uint32_t DEFAULT_SPEED = 5000;
-    static constexpr uint32_t DEFAULT_ACCEL = 20000;
-    static constexpr uint32_t DEFAULT_DECCEL = 20000;
-
     const unsigned int motor_number;
     const RoboClaw_ptr roboclaw;
     bool enabled = true;
     bool calibrated = false;
+    uint32_t step_count = 0;
 
 public:
     RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number);

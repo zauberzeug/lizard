@@ -1,7 +1,7 @@
 #include "roboclaw.h"
 #include "timing.h"
 
-#define MAXRETRY 2
+// MAXRETRY entfernt – wird jetzt aus Property "max_retry" gelesen (siehe step())
 #define SetDWORDval(arg) (uint8_t)(((uint32_t)arg) >> 24), (uint8_t)(((uint32_t)arg) >> 16), (uint8_t)(((uint32_t)arg) >> 8), (uint8_t)arg
 #define SetWORDval(arg) (uint8_t)(((uint16_t)arg) >> 8), (uint8_t)arg
 
@@ -10,6 +10,8 @@ REGISTER_MODULE_DEFAULTS(RoboClaw)
 const std::map<std::string, Variable_ptr> RoboClaw::get_defaults() {
     return {
         {"temperature", std::make_shared<NumberVariable>()},
+        {"timeout", std::make_shared<IntegerVariable>(20)},   // [ticks] Wartezeit pro Byte-Read
+        {"max_retry", std::make_shared<IntegerVariable>(5)},  // Wiederholungen pro Befehl
     };
 }
 
@@ -19,6 +21,10 @@ RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const u
 }
 
 void RoboClaw::step() {
+    // Properties -> Member-Variablen synchronisieren (ermöglicht Konfiguration aus .liz)
+    this->timeout = static_cast<uint32_t>(this->properties.at("timeout")->integer_value);
+    this->max_retry = static_cast<uint8_t>(this->properties.at("max_retry")->integer_value);
+
     if (millis_since(this->last_temp_reading) > 1000) {
         uint16_t temp;
         this->ReadTemp(temp);
@@ -48,7 +54,7 @@ uint16_t RoboClaw::crc_get() {
 }
 
 bool RoboClaw::write_n(uint8_t cnt, ...) {
-    uint8_t trys = MAXRETRY;
+    uint8_t trys = this->max_retry;
     do {
         crc_clear();
         // send data with crc
@@ -71,7 +77,7 @@ bool RoboClaw::write_n(uint8_t cnt, ...) {
 
 bool RoboClaw::read_n(uint8_t cnt, uint8_t cmd, ...) {
     uint32_t value = 0;
-    uint8_t trys = MAXRETRY;
+    uint8_t trys = this->max_retry;
     int16_t data;
     do {
         this->serial->flush();
@@ -147,7 +153,7 @@ uint8_t RoboClaw::Read1(uint8_t cmd, bool *valid) {
         *valid = false;
 
     uint8_t value = 0;
-    uint8_t trys = MAXRETRY;
+    uint8_t trys = this->max_retry;
     int16_t data;
     do {
         this->serial->flush();
@@ -188,7 +194,7 @@ uint16_t RoboClaw::Read2(uint8_t cmd, bool *valid) {
         *valid = false;
 
     uint16_t value = 0;
-    uint8_t trys = MAXRETRY;
+    uint8_t trys = this->max_retry;
     int16_t data;
     do {
         this->serial->flush();
@@ -235,7 +241,7 @@ uint32_t RoboClaw::Read4(uint8_t cmd, bool *valid) {
         *valid = false;
 
     uint32_t value = 0;
-    uint8_t trys = MAXRETRY;
+    uint8_t trys = this->max_retry;
     int16_t data;
     do {
         this->serial->flush();
@@ -294,7 +300,7 @@ uint32_t RoboClaw::Read4_1(uint8_t cmd, uint8_t *status, bool *valid) {
         *valid = false;
 
     uint32_t value = 0;
-    uint8_t trys = MAXRETRY;
+    uint8_t trys = this->max_retry;
     int16_t data;
     do {
         this->serial->flush();
@@ -433,7 +439,7 @@ bool RoboClaw::ResetEncoders() {
 
 bool RoboClaw::ReadVersion(char *version) {
     int data;
-    uint8_t trys = MAXRETRY;
+    uint8_t trys = this->max_retry;
     do {
         this->serial->flush();
 
@@ -732,7 +738,7 @@ bool RoboClaw::SetPinFunctions(uint8_t S3mode, uint8_t S4mode, uint8_t S5mode) {
 
 bool RoboClaw::GetPinFunctions(uint8_t &S3mode, uint8_t &S4mode, uint8_t &S5mode) {
     uint8_t val1 = 0, val2 = 0, val3 = 0;
-    uint8_t trys = MAXRETRY;
+    uint8_t trys = this->max_retry;
     int16_t data;
     do {
         this->serial->flush();

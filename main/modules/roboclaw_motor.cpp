@@ -14,6 +14,9 @@ const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
         {"calibrated", std::make_shared<BooleanVariable>(false)},
         {"limit_low", std::make_shared<IntegerVariable>()},
         {"limit_high", std::make_shared<IntegerVariable>()},
+        {"default_speed", std::make_shared<IntegerVariable>(40)},
+        {"default_accel", std::make_shared<IntegerVariable>(80)},
+        {"default_deccel", std::make_shared<IntegerVariable>(80)},
     };
 }
 
@@ -34,13 +37,15 @@ void RoboClawMotor::step() {
         }
     }
 
-    uint8_t status;
-    bool valid;
-    int64_t position = this->motor_number == 1 ? this->roboclaw->ReadEncM1(&status, &valid) : this->roboclaw->ReadEncM2(&status, &valid);
-    if (!valid) {
-        throw std::runtime_error("could not read motor position");
+    if (++this->step_count % 10 == 0) {
+        uint8_t status;
+        bool valid;
+        int64_t position = this->motor_number == 1 ? this->roboclaw->ReadEncM1(&status, &valid) : this->roboclaw->ReadEncM2(&status, &valid);
+        if (!valid) {
+            throw std::runtime_error("could not read motor position");
+        }
+        this->properties["position"]->integer_value = position;
     }
-    this->properties["position"]->integer_value = position;
     Module::step();
 }
 
@@ -70,13 +75,13 @@ void RoboClawMotor::call(const std::string method_name, const std::vector<ConstE
         int32_t target = arguments[0]->evaluate_integer();
         uint32_t speed = arguments.size() > 1
                              ? static_cast<uint32_t>(std::abs((int32_t)arguments[1]->evaluate_number()))
-                             : DEFAULT_SPEED;
+                             : static_cast<uint32_t>(this->properties.at("default_speed")->integer_value);
         uint32_t accel = arguments.size() > 2
                              ? static_cast<uint32_t>(std::abs((int32_t)arguments[2]->evaluate_number()))
-                             : DEFAULT_ACCEL;
+                             : static_cast<uint32_t>(this->properties.at("default_accel")->integer_value);
         uint32_t deccel = arguments.size() > 3
                               ? static_cast<uint32_t>(std::abs((int32_t)arguments[3]->evaluate_number()))
-                              : DEFAULT_DECCEL;
+                              : static_cast<uint32_t>(this->properties.at("default_deccel")->integer_value);
         this->position(target, speed, accel, deccel);
     } else if (method_name == "enable") {
         Module::expect(arguments, 0);

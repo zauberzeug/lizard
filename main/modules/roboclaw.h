@@ -14,7 +14,8 @@ using RoboClaw_ptr = std::shared_ptr<RoboClaw>;
 
 class RoboClaw : public Module {
     uint16_t crc;
-    const uint32_t timeout = 5; // [ticks]
+    uint32_t timeout = 20;   // [ticks] = 20ms at 1000Hz FreeRTOS; konfigurierbar via Property
+    uint8_t max_retry = 5;   // Wiederholungen pro Befehl; konfigurierbar via Property
     const uint8_t address;
     const ConstSerial_ptr serial;
     unsigned long int last_temp_reading = 0;
