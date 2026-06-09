@@ -71,6 +71,7 @@ public:
     // Status codes exposed via the "status" property (readable from Lizard).
     static constexpr int64_t STATUS_OK = 0;
     static constexpr int64_t STATUS_SET_MODE_FAILED = 1;
+    static constexpr int64_t STATUS_SET_MODE_PENDING = 2;
 
     MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id);
     void subscribe_to_can();

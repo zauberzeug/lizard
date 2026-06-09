@@ -70,6 +70,9 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
     mode = std::clamp(mode, (uint8_t)0x00, MAX_MODE);
     uint8_t data[] = {0x82, mode};
     this->send(data, 2);
+    // Mark the attempt as pending so the property reflects the most recent
+    // set_mode rather than a stale result if this ack is lost on the bus.
+    this->properties.at("status")->integer_value = STATUS_SET_MODE_PENDING;
 }
 
 void MksServoMotor::send_set_bitrate(uint8_t rate) {
