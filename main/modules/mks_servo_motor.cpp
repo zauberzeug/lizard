@@ -33,7 +33,7 @@ void MksServoMotor::subscribe_to_can() {
     this->can->subscribe(this->can_id, std::static_pointer_cast<Module>(this->shared_from_this()));
     // Send the initial configuration only after the subscription is in place,
     // so the 0x82 acknowledgement is observed and reflected in "set_mode_status".
-    this->send_working_current(1700);
+    this->send_working_current(this->properties.at("working_current")->integer_value);
     this->send_set_mode(MODE_SR_vFOC); // required for 0xF5/0xF6 bus motion commands
 }
 
