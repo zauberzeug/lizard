@@ -14,6 +14,7 @@ private:
     bool enabled = true;
 
     void send(const uint8_t *data, uint8_t len);
+    bool crc_ok(const uint8_t *data, int count) const;
     void send_position_error_read();
     void send_position_read();
     void send_speed_read();
@@ -22,6 +23,8 @@ private:
     void enable();
     void disable();
     void send_set_mode(uint8_t mode);
+    void send_set_bitrate(int64_t hz);
+    void send_set_can_id(int64_t new_id);
     void send_working_current(int64_t ma);
     void send_holding_current(int64_t pct);
     void send_speed_internal(int64_t speed, int64_t direction, int64_t acc);
@@ -42,7 +45,32 @@ public:
     static constexpr int64_t MAX_HOLDING_RATIO = 9;
     static constexpr int64_t MAX_SPEED = 3000;
     static constexpr int64_t MAX_ACC = 255;
-    static constexpr uint8_t MAX_MODE = 0x05;
+
+    // Working modes (0x82 command).
+    static constexpr uint8_t MODE_CR_OPEN = 0x00;
+    static constexpr uint8_t MODE_CR_CLOSE = 0x01;
+    static constexpr uint8_t MODE_CR_vFOC = 0x02;
+    static constexpr uint8_t MODE_SR_OPEN = 0x03;
+    static constexpr uint8_t MODE_SR_CLOSE = 0x04;
+    static constexpr uint8_t MODE_SR_vFOC = 0x05;
+    static constexpr uint8_t MAX_MODE = MODE_SR_vFOC;
+
+    // CAN bitrates (0x8A command).
+    static constexpr uint8_t BITRATE_125K = 0x00;
+    static constexpr uint8_t BITRATE_250K = 0x01;
+    static constexpr uint8_t BITRATE_500K = 0x02;
+    static constexpr uint8_t BITRATE_1M = 0x03;
+
+    // Slave CAN ID range (0x8B command). 0 is the broadcast address and is
+    // intentionally excluded here so an individual motor isn't accidentally
+    // set to listen to everything.
+    static constexpr uint16_t MIN_CAN_ID = 1;
+    static constexpr uint16_t MAX_CAN_ID = 2047;
+
+    // Status codes exposed via the "set_mode_status" property (readable from Lizard).
+    static constexpr int64_t STATUS_OK = 0;
+    static constexpr int64_t STATUS_SET_MODE_FAILED = 1;
+    static constexpr int64_t STATUS_SET_MODE_PENDING = 2;
 
     MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id);
     void subscribe_to_can();
