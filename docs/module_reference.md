@@ -737,7 +737,7 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.zero()`                        | Set current position as zero                                                 |                       |
 | `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                             | `int`                 |
 | `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10) | `int`                 |
-| `motor.set_bitrate(rate)`             | Set CAN bitrate ("125K", "250K", "500K" or "1M")                             | `str`                 |
+| `motor.set_bitrate(hz)`               | Set CAN bitrate in Hz (125000, 250000, 500000 or 1000000)                    | `int`                 |
 | `motor.set_can_id(id)`                | Set motor's CAN ID (1-2047)                                                  | `int`                 |
 | `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                       | `float`, `int`, `int` |
 | `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                 | `int`, `int`, `int`   |
@@ -758,6 +758,7 @@ The `read_position_error()` method requests the current position error from the 
 The result is available in the `position_error` property (in degrees) once the motor responds.
 
 The `set_bitrate()` method changes the CAN bitrate on the motor.
+The rate is given in Hz and must be one of the four supported values (125000, 250000, 500000 or 1000000); any other value is rejected with a log message and no command is sent.
 The motor switches to the new bitrate immediately, which means communication with the motor is lost until the Lizard CAN bus is also reconfigured to match the new bitrate.
 
 The `set_can_id()` method changes the motor's CAN ID (range 1-2047, default 1).

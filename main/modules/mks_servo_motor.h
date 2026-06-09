@@ -23,7 +23,7 @@ private:
     void enable();
     void disable();
     void send_set_mode(uint8_t mode);
-    void send_set_bitrate(uint8_t rate);
+    void send_set_bitrate(int64_t hz);
     void send_set_can_id(int64_t new_id);
     void send_working_current(int64_t ma);
     void send_holding_current(int64_t pct);
@@ -60,7 +60,6 @@ public:
     static constexpr uint8_t BITRATE_250K = 0x01;
     static constexpr uint8_t BITRATE_500K = 0x02;
     static constexpr uint8_t BITRATE_1M = 0x03;
-    static constexpr uint8_t MAX_BITRATE = BITRATE_1M;
 
     // Slave CAN ID range (0x8B command). 0 is the broadcast address and is
     // intentionally excluded here so an individual motor isn't accidentally

@@ -75,8 +75,28 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
     this->properties.at("set_mode_status")->integer_value = STATUS_SET_MODE_PENDING;
 }
 
-void MksServoMotor::send_set_bitrate(uint8_t rate) {
-    rate = std::clamp(rate, (uint8_t)0x00, MAX_BITRATE);
+void MksServoMotor::send_set_bitrate(int64_t hz) {
+    uint8_t rate;
+    switch (hz) {
+    case 125000:
+        rate = BITRATE_125K;
+        break;
+    case 250000:
+        rate = BITRATE_250K;
+        break;
+    case 500000:
+        rate = BITRATE_500K;
+        break;
+    case 1000000:
+        rate = BITRATE_1M;
+        break;
+    default:
+        // Only the four discrete rates are valid; reject anything else
+        // instead of clamping silently onto the wrong bus speed.
+        echo("%s set_bitrate: unsupported rate %d, expected 125000/250000/500000/1000000",
+             this->name.c_str(), (int)hz);
+        return;
+    }
     uint8_t data[] = {0x8A, rate};
     this->send(data, 2);
 }
@@ -188,20 +208,8 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         Module::expect(arguments, 1, integer);
         this->send_set_mode((uint8_t)arguments[0]->evaluate_integer());
     } else if (method_name == "set_bitrate") {
-        Module::expect(arguments, 1, string);
-        std::string rate = arguments[0]->evaluate_string();
-        std::transform(rate.begin(), rate.end(), rate.begin(), ::toupper);
-        if (rate == "125K") {
-            this->send_set_bitrate(BITRATE_125K);
-        } else if (rate == "250K") {
-            this->send_set_bitrate(BITRATE_250K);
-        } else if (rate == "500K") {
-            this->send_set_bitrate(BITRATE_500K);
-        } else if (rate == "1M") {
-            this->send_set_bitrate(BITRATE_1M);
-        } else {
-            echo("%s set_bitrate: unknown rate '%s', expected 125K/250K/500K/1M", this->name.c_str(), rate.c_str());
-        }
+        Module::expect(arguments, 1, integer);
+        this->send_set_bitrate(arguments[0]->evaluate_integer());
     } else if (method_name == "set_can_id") {
         Module::expect(arguments, 1, integer);
         this->send_set_can_id(arguments[0]->evaluate_integer());
