@@ -70,8 +70,6 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
     mode = std::clamp(mode, (uint8_t)0x00, MAX_MODE);
     uint8_t data[] = {0x82, mode};
     this->send(data, 2);
-    // Mark the attempt as pending so the property reflects the most recent
-    // set_mode rather than a stale result if this ack is lost on the bus.
     this->properties.at("set_mode_status")->integer_value = STATUS_SET_MODE_PENDING;
 }
 
@@ -91,10 +89,7 @@ void MksServoMotor::send_set_bitrate(int64_t hz) {
         rate = BITRATE_1M;
         break;
     default:
-        // Only the four discrete rates are valid; reject anything else
-        // instead of clamping silently onto the wrong bus speed.
-        echo("%s set_bitrate: unsupported rate %d, expected 125000/250000/500000/1000000",
-             this->name.c_str(), (int)hz);
+        echo("%s set_bitrate: unsupported rate %d, expected 125000/250000/500000/1000000", this->name.c_str(), (int)hz);
         return;
     }
     uint8_t data[] = {0x8A, rate};
@@ -300,8 +295,6 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
         if (!this->crc_ok(data, count)) {
             return;
         }
-        // MKS acks use 0x01 = success; treat 0x00 (fail) and any other code
-        // (e.g. 0x02 error/timeout) as a failure rather than silently OK.
         if (data[1] == 0x01) {
             this->properties.at("set_mode_status")->integer_value = STATUS_OK;
         } else {
