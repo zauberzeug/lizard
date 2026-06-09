@@ -20,7 +20,7 @@ const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
         {"working_current", std::make_shared<IntegerVariable>(1700)},
         {"enabled", std::make_shared<BooleanVariable>(true)},
         {"position_error", std::make_shared<NumberVariable>()},
-        {"status", std::make_shared<IntegerVariable>(STATUS_OK)},
+        {"set_mode_status", std::make_shared<IntegerVariable>(STATUS_OK)},
     };
 }
 
@@ -32,7 +32,7 @@ MksServoMotor::MksServoMotor(const std::string name, const Can_ptr can, const ui
 void MksServoMotor::subscribe_to_can() {
     this->can->subscribe(this->can_id, std::static_pointer_cast<Module>(this->shared_from_this()));
     // Send the initial configuration only after the subscription is in place,
-    // so the 0x82 acknowledgement is observed and reflected in "status".
+    // so the 0x82 acknowledgement is observed and reflected in "set_mode_status".
     this->send_working_current(1700);
     this->send_set_mode(MODE_SR_vFOC); // required for 0xF5/0xF6 bus motion commands
 }
@@ -72,7 +72,7 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
     this->send(data, 2);
     // Mark the attempt as pending so the property reflects the most recent
     // set_mode rather than a stale result if this ack is lost on the bus.
-    this->properties.at("status")->integer_value = STATUS_SET_MODE_PENDING;
+    this->properties.at("set_mode_status")->integer_value = STATUS_SET_MODE_PENDING;
 }
 
 void MksServoMotor::send_set_bitrate(uint8_t rate) {
@@ -295,9 +295,9 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
         // MKS acks use 0x01 = success; treat 0x00 (fail) and any other code
         // (e.g. 0x02 error/timeout) as a failure rather than silently OK.
         if (data[1] == 0x01) {
-            this->properties.at("status")->integer_value = STATUS_OK;
+            this->properties.at("set_mode_status")->integer_value = STATUS_OK;
         } else {
-            this->properties.at("status")->integer_value = STATUS_SET_MODE_FAILED;
+            this->properties.at("set_mode_status")->integer_value = STATUS_SET_MODE_FAILED;
         }
     }
 }

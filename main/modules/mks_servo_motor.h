@@ -68,7 +68,7 @@ public:
     static constexpr uint16_t MIN_CAN_ID = 1;
     static constexpr uint16_t MAX_CAN_ID = 2047;
 
-    // Status codes exposed via the "status" property (readable from Lizard).
+    // Status codes exposed via the "set_mode_status" property (readable from Lizard).
     static constexpr int64_t STATUS_OK = 0;
     static constexpr int64_t STATUS_SET_MODE_FAILED = 1;
     static constexpr int64_t STATUS_SET_MODE_PENDING = 2;

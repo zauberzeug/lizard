@@ -727,7 +727,7 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.working_current` | Working current (mA, 0-3000, default: 1700) | `int`     |
 | `motor.enabled`         | Whether the motor is enabled                | `bool`    |
 | `motor.position_error`  | Last read position error (degrees)          | `float`   |
-| `motor.status`          | Status code (0 = OK, 1 = set_mode failed)   | `int`     |
+| `motor.set_mode_status` | Result of the last `set_mode` (0 = OK, 1 = failed, 2 = pending) | `int`     |
 
 | Methods                               | Description                                                                  | Arguments             |
 | ------------------------------------- | ---------------------------------------------------------------------------- | --------------------- |
