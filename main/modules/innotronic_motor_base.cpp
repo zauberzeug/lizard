@@ -75,6 +75,18 @@ void InnotronicMotorBase::configure_node_id(uint8_t new_node_id) {
     this->configure(0x01, static_cast<uint16_t>(new_node_id) << 5, 0);
 }
 
+void InnotronicMotorBase::configure_status_interval(uint8_t cmd_id, uint16_t interval_ms) {
+    // Configure 0x0B / SettingID 0x04: cyclic interval for a single status message.
+    // Byte 1 selects the target status message (0x11, 0x12 or 0x15). The firmware reads the
+    // interval as a uint16 from the last two frame bytes (byte 6 = low, byte 7 = high).
+    uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    data[0] = 0x04;
+    data[1] = cmd_id;
+    std::memcpy(data + 6, &interval_ms, 2);
+    uint32_t can_id = (this->node_id << 5) | 0x0B;
+    this->can->send(can_id, data);
+}
+
 void InnotronicMotorBase::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "off") {
         Module::expect(arguments, 0);
@@ -96,6 +108,10 @@ void InnotronicMotorBase::call(const std::string method_name, const std::vector<
     } else if (method_name == "configure_node_id") {
         Module::expect(arguments, 1, integer);
         this->configure_node_id(static_cast<uint8_t>(arguments[0]->evaluate_integer()));
+    } else if (method_name == "configure_status_interval") {
+        Module::expect(arguments, 2, integer, integer);
+        this->configure_status_interval(static_cast<uint8_t>(arguments[0]->evaluate_integer()),
+                                        static_cast<uint16_t>(arguments[1]->evaluate_integer()));
     } else if (method_name == "enable") {
         Module::expect(arguments, 0);
         this->enable();

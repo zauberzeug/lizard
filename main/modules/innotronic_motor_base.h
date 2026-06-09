@@ -25,6 +25,7 @@ public:
 
     void configure(uint8_t setting_id, uint16_t value1, int32_t value2);
     void configure_node_id(uint8_t new_node_id);
+    void configure_status_interval(uint8_t cmd_id, uint16_t interval_ms);
 
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void step() override;
