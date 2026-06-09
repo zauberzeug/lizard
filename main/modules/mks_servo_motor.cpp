@@ -27,12 +27,14 @@ const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
 MksServoMotor::MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id)
     : Module(name), can(can), can_id(can_id) {
     this->properties = MksServoMotor::get_defaults();
-    this->send_working_current(1700);
-    this->send_set_mode(MODE_SR_vFOC); // required for 0xF5/0xF6 bus motion commands
 }
 
 void MksServoMotor::subscribe_to_can() {
     this->can->subscribe(this->can_id, std::static_pointer_cast<Module>(this->shared_from_this()));
+    // Send the initial configuration only after the subscription is in place,
+    // so the 0x82 acknowledgement is observed and reflected in "status".
+    this->send_working_current(1700);
+    this->send_set_mode(MODE_SR_vFOC); // required for 0xF5/0xF6 bus motion commands
 }
 
 void MksServoMotor::send(const uint8_t *data, uint8_t len) {
