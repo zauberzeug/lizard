@@ -85,7 +85,7 @@ void MksServoMotor::send_set_can_id(int64_t new_id) {
     new_id = std::clamp(new_id, (int64_t)MIN_CAN_ID, (int64_t)MAX_CAN_ID);
     uint8_t data[] = {0x8B, (uint8_t)(new_id >> 8), (uint8_t)(new_id & 0xFF)};
     this->send(data, 3);
-    echo("%s set_can_id: motor now responds on CAN id %d - reconstruct the module with the new can_id",
+    echo("%s set_can_id: requested CAN id change to %d - if accepted, the motor responds on the new id; reconstruct the module with the new can_id",
          this->name.c_str(), (int)new_id);
 }
 
