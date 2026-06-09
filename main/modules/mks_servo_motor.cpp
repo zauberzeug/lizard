@@ -289,10 +289,12 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
         if (!this->crc_ok(data, count)) {
             return;
         }
-        if (data[1] == 0x00) {
-            this->properties.at("status")->integer_value = STATUS_SET_MODE_FAILED;
-        } else {
+        // MKS acks use 0x01 = success; treat 0x00 (fail) and any other code
+        // (e.g. 0x02 error/timeout) as a failure rather than silently OK.
+        if (data[1] == 0x01) {
             this->properties.at("status")->integer_value = STATUS_OK;
+        } else {
+            this->properties.at("status")->integer_value = STATUS_SET_MODE_FAILED;
         }
     }
 }
