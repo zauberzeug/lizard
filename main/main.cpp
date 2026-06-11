@@ -19,6 +19,8 @@
 #include "rom/uart.h"
 #include "storage.h"
 #include "utils/bus_backup.h"
+#include "utils/interpreter_lock.h"
+#include "utils/scheduler.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -129,7 +131,7 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
     }
 }
 
-std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
+std::vector<Action_ptr> compile_actions(const struct owl_ref ref, const bool allow_await = true) {
     std::vector<Action_ptr> actions;
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r)) {
         const struct parsed_action action = parsed_action_get(r);
@@ -166,10 +168,16 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
             }
             actions.push_back(std::make_shared<VariableAssignment>(variable, expression));
         } else if (!action.await_condition.empty) {
+            if (!allow_await) {
+                throw std::runtime_error("await is not allowed in scheduled blocks");
+            }
             struct parsed_await_condition await_condition = parsed_await_condition_get(action.await_condition);
             const ConstExpression_ptr condition = compile_expression(await_condition.condition);
             actions.push_back(std::make_shared<AwaitCondition>(condition));
         } else if (!action.await_routine.empty) {
+            if (!allow_await) {
+                throw std::runtime_error("await is not allowed in scheduled blocks");
+            }
             struct parsed_await_routine await_routine = parsed_await_routine_get(action.await_routine);
             const std::string routine_name = identifier_to_string(await_routine.routine_name);
             const Routine_ptr routine = Global::get_routine(routine_name);
@@ -281,6 +289,15 @@ void process_tree(owl_tree *const tree, bool from_expander) {
             const Routine_ptr routine = std::make_shared<Routine>(compile_actions(actions.action));
             const ConstExpression_ptr condition = compile_expression(rule_definition.condition);
             Global::add_rule(std::make_shared<Rule>(condition, routine));
+        } else if (!statement.schedule_definition.empty) {
+            const struct parsed_schedule_definition schedule_definition = parsed_schedule_definition_get(statement.schedule_definition);
+            const ConstExpression_ptr time = compile_expression(schedule_definition.time);
+            if (!time->is_numbery()) {
+                throw std::runtime_error("schedule time must be a number");
+            }
+            const struct parsed_actions actions = parsed_actions_get(schedule_definition.actions);
+            const Routine_ptr routine = std::make_shared<Routine>(compile_actions(actions.action, false));
+            scheduler::add(static_cast<int64_t>(time->evaluate_number() * 1000.0), routine);
         } else {
             throw std::runtime_error("unknown statement type");
         }
@@ -288,6 +305,7 @@ void process_tree(owl_tree *const tree, bool from_expander) {
 }
 
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
+    InterpreterLock lock;
     if (trigger_keep_alive) {
         core_module->keep_alive();
     }
@@ -333,6 +351,7 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
 }
 
 void process_line(const char *line, const int len) {
+    InterpreterLock lock;
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
         case '+':
@@ -380,6 +399,7 @@ void process_uart() {
 }
 
 void run_step(Module_ptr module) {
+    InterpreterLock lock;
     try {
         module->step();
     } catch (const std::runtime_error &e) {
@@ -408,6 +428,7 @@ void app_main() {
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
+        scheduler::init();
     } catch (const std::runtime_error &e) {
         echo("error while initializing core module: %s", e.what());
         exit(1);
@@ -440,6 +461,7 @@ void app_main() {
         run_step(core_module);
 
         for (auto const &rule : Global::rules) {
+            InterpreterLock lock;
             try {
                 if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
                     rule->routine->start();
@@ -451,6 +473,7 @@ void app_main() {
         }
 
         for (auto const &[routine_name, routine] : Global::routines) {
+            InterpreterLock lock;
             try {
                 routine->step();
             } catch (const std::runtime_error &e) {
