@@ -29,7 +29,7 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
         {"angle_left", std::make_shared<NumberVariable>()},
         {"angle_right", std::make_shared<NumberVariable>()},
         {"deg_limit", std::make_shared<NumberVariable>(60.0)},
-        {"cal_timeout", std::make_shared<NumberVariable>(10.0)},
+        {"cal_timeout", std::make_shared<NumberVariable>(30.0)},
         {"stall_current", std::make_shared<NumberVariable>(3.0)},
         // Set true if motor channel 1 is wired to the physical right motor (and m2 to the left).
         // Channel-mapping flips for moves, references, backoff, angle/current reporting; the
@@ -186,21 +186,17 @@ void InnotronicDeltaArm::start_reference(const std::string &side) {
         this->motor->reference_drive_start(this->channel_for_right(), false);
         echo("%s: reference right started", this->name.c_str());
     } else {
-        // Hotfix: warmup-both lifts both arms; its result is not trusted (first reference
-        // after power-on leaves motor left off-position). After the warmup we re-reference
-        // left and right individually — only those singles update calibrated_*. Combined
-        // frame: some firmware revs only honor "both" when m1 and m2 arrive in the same
-        // 0x0C frame. 0x10=CW, 0x20=CCW.
+        // "both" references both arms in a single double lift-up. Combined frame: some firmware
+        // revs only honor "both" when m1 and m2 arrive in the same 0x0C frame. 0x10=CW, 0x20=CCW.
         this->properties.at("calibrated_left")->boolean_value = false;
         this->properties.at("calibrated_right")->boolean_value = false;
         this->cal_state = cal_both;
         this->both_left_done = false;
         this->both_right_done = false;
-        this->in_both_sequence = true;
         uint8_t cmd_m1 = this->is_motors_swapped() ? 0x20 : 0x10;
         uint8_t cmd_m2 = this->is_motors_swapped() ? 0x10 : 0x20;
         this->motor->send_single_motor_control(cmd_m1, cmd_m2);
-        echo("%s: reference both (warmup) started", this->name.c_str());
+        echo("%s: reference both started", this->name.c_str());
     }
 }
 
@@ -322,7 +318,6 @@ void InnotronicDeltaArm::step() {
             this->properties.at("calibrated_left")->boolean_value = false;
             this->properties.at("calibrated_right")->boolean_value = false;
             this->cal_state = cal_idle;
-            this->in_both_sequence = false;
             echo("%s: calibration timeout after %.1fs — disabling", this->name.c_str(), timeout_s);
             this->disable();
         }
@@ -340,21 +335,10 @@ void InnotronicDeltaArm::step() {
             } else {
                 echo("%s: left reference failed (ref_result=%d) — disabling", this->name.c_str(), this->last_ref_left);
             }
-            if (this->in_both_sequence && ok) {
-                // Hotfix step 3: single-left succeeded, now run single-right to finish the chain.
-                this->cal_state = cal_idle;
-                this->start_reference("right");
-                if (this->cal_state == cal_idle) {
-                    this->in_both_sequence = false;
-                    this->properties.at("calibrating")->boolean_value = false;
-                }
-            } else {
-                this->in_both_sequence = false;
-                this->properties.at("calibrating")->boolean_value = false;
-                this->cal_state = cal_idle;
-                if (!ok) {
-                    this->disable();
-                }
+            this->properties.at("calibrating")->boolean_value = false;
+            this->cal_state = cal_idle;
+            if (!ok) {
+                this->disable();
             }
         } else if (left_endstop_active && !this->brake_sent_left) {
             this->motor->reference_drive_stop(this->channel_for_left());
@@ -371,7 +355,6 @@ void InnotronicDeltaArm::step() {
             } else {
                 echo("%s: right reference failed (ref_result=%d) — disabling", this->name.c_str(), this->last_ref_right);
             }
-            this->in_both_sequence = false;
             this->properties.at("calibrating")->boolean_value = false;
             this->cal_state = cal_idle;
             if (!ok) {
@@ -405,23 +388,17 @@ void InnotronicDeltaArm::step() {
             }
         }
         if (this->both_left_done && this->both_right_done) {
-            echo("%s: warmup both done (left=%d right=%d)",
+            const bool left_ok = this->last_ref_left == REF_OK;
+            const bool right_ok = this->last_ref_right == REF_OK;
+            this->properties.at("calibrated_left")->boolean_value = left_ok;
+            this->properties.at("calibrated_right")->boolean_value = right_ok;
+            echo("%s: reference both done (left=%d right=%d)",
                  this->name.c_str(), this->last_ref_left, this->last_ref_right);
-            if (this->in_both_sequence) {
-                // Hotfix step 2: warmup acknowledged (result is intentionally not validated —
-                // REF_OVERCURRENT during the first lift-up is expected), now run the trustworthy
-                // single-left. start_reference handles the endstop backoff (arm may be sitting
-                // at the endstop after the warmup) and resets the per-phase ref tracking state.
-                this->cal_state = cal_idle;
-                this->start_reference("left");
-                if (this->cal_state == cal_idle) {
-                    // start_reference rejected (e.g. motor got disabled mid-sequence).
-                    this->in_both_sequence = false;
-                    this->properties.at("calibrating")->boolean_value = false;
-                }
-            } else {
-                this->properties.at("calibrating")->boolean_value = false;
-                this->cal_state = cal_idle;
+            this->properties.at("calibrating")->boolean_value = false;
+            this->cal_state = cal_idle;
+            if (!left_ok || !right_ok) {
+                echo("%s: both reference failed — disabling", this->name.c_str());
+                this->disable();
             }
         }
         break;
@@ -453,7 +430,6 @@ void InnotronicDeltaArm::step() {
                  this->name.c_str(), MAX_BACKOFF_DEG, left_travel, right_travel);
             this->pending_ref_side.clear();
             this->cal_state = cal_idle;
-            this->in_both_sequence = false;
             this->properties.at("calibrating")->boolean_value = false;
             this->disable();
             break;
@@ -505,7 +481,6 @@ void InnotronicDeltaArm::call(const std::string method_name, const std::vector<C
         if (arguments.size() == 0) {
             if (this->cal_state != cal_idle) {
                 this->cal_state = cal_idle;
-                this->in_both_sequence = false;
                 this->properties.at("calibrating")->boolean_value = false;
                 echo("%s: calibration aborted", this->name.c_str());
             }
