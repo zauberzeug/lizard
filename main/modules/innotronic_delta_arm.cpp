@@ -1,4 +1,5 @@
 #include "innotronic_delta_arm.h"
+#include "module_helpers.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <cmath>
@@ -16,7 +17,16 @@ static constexpr unsigned long BACKOFF_INTERVAL_MS = 200;
 // still reporting active, the sensor is assumed stuck (e.g. broken cable) and we abort.
 static constexpr double MAX_BACKOFF_DEG = 10.0;
 
-REGISTER_MODULE_DEFAULTS(InnotronicDeltaArm)
+static Module_ptr create_innotronic_delta_arm(const std::string &name,
+                                              const std::vector<ConstExpression_ptr> &arguments,
+                                              MessageHandler) {
+    Module::expect(arguments, 3, identifier, identifier, identifier);
+    const InnotronicDeltaMotor_ptr motor = get_module_argument<InnotronicDeltaMotor>(arguments[0]);
+    const Input_ptr left_endstop = get_module_argument<Input>(arguments[1]);
+    const Input_ptr right_endstop = get_module_argument<Input>(arguments[2]);
+    return std::make_shared<InnotronicDeltaArm>(name, motor, left_endstop, right_endstop);
+}
+REGISTER_MODULE(InnotronicDeltaArm, &create_innotronic_delta_arm)
 
 const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
     return {
@@ -40,7 +50,7 @@ const std::map<std::string, Variable_ptr> InnotronicDeltaArm::get_defaults() {
 
 InnotronicDeltaArm::InnotronicDeltaArm(const std::string name, const InnotronicDeltaMotor_ptr motor,
                                        const Input_ptr left_endstop, const Input_ptr right_endstop)
-    : Module(innotronic_delta_arm, name), motor(motor), left_endstop(left_endstop), right_endstop(right_endstop),
+    : Module(name), motor(motor), left_endstop(left_endstop), right_endstop(right_endstop),
       deg_per_tick(360.0 / motor->motor_ticks) {
     this->properties = InnotronicDeltaArm::get_defaults();
 }

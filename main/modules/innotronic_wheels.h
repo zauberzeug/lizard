@@ -4,6 +4,9 @@
 #include "module.h"
 
 class InnotronicWheels : public Module {
+public:
+    static inline constexpr const char *TYPE = "InnotronicWheels";
+
 private:
     const InnotronicDriveMotor_ptr left_motor;
     const InnotronicDriveMotor_ptr right_motor;

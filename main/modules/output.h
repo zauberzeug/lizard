@@ -17,6 +17,8 @@ protected:
     Output(const std::string name);
 
 public:
+    static inline constexpr const char *TYPE = "Output";
+
     void enable();
     void disable();
     void activate();

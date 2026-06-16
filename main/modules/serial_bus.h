@@ -14,6 +14,8 @@ using SerialBus_ptr = std::shared_ptr<SerialBus>;
 
 class SerialBus : public Module {
 public:
+    static inline constexpr const char *TYPE = "SerialBus";
+
     static constexpr size_t PAYLOAD_CAPACITY = 256;
 
     const ConstSerial_ptr serial;

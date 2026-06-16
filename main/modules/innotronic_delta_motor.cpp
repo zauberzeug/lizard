@@ -1,10 +1,25 @@
 #include "innotronic_delta_motor.h"
+#include "module_helpers.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <cstring>
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(InnotronicDeltaMotor)
+static Module_ptr create_innotronic_delta_motor(const std::string &name,
+                                                 const std::vector<ConstExpression_ptr> &arguments,
+                                                 MessageHandler) {
+    Module::expect(arguments, 3, identifier, integer, string);
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
+    const int64_t node_id = arguments[1]->evaluate_integer();
+    if (node_id < 0 || node_id > 0x3F) {
+        throw std::runtime_error("node ID must be between 0 and 63");
+    }
+    const std::string motor_type = arguments[2]->evaluate_string();
+    auto motor = std::make_shared<InnotronicDeltaMotor>(name, can, node_id, motor_type);
+    motor->subscribe_to_can();
+    return motor;
+}
+REGISTER_MODULE(InnotronicDeltaMotor, &create_innotronic_delta_motor)
 
 const std::map<std::string, Variable_ptr> InnotronicDeltaMotor::get_defaults() {
     auto defaults = InnotronicMotorBase::common_defaults();
@@ -38,7 +53,7 @@ InnotronicDeltaMotor::MotorConfig InnotronicDeltaMotor::config_for(const std::st
 
 InnotronicDeltaMotor::InnotronicDeltaMotor(const std::string name, const Can_ptr can, const uint32_t node_id,
                                            const std::string motor_type)
-    : InnotronicMotorBase(innotronic_delta_motor, name, can, node_id),
+    : InnotronicMotorBase(name, can, node_id),
       motor_ticks(config_for(motor_type).ticks) {
     this->properties = InnotronicDeltaMotor::get_defaults();
     // Switch firmware to the operating mode for this motor variant. Fire-and-forget at construction.

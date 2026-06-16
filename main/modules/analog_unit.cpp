@@ -4,14 +4,19 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-REGISTER_MODULE_DEFAULTS(AnalogUnit)
+static Module_ptr create_analog_unit(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 1, integer);
+    const uint8_t unit_id = arguments[0]->evaluate_integer();
+    return std::make_shared<AnalogUnit>(name, unit_id);
+}
+REGISTER_MODULE(AnalogUnit, &create_analog_unit)
 
 const std::map<std::string, Variable_ptr> AnalogUnit::get_defaults() {
     return {};
 }
 
 AnalogUnit::AnalogUnit(const std::string name, uint8_t unit_id)
-    : Module(analog_unit, name) {
+    : Module(name) {
     if (unit_id < 1 || unit_id > 2) {
         echo("error: invalid unit, using default 1");
         unit_id = 1;

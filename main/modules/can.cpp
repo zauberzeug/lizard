@@ -5,7 +5,14 @@
 #include "driver/twai.h"
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(Can)
+static Module_ptr create_can(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 3, integer, integer, integer);
+    const gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
+    const gpio_num_t tx_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+    const long baud_rate = arguments[2]->evaluate_integer();
+    return std::make_shared<Can>(name, rx_pin, tx_pin, baud_rate);
+}
+REGISTER_MODULE(Can, &create_can)
 
 const std::map<std::string, Variable_ptr> Can::get_defaults() {
     return {
@@ -23,7 +30,7 @@ const std::map<std::string, Variable_ptr> Can::get_defaults() {
 }
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
-    : Module(can, name) {
+    : Module(name) {
     this->g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
     this->f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -88,13 +95,14 @@ void Can::step() {
     this->properties.at("arb_lost_count")->integer_value = status_info.arb_lost_count;
     this->properties.at("bus_error_count")->integer_value = status_info.bus_error_count;
 
-    if (status_info.state == TWAI_STATE_BUS_OFF) {
+    if (status_info.state == TWAI_STATE_BUS_OFF && this->previous_state != TWAI_STATE_BUS_OFF) {
         try {
             this->reset_can_bus();
         } catch (const std::exception &e) {
             echo("CAN recovery failed: %s", e.what());
         }
     }
+    this->previous_state = status_info.state;
 
     Module::step();
 }
@@ -135,6 +143,11 @@ bool Can::receive() {
 void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
     twai_status_info_t status_info;
     if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
+        static unsigned long last_drop_log = 0;
+        if (millis_since(last_drop_log) > 1000) {
+            echo("CAN send dropped: bus not RUNNING");
+            last_drop_log = millis();
+        }
         return;
     }
 
@@ -191,11 +204,6 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
         if (twai_stop() != ESP_OK) {
             throw std::runtime_error("could not stop TWAI driver");
         }
-    } else if (method_name == "recover") {
-        Module::expect(arguments, 0);
-        if (twai_initiate_recovery() != ESP_OK) {
-            throw std::runtime_error("could not initiate recovery");
-        }
     } else if (method_name == "reset") {
         Module::expect(arguments, 0);
         try {
@@ -223,51 +231,49 @@ void Can::reset_can_bus() {
         throw std::runtime_error("could not get TWAI status");
     }
 
-    auto state_name = [](twai_state_t s) {
-        return s == TWAI_STATE_STOPPED      ? "STOPPED"
-               : s == TWAI_STATE_RUNNING    ? "RUNNING"
-               : s == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
-               : s == TWAI_STATE_RECOVERING ? "RECOVERING"
-                                            : "UNKNOWN";
-    };
+    echo("CAN bus state before reset: %s",
+         status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
+         : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
+         : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+         : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                      : "UNKNOWN");
 
-    echo("CAN bus state before reset: %s", state_name(status_info.state));
-
-    // Uninstall and reinstall the driver to avoid ESP-IDF assertion failure
-    // in twai_handle_tx_buffer_frame during twai_initiate_recovery() when
-    // in BUS_OFF state (tx_msg_count goes negative).
     if (status_info.state == TWAI_STATE_RUNNING) {
         if (twai_stop() != ESP_OK) {
             throw std::runtime_error("could not stop TWAI driver");
         }
     } else if (status_info.state == TWAI_STATE_RECOVERING) {
         const unsigned long start_time = millis();
+        const unsigned long timeout_ms = 500;
         while (true) {
             if (twai_get_status_info(&status_info) != ESP_OK) {
                 throw std::runtime_error("failed to get status during recovery");
             }
+
             if (status_info.state != TWAI_STATE_RECOVERING) {
                 break;
             }
-            if (millis_since(start_time) > 500) {
+
+            if (millis_since(start_time) > timeout_ms) {
                 throw std::runtime_error("recovery timeout");
             }
+
             delay(20);
         }
     }
 
+    // Tear down and rebuild the driver instead of calling twai_initiate_recovery():
+    // ESP-IDF v5.3.1 asserts tx_msg_count >= 0 in the TX ISR while leaving BUS_OFF,
+    // which would call abort() from interrupt context.
     if (twai_driver_uninstall() != ESP_OK) {
         throw std::runtime_error("could not uninstall TWAI driver");
     }
-
     if (twai_driver_install(&this->g_config, &this->t_config, &this->f_config) != ESP_OK) {
         throw std::runtime_error("could not reinstall TWAI driver");
     }
-
     if (twai_start() != ESP_OK) {
         throw std::runtime_error("could not start TWAI driver");
     }
-
     if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
         throw std::runtime_error("TWAI driver didn't start properly");
     }

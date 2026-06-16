@@ -14,6 +14,7 @@ private:
     bool enabled = true;
 
     void send(const uint8_t *data, uint8_t len);
+    bool crc_ok(const uint8_t *data, int count) const;
     void send_position_error_read();
     void send_position_read();
     void send_speed_read();
@@ -22,7 +23,7 @@ private:
     void enable();
     void disable();
     void send_set_mode(uint8_t mode);
-    void send_set_bitrate(uint8_t rate);
+    void send_set_bitrate(int64_t hz);
     void send_set_can_id(int64_t new_id);
     void send_working_current(int64_t ma);
     void send_holding_current(int64_t pct);
@@ -33,6 +34,8 @@ private:
     void send_coord_zero();
 
 public:
+    static inline constexpr const char *TYPE = "MksServoMotor";
+
     static constexpr int32_t COUNTS_PER_TURN = 16384;
     static constexpr double COUNTS_PER_DEG = 16384.0 / 360.0;
     static constexpr double POSITION_ERROR_COUNTS_PER_TURN = 51200.0;
@@ -57,7 +60,6 @@ public:
     static constexpr uint8_t BITRATE_250K = 0x01;
     static constexpr uint8_t BITRATE_500K = 0x02;
     static constexpr uint8_t BITRATE_1M = 0x03;
-    static constexpr uint8_t MAX_BITRATE = BITRATE_1M;
 
     // Slave CAN ID range (0x8B command). 0 is the broadcast address and is
     // intentionally excluded here so an individual motor isn't accidentally
@@ -65,9 +67,10 @@ public:
     static constexpr uint16_t MIN_CAN_ID = 1;
     static constexpr uint16_t MAX_CAN_ID = 2047;
 
-    // Status codes exposed via the "status" property (readable from Lizard).
+    // Status codes exposed via the "set_mode_status" property (readable from Lizard).
     static constexpr int64_t STATUS_OK = 0;
     static constexpr int64_t STATUS_SET_MODE_FAILED = 1;
+    static constexpr int64_t STATUS_SET_MODE_PENDING = 2;
 
     MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id);
     void subscribe_to_can();

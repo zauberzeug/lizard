@@ -1,8 +1,23 @@
 #include "motor_axis.h"
+#include "input.h"
+#include "module_helpers.h"
+#include "motor.h"
 #include "utils/uart.h"
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(MotorAxis)
+static Module_ptr create_motor_axis(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 3, identifier, identifier, identifier);
+    const std::string motor_name = arguments[0]->evaluate_identifier();
+    const Module_ptr module = Global::get_module(motor_name);
+    const Motor_ptr motor = std::dynamic_pointer_cast<Motor>(module);
+    if (!motor) {
+        throw std::runtime_error("module \"" + motor_name + "\" is not a supported motor for MotorAxis");
+    }
+    const Input_ptr input1 = get_module_argument<Input>(arguments[1]);
+    const Input_ptr input2 = get_module_argument<Input>(arguments[2]);
+    return std::make_shared<MotorAxis>(name, motor, input1, input2);
+}
+REGISTER_MODULE(MotorAxis, &create_motor_axis)
 
 const std::map<std::string, Variable_ptr> MotorAxis::get_defaults() {
     return {
@@ -11,7 +26,7 @@ const std::map<std::string, Variable_ptr> MotorAxis::get_defaults() {
 }
 
 MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2)
-    : Module(motor_axis, name), motor(motor), input1(input1), input2(input2) {
+    : Module(name), motor(motor), input1(input1), input2(input2) {
     this->properties = MotorAxis::get_defaults();
 }
 

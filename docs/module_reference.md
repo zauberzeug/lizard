@@ -411,7 +411,6 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | `can.get_status()`                                  | Print the driver status        |           |
 | `can.start()`                                       | Start the driver               |           |
 | `can.stop()`                                        | Stop the driver                |           |
-| `can.recover()`                                     | Recover the driver             |           |
 | `can.reset()`                                       | Reset the driver               |           |
 
 The method `get_status()` prints the following information:
@@ -430,8 +429,8 @@ The method `get_status()` prints the following information:
 After creating a CAN module, the driver is started automatically.
 The `start()` and `stop()` methods are primarily for debugging purposes.
 
-The `recover()` method can be used to recover the driver from a "BUS_OFF" state.
-In contrast, the `reset()` method will stop the driver, try to recover it and then start it again.
+The `reset()` method will stop the driver, try to recover it and then start it again.
+It can be used to recover the driver from a "BUS_OFF" state.
 
 ## Serial interface
 
@@ -721,14 +720,14 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | ------------------------------------ | -------------------------- | ----------------- |
 | `motor = MksServoMotor(can, can_id)` | CAN module and CAN node ID | CAN module, `int` |
 
-| Properties              | Description                                 | Data type |
-| ----------------------- | ------------------------------------------- | --------- |
-| `motor.position`        | Motor position (degrees)                    | `float`   |
-| `motor.speed`           | Motor speed (RPM)                           | `int`     |
-| `motor.working_current` | Working current (mA, 0-3000, default: 1700) | `int`     |
-| `motor.enabled`         | Whether the motor is enabled                | `bool`    |
-| `motor.position_error`  | Last read position error (degrees)          | `float`   |
-| `motor.status`          | Status code (0 = OK, 1 = set_mode failed)   | `int`     |
+| Properties              | Description                                                     | Data type |
+| ----------------------- | --------------------------------------------------------------- | --------- |
+| `motor.position`        | Motor position (degrees)                                        | `float`   |
+| `motor.speed`           | Motor speed (RPM)                                               | `int`     |
+| `motor.working_current` | Working current (mA, 0-3000, default: 1700)                     | `int`     |
+| `motor.enabled`         | Whether the motor is enabled                                    | `bool`    |
+| `motor.position_error`  | Last read position error (degrees)                              | `float`   |
+| `motor.set_mode_status` | Result of the last `set_mode` (0 = OK, 1 = failed, 2 = pending) | `int`     |
 
 | Methods                               | Description                                                                  | Arguments             |
 | ------------------------------------- | ---------------------------------------------------------------------------- | --------------------- |
@@ -738,7 +737,7 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.zero()`                        | Set current position as zero                                                 |                       |
 | `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                             | `int`                 |
 | `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10) | `int`                 |
-| `motor.set_bitrate(rate)`             | Set CAN bitrate ("125K", "250K", "500K" or "1M")                             | `str`                 |
+| `motor.set_bitrate(hz)`               | Set CAN bitrate in Hz (125000, 250000, 500000 or 1000000)                    | `int`                 |
 | `motor.set_can_id(id)`                | Set motor's CAN ID (1-2047)                                                  | `int`                 |
 | `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                       | `float`, `int`, `int` |
 | `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                 | `int`, `int`, `int`   |
@@ -758,6 +757,17 @@ If acceleration is 0, the motor stops immediately.
 The `read_position_error()` method requests the current position error from the motor via CAN.
 The result is available in the `position_error` property (in degrees) once the motor responds.
 
+The `set_bitrate()` method changes the CAN bitrate on the motor.
+The rate is given in Hz and must be one of the four supported values (125000, 250000, 500000 or 1000000);
+any other value is rejected with a log message and no command is sent.
+The motor switches to the new bitrate immediately, which means communication with the motor is lost
+until the Lizard CAN bus is also reconfigured to match the new bitrate.
+
+The `set_can_id()` method changes the motor's CAN ID (range 1-2047, default 1).
+The new ID is persisted on the drive, so the motor only responds on the new ID afterwards —
+the Lizard script must be updated to construct the module with the new `can_id`.
+ID `0` is reserved as the broadcast address (all motors listen, none respond) and is therefore not accepted here.
+
 **Working Modes**
 
 The MKS SERVO42D/57D supports the following working modes:
@@ -773,25 +783,8 @@ The MKS SERVO42D/57D supports the following working modes:
 
 The `set_mode()` method sets the working mode of the motor.
 For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
-The constructor automatically sets SR_vFOC mode (0x05), which is required for the bus motion commands (`position()`, `speed()`, `stop()`).
-
-**CAN Bitrate**
-
-The `set_bitrate()` method changes the CAN bitrate on the motor.
-The motor applies the new bitrate immediately, so you must also change the CAN bus baud rate on the ESP32 side to continue communication.
-
-| Rate   | Description |
-| ------ | ----------- |
-| "125K" | 125 kbit/s  |
-| "250K" | 250 kbit/s  |
-| "500K" | 500 kbit/s  |
-| "1M"   | 1 Mbit/s    |
-
-**CAN ID**
-
-The `set_can_id()` method changes the motor's CAN ID (range 1-2047, default 1).
-The new ID is persisted on the drive, so the motor only responds on the new ID afterwards — the Lizard script must be updated to construct the module with the new `can_id`.
-ID `0` is reserved as the broadcast address (all motors listen, none respond) and is therefore not accepted here.
+The constructor automatically sets SR_vFOC mode (0x05),
+which is required for the bus motion commands (`position()`, `speed()`, `stop()`).
 
 ## Motor Axis
 
@@ -1012,163 +1005,6 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | `wheels.disable()`              | Disable both motors                             |                  |
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
-
-## Innotronic Drive Motor
-
-The InnotronicDriveMotor module controls an Innotronic Twin MC motor controller in track drive mode (speed control on motor 1).
-The constructor sends the firmware-mode-switch (`0xA5A5`) so the controller is in drive mode regardless of its previous state.
-Currently only the G350 motor (600 hall ticks per revolution) is supported in this mode.
-
-| Constructor                                  | Description            | Arguments         |
-| -------------------------------------------- | ---------------------- | ----------------- |
-| `motor = InnotronicDriveMotor(can, node_id)` | CAN module and node ID | CAN module, `int` |
-
-| Properties          | Description                                       | Data type |
-| ------------------- | ------------------------------------------------- | --------- |
-| `motor.voltage`     | Board voltage (V)                                 | `float`   |
-| `motor.temperature` | Controller temperature (°C)                       | `int`     |
-| `motor.state`       | Current switch state                              | `int`     |
-| `motor.error_codes` | Error bitmask as hex string                       | `str`     |
-| `motor.version`     | Firmware version reported by controller           | `int`     |
-| `motor.speed`       | Current speed (m/s, sign- and `m_per_rad`-scaled) | `float`   |
-| `motor.current_m1`  | Motor 1 current (A)                               | `float`   |
-| `motor.current_m2`  | Motor 2 current (A)                               | `float`   |
-| `motor.m_per_rad`   | Meters per radian for speed conversion            | `float`   |
-| `motor.reversed`    | Reverse motor direction                           | `bool`    |
-| `motor.rad_limit`   | Maximum angular velocity limit (rad/s)            | `float`   |
-| `motor.enabled`     | Whether the motor is enabled                      | `bool`    |
-| `motor.debug`       | Enable CAN debug output                           | `bool`    |
-
-| Methods                                       | Description                       | Arguments                     |
-| --------------------------------------------- | --------------------------------- | ----------------------------- |
-| `motor.speed(vel[, acc, jerk])`               | Set target angular velocity rad/s | `float`\[, `float`, `float`\] |
-| `motor.drive_ticks(vel, ticks)`               | Relative move in hall ticks       | `float`, `int`                |
-| `motor.switch_state(state)`                   | Set state: 1=off, 2=brake, 3=on   | `int`                         |
-| `motor.configure(setting_id, value1, value2)` | Send raw configure command        | `int`, `int`, `int`           |
-| `motor.configure_node_id(new_id)`             | Set CAN node ID                   | `int`                         |
-| `motor.on()`                                  | Turn motor on                     |                               |
-| `motor.off()`                                 | Turn motor off                    |                               |
-| `motor.stop()`                                | Brake the motor                   |                               |
-| `motor.enable()`                              | Enable the motor                  |                               |
-| `motor.disable()`                             | Disable the motor                 |                               |
-
-## Innotronic Delta Motor
-
-The InnotronicDeltaMotor module controls an Innotronic Twin MC motor controller in delta arm mode (per-motor position in hall ticks).
-The third constructor argument selects the firmware operating mode and the hall-ticks-per-revolution count; it is required.
-
-| Constructor                                              | Description                            | Arguments                |
-| -------------------------------------------------------- | -------------------------------------- | ------------------------ |
-| `motor = InnotronicDeltaMotor(can, node_id, motor_type)` | CAN module, node ID, and motor variant | CAN module, `int`, `str` |
-
-Supported `motor_type` strings:
-
-| `motor_type`     | Description                               | Ticks/rev | Firmware mode |
-| ---------------- | ----------------------------------------- | --------- | ------------- |
-| `"windmeile"`    | First-generation delta arm motor          | 300       | `0xB5B5`      |
-| `"g350"`         | Drive motor used as delta arm motor       | 600       | `0xD5D5`      |
-| `"g250r-t-14.2"` | Newer delta arm motor (14.2:1 gear ratio) | unknown   | `0xC5C5`      |
-
-The `g250r-t-14.2` variant currently throws at construction because its hall ticks per revolution have not yet been measured.
-The 12.5:1 g250r-t variant is intentionally not supported.
-
-| Properties            | Description                              | Data type |
-| --------------------- | ---------------------------------------- | --------- |
-| `motor.voltage`       | Board voltage (V)                        | `float`   |
-| `motor.temperature`   | Controller temperature (°C)              | `int`     |
-| `motor.state`         | Current switch state                     | `int`     |
-| `motor.error_codes`   | Error bitmask as hex string              | `str`     |
-| `motor.version`       | Firmware version reported by controller  | `int`     |
-| `motor.angle_m1`      | Motor 1 angle (hall ticks)               | `float`   |
-| `motor.angle_m2`      | Motor 2 angle (hall ticks)               | `float`   |
-| `motor.current_m1`    | Motor 1 current (A)                      | `float`   |
-| `motor.current_m2`    | Motor 2 current (A)                      | `float`   |
-| `motor.ref_result_m1` | Reference drive result motor 1 (0/1/2/4) | `int`     |
-| `motor.ref_result_m2` | Reference drive result motor 2 (0/1/2/4) | `int`     |
-| `motor.reversed`      | Reverse motor direction                  | `bool`    |
-| `motor.enabled`       | Whether the motor is enabled             | `bool`    |
-| `motor.debug`         | Enable CAN debug output                  | `bool`    |
-
-| Methods                                                     | Description                                                          | Arguments                              |
-| ----------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------- |
-| `motor.rel_angle(angle[, vel, acc, jerk])`                  | Move by relative angle (rad)                                         | `float`\[, `float`, `float`, `float`\] |
-| `motor.delta_angle(motor_select, pos1[, spd1, pos2, spd2])` | Per-motor position cmd (0x10=left, 0x20=right, 0x30=both)            | `int`, `int`\[, `int`, `int`, `int`\]  |
-| `motor.reference_drive_start(motor[, clockwise])`           | Start reference drive for motor 1 or 2                               | `int`\[, `bool`\]                      |
-| `motor.reference_drive_stop(motor)`                         | Stop reference drive (brake, also stores current pos as 0-reference) | `int`                                  |
-| `motor.single_motor_control(cmd_m1, cmd_m2)`                | Per-motor control (0x00=noop, 0x05=brake, 0x10=cal CW, 0x20=cal CCW) | `int`, `int`                           |
-| `motor.switch_state(state)`                                 | Set state: 1=off, 2=brake, 3=on                                      | `int`                                  |
-| `motor.configure(setting_id, value1, value2)`               | Send raw configure command                                           | `int`, `int`, `int`                    |
-| `motor.configure_node_id(new_id)`                           | Set CAN node ID                                                      | `int`                                  |
-| `motor.on()`                                                | Turn motor on                                                        |                                        |
-| `motor.off()`                                               | Turn motor off                                                       |                                        |
-| `motor.stop()`                                              | Brake the motor                                                      |                                        |
-| `motor.enable()`                                            | Enable the motor                                                     |                                        |
-| `motor.disable()`                                           | Disable the motor                                                    |                                        |
-
-Reference result values: 0=none, 1=OK, 2=overcurrent, 4=ref_end (max rotation reached).
-
-## Innotronic Delta Arm
-
-The InnotronicDeltaArm module controls a delta arm (parallel kinematics) using an InnotronicDeltaMotor.
-It manages calibration via reference drives and endstop detection, blocks drive commands until calibrated, and stops the motor on stall (overcurrent without position progress).
-
-| Constructor                                                    | Description                                | Arguments                          |
-| -------------------------------------------------------------- | ------------------------------------------ | ---------------------------------- |
-| `arm = InnotronicDeltaArm(motor, left_endstop, right_endstop)` | Motor module and two endstop input modules | InnotronicDeltaMotor, Input, Input |
-
-| Properties             | Description                                                  | Data type |
-| ---------------------- | ------------------------------------------------------------ | --------- |
-| `arm.enabled`          | Whether the arm is enabled                                   | `bool`    |
-| `arm.calibrating`      | Whether a reference drive is active                          | `bool`    |
-| `arm.calibrated_left`  | Left side calibration status                                 | `bool`    |
-| `arm.calibrated_right` | Right side calibration status                                | `bool`    |
-| `arm.active`           | Whether a `position` move is in progress (cleared on settle) | `bool`    |
-| `arm.stalled`          | Latched after a stall; clears on next successful reference   | `bool`    |
-| `arm.angle_left`       | Current left motor angle (degrees)                           | `float`   |
-| `arm.angle_right`      | Current right motor angle (degrees)                          | `float`   |
-| `arm.deg_limit`        | Per-side range from zero, in degrees (0 = no limit)          | `float`   |
-| `arm.cal_timeout`      | Calibration timeout (seconds; 0 = no timeout)                | `float`   |
-| `arm.stall_current`    | Current threshold for stall detection (A)                    | `float`   |
-
-| Methods                                         | Description                                            | Arguments                          |
-| ----------------------------------------------- | ------------------------------------------------------ | ---------------------------------- |
-| `arm.position(left, right[, speed_l, speed_r])` | Move to position in degrees (requires calibration)     | `float`, `float`\[, `int`, `int`\] |
-| `arm.reference(side)`                           | Start reference drive: `"left"`, `"right"` or `"both"` | `str`                              |
-| `arm.stop()`                                    | Stop both motors and abort calibration                 |                                    |
-| `arm.stop(motor)`                               | Brake individual motor (1 or 2)                        | `int`                              |
-| `arm.on()`                                      | Turn motor on                                          |                                    |
-| `arm.off()`                                     | Turn motor off                                         |                                    |
-| `arm.enable()`                                  | Enable the arm                                         |                                    |
-| `arm.disable()`                                 | Disable the arm                                        |                                    |
-
-The calibration state machine watches both the endstop GPIOs and the motor controller's reference drive result (0x14).
-If an endstop is already triggered when `reference` is called, the arm first nudges away from it before starting the reference drive.
-On stall (overcurrent above `stall_current` for ~200 ms with no position progress) the motor is disabled and calibration is invalidated; a fresh `reference` is required to recover.
-
-## Innotronic Wheels
-
-The InnotronicWheels module combines two InnotronicDriveMotor modules for differential steering.
-
-| Constructor                                          | Description       | Arguments                        |
-| ---------------------------------------------------- | ----------------- | -------------------------------- |
-| `wheels = InnotronicWheels(left_motor, right_motor)` | Two motor modules | two InnotronicDriveMotor modules |
-
-| Properties             | Description                    | Data type |
-| ---------------------- | ------------------------------ | --------- |
-| `wheels.width`         | Wheel distance (m)             | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
-| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
-
-| Methods                         | Description                                     | Arguments        |
-| ------------------------------- | ----------------------------------------------- | ---------------- |
-| `wheels.speed(linear, angular)` | Move with `linear`/`angular` speed (m/s, rad/s) | `float`, `float` |
-| `wheels.off()`                  | Turn both motors off                            |                  |
-| `wheels.stop()`                 | Brake both motors                               |                  |
-| `wheels.enable()`               | Enable both motors                              |                  |
-| `wheels.disable()`              | Disable both motors                             |                  |
-
-When the wheels are disabled, they will stop and ignore movement commands.
 
 ## Analog Unit
 

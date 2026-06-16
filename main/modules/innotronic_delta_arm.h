@@ -5,6 +5,9 @@
 #include "module.h"
 
 class InnotronicDeltaArm : public Module {
+public:
+    static inline constexpr const char *TYPE = "InnotronicDeltaArm";
+
 private:
     const InnotronicDeltaMotor_ptr motor;
     const Input_ptr left_endstop;

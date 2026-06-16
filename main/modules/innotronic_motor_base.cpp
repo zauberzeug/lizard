@@ -15,8 +15,8 @@ const std::map<std::string, Variable_ptr> InnotronicMotorBase::common_defaults()
     };
 }
 
-InnotronicMotorBase::InnotronicMotorBase(const ModuleType type, const std::string name, const Can_ptr can, const uint32_t node_id)
-    : Module(type, name), node_id(node_id), can(can) {
+InnotronicMotorBase::InnotronicMotorBase(const std::string name, const Can_ptr can, const uint32_t node_id)
+    : Module(name), node_id(node_id), can(can) {
 }
 
 bool InnotronicMotorBase::is_enabled() const {
@@ -41,8 +41,8 @@ void InnotronicMotorBase::handle_status_msg(const uint8_t *data) {
     this->properties.at("error_codes")->string_value = hex_buf;
     this->properties.at("version")->integer_value = data[7];
     if (this->is_debug()) {
-        echo("[%lu] CAN RX [NodeID=%ld, CmdID=0x11]: voltage %.2f V, temp %d C, state %d, error %s, version %d",
-             millis(), this->node_id,
+        echo("[%lu] CAN RX [NodeID=%lu, CmdID=0x11]: voltage %.2f V, temp %d C, state %d, error %s, version %d",
+             millis(), (unsigned long)this->node_id,
              this->properties.at("voltage")->number_value,
              (int)this->properties.at("temperature")->integer_value,
              (int)this->properties.at("state")->integer_value,

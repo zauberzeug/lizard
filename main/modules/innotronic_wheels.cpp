@@ -1,9 +1,18 @@
 #include "innotronic_wheels.h"
+#include "module_helpers.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <memory>
 
-REGISTER_MODULE_DEFAULTS(InnotronicWheels)
+static Module_ptr create_innotronic_wheels(const std::string &name,
+                                           const std::vector<ConstExpression_ptr> &arguments,
+                                           MessageHandler) {
+    Module::expect(arguments, 2, identifier, identifier);
+    const InnotronicDriveMotor_ptr left_motor = get_module_argument<InnotronicDriveMotor>(arguments[0]);
+    const InnotronicDriveMotor_ptr right_motor = get_module_argument<InnotronicDriveMotor>(arguments[1]);
+    return std::make_shared<InnotronicWheels>(name, left_motor, right_motor);
+}
+REGISTER_MODULE(InnotronicWheels, &create_innotronic_wheels)
 
 const std::map<std::string, Variable_ptr> InnotronicWheels::get_defaults() {
     return {
@@ -23,7 +32,7 @@ const std::map<std::string, Variable_ptr> InnotronicWheels::get_defaults() {
 }
 
 InnotronicWheels::InnotronicWheels(const std::string name, const InnotronicDriveMotor_ptr left_motor, const InnotronicDriveMotor_ptr right_motor)
-    : Module(innotronic_wheels, name), left_motor(left_motor), right_motor(right_motor) {
+    : Module(name), left_motor(left_motor), right_motor(right_motor) {
     this->properties = InnotronicWheels::get_defaults();
 }
 

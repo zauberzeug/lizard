@@ -28,7 +28,18 @@ static void check_error(esp_err_t err, const char *msg) {
 #define DUTY_VALUE 1 // 50% of max 1 with 1-bit resolution
 #endif
 
-REGISTER_MODULE_DEFAULTS(StepperMotor)
+static Module_ptr create_stepper_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() < 2 || arguments.size() > 4) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, integer, integer, integer, integer);
+    const gpio_num_t step_pin = (gpio_num_t)arguments[0]->evaluate_integer();
+    const gpio_num_t dir_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+    const ledc_timer_t ledc_timer = arguments.size() > 2 ? (ledc_timer_t)arguments[2]->evaluate_integer() : LEDC_TIMER_0;
+    const ledc_channel_t ledc_channel = arguments.size() > 3 ? (ledc_channel_t)arguments[3]->evaluate_integer() : LEDC_CHANNEL_0;
+    return std::make_shared<StepperMotor>(name, step_pin, dir_pin, ledc_timer, ledc_channel);
+}
+REGISTER_MODULE(StepperMotor, &create_stepper_motor)
 
 const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
     return {
@@ -44,7 +55,7 @@ StepperMotor::StepperMotor(const std::string name,
                            const gpio_num_t dir_pin,
                            const ledc_timer_t ledc_timer,
                            const ledc_channel_t ledc_channel)
-    : Module(stepper_motor, name),
+    : Module(name),
       step_pin(step_pin),
       dir_pin(dir_pin),
       ledc_timer(ledc_timer),

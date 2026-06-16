@@ -56,6 +56,8 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
     void set_profile_quick_stop_deceleration(uint16_t deceleration);
 
 public:
+    static inline constexpr const char *TYPE = "CanOpenMotor";
+
     CanOpenMotor(const std::string &name, const Can_ptr can, int64_t node_id);
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

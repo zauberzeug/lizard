@@ -1,8 +1,17 @@
 #include "mks_servo_motor.h"
 #include "../utils/uart.h"
+#include "module_helpers.h"
 #include <algorithm>
 
-REGISTER_MODULE_DEFAULTS(MksServoMotor)
+static Module_ptr create_mks_servo_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
+    const int64_t motor_id = arguments[1]->evaluate_integer();
+    auto motor = std::make_shared<MksServoMotor>(name, can, motor_id);
+    motor->subscribe_to_can();
+    return motor;
+}
+REGISTER_MODULE(MksServoMotor, &create_mks_servo_motor)
 
 const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
     return {
@@ -11,19 +20,21 @@ const std::map<std::string, Variable_ptr> MksServoMotor::get_defaults() {
         {"working_current", std::make_shared<IntegerVariable>(1700)},
         {"enabled", std::make_shared<BooleanVariable>(true)},
         {"position_error", std::make_shared<NumberVariable>()},
-        {"status", std::make_shared<IntegerVariable>(STATUS_OK)},
+        {"set_mode_status", std::make_shared<IntegerVariable>(STATUS_OK)},
     };
 }
 
 MksServoMotor::MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id)
-    : Module(mks_servo_motor, name), can(can), can_id(can_id) {
+    : Module(name), can(can), can_id(can_id) {
     this->properties = MksServoMotor::get_defaults();
-    this->send_working_current(1700);
-    this->send_set_mode(MODE_SR_vFOC); // required for 0xF5/0xF6 bus motion commands
 }
 
 void MksServoMotor::subscribe_to_can() {
     this->can->subscribe(this->can_id, std::static_pointer_cast<Module>(this->shared_from_this()));
+    // Send the initial configuration only after the subscription is in place,
+    // so the 0x82 acknowledgement is observed and reflected in "set_mode_status".
+    this->send_working_current(this->properties.at("working_current")->integer_value);
+    this->send_set_mode(MODE_SR_vFOC); // required for 0xF5/0xF6 bus motion commands
 }
 
 void MksServoMotor::send(const uint8_t *data, uint8_t len) {
@@ -59,18 +70,41 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
     mode = std::clamp(mode, (uint8_t)0x00, MAX_MODE);
     uint8_t data[] = {0x82, mode};
     this->send(data, 2);
+    this->properties.at("set_mode_status")->integer_value = STATUS_SET_MODE_PENDING;
 }
 
-void MksServoMotor::send_set_bitrate(uint8_t rate) {
-    rate = std::clamp(rate, (uint8_t)0x00, MAX_BITRATE);
+void MksServoMotor::send_set_bitrate(int64_t hz) {
+    uint8_t rate;
+    switch (hz) {
+    case 125000:
+        rate = BITRATE_125K;
+        break;
+    case 250000:
+        rate = BITRATE_250K;
+        break;
+    case 500000:
+        rate = BITRATE_500K;
+        break;
+    case 1000000:
+        rate = BITRATE_1M;
+        break;
+    default:
+        echo("%s set_bitrate: unsupported rate %d, expected 125000/250000/500000/1000000", this->name.c_str(), (int)hz);
+        return;
+    }
     uint8_t data[] = {0x8A, rate};
-    this->send(data, 2); // fire-and-forget: the drive changes bitrate immediately, so no response is received
+    this->send(data, 2);
 }
 
 void MksServoMotor::send_set_can_id(int64_t new_id) {
-    new_id = std::clamp(new_id, (int64_t)MIN_CAN_ID, (int64_t)MAX_CAN_ID);
+    if (new_id < MIN_CAN_ID || new_id > MAX_CAN_ID) {
+        echo("%s set_can_id: invalid id %d, expected %d-%d", this->name.c_str(), (int)new_id, MIN_CAN_ID, MAX_CAN_ID);
+        return;
+    }
     uint8_t data[] = {0x8B, (uint8_t)(new_id >> 8), (uint8_t)(new_id & 0xFF)};
     this->send(data, 3);
+    echo("%s set_can_id: requested CAN id change to %d - if accepted, the motor responds on the new id; reconstruct the module with the new can_id",
+         this->name.c_str(), (int)new_id);
 }
 
 void MksServoMotor::send_working_current(int64_t ma) {
@@ -172,20 +206,8 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
         Module::expect(arguments, 1, integer);
         this->send_set_mode((uint8_t)arguments[0]->evaluate_integer());
     } else if (method_name == "set_bitrate") {
-        Module::expect(arguments, 1, string);
-        std::string rate = arguments[0]->evaluate_string();
-        std::transform(rate.begin(), rate.end(), rate.begin(), ::toupper);
-        if (rate == "125K") {
-            this->send_set_bitrate(BITRATE_125K);
-        } else if (rate == "250K") {
-            this->send_set_bitrate(BITRATE_250K);
-        } else if (rate == "500K") {
-            this->send_set_bitrate(BITRATE_500K);
-        } else if (rate == "1M") {
-            this->send_set_bitrate(BITRATE_1M);
-        } else {
-            echo("%s set_bitrate: unknown rate '%s', expected 125K/250K/500K/1M", this->name.c_str(), rate.c_str());
-        }
+        Module::expect(arguments, 1, integer);
+        this->send_set_bitrate(arguments[0]->evaluate_integer());
     } else if (method_name == "set_can_id") {
         Module::expect(arguments, 1, integer);
         this->send_set_can_id(arguments[0]->evaluate_integer());
@@ -227,17 +249,22 @@ void MksServoMotor::call(const std::string method_name, const std::vector<ConstE
     }
 }
 
+bool MksServoMotor::crc_ok(const uint8_t *data, int count) const {
+    // MKS checksum: low byte of the CAN id plus all data bytes except the
+    // trailing checksum byte itself, which sits at data[count - 1].
+    uint8_t crc = (uint8_t)(this->can_id & 0xFF);
+    for (int i = 0; i < count - 1; i++) {
+        crc += data[i];
+    }
+    return crc == data[count - 1];
+}
+
 void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) {
     if (count < 1) {
         return;
     }
     if (data[0] == 0x31 && count == 8) {
-        // CRC validation
-        uint8_t crc = (uint8_t)(this->can_id & 0xFF);
-        for (int i = 0; i < 7; i++) {
-            crc += data[i];
-        }
-        if ((crc & 0xFF) != data[7]) {
+        if (!this->crc_ok(data, count)) {
             return;
         }
         // Extract 48-bit big-endian signed encoder value from data[1..6]
@@ -251,24 +278,14 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
         }
         this->properties.at("position")->number_value = (double)val * 360.0 / COUNTS_PER_TURN;
     } else if (data[0] == 0x32 && count == 4) {
-        // CRC validation
-        uint8_t crc = (uint8_t)(this->can_id & 0xFF);
-        for (int i = 0; i < 3; i++) {
-            crc += data[i];
-        }
-        if ((crc & 0xFF) != data[3]) {
+        if (!this->crc_ok(data, count)) {
             return;
         }
         // Extract 16-bit big-endian signed speed (RPM) from data[1..2]
         int16_t speed = (int16_t)((data[1] << 8) | data[2]);
         this->properties.at("speed")->integer_value = speed;
     } else if (data[0] == 0x39 && count == 6) {
-        // CRC validation
-        uint8_t crc = (uint8_t)(this->can_id & 0xFF);
-        for (int i = 0; i < 5; i++) {
-            crc += data[i];
-        }
-        if ((crc & 0xFF) != data[5]) {
+        if (!this->crc_ok(data, count)) {
             return;
         }
         // Extract 32-bit big-endian signed position error from data[1..4]
@@ -278,15 +295,13 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
                       (int32_t)data[4];
         this->properties.at("position_error")->number_value = (double)val * 360.0 / POSITION_ERROR_COUNTS_PER_TURN;
     } else if (data[0] == 0x82 && count == 3) {
-        // CRC validation
-        uint8_t crc = (uint8_t)(this->can_id & 0xFF) + data[0] + data[1];
-        if ((crc & 0xFF) != data[2]) {
+        if (!this->crc_ok(data, count)) {
             return;
         }
-        if (data[1] == 0x00) {
-            this->properties.at("status")->integer_value = STATUS_SET_MODE_FAILED;
+        if (data[1] == 0x01) {
+            this->properties.at("set_mode_status")->integer_value = STATUS_OK;
         } else {
-            this->properties.at("status")->integer_value = STATUS_OK;
+            this->properties.at("set_mode_status")->integer_value = STATUS_SET_MODE_FAILED;
         }
     }
 }

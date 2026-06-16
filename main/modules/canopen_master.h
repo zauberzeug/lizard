@@ -12,6 +12,8 @@ private:
     int64_t sync_interval_counter = 0;
 
 public:
+    static inline constexpr const char *TYPE = "CanOpenMaster";
+
     CanOpenMaster(const std::string &name, const Can_ptr can);
     void step() override;
     static const std::map<std::string, Variable_ptr> get_defaults();

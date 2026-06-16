@@ -2,11 +2,21 @@
 #include "../global.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "module_helpers.h"
 #include <cstring>
 #include <math.h>
 #include <memory>
 
-REGISTER_MODULE_DEFAULTS(RmdMotor)
+static Module_ptr create_rmd_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 3, identifier, integer, integer);
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
+    const uint8_t motor_id = arguments[1]->evaluate_integer();
+    const int ratio = arguments[2]->evaluate_integer();
+    auto motor = std::make_shared<RmdMotor>(name, can, motor_id, ratio);
+    motor->subscribe_to_can();
+    return motor;
+}
+REGISTER_MODULE(RmdMotor, &create_rmd_motor)
 
 const std::map<std::string, Variable_ptr> RmdMotor::get_defaults() {
     return {
@@ -20,7 +30,7 @@ const std::map<std::string, Variable_ptr> RmdMotor::get_defaults() {
 }
 
 RmdMotor::RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio)
-    : Module(rmd_motor, name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
+    : Module(name), motor_id(motor_id), can(can), ratio(ratio), encoder_range(262144.0 / ratio) {
     this->properties = RmdMotor::get_defaults();
 }
 

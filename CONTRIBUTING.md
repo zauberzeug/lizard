@@ -22,7 +22,7 @@ Lizard follows the [ESP-IDF Style Guide](https://docs.espressif.com/projects/esp
 | Local variables          | `snake_case`                     | `motor_id`, `can_name`           |
 | Static variables         | `s_` prefix                      | `s_instance_count`               |
 | Type aliases             | `snake_case` with `_ptr` or `_t` | `Module_ptr`, `signed_32_bit_t`  |
-| Enums                    | `snake_case` values              | `ModuleType::odrive_motor`       |
+| Enums                    | `snake_case` values              | `Type::integer`                  |
 | Namespaces               | `snake_case`                     | `compilation`                    |
 | Constants/Macros         | `UPPER_SNAKE_CASE`               | `DEFAULT_SDA_PIN`                |
 

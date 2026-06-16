@@ -13,6 +13,8 @@ private:
     bool enabled = true;
 
 public:
+    static inline constexpr const char *TYPE = "PwmOutput";
+
     PwmOutput(const std::string name,
               const gpio_num_t pin,
               const ledc_timer_t ledc_timer,

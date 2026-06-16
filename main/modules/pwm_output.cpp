@@ -7,7 +7,17 @@
 #define SPEED_MODE LEDC_HIGH_SPEED_MODE
 #endif
 
-REGISTER_MODULE_DEFAULTS(PwmOutput)
+static Module_ptr create_pwm_output(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() < 1 || arguments.size() > 3) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, integer, integer, integer);
+    const gpio_num_t pin = (gpio_num_t)arguments[0]->evaluate_integer();
+    const ledc_timer_t ledc_timer = arguments.size() > 1 ? (ledc_timer_t)arguments[1]->evaluate_integer() : LEDC_TIMER_0;
+    const ledc_channel_t ledc_channel = arguments.size() > 2 ? (ledc_channel_t)arguments[2]->evaluate_integer() : LEDC_CHANNEL_0;
+    return std::make_shared<PwmOutput>(name, pin, ledc_timer, ledc_channel);
+}
+REGISTER_MODULE(PwmOutput, &create_pwm_output)
 
 const std::map<std::string, Variable_ptr> PwmOutput::get_defaults() {
     return {
@@ -21,7 +31,7 @@ PwmOutput::PwmOutput(const std::string name,
                      const gpio_num_t pin,
                      const ledc_timer_t ledc_timer,
                      const ledc_channel_t ledc_channel)
-    : Module(pwm_output, name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
+    : Module(name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
     gpio_reset_pin(pin);
 
     this->properties = PwmOutput::get_defaults();

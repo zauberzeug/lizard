@@ -11,6 +11,8 @@ static constexpr uint8_t REF_END = 4;
 
 class InnotronicDeltaMotor : public InnotronicMotorBase {
 public:
+    static inline constexpr const char *TYPE = "InnotronicDeltaMotor";
+
     struct MotorConfig {
         int ticks;
         uint16_t mode; // operating mode word for Configure 0x0B / setting 0x02

@@ -13,6 +13,8 @@ private:
     bool enabled = true;
 
 public:
+    static inline constexpr const char *TYPE = "RoboClawMotor";
+
     RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

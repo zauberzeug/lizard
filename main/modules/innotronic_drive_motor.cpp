@@ -1,4 +1,5 @@
 #include "innotronic_drive_motor.h"
+#include "module_helpers.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include <algorithm>
@@ -6,7 +7,20 @@
 #include <cstring>
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(InnotronicDriveMotor)
+static Module_ptr create_innotronic_drive_motor(const std::string &name,
+                                                 const std::vector<ConstExpression_ptr> &arguments,
+                                                 MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
+    const int64_t node_id = arguments[1]->evaluate_integer();
+    if (node_id < 0 || node_id > 0x3F) {
+        throw std::runtime_error("node ID must be between 0 and 63");
+    }
+    auto motor = std::make_shared<InnotronicDriveMotor>(name, can, node_id);
+    motor->subscribe_to_can();
+    return motor;
+}
+REGISTER_MODULE(InnotronicDriveMotor, &create_innotronic_drive_motor)
 
 const std::map<std::string, Variable_ptr> InnotronicDriveMotor::get_defaults() {
     auto defaults = InnotronicMotorBase::common_defaults();
@@ -21,7 +35,7 @@ const std::map<std::string, Variable_ptr> InnotronicDriveMotor::get_defaults() {
 }
 
 InnotronicDriveMotor::InnotronicDriveMotor(const std::string name, const Can_ptr can, const uint32_t node_id)
-    : InnotronicMotorBase(innotronic_drive_motor, name, can, node_id) {
+    : InnotronicMotorBase(name, can, node_id) {
     this->properties = InnotronicDriveMotor::get_defaults();
     // Operating mode 0xA5A5 = drive mode (per firmware spec). Fire-and-forget at construction.
     this->configure(0x02, 0xA5A5, 0);

@@ -20,9 +20,9 @@ protected:
     void send_switch_state(uint8_t state);
     void handle_status_msg(const uint8_t *data);
 
-public:
-    InnotronicMotorBase(const ModuleType type, const std::string name, const Can_ptr can, const uint32_t node_id);
+    InnotronicMotorBase(const std::string name, const Can_ptr can, const uint32_t node_id);
 
+public:
     void configure(uint8_t setting_id, uint16_t value1, int32_t value2);
     void configure_node_id(uint8_t new_node_id);
     void configure_status_interval(uint8_t cmd_id, uint16_t interval_ms);

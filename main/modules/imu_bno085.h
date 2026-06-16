@@ -12,6 +12,8 @@ using ImuBno085_ptr = std::shared_ptr<ImuBno085>;
 
 class ImuBno085 : public Module {
 public:
+    static inline constexpr const char *TYPE = "ImuBno085";
+
     ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin,
               gpio_num_t scl_pin, gpio_num_t int_pin, gpio_num_t rst_pin, uint8_t address, int clk_speed);
     void step() override;

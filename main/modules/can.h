@@ -14,8 +14,11 @@ private:
     twai_general_config_t g_config;
     twai_timing_config_t t_config;
     twai_filter_config_t f_config;
+    twai_state_t previous_state = TWAI_STATE_RUNNING;
 
 public:
+    static inline constexpr const char *TYPE = "Can";
+
     Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

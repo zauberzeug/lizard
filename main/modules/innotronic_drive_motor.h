@@ -7,6 +7,9 @@ class InnotronicDriveMotor;
 using InnotronicDriveMotor_ptr = std::shared_ptr<InnotronicDriveMotor>;
 
 class InnotronicDriveMotor : public InnotronicMotorBase, virtual public Motor {
+public:
+    static inline constexpr const char *TYPE = "InnotronicDriveMotor";
+
 private:
     // Only one drive motor type so far: g350 with 600 hall ticks per revolution.
     static constexpr int MOTOR_TICKS = 600;

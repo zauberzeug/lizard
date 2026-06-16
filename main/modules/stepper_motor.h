@@ -38,6 +38,8 @@ private:
     void set_state(StepperState new_state);
 
 public:
+    static inline constexpr const char *TYPE = "StepperMotor";
+
     StepperMotor(const std::string name,
                  const gpio_num_t step_pin,
                  const gpio_num_t dir_pin,
