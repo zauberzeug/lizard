@@ -19,3 +19,9 @@ repos:
         additional_dependencies:
           - mdformat-gfm
           - mdformat-simple-breaks
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v22.1.5
+    hooks:
+      - id: clang-format
+        types_or: [c, c++]
+        exclude: ^main/(parser\.(c|h)|modules/BNO055ESP32\.(cpp|h))$
