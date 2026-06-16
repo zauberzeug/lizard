@@ -426,6 +426,7 @@ void app_main() {
     printf("\nReady.\n");
 
     while (true) {
+        const unsigned long loop_start = millis();
         try {
             process_uart();
         } catch (const std::runtime_error &e) {
@@ -458,6 +459,9 @@ void app_main() {
             }
         }
 
-        delay(10);
+        // sleep the remainder of the 10 ms budget, not a full vTaskDelay(10) after work (#213).
+        // 1-tick floor: vTaskDelay(0) only yields to equal prio, so idle (WDT) needs a real block.
+        const unsigned long elapsed = millis_since(loop_start);
+        delay(elapsed < 10 ? 10 - elapsed : 1);
     }
 }
