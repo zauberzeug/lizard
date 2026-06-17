@@ -12,6 +12,8 @@ def main() -> int:
                         help='Target chip type (default: esp32)')
     parser.add_argument('--clean', action='store_true',
                         help='Clean build directory before building')
+    parser.add_argument('--flash-4mb', dest='flash_4mb', action='store_true',
+                        help='BRICK: build for 4 MB flash modules (default partition table assumes 8 MB)')
     args = parser.parse_args()
 
     base_defaults = Path(f'sdkconfig.defaults.{args.target}')
@@ -23,6 +25,8 @@ def main() -> int:
     all_defaults = [str(base_defaults.resolve())]
     if secret_defaults.exists():
         all_defaults.append(str(secret_defaults.resolve()))
+    if args.flash_4mb:
+        all_defaults.append(str(Path('sdkconfig.defaults.4mb').resolve()))  # 4 MB overlay last, so it overrides
 
     os.environ['IDF_TARGET'] = args.target
     os.environ['SDKCONFIG_DEFAULTS'] = ';'.join(all_defaults)

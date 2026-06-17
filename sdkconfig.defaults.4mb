@@ -1,0 +1,5 @@
+# 4 MB flash overlay. Append AFTER sdkconfig.defaults.<target> (and the secret) so it wins,
+# flipping the default 8 MB layout to a 4 MB-fitting one. Used via: python build.py <target> --flash-4mb
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_4mb.csv"
