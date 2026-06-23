@@ -425,6 +425,10 @@ void app_main() {
 
     printf("\nReady.\n");
 
+    // Anchor for the deadline loop below: xTaskDelayUntil advances this by one period
+    // each iteration, giving a drift-free 10 ms cadence (no millis() re-read per loop).
+    TickType_t last_wake = xTaskGetTickCount();
+
     while (true) {
         try {
             process_uart();
@@ -458,6 +462,13 @@ void app_main() {
             }
         }
 
-        delay(10);
+        // Sleep until the next 10 ms period boundary instead of a full vTaskDelay(10) after
+        // work, so the period is max(10 ms, work) and drift-free (#213). On overrun
+        // xTaskDelayUntil returns pdFALSE without blocking; floor at 1 tick so the idle task
+        // still runs to feed the watchdog (vTaskDelay(0) only yields to equal-prio tasks).
+        if (xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10)) == pdFALSE) {
+            last_wake = xTaskGetTickCount();
+            delay(1);
+        }
     }
 }
