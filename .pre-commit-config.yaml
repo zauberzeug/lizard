@@ -24,4 +24,3 @@ repos:
     hooks:
       - id: clang-format
         types_or: [c, c++]
-        exclude: ^main/(parser\.(c|h)|modules/BNO055ESP32\.(cpp|h))$
