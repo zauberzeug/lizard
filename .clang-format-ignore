@@ -1,5 +1,9 @@
-# Files clang-format must not touch.
-main/parser.c              # generated from language.owl via gen_parser.sh
-main/parser.h              # generated from language.owl via gen_parser.sh
-main/modules/BNO055ESP32.cpp   # vendored third-party driver (upstream style)
-main/modules/BNO055ESP32.h     # vendored third-party driver (upstream style)
+# generated from language.owl via gen_parser.sh
+
+main/parser.c
+main/parser.h
+
+# vendored third-party driver (upstream style)
+
+main/modules/BNO055ESP32.cpp
+main/modules/BNO055ESP32.h
