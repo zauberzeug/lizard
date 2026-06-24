@@ -107,6 +107,42 @@ Whenever the condition is true, the actions are executed.
 Note that actions can be asynchronous.
 If there are still actions running asynchronously, a truthy condition is ignored.
 
+**Scheduled blocks**
+
+Scheduled blocks execute a list of actions once at a given time,
+specified in milliseconds since boot (matching `core.millis`):
+
+```
+at 125015 do
+    en3.on()
+end
+```
+
+The time expression is evaluated once when the statement is interpreted,
+so relative times can be expressed with `core.millis`:
+
+```
+at core.millis + 500 do en3.off() end
+```
+
+In contrast to rules and routines, scheduled blocks fire with millisecond precision, decoupled from the main loop.
+This allows streaming time-critical sequences like trajectory setpoints from a host system.
+
+Each scheduled block is executed exactly once and discarded afterwards.
+If the time is already in the past, the actions are executed immediately.
+Blocks with equal times fire in the order of their definition.
+
+`await` is not allowed inside scheduled blocks.
+A scheduled block can, however, call a routine that itself awaits conditions or routines:
+the routine starts at the scheduled time and continues with Lizard's regular main loop cycle.
+
+At most 100 scheduled blocks can be pending at the same time;
+further `at` statements fail with the error message "schedule is full".
+All pending blocks can be discarded with [`core.clear_schedule()`](module_reference.md#core),
+for example when the connection to the host system is lost (see [machine safety](machine_safety.md)).
+
+When `core.debug` is true, each firing reports its lateness, e.g. `at 125015: fired 0.3 ms late`.
+
 ## Actions
 
 Routines and rules contain a list of actions.

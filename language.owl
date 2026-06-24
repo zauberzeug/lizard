@@ -14,7 +14,8 @@ statement =
   variable_assignment |
   variable_declaration |
   routine_definition |
-  rule_definition
+  rule_definition |
+  schedule_definition
 
 actions = action{';' | '\n', 1+}
 action =
@@ -32,6 +33,7 @@ property_assignment = identifier@module_name '.' identifier@property_name '=' ex
 variable_assignment = identifier@variable_name '=' expression
 variable_declaration = datatype identifier@variable_name ('=' expression)?
 rule_definition = 'when' expression@condition '\n'* [ 'then' actions 'end' ]
+schedule_definition = 'at' expression@time '\n'* [ 'do' actions 'end' ]
 routine_definition = 'let' identifier@routine_name [ 'do' actions 'end' ]
 routine_call = identifier@routine_name [ '(' ')' ]
 await_condition = 'await' expression@condition
