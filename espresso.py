@@ -38,6 +38,8 @@ class GpioControllerV1(GpioController):
             'en': chip.find_line(en),
             'g0': chip.find_line(g0),
         }
+        if None in self._lines.values():
+            raise RuntimeError(f'GPIO lines {en}/{g0} not found on gpiochip0')
 
     def request_outputs(self, consumer: str) -> None:
         for line in self._lines.values():
@@ -122,11 +124,17 @@ EN = 'PR.04'
 G0 = 'PAC.06'
 if SWAP:
     EN, G0 = G0, EN
-gpio = {
-    None: GpioController,
-    1: GpioControllerV1,
-    2: GpioControllerV2,
-}[GPIOD_VERSION](EN, G0)
+try:
+    gpio = {
+        None: GpioController,
+        1: GpioControllerV1,
+        2: GpioControllerV2,
+    }[GPIOD_VERSION](EN, G0)
+except Exception as error:  # noqa: BLE001 - any gpiod/hardware error means no controllable pins
+    # gpiod is installed but the EN/G0 pins are not available (e.g. not a Jetson):
+    # fall back to the no-op controller and rely on esptool's DTR/RTS reset for flashing.
+    print(f'No controllable EN/G0 pins ({error}); falling back to esptool reset only.')
+    gpio = GpioController(EN, G0)
 
 
 @contextmanager
