@@ -7,7 +7,6 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "driver/gpio.h"
-#include "driver/uart.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -35,7 +34,6 @@ void Core::step() {
 void Core::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "restart") {
         Module::expect(arguments, 0);
-        uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100)); // flush async TX buffer before reboot
         esp_restart();
     } else if (method_name == "version") {
         const esp_app_desc_t *app_desc = esp_app_get_description();
@@ -161,6 +159,21 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "forget_serial_bus") {
         Module::expect(arguments, 0);
         bus_backup::remove();
+    } else if (method_name == "set_baudrate") {
+        Module::expect(arguments, 1, integer);
+        const int baudrate = arguments[0]->evaluate_integer();
+        bool supported = false;
+        for (const int rate : {115200, 230400, 460800, 576000, 921600, 1500000}) {
+            if (rate == baudrate) {
+                supported = true;
+                break;
+            }
+        }
+        if (!supported) {
+            throw std::runtime_error("unsupported baudrate (use 115200, 230400, 460800, 576000, 921600 or 1500000)");
+        }
+        Storage::set_baudrate(baudrate);
+        echo("baudrate set to %d; restart to apply", baudrate);
     } else if (method_name == "pause_broadcasts") {
         Module::expect(arguments, 0);
         Module::broadcast_paused = true;

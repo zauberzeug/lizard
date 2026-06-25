@@ -22,4 +22,7 @@ public:
     static void set_user_pin(const std::uint32_t pin);
     static bool get_user_pin(std::uint32_t &pin);
     static void remove_user_pin();
+
+    static void set_baudrate(const std::uint32_t baudrate);
+    static bool get_baudrate(std::uint32_t &baudrate);
 };

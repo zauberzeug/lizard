@@ -14,6 +14,8 @@ parser.add_argument('--serial-bus', type=int, metavar='NODE_ID',
                     help='Send configuration via serial bus to the specified node ID')
 parser.add_argument('--bus-name', default='bus',
                     help='Name of the SerialBus module (default: bus)')
+parser.add_argument('--baud', type=int, default=115200,
+                    help='Baudrate (default: 115200)')
 args = parser.parse_args()
 
 
@@ -41,7 +43,7 @@ def read(*, timeout: float) -> Iterator[str]:
             continue
 
 
-with serial.Serial(args.device_path, baudrate=921600, timeout=1.0) as port:
+with serial.Serial(args.device_path, baudrate=args.baud, timeout=1.0) as port:
     startup = Path(args.config_file).read_text('utf-8') + '\n'
     checksum = sum(ord(c) for c in startup) % 0x10000
 

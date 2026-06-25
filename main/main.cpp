@@ -9,13 +9,12 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "global.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
 #include "modules/expander.h"
 #include "modules/module.h"
+#include "nvs_flash.h"
 #include "proxy.h"
 #include "rom/gpio.h"
 #include "rom/uart.h"
@@ -37,7 +36,6 @@
 #include <vector>
 
 #define BUFFER_SIZE 1024
-#define LOOP_PERIOD_MS 10 // target main-loop period; the loop sleeps only the remainder of this window
 
 Core_ptr core_module;
 
@@ -413,8 +411,15 @@ void run_step(Module_ptr module) {
 void app_main() {
     vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
+    // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be
+    // initialized first; Storage::init() below calls nvs_flash_init() again, which is safe.
+    // Note: the ROM bootloader and early boot log always use 115200 regardless of this value.
+    nvs_flash_init();
+    uint32_t baud_rate = 115200;
+    Storage::get_baudrate(baud_rate);
+
     const uart_config_t uart_config = {
-        .baud_rate = 921600,
+        .baud_rate = static_cast<int>(baud_rate),
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -425,7 +430,7 @@ void app_main() {
     };
     uart_param_config(UART_NUM_0, &uart_config);
     QueueHandle_t uart_queue;
-    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, BUFFER_SIZE * 2, 20, &uart_queue, 0);
+    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, 100);
 

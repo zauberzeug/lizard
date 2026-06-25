@@ -172,3 +172,36 @@ void Storage::nvs_delete_key(const std::string &ns, const std::string &key) {
 void Storage::remove_user_pin() {
     nvs_delete_key("ble_pins", "user_pin");
 }
+
+void Storage::set_baudrate(const std::uint32_t baudrate) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open("uart", NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace \"uart\" (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_set_u32(handle, "baudrate", baudrate)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not write baudrate (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit baudrate (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    nvs_close(handle);
+}
+
+bool Storage::get_baudrate(std::uint32_t &baudrate) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open("uart", NVS_READWRITE, &handle)) != ESP_OK) {
+        return false;
+    }
+    uint32_t value = 0;
+    err = nvs_get_u32(handle, "baudrate", &value);
+    nvs_close(handle);
+    if (err == ESP_OK) {
+        baudrate = value;
+        return true;
+    }
+    return false;
+}

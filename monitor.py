@@ -91,8 +91,9 @@ def serial_connection() -> serial.Serial:
         else:
             raise Exception('No serial port found')
 
-    print(f'Connecting to {usb_path}')
-    return serial.Serial(usb_path, baudrate=921600, timeout=0.1)
+    baudrate = int(sys.argv[2]) if len(sys.argv) > 2 else 115200
+    print(f'Connecting to {usb_path} at {baudrate} baud')
+    return serial.Serial(usb_path, baudrate=baudrate, timeout=0.1)
 
 
 if __name__ == '__main__':

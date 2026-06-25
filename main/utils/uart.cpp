@@ -1,5 +1,4 @@
 #include "uart.h"
-#include "driver/uart.h"
 #include <algorithm>
 #include <cstdarg>
 #include <cstdint>
@@ -15,7 +14,6 @@ void register_echo_callback(const EchoCallback &callback) {
 
 void echo(const char *format, ...) {
     static char buffer[1024];
-    static char line[sizeof(buffer) + 8];
 
     va_list args;
     va_start(args, format);
@@ -30,10 +28,7 @@ void echo(const char *format, ...) {
     for (unsigned int i = 0; i < pos; ++i) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
-            // write to the driver's TX ring buffer instead of printf (busy-wait);
-            // returns immediately, the UART ISR sends in the background
-            const int len = std::snprintf(line, sizeof(line), "%s@%02x\n", &buffer[start], checksum);
-            uart_write_bytes(UART_NUM_0, line, len);
+            printf("%s@%02x\n", &buffer[start], checksum);
             for (const auto &callback : echo_callbacks) {
                 callback(&buffer[start]);
             }
