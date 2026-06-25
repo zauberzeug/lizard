@@ -19,7 +19,11 @@ args = parser.parse_args()
 
 def send(payload: str) -> None:
     """Send a payload string to the ESP32, optionally over a serial bus."""
-    line_ = f'{args.bus_name}.send({args.serial_bus}, {json.dumps(payload)})' if args.serial_bus else payload
+    if args.serial_bus:
+        escaped_ = payload.replace('%', '%%')
+        line_ = f'{args.bus_name}.send({args.serial_bus}, {json.dumps(escaped_)})'
+    else:
+        line_ = payload
     print(f'Sending: {line_}')
     checksum_ = 0
     for c in line_:

@@ -2,6 +2,7 @@
 #include "../global.h"
 #include "../storage.h"
 #include "../utils/bus_backup.h"
+#include "../utils/scheduler.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -168,6 +169,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 0);
         Module::broadcast_paused = false;
         echo("broadcasts resumed");
+    } else if (method_name == "clear_schedule") {
+        Module::expect(arguments, 0);
+        scheduler::clear();
     } else if (method_name == "keep_alive") {
         Module::expect(arguments, 0);
         this->keep_alive();

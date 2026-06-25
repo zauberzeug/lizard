@@ -28,6 +28,13 @@ when core.last_message_age > 500 then motor.stop(); end
 Any successfully interpreted input message resets `last_message_age`.
 If the host controller has no command to send but wants to signal that it is still alive, it can call `core.keep_alive()`, which resets the timer silently without producing any output.
 
+If the host streams [scheduled blocks](language.md), they should be discarded as well when the connection is lost,
+so that no stale commands fire after the host stopped:
+
+```
+when core.last_message_age > 500 then motor.stop(); core.clear_schedule() end
+```
+
 ## Expander watchdog
 
 The `expander` module provides a watchdog feature that restarts the port expander when it gets stuck and does not send messages anymore.
