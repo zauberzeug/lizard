@@ -7,6 +7,8 @@ from typing import Iterator
 
 import serial
 
+from serial_utils import detect_baudrate
+
 parser = argparse.ArgumentParser(description='Configure an ESP32 running Lizard firmware')
 parser.add_argument('config_file', help='Path to the .liz configuration file')
 parser.add_argument('device_path', help='Serial device path (e.g., /dev/ttyUSB0)')
@@ -14,9 +16,9 @@ parser.add_argument('--serial-bus', type=int, metavar='NODE_ID',
                     help='Send configuration via serial bus to the specified node ID')
 parser.add_argument('--bus-name', default='bus',
                     help='Name of the SerialBus module (default: bus)')
-parser.add_argument('--baud', type=int, default=115200,
-                    help='Baudrate (default: 115200)')
 args = parser.parse_args()
+
+baud = detect_baudrate(args.device_path)
 
 
 def send(payload: str) -> None:
@@ -43,7 +45,7 @@ def read(*, timeout: float) -> Iterator[str]:
             continue
 
 
-with serial.Serial(args.device_path, baudrate=args.baud, timeout=1.0) as port:
+with serial.Serial(args.device_path, baudrate=baud, timeout=1.0) as port:
     startup = Path(args.config_file).read_text('utf-8') + '\n'
     checksum = sum(ord(c) for c in startup) % 0x10000
 

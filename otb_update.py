@@ -7,13 +7,14 @@ from pathlib import Path
 
 import serial
 
+from serial_utils import detect_baudrate
+
 CHUNK_SIZE = 174  # must match BUS_OTB_CHUNK_SIZE in main/utils/otb.h
 WINDOW = 8
 
 parser = argparse.ArgumentParser(description='Push firmware via SerialBus OTB')
 parser.add_argument('firmware', help='Path to firmware binary')
 parser.add_argument('--port', default='/dev/ttyUSB0', help='Serial port')
-parser.add_argument('--baud', type=int, default=115200, help='Baudrate')
 parser.add_argument('--target', type=int, required=True, help='Bus ID of target node')
 parser.add_argument('--bus', default='bus', help='SerialBus module name')
 parser.add_argument('--expander', help='Expander to pause broadcasts on')
@@ -26,8 +27,10 @@ if not firmware.exists():
 file_size = firmware.stat().st_size
 number_of_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
 
+baud = detect_baudrate(args.port)
+
 try:
-    dev = serial.Serial(args.port, args.baud, timeout=0.5)
+    dev = serial.Serial(args.port, baud, timeout=0.5)
 except serial.SerialException as e:
     sys.exit(f'Serial error: {e}')
 

@@ -7,6 +7,8 @@ import serial
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
+from serial_utils import detect_baudrate
+
 
 class LineReader:
     # https://github.com/pyserial/pyserial/issues/216#issuecomment-369414522
@@ -36,20 +38,21 @@ class LineReader:
 def receive() -> None:
     line_reader = LineReader(port)
     while True:
-        try:
-            line = line_reader.readline().decode('utf-8').strip('\r\n')
-        except UnicodeDecodeError:
-            print(f'ERROR: COULD NOT DECODE "{line}"')
-        else:
-            if line[-3:-2] == '@':
+        # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
+        line = line_reader.readline().decode('utf-8', errors='replace').strip('\r\n')
+        if line[-3:-2] == '@':
+            try:
                 check = int(line[-2:], 16)
+            except ValueError:
+                check = None
+            if check is not None:
                 line = line[:-3]
                 checksum = 0
                 for c in line:
                     checksum ^= ord(c)
                 if checksum != check:
                     print(f'ERROR: CHECKSUM MISMATCH ({checksum} vs. {check} for "{line}")')
-            print(line)
+        print(line)
 
 
 async def send() -> None:
@@ -91,7 +94,7 @@ def serial_connection() -> serial.Serial:
         else:
             raise Exception('No serial port found')
 
-    baudrate = int(sys.argv[2]) if len(sys.argv) > 2 else 115200
+    baudrate = detect_baudrate(usb_path)
     print(f'Connecting to {usb_path} at {baudrate} baud')
     return serial.Serial(usb_path, baudrate=baudrate, timeout=0.1)
 

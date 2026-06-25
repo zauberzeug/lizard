@@ -48,7 +48,6 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 | ------------ | ----------------------------------------------------- |
 | `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`) |
 | `--port`     | Serial port (default: `/dev/ttyUSB0`)                 |
-| `--baud`     | Baudrate (default: `115200`)                          |
 | `--target`   | Bus ID of the target node (required)                  |
 | `--bus`      | Name of the SerialBus module (default: `bus`)         |
 | `--expander` | Expander name when coordinator is behind an expander  |

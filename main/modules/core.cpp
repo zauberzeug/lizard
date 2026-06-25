@@ -163,14 +163,14 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 1, integer);
         const int baudrate = arguments[0]->evaluate_integer();
         bool supported = false;
-        for (const int rate : {115200, 230400, 460800, 576000, 921600, 1500000}) {
+        for (const int rate : {115200, 230400, 460800, 921600}) {
             if (rate == baudrate) {
                 supported = true;
                 break;
             }
         }
         if (!supported) {
-            throw std::runtime_error("unsupported baudrate (use 115200, 230400, 460800, 576000, 921600 or 1500000)");
+            throw std::runtime_error("unsupported baudrate (use 115200, 230400, 460800 or 921600)");
         }
         Storage::set_baudrate(baudrate);
         echo("baudrate set to %d; restart to apply", baudrate);
