@@ -13,7 +13,8 @@ def main() -> int:
     parser.add_argument('--clean', action='store_true',
                         help='Clean build directory before building')
     parser.add_argument('--flash-4mb', dest='flash_4mb', action='store_true',
-                        help='BRICK: build for 4 MB flash modules (default partition table assumes 8 MB)')
+                        help='build for 4 MB flash modules; the default partition table assumes 8 MB, '
+                             'and on a size mismatch the device boot-loops until reflashed over serial')
     args = parser.parse_args()
 
     base_defaults = Path(f'sdkconfig.defaults.{args.target}')
@@ -39,6 +40,15 @@ def main() -> int:
         for config in ['sdkconfig', 'sdkconfig.old']:
             if Path(config).exists():
                 print(f'Removing {config}')
+                Path(config).unlink()
+    elif args.flash_4mb:
+        # ESP-IDF reads SDKCONFIG_DEFAULTS only when generating sdkconfig from scratch.
+        # An existing sdkconfig (e.g. from a prior 8 MB build) is reused verbatim, so the
+        # 4 MB overlay would be silently ignored and the build would still SW_RESET-loop on
+        # a 4 MB chip. Drop the stale sdkconfig so the overlay is guaranteed to take effect.
+        for config in ['sdkconfig', 'sdkconfig.old']:
+            if Path(config).exists():
+                print(f'--flash-4mb: removing stale {config} so the 4 MB overlay is applied')
                 Path(config).unlink()
 
     print('Building...')
