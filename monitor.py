@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
+import argparse
 import asyncio
 import os.path
-import sys
 
 import serial
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
-from serial_utils import detect_baudrate
+parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
+parser.add_argument('device', nargs='?', help='Serial device path (e.g., /dev/ttyUSB0)')
+parser.add_argument('--baud', type=int, default=115200, help='Baud rate (default: 115200)')
+args = parser.parse_args()
 
 
 class LineReader:
@@ -77,8 +80,8 @@ async def send() -> None:
 
 
 def serial_connection() -> serial.Serial:
-    if len(sys.argv) > 1:
-        usb_path = sys.argv[1]
+    if args.device:
+        usb_path = args.device
     else:
         usb_paths = [
             '/dev/ttyTHS0',
@@ -94,9 +97,8 @@ def serial_connection() -> serial.Serial:
         else:
             raise Exception('No serial port found')
 
-    baudrate = detect_baudrate(usb_path)
-    print(f'Connecting to {usb_path} at {baudrate} baud')
-    return serial.Serial(usb_path, baudrate=baudrate, timeout=0.1)
+    print(f'Connecting to {usb_path} at {args.baud} baud')
+    return serial.Serial(usb_path, baudrate=args.baud, timeout=0.1)
 
 
 if __name__ == '__main__':

@@ -25,23 +25,23 @@ It is automatically created right after the boot sequence.
 | `core.heap`             | Free heap memory (bytes)                                        | `int`     |
 | `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
 
-| Methods                          | Description                                         | Arguments    |
-| -------------------------------- | --------------------------------------------------- | ------------ |
-| `core.restart()`                 | Restart the microcontroller                         |              |
-| `core.version()`                 | Show lizard version                                 |              |
-| `core.info()`                    | Show lizard version, compile time and IDF version   |              |
-| `core.print(...)`                | Print arbitrary arguments to the command line       | arbitrary    |
-| `core.output(format)`            | Define the output format                            | `str`        |
-| `core.startup_checksum()`        | Show 16-bit checksum of the startup script          |              |
-| `core.get_pin_status(pin)`       | Print the status of the chosen pin                  | `int`        |
-| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level     | `int`, `int` |
-| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register  | `int`        |
-| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS   |              |
-| `core.set_baudrate(baud)`        | Persist the UART0 baud rate (applied after restart) | `int`        |
-| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)             |              |
-| `core.resume_broadcasts()`       | Resume property broadcasts                          |              |
-| `core.clear_schedule()`          | Discard all pending scheduled blocks                |              |
-| `core.keep_alive()`              | Reset `last_message_age` without producing output   |              |
+| Methods                          | Description                                        | Arguments    |
+| -------------------------------- | -------------------------------------------------- | ------------ |
+| `core.restart()`                 | Restart the microcontroller                        |              |
+| `core.version()`                 | Show lizard version                                |              |
+| `core.info()`                    | Show lizard version, compile time and IDF version  |              |
+| `core.print(...)`                | Print arbitrary arguments to the command line      | arbitrary    |
+| `core.output(format)`            | Define the output format                           | `str`        |
+| `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
+| `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
+| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
+| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
+| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
+| `core.set_baudrate(baud)`        | Persist UART0 baud rate (applied after restart)    | `int`        |
+| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
+| `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
+| `core.clear_schedule()`          | Discard all pending scheduled blocks               |              |
+| `core.keep_alive()`              | Reset `last_message_age` without producing output  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -52,7 +52,7 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 **UART baud rate:**
 The console (UART0) defaults to 115200 baud.
 `core.set_baudrate(baud)` persists a new rate to non-volatile storage; it takes effect on the next restart, so the change is not a breaking one for hosts that are not updated yet.
-After `core.set_baudrate(921600)` followed by `core.restart()`, just reconnect with the host tools — `monitor.py`, `configure.py` and `otb_update.py` detect the rate automatically (they probe the supported rates and pick the one whose checksummed reply decodes), so there is nothing to configure on the host side.
+After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with the host tools at the new rate, e.g. `./monitor.py /dev/ttyUSB0 --baud 921600` (`monitor.py`, `configure.py` and `otb_update.py` all accept `--baud`, defaulting to 115200).
 Supported rates are 115200, 230400, 460800 and 921600.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
 
