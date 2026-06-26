@@ -36,7 +36,8 @@ def read(*, timeout: float) -> Iterator[str]:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            yield port.read_until(b'\r\n').decode().rsplit('@', 1)[0]
+            # strip() so the match also catches the un-checksummed boot banner "Ready.\r\n"
+            yield port.read_until(b'\r\n').decode().rsplit('@', 1)[0].strip()
         except UnicodeDecodeError:
             continue
 
