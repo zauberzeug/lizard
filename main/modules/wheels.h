@@ -20,8 +20,8 @@ protected:
     /// Common property defaults; concrete modules extend this in their own `get_defaults()`.
     static std::map<std::string, Variable_ptr> get_wheels_defaults();
 
-    /// True while drive commands are allowed (both `enabled` and the `drivable` property set).
-    bool can_drive() const;
+    /// Value of the `drivable` gate property.
+    bool is_drivable() const;
 
     /// Apply per-wheel target speeds (already split from linear/angular via `width`).
     virtual void do_wheel_speeds(double left, double right) = 0;
