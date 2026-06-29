@@ -28,10 +28,8 @@ using DefaultsFunction = std::function<std::map<std::string, Variable_ptr>()>;
     } // namespace
 
 class Module {
-private:
-    std::list<Module_ptr> shadow_modules;
-
 protected:
+    std::list<Module_ptr> shadow_modules;
     std::map<std::string, Variable_ptr> properties;
     bool output_on = false;
     bool broadcast = false;
