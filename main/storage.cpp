@@ -60,6 +60,39 @@ std::string read(const std::string ns, const std::string key) {
     return result;
 }
 
+void write_u32(const std::string ns, const std::string key, const std::uint32_t value) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
+        throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_set_u32(handle, key.c_str(), value)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not write to storage " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    if ((err = nvs_commit(handle)) != ESP_OK) {
+        nvs_close(handle);
+        throw std::runtime_error("could not commit to storage " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
+    }
+    nvs_close(handle);
+}
+
+bool read_u32(const std::string ns, const std::string key, std::uint32_t &out) {
+    esp_err_t err;
+    nvs_handle handle;
+    if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
+        return false;
+    }
+    uint32_t value = 0;
+    err = nvs_get_u32(handle, key.c_str(), &value);
+    nvs_close(handle);
+    if (err == ESP_OK) {
+        out = value;
+        return true;
+    }
+    return false;
+}
+
 void Storage::put(const std::string value) {
     try {
         const int old_num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
@@ -119,36 +152,11 @@ void Storage::clear_nvs() {
 }
 
 void Storage::set_user_pin(const std::uint32_t pin) {
-    esp_err_t err;
-    nvs_handle handle;
-    if ((err = nvs_open("ble_pins", NVS_READWRITE, &handle)) != ESP_OK) {
-        throw std::runtime_error("could not open storage namespace \"ble_pins\" (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    if ((err = nvs_set_u32(handle, "user_pin", pin)) != ESP_OK) {
-        nvs_close(handle);
-        throw std::runtime_error("could not write user_pin (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    if ((err = nvs_commit(handle)) != ESP_OK) {
-        nvs_close(handle);
-        throw std::runtime_error("could not commit user_pin (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    nvs_close(handle);
+    write_u32("ble_pins", "user_pin", pin);
 }
 
 bool Storage::get_user_pin(std::uint32_t &pin) {
-    esp_err_t err;
-    nvs_handle handle;
-    if ((err = nvs_open("ble_pins", NVS_READWRITE, &handle)) != ESP_OK) {
-        return false;
-    }
-    uint32_t value = 0;
-    err = nvs_get_u32(handle, "user_pin", &value);
-    nvs_close(handle);
-    if (err == ESP_OK) {
-        pin = value;
-        return true;
-    }
-    return false;
+    return read_u32("ble_pins", "user_pin", pin);
 }
 
 void Storage::nvs_delete_key(const std::string &ns, const std::string &key) {
@@ -174,34 +182,9 @@ void Storage::remove_user_pin() {
 }
 
 void Storage::set_baudrate(const std::uint32_t baudrate) {
-    esp_err_t err;
-    nvs_handle handle;
-    if ((err = nvs_open("uart", NVS_READWRITE, &handle)) != ESP_OK) {
-        throw std::runtime_error("could not open storage namespace \"uart\" (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    if ((err = nvs_set_u32(handle, "baudrate", baudrate)) != ESP_OK) {
-        nvs_close(handle);
-        throw std::runtime_error("could not write baudrate (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    if ((err = nvs_commit(handle)) != ESP_OK) {
-        nvs_close(handle);
-        throw std::runtime_error("could not commit baudrate (" + std::string(esp_err_to_name(err)) + ")");
-    }
-    nvs_close(handle);
+    write_u32("uart", "baudrate", baudrate);
 }
 
 bool Storage::get_baudrate(std::uint32_t &baudrate) {
-    esp_err_t err;
-    nvs_handle handle;
-    if ((err = nvs_open("uart", NVS_READWRITE, &handle)) != ESP_OK) {
-        return false;
-    }
-    uint32_t value = 0;
-    err = nvs_get_u32(handle, "baudrate", &value);
-    nvs_close(handle);
-    if (err == ESP_OK) {
-        baudrate = value;
-        return true;
-    }
-    return false;
+    return read_u32("uart", "baudrate", baudrate);
 }
