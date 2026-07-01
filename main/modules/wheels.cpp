@@ -18,6 +18,19 @@ bool Wheels::is_drivable() const {
     return this->properties.at("drivable")->boolean_value;
 }
 
+bool Wheels::gate_or_brake() {
+    if (!this->enabled) {
+        return false;
+    }
+    if (!this->is_drivable()) {
+        // Not drivable: brake instead of ignoring, so the continuous speed-command stream
+        // stops the robot rather than holding the last commanded speed.
+        this->do_wheel_speeds(0.0, 0.0);
+        return false;
+    }
+    return true;
+}
+
 void Wheels::step() {
     this->update_odometry();
 
@@ -35,13 +48,7 @@ void Wheels::step() {
 void Wheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "speed") {
         Module::expect(arguments, 2, numbery, numbery);
-        if (!this->enabled) {
-            return;
-        }
-        if (!this->is_drivable()) {
-            // Not drivable: brake instead of ignoring, so the continuous speed-command stream
-            // stops the robot rather than holding the last commanded speed.
-            this->do_wheel_speeds(0.0, 0.0);
+        if (!this->gate_or_brake()) {
             return;
         }
         const double linear = arguments[0]->evaluate_number();

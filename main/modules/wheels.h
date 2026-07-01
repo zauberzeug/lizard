@@ -23,6 +23,10 @@ protected:
     /// Value of the `drivable` gate property.
     bool is_drivable() const;
 
+    /// Speed gate shared by all drive commands: returns true if driving is allowed.
+    /// If disabled it returns false silently; if not drivable it brakes and returns false.
+    bool gate_or_brake();
+
     /// Apply per-wheel target speeds (already split from linear/angular via `width`).
     virtual void do_wheel_speeds(double left, double right) = 0;
     virtual void do_enable() = 0;
