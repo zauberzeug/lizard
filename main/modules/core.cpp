@@ -159,6 +159,21 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "forget_serial_bus") {
         Module::expect(arguments, 0);
         bus_backup::remove();
+    } else if (method_name == "set_baudrate") {
+        Module::expect(arguments, 1, integer);
+        const int baudrate = arguments[0]->evaluate_integer();
+        bool supported = false;
+        for (const int rate : {115200, 230400, 460800, 921600}) {
+            if (rate == baudrate) {
+                supported = true;
+                break;
+            }
+        }
+        if (!supported) {
+            throw std::runtime_error("unsupported baudrate (use 115200, 230400, 460800 or 921600)");
+        }
+        Storage::set_baudrate(baudrate);
+        echo("baudrate set to %d; restart to apply", baudrate);
     } else if (method_name == "pause_broadcasts") {
         Module::expect(arguments, 0);
         Module::broadcast_paused = true;

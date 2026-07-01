@@ -37,6 +37,7 @@ It is automatically created right after the boot sequence.
 | `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
 | `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
 | `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
+| `core.set_baudrate(baud)`        | Persist UART0 baud rate (applied after restart)    | `int`        |
 | `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
 | `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
 | `core.clear_schedule()`          | Discard all pending scheduled blocks               |              |
@@ -47,6 +48,13 @@ The `precision` is an optional integer specifying the number of decimal places f
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
+
+**UART baud rate:**
+The console (UART0) defaults to 115200 baud.
+`core.set_baudrate(baud)` persists a new rate to non-volatile storage; it takes effect on the next restart, so the change is not a breaking one for hosts that are not updated yet.
+After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with the host tools at the new rate, e.g. `./monitor.py /dev/ttyUSB0 --baud 921600` (`monitor.py`, `configure.py` and `otb_update.py` all accept `--baud`, defaulting to 115200).
+Supported rates are 115200, 230400, 460800 and 921600.
+Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
 
 ## Bluetooth
 

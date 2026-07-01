@@ -14,6 +14,7 @@
 #include "modules/core.h"
 #include "modules/expander.h"
 #include "modules/module.h"
+#include "nvs_flash.h"
 #include "proxy.h"
 #include "rom/gpio.h"
 #include "rom/uart.h"
@@ -410,8 +411,15 @@ void run_step(Module_ptr module) {
 void app_main() {
     vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
+    // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be
+    // initialized first; Storage::init() below calls nvs_flash_init() again, which is safe.
+    // Note: the ROM bootloader and early boot log always use 115200 regardless of this value.
+    nvs_flash_init();
+    uint32_t baud_rate = 115200;
+    Storage::get_baudrate(baud_rate);
+
     const uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = static_cast<int>(baud_rate),
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,

@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
+import argparse
 import asyncio
 import os.path
-import sys
 
 import serial
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
+
+parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
+parser.add_argument('device', nargs='?', help='Serial device path (e.g., /dev/ttyUSB0)')
+parser.add_argument('--baud', type=int, default=115200, help='Baud rate (default: 115200)')
+args = parser.parse_args()
 
 
 class LineReader:
@@ -36,20 +41,21 @@ class LineReader:
 def receive() -> None:
     line_reader = LineReader(port)
     while True:
-        try:
-            line = line_reader.readline().decode('utf-8').strip('\r\n')
-        except UnicodeDecodeError:
-            print(f'ERROR: COULD NOT DECODE "{line}"')
-        else:
-            if line[-3:-2] == '@':
+        # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
+        line = line_reader.readline().decode('utf-8', errors='replace').strip('\r\n')
+        if line[-3:-2] == '@':
+            try:
                 check = int(line[-2:], 16)
+            except ValueError:
+                check = None
+            if check is not None:
                 line = line[:-3]
                 checksum = 0
                 for c in line:
                     checksum ^= ord(c)
                 if checksum != check:
                     print(f'ERROR: CHECKSUM MISMATCH ({checksum} vs. {check} for "{line}")')
-            print(line)
+        print(line)
 
 
 async def send() -> None:
@@ -74,8 +80,8 @@ async def send() -> None:
 
 
 def serial_connection() -> serial.Serial:
-    if len(sys.argv) > 1:
-        usb_path = sys.argv[1]
+    if args.device:
+        usb_path = args.device
     else:
         usb_paths = [
             '/dev/ttyTHS0',
@@ -91,8 +97,8 @@ def serial_connection() -> serial.Serial:
         else:
             raise Exception('No serial port found')
 
-    print(f'Connecting to {usb_path}')
-    return serial.Serial(usb_path, baudrate=115200, timeout=0.1)
+    print(f'Connecting to {usb_path} at {args.baud} baud')
+    return serial.Serial(usb_path, baudrate=args.baud, timeout=0.1)
 
 
 if __name__ == '__main__':
