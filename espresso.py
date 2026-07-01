@@ -57,12 +57,11 @@ class GpioControllerV2(GpioController):
     CHIP_PATH = '/dev/gpiochip0'
 
     def __init__(self, en: str, g0: str) -> None:
-        chip = gpiod.Chip(self.CHIP_PATH)
-        self._offsets = {
-            'en': chip.line_offset_from_id(en),
-            'g0': chip.line_offset_from_id(g0),
-        }
-        chip.close()
+        with gpiod.Chip(self.CHIP_PATH) as chip:
+            self._offsets = {
+                'en': chip.line_offset_from_id(en),
+                'g0': chip.line_offset_from_id(g0),
+            }
         self._request = None
 
     def request_outputs(self, consumer: str) -> None:
@@ -83,7 +82,8 @@ class GpioControllerV2(GpioController):
 
 DEFAULT_DEVICE = '/dev/tty.SLAB_USBtoUART'
 path = Path('/etc/nv_tegra_release')
-if path.exists() and (match := re.search(r'R(\d+)', path.read_text(encoding='utf-8'))):
+IS_JETSON = path.exists()
+if IS_JETSON and (match := re.search(r'R(\d+)', path.read_text(encoding='utf-8'))):
     major = int(match.group(1))
     if major == 35:
         DEFAULT_DEVICE = '/dev/ttyTHS0'
@@ -131,6 +131,8 @@ try:
         2: GpioControllerV2,
     }[GPIOD_VERSION](EN, G0)
 except Exception as error:  # noqa: BLE001 - any gpiod/hardware error means no controllable pins
+    if IS_JETSON:
+        raise  # on a Jetson the EN/G0 lines must resolve; surface the real error instead of masking it
     # gpiod is installed but the EN/G0 pins are not available (e.g. not a Jetson):
     # fall back to the no-op controller and rely on esptool's DTR/RTS reset for flashing.
     print(f'No controllable EN/G0 pins ({error}); falling back to esptool reset only.')
