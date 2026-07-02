@@ -12,9 +12,10 @@ def main() -> int:
                         help='Target chip type (default: esp32)')
     parser.add_argument('--clean', action='store_true',
                         help='Clean build directory before building')
-    parser.add_argument('--flash-4mb', dest='flash_4mb', action='store_true',
-                        help='build for 4 MB flash modules; the default partition table assumes 8 MB, '
-                             'and on a size mismatch the device boot-loops until reflashed over serial')
+    parser.add_argument('--flash-size', dest='flash_size', choices=['4mb', '8mb'], default='8mb',
+                        help='flash size variant (default: 8mb). 8mb uses the default partition table; '
+                             '4mb builds into an isolated build dir with a 4 MB-fitting table. '
+                             'On a size mismatch the device boot-loops until reflashed over serial.')
     args = parser.parse_args()
 
     base_defaults = Path(f'sdkconfig.defaults.{args.target}')
@@ -26,33 +27,32 @@ def main() -> int:
     all_defaults = [str(base_defaults.resolve())]
     if secret_defaults.exists():
         all_defaults.append(str(secret_defaults.resolve()))
-    if args.flash_4mb:
+
+    # Each flash-size variant gets its OWN generated sdkconfig and build dir, so the two never
+    # share mutable state: switching between them can't leak a stale partition table in either
+    # direction, and the 8 MB / 4 MB artifacts coexist instead of clobbering each other.
+    idf_args = ['idf.py']
+    if args.flash_size == '4mb':
         all_defaults.append(str(Path('sdkconfig.defaults.4mb').resolve()))  # 4 MB overlay last, so it overrides
+        idf_args += ['-B', 'build-4mb', '-D', 'SDKCONFIG=sdkconfig.4mb']
 
     os.environ['IDF_TARGET'] = args.target
     os.environ['SDKCONFIG_DEFAULTS'] = ';'.join(all_defaults)
     print(f'Using target: {args.target}')
+    print(f'Using flash size: {args.flash_size}')
     print(f'Using defaults: {all_defaults}')
 
     if args.clean:
         print('Running full clean...')
-        subprocess.run(['idf.py', 'fullclean'], check=False)
-        for config in ['sdkconfig', 'sdkconfig.old']:
+        subprocess.run([*idf_args, 'fullclean'], check=False)
+        generated = 'sdkconfig.4mb' if args.flash_size == '4mb' else 'sdkconfig'
+        for config in [generated, f'{generated}.old']:
             if Path(config).exists():
                 print(f'Removing {config}')
                 Path(config).unlink()
-    elif args.flash_4mb:
-        # ESP-IDF reads SDKCONFIG_DEFAULTS only when generating sdkconfig from scratch.
-        # An existing sdkconfig (e.g. from a prior 8 MB build) is reused verbatim, so the
-        # 4 MB overlay would be silently ignored and the build would still SW_RESET-loop on
-        # a 4 MB chip. Drop the stale sdkconfig so the overlay is guaranteed to take effect.
-        for config in ['sdkconfig', 'sdkconfig.old']:
-            if Path(config).exists():
-                print(f'--flash-4mb: removing stale {config} so the 4 MB overlay is applied')
-                Path(config).unlink()
 
     print('Building...')
-    result = subprocess.run(['idf.py', 'build'], check=False)
+    result = subprocess.run([*idf_args, 'build'], check=False)
     if result.returncode != 0:
         print('Build failed!')
         return result.returncode

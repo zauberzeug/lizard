@@ -1,9 +1,11 @@
 build/
+build-4mb/
 managed_components/
 owl/
 site/
 __pycache__/
 sdkconfig
+sdkconfig.4mb
 sdkconfig.defaults.secret
 *.swp
 *.bin
