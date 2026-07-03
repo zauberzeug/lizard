@@ -14,9 +14,6 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  */
 class Wheels : public Module {
 protected:
-    /// Common property defaults; concrete modules extend this in their own `get_defaults()`.
-    static std::map<std::string, Variable_ptr> get_wheels_defaults();
-
     /// Write `linear_speed`/`angular_speed` from measured per-wheel speeds; call from `update_odometry()`.
     void update_speeds(double left_speed, double right_speed);
 
@@ -31,6 +28,8 @@ private:
     bool enabled = true;
 
 public:
+    /// Shared property defaults; subclasses that add properties shadow this in their own `get_defaults()`.
+    static const std::map<std::string, Variable_ptr> get_defaults();
     Wheels(const std::string name);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

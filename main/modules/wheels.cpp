@@ -1,6 +1,6 @@
 #include "wheels.h"
 
-std::map<std::string, Variable_ptr> Wheels::get_wheels_defaults() {
+const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
     return {
         {"width", std::make_shared<NumberVariable>(1.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
@@ -11,10 +11,9 @@ std::map<std::string, Variable_ptr> Wheels::get_wheels_defaults() {
 
 Wheels::Wheels(const std::string name)
     : Module(name) {
-    // Seed the shared properties the base unconditionally reads, so a subclass that forgets to
-    // assign its own defaults still boots (a missing key would throw std::out_of_range, which the
-    // main loop does not catch). Subclasses overwrite this with their own defaults in their ctor.
-    this->properties = Wheels::get_wheels_defaults();
+    // Install the shared defaults. Subclasses with no extra properties (Dunker, ODrive) rely on
+    // this; those that add properties (RoboClaw's m_per_tick) overwrite it in their own ctor.
+    this->properties = Wheels::get_defaults();
 }
 
 void Wheels::update_speeds(double left_speed, double right_speed) {

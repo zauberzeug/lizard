@@ -12,13 +12,8 @@ static Module_ptr create_odrive_wheels(const std::string &name, const std::vecto
 }
 REGISTER_MODULE(ODriveWheels, &create_odrive_wheels)
 
-const std::map<std::string, Variable_ptr> ODriveWheels::get_defaults() {
-    return Wheels::get_wheels_defaults();
-}
-
 ODriveWheels::ODriveWheels(const std::string name, const ODriveMotor_ptr left_motor, const ODriveMotor_ptr right_motor)
     : Wheels(name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties = ODriveWheels::get_defaults();
 }
 
 void ODriveWheels::update_odometry() {

@@ -13,7 +13,7 @@ static Module_ptr create_roboclaw_wheels(const std::string &name, const std::vec
 REGISTER_MODULE(RoboClawWheels, &create_roboclaw_wheels)
 
 const std::map<std::string, Variable_ptr> RoboClawWheels::get_defaults() {
-    auto defaults = Wheels::get_wheels_defaults();
+    auto defaults = Wheels::get_defaults();
     defaults["m_per_tick"] = std::make_shared<NumberVariable>(1);
     return defaults;
 }
