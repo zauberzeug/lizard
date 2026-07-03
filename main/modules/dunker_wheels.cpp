@@ -23,8 +23,7 @@ DunkerWheels::DunkerWheels(const std::string name, const DunkerMotor_ptr left_mo
 void DunkerWheels::update_odometry() {
     const double left_speed = this->left_motor->get_speed();
     const double right_speed = this->right_motor->get_speed();
-    this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
-    this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
+    this->update_speeds(left_speed, right_speed);
 }
 
 void DunkerWheels::do_wheel_speeds(double left, double right) {

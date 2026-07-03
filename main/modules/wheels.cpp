@@ -12,6 +12,15 @@ std::map<std::string, Variable_ptr> Wheels::get_wheels_defaults() {
 
 Wheels::Wheels(const std::string name)
     : Module(name) {
+    // Seed the shared properties the base unconditionally reads, so a subclass that forgets to
+    // assign its own defaults still boots (a missing key would throw std::out_of_range, which the
+    // main loop does not catch). Subclasses overwrite this with their own defaults in their ctor.
+    this->properties = Wheels::get_wheels_defaults();
+}
+
+void Wheels::update_speeds(double left_speed, double right_speed) {
+    this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
+    this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
 }
 
 bool Wheels::is_drivable() const {

@@ -18,8 +18,6 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  */
 class Wheels : public Module {
 protected:
-    bool enabled = true;
-
     /// Common property defaults; concrete modules extend this in their own `get_defaults()`.
     static std::map<std::string, Variable_ptr> get_wheels_defaults();
 
@@ -30,12 +28,18 @@ protected:
     /// If disabled it returns false silently; if not drivable it brakes to a hold and returns false.
     bool gate_or_brake();
 
+    /// Write `linear_speed`/`angular_speed` from measured per-wheel speeds; call from `update_odometry()`.
+    void update_speeds(double left_speed, double right_speed);
+
     /// Apply per-wheel target speeds (already split from linear/angular via `width`).
     virtual void do_wheel_speeds(double left, double right) = 0;
     virtual void do_enable() = 0;
     virtual void do_disable() = 0;
     /// Update `linear_speed`/`angular_speed` from the motors; called every `step()`.
     virtual void update_odometry() = 0;
+
+private:
+    bool enabled = true;
 
 public:
     Wheels(const std::string name);

@@ -45,8 +45,7 @@ void RoboClawWheels::update_odometry() {
         const double m_per_tick = this->properties.at("m_per_tick")->number_value;
         double left_speed = (d_left_position * m_per_tick) / d_micros * 1000000;
         double right_speed = (d_right_position * m_per_tick) / d_micros * 1000000;
-        this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
-        this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
+        this->update_speeds(left_speed, right_speed);
     }
 
     this->last_micros = micros();
