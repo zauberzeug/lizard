@@ -14,10 +14,11 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  */
 class Wheels : public Module {
 protected:
-    bool enabled = true;
-
     /// Common property defaults; concrete modules extend this in their own `get_defaults()`.
     static std::map<std::string, Variable_ptr> get_wheels_defaults();
+
+    /// Write `linear_speed`/`angular_speed` from measured per-wheel speeds; call from `update_odometry()`.
+    void update_speeds(double left_speed, double right_speed);
 
     /// Apply per-wheel target speeds (already split from linear/angular via `width`).
     virtual void do_wheel_speeds(double left, double right) = 0;
@@ -25,6 +26,9 @@ protected:
     virtual void do_disable() = 0;
     /// Update `linear_speed`/`angular_speed` from the motors; called every `step()`.
     virtual void update_odometry() = 0;
+
+private:
+    bool enabled = true;
 
 public:
     Wheels(const std::string name);
