@@ -22,21 +22,8 @@ void Wheels::update_speeds(double left_speed, double right_speed) {
     this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
 }
 
-bool Wheels::is_drivable() const {
-    return this->properties.at("drivable")->boolean_value;
-}
-
-bool Wheels::gate_or_brake() {
-    if (!this->properties.at("enabled")->boolean_value) {
-        return false;
-    }
-    if (!this->is_drivable()) {
-        // Handbrake: brake to a hold instead of ignoring, so the continuous command stream
-        // stops the robot rather than holding the last commanded value.
-        this->do_wheel_speeds(0.0, 0.0);
-        return false;
-    }
-    return true;
+bool Wheels::may_drive() const {
+    return this->properties.at("enabled")->boolean_value && this->properties.at("drivable")->boolean_value;
 }
 
 void Wheels::step() {
@@ -50,13 +37,19 @@ void Wheels::step() {
         }
     }
 
+    if (this->properties.at("enabled")->boolean_value && !this->properties.at("drivable")->boolean_value) {
+        // Handbrake: keep braking to a hold every cycle, so it engages even when no drive command
+        // arrives — e.g. the rule that cleared drivable ran because the host went silent.
+        this->do_wheel_speeds(0.0, 0.0);
+    }
+
     Module::step();
 }
 
 void Wheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "speed") {
         Module::expect(arguments, 2, numbery, numbery);
-        if (!this->gate_or_brake()) {
+        if (!this->may_drive()) {
             return;
         }
         const double linear = arguments[0]->evaluate_number();
@@ -69,6 +62,16 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
     } else if (method_name == "disable") {
         Module::expect(arguments, 0);
         this->disable();
+    } else if (method_name == "shadow") {
+        Module::call(method_name, arguments);
+        // Property writes only forward to already-attached shadows, so a shadow attached after
+        // drivable/enabled were changed would start out with stale defaults and keep driving while
+        // the master holds. Sync the two gate properties onto the freshly attached shadow.
+        if (!this->shadow_modules.empty()) {
+            const auto &shadow = this->shadow_modules.back();
+            shadow->get_property("drivable")->boolean_value = this->properties.at("drivable")->boolean_value;
+            shadow->get_property("enabled")->boolean_value = this->properties.at("enabled")->boolean_value;
+        }
     } else {
         Module::call(method_name, arguments);
     }

@@ -532,13 +532,13 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | ----------------------------------------------- | ------------------------ | ------------------------ |
 | `wheels = ODriveWheels(left_motor, left_motor)` | Two ODrive motor modules | two ODrive motor modules |
 
-| Properties             | Description                                                                                        | Data type |
-| ---------------------- | -------------------------------------------------------------------------------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)                                                                                 | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)                                                                                | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)                                                                              | `float`   |
-| `wheels.enabled`       | Whether the wheels are enabled                                                                     | `bool`    |
-| `wheels.drivable`      | Whether driving is allowed; `false` brakes and holds like a handbrake without disabling the motors | `bool`    |
+| Properties             | Description                                                                                                                                                         | Data type |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `wheels.width`         | Wheel distance (m)                                                                                                                                                  | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)                                                                                                                                                 | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)                                                                                                                                               | `float`   |
+| `wheels.enabled`       | Whether the wheels are enabled                                                                                                                                      | `bool`    |
+| `wheels.drivable`      | Whether driving is allowed; `false` brakes and holds like a handbrake without disabling the motors (`disable()` and `off()` still switch the motors off regardless) | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -672,14 +672,14 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | ------------------------------------------------- | --------------------- | -------------------------- |
 | `wheels = RoboClawWheels(left_motor, left_motor)` | left and right motors | two RoboClaw motor modules |
 
-| Properties             | Description                                                                                        | Data type |
-| ---------------------- | -------------------------------------------------------------------------------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)                                                                                 | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)                                                                                | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)                                                                              | `float`   |
-| `wheels.m_per_tick`    | Meters per encoder tick                                                                            | `float`   |
-| `wheels.enabled`       | Whether motors react to commands                                                                   | `bool`    |
-| `wheels.drivable`      | Whether driving is allowed; `false` brakes and holds like a handbrake without disabling the motors | `bool`    |
+| Properties             | Description                                                                                                                                                         | Data type |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `wheels.width`         | Wheel distance (m)                                                                                                                                                  | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)                                                                                                                                                 | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)                                                                                                                                               | `float`   |
+| `wheels.m_per_tick`    | Meters per encoder tick                                                                                                                                             | `float`   |
+| `wheels.enabled`       | Whether motors react to commands                                                                                                                                    | `bool`    |
+| `wheels.drivable`      | Whether driving is allowed; `false` brakes and holds like a handbrake without disabling the motors (`disable()` and `off()` still switch the motors off regardless) | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -1002,13 +1002,13 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | ------------------------------------------------ | --------------------- | ----------------------- |
 | `wheels = DunkerWheels(left_motor, right_motor)` | left and right motors | two DunkerMotor modules |
 
-| Properties             | Description                                                                                        | Data type |
-| ---------------------- | -------------------------------------------------------------------------------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)                                                                                 | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)                                                                                | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)                                                                              | `float`   |
-| `wheels.enabled`       | Whether the wheels are enabled                                                                     | `bool`    |
-| `wheels.drivable`      | Whether driving is allowed; `false` brakes and holds like a handbrake without disabling the motors | `bool`    |
+| Properties             | Description                                                                                                                                                         | Data type |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `wheels.width`         | Wheel distance (m)                                                                                                                                                  | `float`   |
+| `wheels.linear_speed`  | Forward speed (m/s)                                                                                                                                                 | `float`   |
+| `wheels.angular_speed` | Turning speed (rad/s)                                                                                                                                               | `float`   |
+| `wheels.enabled`       | Whether the wheels are enabled                                                                                                                                      | `bool`    |
+| `wheels.drivable`      | Whether driving is allowed; `false` brakes and holds like a handbrake without disabling the motors (`disable()` and `off()` still switch the motors off regardless) | `bool`    |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |

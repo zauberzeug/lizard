@@ -12,18 +12,15 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  * the enabled-sync in `step()` and the `speed`/`enable`/`disable` command flow. Concrete
  * drivetrains provide the motor-specific parts through the protected hooks.
  *
- * `drivable` is a handbrake: while `false` the motors stay enabled but every drive command
- * brakes to a hold instead of moving, so an external rule can block driving without switching
- * the motors off (that is what `enabled`/`disable` are for). Driving resumes on `drivable = true`.
+ * `drivable` is a handbrake: while `false` the motors stay enabled but hold at a stop — drive
+ * commands are blocked and `step()` keeps braking to zero every cycle, so the hold engages even
+ * when no command arrives. It lets an external rule block driving without switching the motors off
+ * (that is what `enabled`/`disable` are for). Driving resumes on `drivable = true`.
  */
 class Wheels : public Module {
 protected:
-    /// Value of the `drivable` handbrake property.
-    bool is_drivable() const;
-
-    /// Gate shared by all drive commands (`speed` and `power`): returns true if driving is allowed.
-    /// If disabled it returns false silently; if not drivable it brakes to a hold and returns false.
-    bool gate_or_brake();
+    /// Whether drive commands may be applied: true only while enabled and drivable.
+    bool may_drive() const;
 
     /// Write `linear_speed`/`angular_speed` from measured per-wheel speeds; call from `update_odometry()`.
     void update_speeds(double left_speed, double right_speed);
