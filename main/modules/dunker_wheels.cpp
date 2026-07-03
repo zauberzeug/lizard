@@ -11,13 +11,8 @@ static Module_ptr create_dunker_wheels(const std::string &name, const std::vecto
 }
 REGISTER_MODULE(DunkerWheels, &create_dunker_wheels)
 
-const std::map<std::string, Variable_ptr> DunkerWheels::get_defaults() {
-    return Wheels::get_wheels_defaults();
-}
-
 DunkerWheels::DunkerWheels(const std::string name, const DunkerMotor_ptr left_motor, const DunkerMotor_ptr right_motor)
     : Wheels(name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties = DunkerWheels::get_defaults();
 }
 
 void DunkerWheels::update_odometry() {
