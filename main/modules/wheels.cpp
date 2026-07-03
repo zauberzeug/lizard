@@ -6,11 +6,29 @@ std::map<std::string, Variable_ptr> Wheels::get_wheels_defaults() {
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
+        {"drivable", std::make_shared<BooleanVariable>(true)},
     };
 }
 
 Wheels::Wheels(const std::string name)
     : Module(name) {
+}
+
+bool Wheels::is_drivable() const {
+    return this->properties.at("drivable")->boolean_value;
+}
+
+bool Wheels::gate_or_brake() {
+    if (!this->properties.at("enabled")->boolean_value) {
+        return false;
+    }
+    if (!this->is_drivable()) {
+        // Handbrake: brake to a hold instead of ignoring, so the continuous command stream
+        // stops the robot rather than holding the last commanded value.
+        this->do_wheel_speeds(0.0, 0.0);
+        return false;
+    }
+    return true;
 }
 
 void Wheels::step() {
@@ -30,7 +48,7 @@ void Wheels::step() {
 void Wheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "speed") {
         Module::expect(arguments, 2, numbery, numbery);
-        if (!this->properties.at("enabled")->boolean_value) {
+        if (!this->gate_or_brake()) {
             return;
         }
         const double linear = arguments[0]->evaluate_number();
@@ -45,6 +63,19 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         this->disable();
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+void Wheels::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    Module::write_property(property_name, expression, from_expander);
+    // Shadowed wheels mirror method calls but not property writes. Forward the two gate
+    // properties so a shadow stops together with its master. Write them one level deep via
+    // Module::write_property (not the shadow's own override) to match the single-level
+    // call_with_shadows and to avoid recursion on shadow chains or mutual shadows.
+    if (property_name == "drivable" || property_name == "enabled") {
+        for (auto const &module : this->shadow_modules) {
+            module->Module::write_property(property_name, expression, from_expander);
+        }
     }
 }
 

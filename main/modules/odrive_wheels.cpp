@@ -57,10 +57,11 @@ void ODriveWheels::do_disable() {
 void ODriveWheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "power") {
         Module::expect(arguments, 2, numbery, numbery);
-        if (this->properties.at("enabled")->boolean_value) {
-            this->left_motor->power(arguments[0]->evaluate_number());
-            this->right_motor->power(arguments[1]->evaluate_number());
+        if (!this->gate_or_brake()) {
+            return;
         }
+        this->left_motor->power(arguments[0]->evaluate_number());
+        this->right_motor->power(arguments[1]->evaluate_number());
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->left_motor->off();
