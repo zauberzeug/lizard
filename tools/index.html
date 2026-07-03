@@ -950,6 +950,7 @@ The target node will reboot with the new firmware after a successful transfer.</
 <p>Install Python requirements:</p>
 <pre><code class="language-python">python3 -m pip install -r requirements.txt
 </code></pre>
+<p>On macOS, use <code>requirements-macos.txt</code> instead, which omits <code>gpiod</code> (not available on macOS).</p>
 <p>Install UART drivers: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers</p>
 <p>Get all sub modules:</p>
 <pre><code class="language-bash">git submodule update --init --recursive

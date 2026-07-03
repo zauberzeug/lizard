@@ -1260,6 +1260,11 @@ It is automatically created right after the boot sequence.</p>
 <td>Free heap memory (bytes)</td>
 <td><code>int</code></td>
 </tr>
+<tr>
+<td><code>core.last_message_age</code></td>
+<td>Time since last input message was received and interpreted (ms)</td>
+<td><code>int</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -1322,6 +1327,11 @@ It is automatically created right after the boot sequence.</p>
 <td></td>
 </tr>
 <tr>
+<td><code>core.set_baudrate(baud)</code></td>
+<td>Persist UART0 baud rate (applied after restart)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
 <td><code>core.pause_broadcasts()</code></td>
 <td>Pause property broadcasts (all modules)</td>
 <td></td>
@@ -1331,12 +1341,28 @@ It is automatically created right after the boot sequence.</p>
 <td>Resume property broadcasts</td>
 <td></td>
 </tr>
+<tr>
+<td><code>core.clear_schedule()</code></td>
+<td>Discard all pending scheduled blocks</td>
+<td></td>
+</tr>
+<tr>
+<td><code>core.keep_alive()</code></td>
+<td>Reset <code>last_message_age</code> without producing output</td>
+<td></td>
+</tr>
 </tbody>
 </table>
 <p>The output <code>format</code> is a string with multiple space-separated elements of the pattern <code>&lt;module&gt;.&lt;property&gt;[:&lt;precision&gt;]</code> or <code>&lt;variable&gt;[:&lt;precision&gt;]</code>.
 The <code>precision</code> is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format <code>"core.millis input.level motor.position:3"</code> might yield an output like <code>"92456 1 12.789"</code>.</p>
 <p><code>core.get_pin_status(pin)</code> reads the pin's voltage, not the output state directly.</p>
+<p><strong>UART baud rate:</strong>
+The console (UART0) defaults to 115200 baud.
+<code>core.set_baudrate(baud)</code> persists a new rate to non-volatile storage; it takes effect on the next restart, so the change is not a breaking one for hosts that are not updated yet.
+After <code>core.set_baudrate(921600)</code> followed by <code>core.restart()</code>, reconnect with the host tools at the new rate, e.g. <code>./monitor.py /dev/ttyUSB0 --baud 921600</code> (<code>monitor.py</code>, <code>configure.py</code> and <code>otb_update.py</code> all accept <code>--baud</code>, defaulting to 115200).
+Supported rates are 115200, 230400, 460800 and 921600.
+Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.</p>
 <h2 id="bluetooth">Bluetooth<a class="headerlink" href="#bluetooth" title="Permanent link">&para;</a></h2>
 <p>Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
 Simply create a Bluetooth module with a device name of your choice.</p>
@@ -1431,9 +1457,9 @@ When a fifth connects, the oldest entry is removed.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>bus.send(receiver, payload)</code></td>
-<td>Send a single line of text to a peer <code>receiver</code> (0-255)</td>
-<td><code>int</code>, <code>str</code></td>
+<td><code>bus.send(receiver, fmt, args...)</code></td>
+<td>Send a printf-formatted line to peer <code>receiver</code> (0-254). Specifiers: <code>%d</code> int, <code>%f</code> number (opt. <code>%.Nf</code>), <code>%s</code> string (bool→<code>true</code>/<code>false</code>)</td>
+<td><code>int</code>, <code>str</code>, ...</td>
 </tr>
 <tr>
 <td><code>bus.make_coordinator(peer_ids...)</code></td>
@@ -1652,12 +1678,15 @@ Note that the pulsing frequency is limited by the main loop to around 20 Hz.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>pwm = PwmOutput(pin)</code></td>
+<td><code>pwm = PwmOutput(pin[, lt[, lc]])</code></td>
 <td><code>pin</code> is the corresponding GPIO number</td>
-<td><code>int</code></td>
+<td>1–3x <code>int</code></td>
 </tr>
 </tbody>
 </table>
+<p>The constructor arguments <code>lt</code> (LEDC timer) and <code>lc</code> (LEDC channel) are optional and default to 0.
+When using multiple PWM outputs, set different channel IDs to avoid conflicts.
+Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.</p>
 <table>
 <thead>
 <tr>
@@ -2354,11 +2383,6 @@ This means calibration values only update while the corresponding sensor report 
 <td></td>
 </tr>
 <tr>
-<td><code>can.recover()</code></td>
-<td>Recover the driver</td>
-<td></td>
-</tr>
-<tr>
 <td><code>can.reset()</code></td>
 <td>Reset the driver</td>
 <td></td>
@@ -2380,8 +2404,8 @@ This means calibration values only update while the corresponding sensor report 
 </ul>
 <p>After creating a CAN module, the driver is started automatically.
 The <code>start()</code> and <code>stop()</code> methods are primarily for debugging purposes.</p>
-<p>The <code>recover()</code> method can be used to recover the driver from a "BUS_OFF" state.
-In contrast, the <code>reset()</code> method will stop the driver, try to recover it and then start it again.</p>
+<p>The <code>reset()</code> method will stop the driver, try to recover it and then start it again.
+It can be used to recover the driver from a "BUS_OFF" state.</p>
 <h2 id="serial-interface">Serial interface<a class="headerlink" href="#serial-interface" title="Permanent link">&para;</a></h2>
 <p>The serial module allows communicating with peripherals via the specified connection.</p>
 <table>
@@ -3324,6 +3348,11 @@ The pulse counter used for position feedback is created internally.</p>
 <td>Last read position error (degrees)</td>
 <td><code>float</code></td>
 </tr>
+<tr>
+<td><code>motor.set_mode_status</code></td>
+<td>Result of the last <code>set_mode</code> (0 = OK, 1 = failed, 2 = pending)</td>
+<td><code>int</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -3362,7 +3391,17 @@ The pulse counter used for position feedback is created internally.</p>
 </tr>
 <tr>
 <td><code>motor.set_holding_current(pct)</code></td>
-<td>Set holding current as percentage of working current (10-100 in steps of 10;)</td>
+<td>Set holding current as percentage of working current (10-100 in steps of 10)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.set_bitrate(hz)</code></td>
+<td>Set CAN bitrate in Hz (125000, 250000, 500000 or 1000000)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>motor.set_can_id(id)</code></td>
+<td>Set motor's CAN ID (1-2047)</td>
 <td><code>int</code></td>
 </tr>
 <tr>
@@ -3396,6 +3435,15 @@ If acceleration is 0, the motor runs directly at the set speed without ramping.<
 If acceleration is 0, the motor stops immediately.</p>
 <p>The <code>read_position_error()</code> method requests the current position error from the motor via CAN.
 The result is available in the <code>position_error</code> property (in degrees) once the motor responds.</p>
+<p>The <code>set_bitrate()</code> method changes the CAN bitrate on the motor.
+The rate is given in Hz and must be one of the four supported values (125000, 250000, 500000 or 1000000);
+any other value is rejected with a log message and no command is sent.
+The motor switches to the new bitrate immediately, which means communication with the motor is lost
+until the Lizard CAN bus is also reconfigured to match the new bitrate.</p>
+<p>The <code>set_can_id()</code> method changes the motor's CAN ID (range 1-2047, default 1).
+The new ID is persisted on the drive, so the motor only responds on the new ID afterwards —
+the Lizard script must be updated to construct the module with the new <code>can_id</code>.
+ID <code>0</code> is reserved as the broadcast address (all motors listen, none respond) and is therefore not accepted here.</p>
 <p><strong>Working Modes</strong></p>
 <p>The MKS SERVO42D/57D supports the following working modes:</p>
 <table>
@@ -3447,7 +3495,9 @@ The result is available in the <code>position_error</code> property (in degrees)
 </tbody>
 </table>
 <p>The <code>set_mode()</code> method sets the working mode of the motor.
-For CAN bus control, use SR_vFOC mode (0x05): <code>motor.set_mode(5)</code>.</p>
+For CAN bus control, use SR_vFOC mode (0x05): <code>motor.set_mode(5)</code>.
+The constructor automatically sets SR_vFOC mode (0x05),
+which is required for the bus motion commands (<code>position()</code>, <code>speed()</code>, <code>stop()</code>).</p>
 <h2 id="motor-axis">Motor Axis<a class="headerlink" href="#motor-axis" title="Permanent link">&para;</a></h2>
 <p>The motor axis module wraps a motor and two limit switches.
 It prevents the motor from moving past the limits.

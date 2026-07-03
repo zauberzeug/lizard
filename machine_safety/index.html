@@ -594,6 +594,12 @@ It allows formulating rules that stop critical hardware modules when the connect
 <p>The following example stops a motor when there is no serial communication for 500 ms:</p>
 <pre><code>when core.last_message_age &gt; 500 then motor.stop(); end
 </code></pre>
+<p>Any successfully interpreted input message resets <code>last_message_age</code>.
+If the host controller has no command to send but wants to signal that it is still alive, it can call <code>core.keep_alive()</code>, which resets the timer silently without producing any output.</p>
+<p>If the host streams <a href="../language/">scheduled blocks</a>, they should be discarded as well when the connection is lost,
+so that no stale commands fire after the host stopped:</p>
+<pre><code>when core.last_message_age &gt; 500 then motor.stop(); core.clear_schedule() end
+</code></pre>
 <h2 id="expander-watchdog">Expander watchdog<a class="headerlink" href="#expander-watchdog" title="Permanent link">&para;</a></h2>
 <p>The <code>expander</code> module provides a watchdog feature that restarts the port expander when it gets stuck and does not send messages anymore.
 After <code>ping_interval</code> seconds of no messages from the port expander, the <code>expander</code> module will instruct the expander to send a "__PONG__" message.

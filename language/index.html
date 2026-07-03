@@ -672,6 +672,30 @@ end
 Whenever the condition is true, the actions are executed.</p>
 <p>Note that actions can be asynchronous.
 If there are still actions running asynchronously, a truthy condition is ignored.</p>
+<p><strong>Scheduled blocks</strong></p>
+<p>Scheduled blocks execute a list of actions once at a given time,
+specified in milliseconds since boot (matching <code>core.millis</code>):</p>
+<pre><code>at 125015 do
+    en3.on()
+end
+</code></pre>
+<p>The time expression is evaluated once when the statement is interpreted,
+so relative times can be expressed with <code>core.millis</code>:</p>
+<pre><code>at core.millis + 500 do en3.off() end
+</code></pre>
+<p>In contrast to rules and routines, scheduled blocks fire with millisecond precision, decoupled from the main loop.
+This allows streaming time-critical sequences like trajectory setpoints from a host system.</p>
+<p>Each scheduled block is executed exactly once and discarded afterwards.
+If the time is already in the past, the actions are executed immediately.
+Blocks with equal times fire in the order of their definition.</p>
+<p><code>await</code> is not allowed inside scheduled blocks.
+A scheduled block can, however, call a routine that itself awaits conditions or routines:
+the routine starts at the scheduled time and continues with Lizard's regular main loop cycle.</p>
+<p>At most 100 scheduled blocks can be pending at the same time;
+further <code>at</code> statements fail with the error message "schedule is full".
+All pending blocks can be discarded with <a href="../module_reference/#core"><code>core.clear_schedule()</code></a>,
+for example when the connection to the host system is lost (see <a href="../machine_safety/">machine safety</a>).</p>
+<p>When <code>core.debug</code> is true, each firing reports its lateness, e.g. <code>at 125015: fired 0.3 ms late</code>.</p>
 <h2 id="actions">Actions<a class="headerlink" href="#actions" title="Permanent link">&para;</a></h2>
 <p>Routines and rules contain a list of actions.</p>
 <p><strong>Method and routine calls</strong></p>
