@@ -19,9 +19,8 @@ Python scripts in this project are **build/flash/monitor tools**, not the main a
 | Script           | Purpose                                         |
 | ---------------- | ----------------------------------------------- |
 | `build.py`       | Build for ESP32/ESP32-S3 (wraps `idf.py build`) |
-| `flash.py`       | Flash firmware to device                        |
 | `monitor.py`     | Serial monitor                                  |
-| `espresso.py`    | Deployment tool                                 |
+| `espresso.py`    | Flash & control ESP32 (flash/erase/enable/reset)|
 | `configure.py`   | Project configuration                           |
 | `core_dumper.py` | Analyze core dumps                              |
 

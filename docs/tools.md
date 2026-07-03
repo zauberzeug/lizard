@@ -7,7 +7,7 @@
 To install Lizard on your ESP32 run
 
 ```bash
-sudo ./espresso.py flash <device_path>
+sudo ./espresso.py flash --device <device_path>
 ```
 
 Note that flashing may require root access (hence the sudo).
@@ -154,13 +154,13 @@ To upload the compiled firmware you can use the `./espresso.py` command describe
 
 ### Backtrace
 
-In case Lizard terminates with a backtrace printed to the serial terminal, you can use the following script to print corresponding source code lines.
+In case Lizard terminates with a backtrace printed to the serial terminal, you can translate the addresses to source code lines with the `addr2line` tool from the ESP-IDF toolchain.
+Make sure the toolchain is on your `PATH` (e.g. by sourcing `. $IDF_PATH/export.sh`) and that a compiled ELF file is located at `build/lizard.elf`.
+Use the `addr2line` that matches the active ESP-IDF toolchain; on ESP-IDF 5.x the unified Xtensa binary below covers both ESP32 and ESP32-S3 (a RISC-V target would use `riscv32-esp-elf-addr2line`).
 
 ```bash
-./backtrace.sh <addresses>
+xtensa-esp-elf-addr2line -e build/lizard.elf <addresses>
 ```
-
-Note that the script assumes Espressif IDF tools being installed at `~/esp/esp-tools_4.4/` and a compiled ELF file being located at `build/lizard.elf`.
 
 ### Releasing
 
