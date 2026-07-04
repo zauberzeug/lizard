@@ -106,6 +106,10 @@ parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', hel
 parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
 parser.add_argument('--device', nargs='?', default=DEFAULT_DEVICE, help='Serial device path (auto-detected on Jetson)')
+parser.add_argument('--baud', type=int, default=921600, help='Baud rate for flashing and erasing')
+parser.add_argument('--no-stub', action='store_true',
+                    help='Do not upload esptool\'s RAM stub (slower, but avoids stub upload failures '
+                         'on some USB-UART bridges)')
 
 args = parser.parse_args()
 ON = 1 if args.nand else 0
@@ -114,6 +118,8 @@ DRY_RUN = args.dry_run
 SWAP = args.swap
 CHIP = args.chip
 DEVICE = args.device
+BAUD = str(args.baud)
+STUB_ARGS = ('--no-stub',) if args.no_stub else ()
 FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}.get(CHIP, '40m')
 BOOTLOADER_OFFSET = {'esp32': '0x1000', 'esp32s3': '0x0'}.get(CHIP, '0x1000')
 BOOTLOADER = args.bootloader
@@ -203,7 +209,8 @@ def erase() -> None:
                 'esptool.py',
                 '--chip', CHIP,
                 '--port', DEVICE,
-                '--baud', '921600',
+                '--baud', BAUD,
+                *STUB_ARGS,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'erase_flash',
@@ -237,7 +244,8 @@ def flash() -> None:
                 'esptool.py',
                 '--chip', CHIP,
                 '--port', DEVICE,
-                '--baud', '921600',
+                '--baud', BAUD,
+                *STUB_ARGS,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'write_flash',
