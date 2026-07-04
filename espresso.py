@@ -226,7 +226,8 @@ def reset_partition() -> None:
         'esptool.py',
         '--chip', args.chip,
         '--port', DEVICE,
-        '--baud', '115200',
+        '--baud', BAUD,
+        *STUB_ARGS,
         'erase_region',
         '0xf000',  # otadata partition offset (default ESP-IDF partition table)
         '0x2000',  # otadata partition size (default ESP-IDF partition table)
