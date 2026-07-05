@@ -3,7 +3,6 @@ build/partition_table/partition-table.bin
 build/lizard.elf
 build/lizard.bin
 configure.py
-core_dumper.py
 espresso.py
 monitor.py
 README.md

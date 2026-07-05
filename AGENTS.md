@@ -427,10 +427,10 @@ idf.py monitor
 
 ### Core Dumps
 
-If the device crashes, use `core_dumper.py` to analyze:
+If the device crashes, use `espresso.py coredump` to analyze:
 
 ```bash
-python core_dumper.py
+python espresso.py coredump
 ```
 
 ### Common Debug Techniques
