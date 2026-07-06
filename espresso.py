@@ -20,8 +20,10 @@ IS_JETSON = Path('/etc/nv_tegra_release').exists()
 
 PIN_COMMANDS = {'flash', 'erase', 'enable', 'disable', 'reset', 'release_pins'}
 
-# Artifact dests whose value must resolve inside build/ under --host (only build/ is rsynced).
-ARTIFACT_DESTS = {'bootloader', 'partition_table', 'firmware', 'elf'}
+# Artifact dests and the extension each must carry under --host. Only build/ is rsynced, and
+# only the command's include pattern (flash→*.bin, coredump→*.elf) is transferred, so a custom
+# path must be under build/ AND match that extension or it would be silently absent on the remote.
+ARTIFACT_SUFFIX = {'bootloader': '.bin', 'partition_table': '.bin', 'firmware': '.bin', 'elf': '.elf'}
 
 # Which build/ artifacts each remote command needs rsynced (others need none: erase/enable/
 # disable/reset/release_pins control pins only). Commands absent here skip the artifact rsync.
@@ -213,17 +215,21 @@ def quote_remote_path(path: str) -> str:
     return shlex.quote(path)
 
 
-def _require_build_relative(flag: str, value: str) -> None:
+def _require_build_relative(flag: str, value: str, suffix: str) -> None:
     """Reject a custom artifact path that would fall outside the rsynced build/ scope.
 
-    Only build/ (plus espresso.py) is copied to the remote, so a custom artifact path must
-    resolve inside build/ or it would silently be missing there. ".." components are rejected
-    too, so build/../etc/x cannot escape the copied scope.
+    Only build/ (plus espresso.py) is copied to the remote, and only files matching the
+    command's include pattern are transferred, so a custom artifact path must resolve inside
+    build/ AND carry the expected extension -- otherwise it is accepted here but silently
+    missing on the remote. ".." components are rejected too, so build/../etc/x cannot escape.
     """
     posix = PurePosixPath(value)
     if posix.is_absolute() or '..' in posix.parts or posix.parts[:1] != ('build',):
         raise RuntimeError(f'{flag} {value!r}: under --host, artifact paths must be relative and under '
                            'build/ (only build/ and espresso.py are copied to the remote).')
+    if posix.suffix != suffix:
+        raise RuntimeError(f'{flag} {value!r}: under --host, this must be a {suffix} file under build/ '
+                           f'(only build/**/*{suffix} is rsynced to the remote for this command).')
 
 
 def remote_command(parsed: argparse.Namespace, parser: argparse.ArgumentParser) -> List[str]:
@@ -251,8 +257,8 @@ def remote_command(parsed: argparse.Namespace, parser: argparse.ArgumentParser) 
         if isinstance(value, bool):  # store_true flag the user turned on
             command.append(option)
             continue
-        if dest in ARTIFACT_DESTS:
-            _require_build_relative(option, str(value))
+        if dest in ARTIFACT_SUFFIX:
+            _require_build_relative(option, str(value), ARTIFACT_SUFFIX[dest])
         command += [option, str(value)]
     return command
 
