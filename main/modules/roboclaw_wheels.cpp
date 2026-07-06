@@ -19,8 +19,7 @@ const std::map<std::string, Variable_ptr> RoboClawWheels::get_defaults() {
 }
 
 RoboClawWheels::RoboClawWheels(const std::string name, const RoboClawMotor_ptr left_motor, const RoboClawMotor_ptr right_motor)
-    : Wheels(name), left_motor(left_motor), right_motor(right_motor) {
-    this->properties = RoboClawWheels::get_defaults();
+    : Wheels(name, RoboClawWheels::get_defaults()), left_motor(left_motor), right_motor(right_motor) {
 }
 
 /* Catch unsigned wrap-around by detecting large jumps in encoder deltas */
