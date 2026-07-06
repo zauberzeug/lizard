@@ -1,5 +1,14 @@
 #include "wheels.h"
 
+const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
+    return {
+        {"width", std::make_shared<NumberVariable>(1.0)},
+        {"linear_speed", std::make_shared<NumberVariable>()},
+        {"angular_speed", std::make_shared<NumberVariable>()},
+        {"enabled", std::make_shared<BooleanVariable>(true)},
+    };
+}
+
 Wheels::Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults)
     : Module(name) {
     this->properties = defaults;
@@ -55,13 +64,4 @@ void Wheels::disable() {
     this->do_disable();
     this->last_applied_enabled = false;
     this->properties.at("enabled")->boolean_value = false;
-}
-
-const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
-    return {
-        {"width", std::make_shared<NumberVariable>(1.0)},
-        {"linear_speed", std::make_shared<NumberVariable>()},
-        {"angular_speed", std::make_shared<NumberVariable>()},
-        {"enabled", std::make_shared<BooleanVariable>(true)},
-    };
 }
