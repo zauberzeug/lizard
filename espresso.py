@@ -20,6 +20,16 @@ IS_JETSON = Path('/etc/nv_tegra_release').exists()
 
 PIN_COMMANDS = {'flash', 'erase', 'enable', 'disable', 'reset', 'release_pins'}
 
+# Artifact dests whose value must resolve inside build/ under --host (only build/ is rsynced).
+ARTIFACT_DESTS = {'bootloader', 'partition_table', 'firmware', 'elf'}
+
+# Which build/ artifacts each remote command needs rsynced (others need none: erase/enable/
+# disable/reset/release_pins control pins only). Commands absent here skip the artifact rsync.
+REMOTE_ARTIFACT_INCLUDES = {
+    'flash': ['--include=*/', '--include=*.bin'],
+    'coredump': ['--include=*/', '--include=*.elf'],
+}
+
 # Configuration, populated by main() once the arguments are known. Kept at module
 # level so the command functions below can read it without threading it through every
 # call; importing this module runs no argument parsing and touches no hardware.
@@ -29,6 +39,8 @@ OFF = 1
 DRY_RUN = False
 CHIP = 'esp32'
 DEVICE = ''
+BAUD = '921600'
+STUB_ARGS: Tuple[str, ...] = ()
 EN = 'PR.04'
 G0 = 'PAC.06'
 FLASH_FREQ = '40m'
@@ -133,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
     parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
     parser.add_argument('--device', nargs='?', default=None, help='Serial device path (auto-detected on Jetson)')
+    parser.add_argument('--baud', type=int, default=None,
+                        help='Baud rate for flashing and erasing (default: 921600)')
+    parser.add_argument('--no-stub', action='store_true',
+                        help="Do not upload esptool's RAM stub (slower, but avoids stub upload failures "
+                             'on some USB-UART bridges)')
     parser.add_argument('--elf', default=None, help='coredump: path to ELF file (default: build/lizard.elf)')
     parser.add_argument('--debug', action='store_true',
                         help='coredump: start a debug session, then return to the shell')
@@ -196,57 +213,89 @@ def quote_remote_path(path: str) -> str:
     return shlex.quote(path)
 
 
-def remote_command(parsed: argparse.Namespace) -> List[str]:
-    """Rebuild the espresso argument list to run on the remote, minus ``--host``.
+def _require_build_relative(flag: str, value: str) -> None:
+    """Reject a custom artifact path that would fall outside the rsynced build/ scope.
 
-    Only flags the user explicitly set are forwarded, so device/pin/L4T resolution and
-    the path defaults all happen on the remote machine -- a local default (e.g. a Mac's
-    serial device) can never leak into the remote invocation. File paths must be relative
-    so they resolve against the remote target directory after the rsync.
+    Only build/ (plus espresso.py) is copied to the remote, so a custom artifact path must
+    resolve inside build/ or it would silently be missing there. ".." components are rejected
+    too, so build/../etc/x cannot escape the copied scope.
+    """
+    posix = PurePosixPath(value)
+    if posix.is_absolute() or '..' in posix.parts or posix.parts[:1] != ('build',):
+        raise RuntimeError(f'{flag} {value!r}: under --host, artifact paths must be relative and under '
+                           'build/ (only build/ and espresso.py are copied to the remote).')
+
+
+def remote_command(parsed: argparse.Namespace, parser: argparse.ArgumentParser) -> List[str]:
+    """Rebuild the espresso argument list to run on the remote, minus ``--host``/``--dry-run``.
+
+    The forwarded flags are DERIVED from the parser's own actions -- every option whose value
+    differs from its default is forwarded -- rather than a hand-maintained list. That way a
+    new flag (like a future ``--baud``) is forwarded automatically and can never be silently
+    dropped, so ``--baud X --host ...`` cannot flash the remote at the wrong rate.
+
+    Only flags the user explicitly set are forwarded (value flags default to ``None``), so
+    device/pin/L4T resolution and the path defaults all happen on the remote machine -- a
+    local default (e.g. a Mac's serial device) can never leak into the remote invocation.
+    ``--dry-run`` is orchestrated locally (see run_remote) and is deliberately not forwarded.
     """
     command = [parsed.command]
-    for flag, enabled in (('--nand', parsed.nand),
-                          ('--swap', parsed.swap),
-                          ('--reset-partition', parsed.reset_partition),
-                          ('--dry-run', parsed.dry_run),
-                          ('--debug', parsed.debug)):
-        if enabled:
-            command.append(flag)
-    if parsed.chip is not None:
-        command += ['--chip', parsed.chip]
-    if parsed.device is not None:
-        command += ['--device', parsed.device]
-    for flag, value in (('--bootloader', parsed.bootloader),
-                        ('--partition-table', parsed.partition_table),
-                        ('--firmware', parsed.firmware),
-                        ('--elf', parsed.elf)):
-        if value is None:
+    for action in parser._actions:  # pylint: disable=protected-access
+        dest = action.dest
+        if dest in ('help', 'command', 'host', 'dry_run'):
             continue
-        # Only build/ (plus espresso.py) is rsynced to the remote, so a custom artifact
-        # path must resolve inside build/ or it would silently be missing on the remote.
-        # Reject ".." components too, so build/../etc/x cannot escape the copied scope.
-        posix = PurePosixPath(value)
-        if posix.is_absolute() or '..' in posix.parts or posix.parts[:1] != ('build',):
-            raise RuntimeError(f'{flag} {value!r}: under --host, artifact paths must be relative and under '
-                               'build/ (only build/ and espresso.py are copied to the remote).')
-        command += [flag, value]
+        value = getattr(parsed, dest, None)
+        if value is None or value == action.default:
+            continue
+        option = max(action.option_strings, key=len)
+        if isinstance(value, bool):  # store_true flag the user turned on
+            command.append(option)
+            continue
+        if dest in ARTIFACT_DESTS:
+            _require_build_relative(option, str(value))
+        command += [option, str(value)]
     return command
 
 
-def run_remote(host: str, command: List[str], use_sudo: bool) -> None:
-    """rsync espresso.py + the build artifacts to the host and run the command over SSH."""
+def run_remote(host: str, command: List[str], *, artifact_includes: List[str],
+               use_sudo: bool, dry_run: bool) -> None:
+    """rsync espresso.py (+ the needed build artifacts) to the host and run the command over SSH.
+
+    Only the artifacts the command actually uses are copied: ``artifact_includes`` is empty for
+    pin-only commands (erase/enable/disable/reset/release_pins), so they no longer die in an
+    rsync of a missing build/ on a fresh clone. sources resolve against the script's own
+    directory, so espresso can be invoked from any cwd. Under ``dry_run`` nothing is sent or run
+    on the remote -- the rsync/ssh commands are printed so a dry run never mutates the remote.
+    """
     target, path = parse_host(host)
+    if target.startswith('-'):
+        raise RuntimeError(f'Refusing host {target!r}: a leading dash could be parsed as an ssh/rsync option.')
     quoted_path = quote_remote_path(path)
-    print_bold(f'Copying espresso.py and build artifacts to {target}:{path}...')
-    subprocess.run(['rsync', '-zarv', '--prune-empty-dirs',
-                    '--include=*/', '--include=*.bin', '--include=*.elf', '--exclude=*',
-                    'build', f'{target}:{quoted_path}'], check=True)
-    subprocess.run(['rsync', '-z', 'espresso.py', f'{target}:{quoted_path}/'], check=True)
+    script_dir = Path(__file__).resolve().parent
+    runner = _print_remote if dry_run else _run_checked
+
+    if artifact_includes:
+        build_dir = script_dir / 'build'
+        if not dry_run and not build_dir.exists():
+            raise RuntimeError(f'No build/ directory next to espresso.py ({build_dir}); run the ESP-IDF build first.')
+        print_bold(f'Copying build artifacts to {target}:{path}...')
+        runner(['rsync', '-zarv', '--prune-empty-dirs', *artifact_includes, '--exclude=*',
+                str(build_dir), f'{target}:{quoted_path}'])
+    print_bold(f'Copying espresso.py to {target}:{path}...')
+    runner(['rsync', '-z', str(script_dir / 'espresso.py'), f'{target}:{quoted_path}/'])
 
     print_bold(f'Running "espresso.py {" ".join(command)}" on {target}...')
     sudo = 'sudo ' if use_sudo else ''
     remote = f'cd {quoted_path} && {sudo}./espresso.py ' + ' '.join(shlex.quote(token) for token in command)
-    subprocess.run(['ssh', '-t', target, f'bash --login -c {shlex.quote(remote)}'], check=True)
+    runner(['ssh', '-t', target, f'bash --login -c {shlex.quote(remote)}'])
+
+
+def _run_checked(command: List[str]) -> None:
+    subprocess.run(command, check=True)
+
+
+def _print_remote(command: List[str]) -> None:
+    print(f'  {" ".join(shlex.quote(token) for token in command)}')
 
 
 @contextmanager
@@ -313,7 +362,8 @@ def erase() -> None:
                 'esptool.py',
                 '--chip', CHIP,
                 '--port', DEVICE,
-                '--baud', '921600',
+                '--baud', BAUD,
+                *STUB_ARGS,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'erase_flash',
@@ -329,7 +379,8 @@ def reset_partition() -> None:
         'esptool.py',
         '--chip', CHIP,
         '--port', DEVICE,
-        '--baud', '115200',
+        '--baud', BAUD,
+        *STUB_ARGS,
         'erase_region',
         '0xf000',  # otadata partition offset (default ESP-IDF partition table)
         '0x2000',  # otadata partition size (default ESP-IDF partition table)
@@ -347,7 +398,8 @@ def flash() -> None:
                 'esptool.py',
                 '--chip', CHIP,
                 '--port', DEVICE,
-                '--baud', '921600',
+                '--baud', BAUD,
+                *STUB_ARGS,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'write_flash',
@@ -419,15 +471,20 @@ def print_fail(message: str) -> None:
 
 
 def main(argv: List[str]) -> None:
-    global args, ON, OFF, DRY_RUN, CHIP, DEVICE, EN, G0
+    global args, ON, OFF, DRY_RUN, CHIP, DEVICE, BAUD, STUB_ARGS, EN, G0
     global FLASH_FREQ, BOOTLOADER_OFFSET, BOOTLOADER, PARTITION_TABLE, FIRMWARE, ELF, gpio
 
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.host is not None:
         # Validate the arguments locally with the real parser (done above), then hand the
-        # command to the remote machine, which resolves its own device/pins/L4T.
-        run_remote(args.host, remote_command(args), use_sudo=not args.dry_run)
+        # command to the remote machine, which resolves its own device/pins/L4T. sudo is only
+        # for the pin/flash commands; coredump wraps esp_coredump (pip --user, dialout not root).
+        run_remote(args.host, remote_command(args, parser),
+                   artifact_includes=REMOTE_ARTIFACT_INCLUDES.get(args.command, []),
+                   use_sudo=args.command in PIN_COMMANDS and not args.dry_run,
+                   dry_run=args.dry_run)
         return
 
     print_ok('Espresso dry-running...' if args.dry_run else 'Espresso running...')
@@ -437,6 +494,8 @@ def main(argv: List[str]) -> None:
     DRY_RUN = args.dry_run
     CHIP = args.chip or 'esp32'
     DEVICE = args.device if args.device is not None else resolve_default_device()
+    BAUD = str(args.baud) if args.baud is not None else '921600'
+    STUB_ARGS = ('--no-stub',) if args.no_stub else ()
     FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}[CHIP]
     BOOTLOADER_OFFSET = {'esp32': '0x1000', 'esp32s3': '0x0'}[CHIP]
     BOOTLOADER = args.bootloader or 'build/bootloader/bootloader.bin'
@@ -447,7 +506,7 @@ def main(argv: List[str]) -> None:
     EN, G0 = 'PR.04', 'PAC.06'
     if args.swap:
         EN, G0 = G0, EN
-    if args.command in PIN_COMMANDS:
+    if args.command in PIN_COMMANDS and not args.dry_run:
         gpio = build_gpio(EN, G0)
 
     if args.command == 'enable':
