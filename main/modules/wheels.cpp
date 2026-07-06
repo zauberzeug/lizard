@@ -10,11 +10,9 @@ const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
     };
 }
 
-Wheels::Wheels(const std::string name)
+Wheels::Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults)
     : Module(name) {
-    // Install the shared defaults. Subclasses with no extra properties (Dunker, ODrive) rely on
-    // this; those that add properties (RoboClaw's m_per_tick) overwrite it in their own ctor.
-    this->properties = Wheels::get_defaults();
+    this->properties = defaults;
 }
 
 void Wheels::update_speeds(double left_speed, double right_speed) {
@@ -29,7 +27,7 @@ bool Wheels::may_drive() const {
 void Wheels::step() {
     this->update_odometry();
 
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+    if (this->properties.at("enabled")->boolean_value != this->last_applied_enabled) {
         if (this->properties.at("enabled")->boolean_value) {
             this->enable();
         } else {
@@ -91,13 +89,13 @@ void Wheels::write_property(const std::string property_name, const ConstExpressi
 }
 
 void Wheels::enable() {
-    this->enabled = true;
+    this->last_applied_enabled = true;
     this->properties.at("enabled")->boolean_value = true;
     this->do_enable();
 }
 
 void Wheels::disable() {
     this->do_disable();
-    this->enabled = false;
+    this->last_applied_enabled = false;
     this->properties.at("enabled")->boolean_value = false;
 }

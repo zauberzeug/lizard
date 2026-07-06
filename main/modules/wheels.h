@@ -18,6 +18,9 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  * (that is what `enabled`/`disable` are for). Driving resumes on `drivable = true`.
  */
 class Wheels : public Module {
+private:
+    bool last_applied_enabled = true; // last value synced to the motors; `step()` edge-detects direct property writes against it
+
 protected:
     /// Whether drive commands may be applied: true only while enabled and drivable.
     bool may_drive() const;
@@ -32,16 +35,13 @@ protected:
     /// Update `linear_speed`/`angular_speed` from the motors; called every `step()`.
     virtual void update_odometry() = 0;
 
-private:
-    bool enabled = true;
-
 public:
-    /// Shared property defaults; subclasses that add properties shadow this in their own `get_defaults()`.
-    static const std::map<std::string, Variable_ptr> get_defaults();
-    Wheels(const std::string name);
+    Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults = Wheels::get_defaults());
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander = false) override;
     void enable();
     void disable();
+    /// Shared property defaults; subclasses that add properties shadow this and pass the result to the constructor.
+    static const std::map<std::string, Variable_ptr> get_defaults();
 };
