@@ -13,6 +13,10 @@ sudo ./espresso.py flash <device_path>
 Note that flashing may require root access (hence the sudo).
 The command also does not work while the serial interface is busy communicating with another process.
 
+If flashing fails on your USB-UART bridge, you can lower the baud rate with `--baud` (default: 921600).
+If the stub upload itself fails (e.g. "Failed to write to target RAM"), pass `--no-stub` to flash via the ROM loader instead.
+On boards with a native USB-Serial-JTAG port (e.g. ESP32-S3), prefer that port over an external USB-UART bridge as the most robust way to flash.
+
 ### Robot Brain
 
 The `espresso.py` script can also upload firmware on a [Robot Brain](https://www.zauberzeug.com/product-robot-brain.html)
