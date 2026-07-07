@@ -257,21 +257,17 @@ def quote_remote_path(path: str) -> str:
     return shlex.quote(path)
 
 
-def _require_build_relative(flag: str, value: str, suffix: str) -> None:
-    """Reject a custom artifact path that would fall outside the rsynced build/ scope.
+def _require_relative(flag: str, value: str) -> None:
+    """Reject an artifact path that cannot land in the same place on the remote.
 
-    Only build/ (plus espresso.py) is copied to the remote, and only files matching the
-    command's include pattern are transferred, so a custom artifact path must resolve inside
-    build/ AND carry the expected extension -- otherwise it is accepted here but silently
-    missing on the remote. ".." components are rejected too, so build/../etc/x cannot escape.
+    The artifacts are rsynced with their relative paths preserved and the remote command
+    resolves them below the target directory, so an absolute path (or one escaping via
+    "..") would be copied somewhere the remote command does not look.
     """
     posix = PurePosixPath(value)
-    if posix.is_absolute() or '..' in posix.parts or posix.parts[:1] != ('build',):
-        raise RuntimeError(f'{flag} {value!r}: under --host, artifact paths must be relative and under '
-                           'build/ (only build/ and espresso.py are copied to the remote).')
-    if posix.suffix != suffix:
-        raise RuntimeError(f'{flag} {value!r}: under --host, this must be a {suffix} file under build/ '
-                           f'(only build/**/*{suffix} is rsynced to the remote for this command).')
+    if posix.is_absolute() or '..' in posix.parts:
+        raise RuntimeError(f'{flag} {value!r}: under --host, artifact paths must be relative and free of ".." '
+                           '(they are copied below the remote target directory).')
 
 
 def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
@@ -283,11 +279,10 @@ def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
     stripped: ``--host`` (it IS the remote dispatch) and ``--dry-run`` (a dry run prints
     the rsync/ssh commands locally and must not run anything remotely, see run_remote).
     """
-    cmd = COMMANDS[parsed.command]
-    for dest in cmd.artifacts:
+    for dest in COMMANDS[parsed.command].artifacts:
         value = getattr(parsed, dest)
         if value is not None:
-            _require_build_relative('--' + dest.replace('_', '-'), str(value), cmd.artifact_suffix)
+            _require_relative('--' + dest.replace('_', '-'), str(value))
     command = []
     skip_value = False
     for token in argv:
@@ -302,17 +297,18 @@ def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
     return command
 
 
-def run_remote(host: str, command: List[str], *, artifact_suffix: str,
+def run_remote(host: str, command: List[str], *, artifacts: List[str],
                use_sudo: bool, dry_run: bool) -> None:
     """rsync espresso.py (+ the needed build artifacts) to the host and run the command over SSH.
 
-    Only build/**/*``artifact_suffix`` files are copied; the suffix is empty for pin-only
-    commands (erase/enable/disable/reset/release_pins), which skip the artifact rsync and so
-    no longer die on a missing build/ on a fresh clone. build/ resolves against the cwd -- the same base
-    a local run uses for the artifact paths -- so the remote flashes exactly what a local flash
-    would; only espresso.py itself is taken from the script's own directory. Under ``dry_run``
-    nothing is sent or run on the remote -- the rsync/ssh commands are printed so a dry run
-    never mutates the remote.
+    Exactly the files the command uses are copied, with their relative paths preserved
+    (rsync -R), so the remote command finds them below the target directory; ``artifacts``
+    is empty for pin-only commands (erase/enable/disable/reset/release_pins), which skip
+    the artifact rsync entirely. The paths resolve against the cwd -- the same base a local
+    run uses -- so the remote flashes exactly what a local flash would; only espresso.py
+    itself is taken from the script's own directory. Under ``dry_run`` nothing is sent or
+    run on the remote -- the rsync/ssh commands are printed so a dry run never mutates the
+    remote.
     """
     target, path = parse_host(host)
     if target.startswith('-'):
@@ -320,13 +316,11 @@ def run_remote(host: str, command: List[str], *, artifact_suffix: str,
     script_dir = Path(__file__).resolve().parent
     runner = _print_remote if dry_run else _run_checked
 
-    if artifact_suffix:
-        build_dir = Path('build')
-        if not dry_run and not build_dir.is_dir():
-            raise RuntimeError(f'No build/ directory in {Path.cwd()}; run the ESP-IDF build first.')
+    if artifacts:
+        if not dry_run and (missing := [artifact for artifact in artifacts if not Path(artifact).is_file()]):
+            raise RuntimeError(f'Missing build artifacts: {", ".join(missing)}; run the ESP-IDF build first.')
         print_bold(f'Copying build artifacts to {target}:{path}...')
-        runner(['rsync', '-zarv', '--prune-empty-dirs', '--include=*/', f'--include=*{artifact_suffix}',
-                '--exclude=*', str(build_dir), f'{target}:{path}'])
+        runner(['rsync', '-zavR', *artifacts, f'{target}:{path}'])
     print_bold(f'Copying espresso.py to {target}:{path}...')
     # -p restores the exec bit on a pre-existing non-executable remote copy, whose
     # permissions a plain rsync would keep forever ("./espresso.py: Permission denied").
@@ -494,26 +488,24 @@ def coredump(config: Config) -> None:
 class Command:
     """A registered command: everything main() and the --host machinery need to know about it.
 
-    ``artifacts`` names the Config path fields the command reads; under --host only
-    build/**/*``artifact_suffix`` is rsynced to the remote, so a custom artifact path must
-    stay within that scope (enforced by _require_build_relative). ``uses_pins`` selects
-    GPIO setup on a local run and the sudo prefix on a remote one.
+    ``artifacts`` names the Config path fields the command reads; under --host exactly those
+    files are rsynced to the remote (resolved with the same defaults the remote would apply,
+    see _require_relative for the path constraint). ``uses_pins`` selects GPIO setup on a
+    local run and the sudo prefix on a remote one.
     """
     handler: Callable[[Config], None]
     uses_pins: bool = False
     artifacts: Tuple[str, ...] = ()
-    artifact_suffix: str = ''
 
 
 COMMANDS: Dict[str, Command] = {
-    'flash': Command(flash, uses_pins=True,
-                     artifacts=('bootloader', 'partition_table', 'firmware'), artifact_suffix='.bin'),
+    'flash': Command(flash, uses_pins=True, artifacts=('bootloader', 'partition_table', 'firmware')),
     'enable': Command(enable, uses_pins=True),
     'disable': Command(disable, uses_pins=True),
     'reset': Command(reset, uses_pins=True),
     'erase': Command(erase, uses_pins=True),
     'release_pins': Command(_release_pins, uses_pins=True),
-    'coredump': Command(coredump, artifacts=('elf',), artifact_suffix='.elf'),
+    'coredump': Command(coredump, artifacts=('elf',)),
 }
 
 
@@ -563,7 +555,7 @@ def main(argv: List[str]) -> None:
         # command to the remote machine, which resolves its own device/pins/L4T. sudo is only
         # for the pin/flash commands; coredump wraps esp_coredump (pip --user, dialout not root).
         run_remote(args.host, remote_command(argv, args),
-                   artifact_suffix=cmd.artifact_suffix,
+                   artifacts=[str(getattr(args, dest) or getattr(DEFAULT, dest)) for dest in cmd.artifacts],
                    use_sudo=cmd.uses_pins,
                    dry_run=args.dry_run)
         return
