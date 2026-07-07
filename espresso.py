@@ -6,8 +6,9 @@ import subprocess
 import sys
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
-from typing import Generator, List, Tuple
+from typing import Generator, List, Optional, Tuple
 
 try:
     import gpiod
@@ -32,29 +33,11 @@ REMOTE_ARTIFACT_INCLUDES = {
     'coredump': ['--include=*/', '--include=*.elf'],
 }
 
-# Configuration, populated by main() once the arguments are known. Kept at module
-# level so the command functions below can read it without threading it through every
-# call; importing this module runs no argument parsing and touches no hardware.
-args = argparse.Namespace()
-ON = 0
-OFF = 1
-DRY_RUN = False
-CHIP = 'esp32'
-DEVICE = ''
-BAUD = '921600'
-STUB_ARGS: Tuple[str, ...] = ()
-EN = 'PR.04'
-G0 = 'PAC.06'
-FLASH_FREQ = '40m'
-BOOTLOADER_OFFSET = '0x1000'
-BOOTLOADER = 'build/bootloader/bootloader.bin'
-PARTITION_TABLE = 'build/partition_table/partition-table.bin'
-FIRMWARE = 'build/lizard.bin'
-ELF = 'build/lizard.elf'
-
 
 class GpioController:
-    def __init__(self, en: str, g0: str) -> None:
+    """No-op fallback controller; also the base class for the real gpiod-backed ones."""
+
+    def __init__(self, en: str = '', g0: str = '') -> None:
         pass
 
     def request_outputs(self, consumer: str) -> None:
@@ -117,8 +100,71 @@ class GpioControllerV2(GpioController):
             self._request = None
 
 
-# No-op controller until main() resolves the real one for a local pin command.
-gpio: GpioController = GpioController('PR.04', 'PAC.06')
+@dataclass(frozen=True)
+class Config:
+    """Resolved runtime configuration, passed to the command functions.
+
+    The field defaults are the single source of the option defaults: build_parser
+    interpolates them into the help texts via the DEFAULT instance and main() applies
+    them as fallbacks (the parser itself keeps None defaults so that main() can tell
+    typed flags from omitted ones). Values that depend on other fields are properties,
+    so they cannot drift from their inputs.
+    """
+    chip: str = 'esp32'
+    device: str = ''  # the real default is machine-dependent, see resolve_default_device()
+    baud: Optional[int] = None  # an explicit --baud; each command falls back to its own default
+    nand: bool = False
+    swap: bool = False
+    dry_run: bool = False
+    no_stub: bool = False
+    reset_partition: bool = False
+    debug: bool = False
+    bootloader: str = 'build/bootloader/bootloader.bin'
+    partition_table: str = 'build/partition_table/partition-table.bin'
+    firmware: str = 'build/lizard.bin'
+    elf: str = 'build/lizard.elf'
+    en_pin: str = 'PR.04'
+    g0_pin: str = 'PAC.06'
+    gpio: GpioController = field(default_factory=GpioController)  # no-op until main() builds the real one
+
+    @property
+    def on(self) -> int:
+        return 1 if self.nand else 0
+
+    @property
+    def off(self) -> int:
+        return 0 if self.nand else 1
+
+    @property
+    def en(self) -> str:
+        return self.g0_pin if self.swap else self.en_pin
+
+    @property
+    def g0(self) -> str:
+        return self.en_pin if self.swap else self.g0_pin
+
+    @property
+    def stub_args(self) -> Tuple[str, ...]:
+        return ('--no-stub',) if self.no_stub else ()
+
+    @property
+    def flash_freq(self) -> str:
+        return {'esp32': '40m', 'esp32s3': '80m'}[self.chip]
+
+    @property
+    def bootloader_offset(self) -> str:
+        return {'esp32': '0x1000', 'esp32s3': '0x0'}[self.chip]
+
+    @property
+    def flash_baud(self) -> str:
+        return str(self.baud or 921600)
+
+    @property
+    def coredump_baud(self) -> int:
+        return self.baud or 115200  # esp_coredump's own default; the flash/erase baud would be wrong here
+
+
+DEFAULT = Config()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -138,22 +184,24 @@ def build_parser() -> argparse.ArgumentParser:
                              'and re-invoke the command over SSH (default path: ~/lizard)')
     parser.add_argument('--nand', action='store_true', help='Board has NAND gates')
     parser.add_argument('--bootloader', default=None,
-                        help='Path to bootloader (default: build/bootloader/bootloader.bin)')
+                        help=f'Path to bootloader (default: {DEFAULT.bootloader})')
     parser.add_argument('--partition-table', default=None,
-                        help='Path to partition table (default: build/partition_table/partition-table.bin)')
+                        help=f'Path to partition table (default: {DEFAULT.partition_table})')
     parser.add_argument('--swap', action='store_true',
                         help='Swap En and G0 pins for piggyboard version lower than v0.5')
-    parser.add_argument('--firmware', default=None, help='Path to firmware binary (default: build/lizard.bin)')
-    parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default=None, help='ESP chip type (default: esp32)')
+    parser.add_argument('--firmware', default=None, help=f'Path to firmware binary (default: {DEFAULT.firmware})')
+    parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default=None,
+                        help=f'ESP chip type (default: {DEFAULT.chip})')
     parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
     parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
     parser.add_argument('--device', nargs='?', default=None, help='Serial device path (auto-detected on Jetson)')
     parser.add_argument('--baud', type=int, default=None,
-                        help='Baud rate (default: 921600 for flashing and erasing, 115200 for coredump)')
+                        help=f'Baud rate (default: {DEFAULT.flash_baud} for flashing and erasing, '
+                             f'{DEFAULT.coredump_baud} for coredump)')
     parser.add_argument('--no-stub', action='store_true',
                         help="Do not upload esptool's RAM stub (slower, but avoids stub upload failures "
                              'on some USB-UART bridges)')
-    parser.add_argument('--elf', default=None, help='coredump: path to ELF file (default: build/lizard.elf)')
+    parser.add_argument('--elf', default=None, help=f'coredump: path to ELF file (default: {DEFAULT.elf})')
     parser.add_argument('--debug', action='store_true',
                         help='coredump: start a debug session, then return to the shell')
     return parser
@@ -309,71 +357,72 @@ def _print_remote(command: List[str]) -> None:
 
 
 @contextmanager
-def _pin_config() -> Generator[None, None, None]:
+def _pin_config(config: Config) -> Generator[None, None, None]:
     """Configure the EN and G0 pins to control the microcontroller."""
     print_bold('Configuring EN and G0 pins...')
-    gpio.request_outputs(consumer='espresso')
+    config.gpio.request_outputs(consumer='espresso')
     time.sleep(0.5)
     yield
-    _release_pins()
+    _release_pins(config)
 
 
-def _release_pins() -> None:
+def _release_pins(config: Config) -> None:
     """Release pins."""
-    gpio.release()
+    config.gpio.release()
 
 
 @contextmanager
-def _flash_mode() -> Generator[None, None, None]:
+def _flash_mode(config: Config) -> Generator[None, None, None]:
     """Bring the microcontroller into flash mode."""
     print_bold('Bringing the microcontroller into flash mode...')
-    set_en(ON)
-    set_g0(ON)
-    set_en(OFF)
+    set_en(config, config.on)
+    set_g0(config, config.on)
+    set_en(config, config.off)
     yield
-    _reset()
+    _reset(config)
 
 
-def enable() -> None:
+def enable(config: Config) -> None:
     """Enable the microcontroller."""
     print_bold('Enabling the microcontroller...')
-    with _pin_config():
-        set_g0(OFF)
-        set_en(OFF)
+    with _pin_config(config):
+        set_g0(config, config.off)
+        set_en(config, config.off)
 
 
-def disable() -> None:
+def disable(config: Config) -> None:
     """Disable the microcontroller."""
     print_bold('Disabling the microcontroller...')
-    with _pin_config():
-        set_en(ON)
+    with _pin_config(config):
+        set_en(config, config.on)
 
 
-def reset() -> None:
+def reset(config: Config) -> None:
     """Reset the microcontroller."""
     print_bold('Resetting the microcontroller...')
-    with _pin_config():
-        _reset()
+    with _pin_config(config):
+        _reset(config)
 
 
-def _reset() -> None:
+def _reset(config: Config) -> None:
     """Set pins to reset the microcontroller."""
-    set_g0(OFF)
-    set_en(ON)
-    set_en(OFF)
+    set_g0(config, config.off)
+    set_en(config, config.on)
+    set_en(config, config.off)
 
 
-def erase() -> None:
+def erase(config: Config) -> None:
     """Erase the microcontroller."""
     print_bold('Erasing the microcontroller...')
-    with _pin_config():
-        with _flash_mode():
+    with _pin_config(config):
+        with _flash_mode(config):
             success = run(
+                config,
                 'esptool.py',
-                '--chip', CHIP,
-                '--port', DEVICE,
-                '--baud', BAUD,
-                *STUB_ARGS,
+                '--chip', config.chip,
+                '--port', config.device,
+                '--baud', config.flash_baud,
+                *config.stub_args,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'erase_flash',
@@ -382,15 +431,16 @@ def erase() -> None:
                 raise RuntimeError('Failed to erase flash.')
 
 
-def reset_partition() -> None:
+def reset_partition(config: Config) -> None:
     """Reset the OTA partition to the default state."""
     print_bold('Resetting partition to "ota_0"...')
     success = run(
+        config,
         'esptool.py',
-        '--chip', CHIP,
-        '--port', DEVICE,
-        '--baud', BAUD,
-        *STUB_ARGS,
+        '--chip', config.chip,
+        '--port', config.device,
+        '--baud', config.flash_baud,
+        *config.stub_args,
         'erase_region',
         '0xf000',  # otadata partition offset (default ESP-IDF partition table)
         '0x2000',  # otadata partition size (default ESP-IDF partition table)
@@ -399,77 +449,77 @@ def reset_partition() -> None:
         raise RuntimeError('Failed to reset OTA partition.')
 
 
-def flash() -> None:
+def flash(config: Config) -> None:
     """Flash the microcontroller."""
     print_bold('Flashing...')
-    with _pin_config():
-        with _flash_mode():
+    with _pin_config(config):
+        with _flash_mode(config):
             success = run(
+                config,
                 'esptool.py',
-                '--chip', CHIP,
-                '--port', DEVICE,
-                '--baud', BAUD,
-                *STUB_ARGS,
+                '--chip', config.chip,
+                '--port', config.device,
+                '--baud', config.flash_baud,
+                *config.stub_args,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'write_flash',
                 '-z',
                 '--flash_mode', 'dio',
-                '--flash_freq', FLASH_FREQ,
+                '--flash_freq', config.flash_freq,
                 '--flash_size', 'detect',
-                BOOTLOADER_OFFSET, BOOTLOADER,
-                '0x8000', PARTITION_TABLE,
-                '0x20000', FIRMWARE,
+                config.bootloader_offset, config.bootloader,
+                '0x8000', config.partition_table,
+                '0x20000', config.firmware,
             )
             if not success:
                 raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
-            if args.reset_partition:
-                reset_partition()
+            if config.reset_partition:
+                reset_partition(config)
 
 
-def coredump() -> None:
+def coredump(config: Config) -> None:
     """Read (or debug) an ESP32 core dump over the serial device.
 
     Wraps esp_coredump, reusing espresso's serial-device selection and --chip. Import is
     deferred so the flash path does not depend on esp_coredump being installed.
     """
-    baud = args.baud or 115200  # esp_coredump's own default; the flash/erase 921600 would be wrong here
     print_bold('Reading core dump...')
-    print(f'  port={DEVICE} chip={CHIP} baud={baud} elf={ELF}')
-    if DRY_RUN:
+    print(f'  port={config.device} chip={config.chip} baud={config.coredump_baud} elf={config.elf}')
+    if config.dry_run:
         return
     try:
         from esp_coredump import CoreDump  # pylint: disable=import-outside-toplevel
     except ImportError as error:
         raise RuntimeError('Module esp_coredump is required for the coredump command, but it is not installed. '
                            'Install it on the machine reading the dump (e.g. "pip install esp-coredump").') from error
-    dump = CoreDump(chip=CHIP, port=DEVICE, baud=baud, prog=ELF)
-    if args.debug:
+    dump = CoreDump(chip=config.chip, port=config.device, baud=config.coredump_baud, prog=config.elf)
+    if config.debug:
         dump.dbg_corefile()
     else:
         dump.info_corefile()
 
 
-def run(*run_args: str) -> bool:
+def run(config: Config, *run_args: str) -> bool:
     """Run a command and return whether it was successful."""
     print(f'  {" ".join(run_args)}')
-    if DRY_RUN:
+    if config.dry_run:
         return True
     result = subprocess.run(run_args, check=False)
     return result.returncode == 0
 
 
-def set_en(value: int) -> None:
+def set_en(config: Config, value: int) -> None:
     print(f'  Setting EN pin to {value}')
-    if not DRY_RUN:
-        gpio.set_value('en', value)
+    if not config.dry_run:
+        config.gpio.set_value('en', value)
         time.sleep(0.5)
 
 
-def set_g0(value: int) -> None:
+def set_g0(config: Config, value: int) -> None:
     print(f'  Setting G0 pin to {value}')
-    if not DRY_RUN:
-        gpio.set_value('g0', value)
+    if not config.dry_run:
+        config.gpio.set_value('g0', value)
         time.sleep(0.5)
 
 
@@ -486,9 +536,6 @@ def print_fail(message: str) -> None:
 
 
 def main(argv: List[str]) -> None:
-    global args, ON, OFF, DRY_RUN, CHIP, DEVICE, BAUD, STUB_ARGS, EN, G0
-    global FLASH_FREQ, BOOTLOADER_OFFSET, BOOTLOADER, PARTITION_TABLE, FIRMWARE, ELF, gpio
-
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -504,40 +551,38 @@ def main(argv: List[str]) -> None:
 
     print_ok('Espresso dry-running...' if args.dry_run else 'Espresso running...')
 
-    ON = 1 if args.nand else 0
-    OFF = 0 if args.nand else 1
-    DRY_RUN = args.dry_run
-    CHIP = args.chip or 'esp32'
-    DEVICE = args.device if args.device is not None else resolve_default_device()
-    BAUD = str(args.baud) if args.baud is not None else '921600'
-    STUB_ARGS = ('--no-stub',) if args.no_stub else ()
-    FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}[CHIP]
-    BOOTLOADER_OFFSET = {'esp32': '0x1000', 'esp32s3': '0x0'}[CHIP]
-    BOOTLOADER = args.bootloader or 'build/bootloader/bootloader.bin'
-    PARTITION_TABLE = args.partition_table or 'build/partition_table/partition-table.bin'
-    FIRMWARE = args.firmware or 'build/lizard.bin'
-    ELF = args.elf or 'build/lizard.elf'
-
-    EN, G0 = 'PR.04', 'PAC.06'
-    if args.swap:
-        EN, G0 = G0, EN
+    config = Config(
+        chip=args.chip or DEFAULT.chip,
+        device=args.device or resolve_default_device(),
+        baud=args.baud,
+        nand=args.nand,
+        swap=args.swap,
+        dry_run=args.dry_run,
+        no_stub=args.no_stub,
+        reset_partition=args.reset_partition,
+        debug=args.debug,
+        bootloader=args.bootloader or DEFAULT.bootloader,
+        partition_table=args.partition_table or DEFAULT.partition_table,
+        firmware=args.firmware or DEFAULT.firmware,
+        elf=args.elf or DEFAULT.elf,
+    )
     if args.command in PIN_COMMANDS and not args.dry_run:
-        gpio = build_gpio(EN, G0)
+        config = replace(config, gpio=build_gpio(config.en, config.g0))
 
     if args.command == 'enable':
-        enable()
+        enable(config)
     elif args.command == 'disable':
-        disable()
+        disable(config)
     elif args.command == 'reset':
-        reset()
+        reset(config)
     elif args.command == 'erase':
-        erase()
+        erase(config)
     elif args.command == 'flash':
-        flash()
+        flash(config)
     elif args.command == 'release_pins':
-        _release_pins()
+        _release_pins(config)
     elif args.command == 'coredump':
-        coredump()
+        coredump(config)
     else:
         raise RuntimeError(f'Invalid command "{args.command}".')
     print_ok('Finished. ☕️')
