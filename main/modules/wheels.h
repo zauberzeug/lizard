@@ -12,18 +12,32 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  * the enabled-sync in `step()` and the `speed`/`enable`/`disable` command flow. Concrete
  * drivetrains provide the motor-specific parts through the protected hooks.
  *
- * `drivable` is a handbrake: while `false` the motors stay enabled but hold at a stop — drive
- * commands are blocked and `step()` keeps braking to zero every cycle, so the hold engages even
- * when no command arrives. It lets an external rule block driving without switching the motors off
- * (that is what `enabled`/`disable` are for). Driving resumes on `drivable = true`.
+ * `drivable` is a safety interlock: while `false`, drive commands are ignored and the wheels are
+ * actively held at standstill (zero-speed setpoint, motors stay enabled), so a rule can block
+ * driving while some other condition is unmet — e.g. a tool is not in its parking position —
+ * without switching the motors off. The hold is sent on the falling edge of `drivable` and
+ * refreshed at a low rate. `disable()` and `off()` still switch the motors off; `off()` also
+ * suspends the hold until `enable()` is called or `drivable` changes. Driving resumes on
+ * `drivable = true`.
  */
 class Wheels : public Module {
 private:
+    static constexpr unsigned int HOLD_REFRESH_CYCLES = 100; // re-send the standstill hold about once per second
+
     bool last_applied_enabled = true; // last value synced to the motors; `step()` edge-detects direct property writes against it
+    bool holding = false;             // wheels are currently held at standstill by the `drivable` interlock
+    bool hold_suspended = false;      // `off()` stood the hold down; re-armed by `enable()` or a `drivable` change
+    unsigned int hold_cycle = 0;      // `step()` cycles since the hold was last sent
+
+    /// Copy the gate properties (`drivable`, `enabled`) from this module onto a freshly attached shadow.
+    void sync_gate_properties(Module &shadow) const;
 
 protected:
     /// Whether drive commands may be applied: true only while enabled and drivable.
     bool may_drive() const;
+
+    /// Stand the standstill hold down until `enable()` or a `drivable` change; call from `off()` handlers.
+    void suspend_hold();
 
     /// Write `linear_speed`/`angular_speed` from measured per-wheel speeds; call from `update_odometry()`.
     void update_speeds(double left_speed, double right_speed);
@@ -39,7 +53,8 @@ public:
     Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults = Wheels::get_defaults());
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-    void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander = false) override;
+    void write_property(const std::string property_name, const ConstExpression_ptr expression,
+                        const bool from_expander = false) override;
     void enable();
     void disable();
     /// Shared property defaults; subclasses that add properties shadow this and pass the result to the constructor.

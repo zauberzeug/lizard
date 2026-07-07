@@ -10,6 +10,18 @@ const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
     };
 }
 
+// The gate properties that must stay in sync between a master and its shadows.
+static constexpr const char *GATE_PROPERTIES[] = {"drivable", "enabled"};
+
+static bool is_gate_property(const std::string &property_name) {
+    for (const char *gate : GATE_PROPERTIES) {
+        if (property_name == gate) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Wheels::Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults)
     : Module(name) {
     this->properties = defaults;
@@ -24,6 +36,11 @@ bool Wheels::may_drive() const {
     return this->properties.at("enabled")->boolean_value && this->properties.at("drivable")->boolean_value;
 }
 
+void Wheels::suspend_hold() {
+    this->holding = false;
+    this->hold_suspended = true;
+}
+
 void Wheels::step() {
     this->update_odometry();
 
@@ -35,9 +52,22 @@ void Wheels::step() {
         }
     }
 
-    if (this->properties.at("enabled")->boolean_value && !this->properties.at("drivable")->boolean_value) {
-        // Handbrake: keep braking to a hold every cycle, so it engages even when no drive command
-        // arrives — e.g. the rule that cleared drivable ran because the host went silent.
+    // Drivable interlock: hold the wheels at standstill while enabled but not drivable, so the
+    // hold engages even when no drive command arrives — e.g. the rule that cleared drivable ran
+    // because the host went silent. The hold is sent once on the falling edge and refreshed at a
+    // low rate to re-assert it after a motor reboot without flooding the bus.
+    const bool should_hold = this->properties.at("enabled")->boolean_value && !this->may_drive();
+    if (!should_hold) {
+        this->holding = false;
+        this->hold_suspended = false;
+    } else if (this->holding) {
+        if (++this->hold_cycle >= HOLD_REFRESH_CYCLES) {
+            this->hold_cycle = 0;
+            this->do_wheel_speeds(0.0, 0.0);
+        }
+    } else if (!this->hold_suspended) {
+        this->holding = true;
+        this->hold_cycle = 0;
         this->do_wheel_speeds(0.0, 0.0);
     }
 
@@ -47,13 +77,12 @@ void Wheels::step() {
 void Wheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "speed") {
         Module::expect(arguments, 2, numbery, numbery);
-        if (!this->may_drive()) {
-            return;
+        if (this->may_drive()) {
+            const double linear = arguments[0]->evaluate_number();
+            const double angular = arguments[1]->evaluate_number();
+            const double width = this->properties.at("width")->number_value;
+            this->do_wheel_speeds(linear - angular * width / 2.0, linear + angular * width / 2.0);
         }
-        const double linear = arguments[0]->evaluate_number();
-        const double angular = arguments[1]->evaluate_number();
-        const double width = this->properties.at("width")->number_value;
-        this->do_wheel_speeds(linear - angular * width / 2.0, linear + angular * width / 2.0);
     } else if (method_name == "enable") {
         Module::expect(arguments, 0);
         this->enable();
@@ -61,27 +90,33 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         Module::expect(arguments, 0);
         this->disable();
     } else if (method_name == "shadow") {
+        const size_t shadow_count = this->shadow_modules.size();
         Module::call(method_name, arguments);
-        // Property writes only forward to already-attached shadows, so a shadow attached after
-        // drivable/enabled were changed would start out with stale defaults and keep driving while
-        // the master holds. Sync the two gate properties onto the freshly attached shadow.
-        if (!this->shadow_modules.empty()) {
-            const auto &shadow = this->shadow_modules.back();
-            shadow->get_property("drivable")->boolean_value = this->properties.at("drivable")->boolean_value;
-            shadow->get_property("enabled")->boolean_value = this->properties.at("enabled")->boolean_value;
+        // Property writes only forward to already-attached shadows, so a freshly attached shadow
+        // could keep driving with stale gate values while the master holds. Sync it once on attach.
+        // (Module::call skips the attach for self-shadows, hence the size check.)
+        if (this->shadow_modules.size() > shadow_count) {
+            this->sync_gate_properties(*this->shadow_modules.back());
         }
     } else {
         Module::call(method_name, arguments);
     }
 }
 
-void Wheels::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+void Wheels::sync_gate_properties(Module &shadow) const {
+    for (const char *gate : GATE_PROPERTIES) {
+        shadow.get_property(gate)->boolean_value = this->properties.at(gate)->boolean_value;
+    }
+}
+
+void Wheels::write_property(const std::string property_name, const ConstExpression_ptr expression,
+                            const bool from_expander) {
     Module::write_property(property_name, expression, from_expander);
-    // Shadowed wheels mirror method calls but not property writes. Forward the two gate
-    // properties so a shadow stops together with its master. Write them one level deep via
+    // Shadowed wheels mirror method calls but not property writes. Forward the gate properties
+    // so a shadow stops together with its master. Write them one level deep via
     // Module::write_property (not the shadow's own override) to match the single-level
     // call_with_shadows and to avoid recursion on shadow chains or mutual shadows.
-    if (property_name == "drivable" || property_name == "enabled") {
+    if (is_gate_property(property_name)) {
         for (auto const &module : this->shadow_modules) {
             module->Module::write_property(property_name, expression, from_expander);
         }
@@ -91,6 +126,7 @@ void Wheels::write_property(const std::string property_name, const ConstExpressi
 void Wheels::enable() {
     this->last_applied_enabled = true;
     this->properties.at("enabled")->boolean_value = true;
+    this->hold_suspended = false;
     this->do_enable();
 }
 
