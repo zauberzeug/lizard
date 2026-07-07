@@ -5,6 +5,7 @@ build/lizard.bin
 configure.py
 espresso.py
 monitor.py
+upload_ssh.py
 README.md
 requirements.txt
 LICENSE
