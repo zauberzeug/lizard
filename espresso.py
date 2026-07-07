@@ -8,7 +8,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
-from typing import Generator, List, Optional, Tuple
+from typing import Callable, Dict, Generator, List, Optional, Tuple
 
 try:
     import gpiod
@@ -18,21 +18,6 @@ else:
     GPIOD_VERSION = 2 if hasattr(gpiod, 'request_lines') else 1
 
 IS_JETSON = Path('/etc/nv_tegra_release').exists()
-
-PIN_COMMANDS = {'flash', 'erase', 'enable', 'disable', 'reset', 'release_pins'}
-
-# Artifact dests and the extension each must carry under --host. Only build/ is rsynced, and
-# only the command's include pattern (flash→*.bin, coredump→*.elf) is transferred, so a custom
-# path must be under build/ AND match that extension or it would be silently absent on the remote.
-ARTIFACT_SUFFIX = {'bootloader': '.bin', 'partition_table': '.bin', 'firmware': '.bin', 'elf': '.elf'}
-
-# Which build/ artifacts each remote command needs rsynced (others need none: erase/enable/
-# disable/reset/release_pins control pins only). Commands absent here skip the artifact rsync.
-REMOTE_ARTIFACT_INCLUDES = {
-    'flash': ['--include=*/', '--include=*.bin'],
-    'coredump': ['--include=*/', '--include=*.elf'],
-}
-
 
 class GpioController:
     """No-op fallback controller; also the base class for the real gpiod-backed ones."""
@@ -177,8 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(description='Flash and control an ESP32 microcontroller from a Jetson board',
                                      allow_abbrev=False)
-    parser.add_argument('command', choices=['flash', 'enable', 'disable', 'reset', 'erase', 'release_pins', 'coredump'],
-                        help='Command to execute')
+    parser.add_argument('command', choices=list(COMMANDS), help='Command to execute')
     parser.add_argument('--host', default=None,
                         help='Run on a remote user@host[:path]: rsync espresso.py + build artifacts there '
                              'and re-invoke the command over SSH (default path: ~/lizard)')
@@ -299,10 +283,11 @@ def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
     stripped: ``--host`` (it IS the remote dispatch) and ``--dry-run`` (a dry run prints
     the rsync/ssh commands locally and must not run anything remotely, see run_remote).
     """
-    for dest, suffix in ARTIFACT_SUFFIX.items():
+    cmd = COMMANDS[parsed.command]
+    for dest in cmd.artifacts:
         value = getattr(parsed, dest)
         if value is not None:
-            _require_build_relative('--' + dest.replace('_', '-'), str(value), suffix)
+            _require_build_relative('--' + dest.replace('_', '-'), str(value), cmd.artifact_suffix)
     command = []
     skip_value = False
     for token in argv:
@@ -317,13 +302,13 @@ def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
     return command
 
 
-def run_remote(host: str, command: List[str], *, artifact_includes: List[str],
+def run_remote(host: str, command: List[str], *, artifact_suffix: str,
                use_sudo: bool, dry_run: bool) -> None:
     """rsync espresso.py (+ the needed build artifacts) to the host and run the command over SSH.
 
-    Only the artifacts the command actually uses are copied: ``artifact_includes`` is empty for
-    pin-only commands (erase/enable/disable/reset/release_pins), so they no longer die in an
-    rsync of a missing build/ on a fresh clone. build/ resolves against the cwd -- the same base
+    Only build/**/*``artifact_suffix`` files are copied; the suffix is empty for pin-only
+    commands (erase/enable/disable/reset/release_pins), which skip the artifact rsync and so
+    no longer die on a missing build/ on a fresh clone. build/ resolves against the cwd -- the same base
     a local run uses for the artifact paths -- so the remote flashes exactly what a local flash
     would; only espresso.py itself is taken from the script's own directory. Under ``dry_run``
     nothing is sent or run on the remote -- the rsync/ssh commands are printed so a dry run
@@ -335,13 +320,13 @@ def run_remote(host: str, command: List[str], *, artifact_includes: List[str],
     script_dir = Path(__file__).resolve().parent
     runner = _print_remote if dry_run else _run_checked
 
-    if artifact_includes:
+    if artifact_suffix:
         build_dir = Path('build')
         if not dry_run and not build_dir.is_dir():
             raise RuntimeError(f'No build/ directory in {Path.cwd()}; run the ESP-IDF build first.')
         print_bold(f'Copying build artifacts to {target}:{path}...')
-        runner(['rsync', '-zarv', '--prune-empty-dirs', *artifact_includes, '--exclude=*',
-                str(build_dir), f'{target}:{path}'])
+        runner(['rsync', '-zarv', '--prune-empty-dirs', '--include=*/', f'--include=*{artifact_suffix}',
+                '--exclude=*', str(build_dir), f'{target}:{path}'])
     print_bold(f'Copying espresso.py to {target}:{path}...')
     # -p restores the exec bit on a pre-existing non-executable remote copy, whose
     # permissions a plain rsync would keep forever ("./espresso.py: Permission denied").
@@ -505,6 +490,33 @@ def coredump(config: Config) -> None:
         dump.info_corefile()
 
 
+@dataclass(frozen=True)
+class Command:
+    """A registered command: everything main() and the --host machinery need to know about it.
+
+    ``artifacts`` names the Config path fields the command reads; under --host only
+    build/**/*``artifact_suffix`` is rsynced to the remote, so a custom artifact path must
+    stay within that scope (enforced by _require_build_relative). ``uses_pins`` selects
+    GPIO setup on a local run and the sudo prefix on a remote one.
+    """
+    handler: Callable[[Config], None]
+    uses_pins: bool = False
+    artifacts: Tuple[str, ...] = ()
+    artifact_suffix: str = ''
+
+
+COMMANDS: Dict[str, Command] = {
+    'flash': Command(flash, uses_pins=True,
+                     artifacts=('bootloader', 'partition_table', 'firmware'), artifact_suffix='.bin'),
+    'enable': Command(enable, uses_pins=True),
+    'disable': Command(disable, uses_pins=True),
+    'reset': Command(reset, uses_pins=True),
+    'erase': Command(erase, uses_pins=True),
+    'release_pins': Command(_release_pins, uses_pins=True),
+    'coredump': Command(coredump, artifacts=('elf',), artifact_suffix='.elf'),
+}
+
+
 def run(config: Config, *run_args: str) -> bool:
     """Run a command and return whether it was successful."""
     print(f'  {" ".join(run_args)}')
@@ -544,13 +556,15 @@ def main(argv: List[str]) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    cmd = COMMANDS[args.command]
+
     if args.host is not None:
         # Validate the arguments locally with the real parser (done above), then hand the
         # command to the remote machine, which resolves its own device/pins/L4T. sudo is only
         # for the pin/flash commands; coredump wraps esp_coredump (pip --user, dialout not root).
         run_remote(args.host, remote_command(argv, args),
-                   artifact_includes=REMOTE_ARTIFACT_INCLUDES.get(args.command, []),
-                   use_sudo=args.command in PIN_COMMANDS,
+                   artifact_suffix=cmd.artifact_suffix,
+                   use_sudo=cmd.uses_pins,
                    dry_run=args.dry_run)
         return
 
@@ -571,25 +585,10 @@ def main(argv: List[str]) -> None:
         firmware=args.firmware or DEFAULT.firmware,
         elf=args.elf or DEFAULT.elf,
     )
-    if args.command in PIN_COMMANDS and not args.dry_run:
+    if cmd.uses_pins and not args.dry_run:
         config = replace(config, gpio=build_gpio(config.en, config.g0))
 
-    if args.command == 'enable':
-        enable(config)
-    elif args.command == 'disable':
-        disable(config)
-    elif args.command == 'reset':
-        reset(config)
-    elif args.command == 'erase':
-        erase(config)
-    elif args.command == 'flash':
-        flash(config)
-    elif args.command == 'release_pins':
-        _release_pins(config)
-    elif args.command == 'coredump':
-        coredump(config)
-    else:
-        raise RuntimeError(f'Invalid command "{args.command}".')
+    cmd.handler(config)
     print_ok('Finished. ☕️')
 
 
