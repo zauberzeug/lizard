@@ -495,7 +495,7 @@ def main(argv: List[str]) -> None:
         # for the pin/flash commands; coredump wraps esp_coredump (pip --user, dialout not root).
         run_remote(args.host, remote_command(args, parser),
                    artifact_includes=REMOTE_ARTIFACT_INCLUDES.get(args.command, []),
-                   use_sudo=args.command in PIN_COMMANDS and not args.dry_run,
+                   use_sudo=args.command in PIN_COMMANDS,
                    dry_run=args.dry_run)
         return
 
