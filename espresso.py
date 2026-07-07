@@ -38,6 +38,8 @@ class GpioControllerV1(GpioController):
             'en': chip.find_line(en),
             'g0': chip.find_line(g0),
         }
+        if None in self._lines.values():
+            raise RuntimeError(f'GPIO lines {en}/{g0} not found on gpiochip0')
 
     def request_outputs(self, consumer: str) -> None:
         for line in self._lines.values():
@@ -55,12 +57,11 @@ class GpioControllerV2(GpioController):
     CHIP_PATH = '/dev/gpiochip0'
 
     def __init__(self, en: str, g0: str) -> None:
-        chip = gpiod.Chip(self.CHIP_PATH)
-        self._offsets = {
-            'en': chip.line_offset_from_id(en),
-            'g0': chip.line_offset_from_id(g0),
-        }
-        chip.close()
+        with gpiod.Chip(self.CHIP_PATH) as chip:
+            self._offsets = {
+                'en': chip.line_offset_from_id(en),
+                'g0': chip.line_offset_from_id(g0),
+            }
         self._request = None
 
     def request_outputs(self, consumer: str) -> None:
@@ -81,7 +82,8 @@ class GpioControllerV2(GpioController):
 
 DEFAULT_DEVICE = '/dev/tty.SLAB_USBtoUART'
 path = Path('/etc/nv_tegra_release')
-if path.exists() and (match := re.search(r'R(\d+)', path.read_text(encoding='utf-8'))):
+IS_JETSON = path.exists()
+if IS_JETSON and (match := re.search(r'R(\d+)', path.read_text(encoding='utf-8'))):
     major = int(match.group(1))
     if major == 35:
         DEFAULT_DEVICE = '/dev/ttyTHS0'
@@ -104,6 +106,10 @@ parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', hel
 parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
 parser.add_argument('--device', nargs='?', default=DEFAULT_DEVICE, help='Serial device path (auto-detected on Jetson)')
+parser.add_argument('--baud', type=int, default=921600, help='Baud rate for flashing and erasing')
+parser.add_argument('--no-stub', action='store_true',
+                    help='Do not upload esptool\'s RAM stub (slower, but avoids stub upload failures '
+                         'on some USB-UART bridges)')
 
 args = parser.parse_args()
 ON = 1 if args.nand else 0
@@ -112,6 +118,8 @@ DRY_RUN = args.dry_run
 SWAP = args.swap
 CHIP = args.chip
 DEVICE = args.device
+BAUD = str(args.baud)
+STUB_ARGS = ('--no-stub',) if args.no_stub else ()
 FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}.get(CHIP, '40m')
 BOOTLOADER_OFFSET = {'esp32': '0x1000', 'esp32s3': '0x0'}.get(CHIP, '0x1000')
 BOOTLOADER = args.bootloader
@@ -122,11 +130,19 @@ EN = 'PR.04'
 G0 = 'PAC.06'
 if SWAP:
     EN, G0 = G0, EN
-gpio = {
-    None: GpioController,
-    1: GpioControllerV1,
-    2: GpioControllerV2,
-}[GPIOD_VERSION](EN, G0)
+try:
+    gpio = {
+        None: GpioController,
+        1: GpioControllerV1,
+        2: GpioControllerV2,
+    }[GPIOD_VERSION](EN, G0)
+except Exception as error:  # noqa: BLE001 - any gpiod/hardware error means no controllable pins
+    if IS_JETSON:
+        raise  # on a Jetson the EN/G0 lines must resolve; surface the real error instead of masking it
+    # gpiod is installed but the EN/G0 pins are not available (e.g. not a Jetson):
+    # fall back to the no-op controller and rely on esptool's DTR/RTS reset for flashing.
+    print(f'No controllable EN/G0 pins ({error}); falling back to esptool reset only.')
+    gpio = GpioController(EN, G0)
 
 
 @contextmanager
@@ -193,7 +209,8 @@ def erase() -> None:
                 'esptool.py',
                 '--chip', CHIP,
                 '--port', DEVICE,
-                '--baud', '921600',
+                '--baud', BAUD,
+                *STUB_ARGS,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'erase_flash',
@@ -209,7 +226,8 @@ def reset_partition() -> None:
         'esptool.py',
         '--chip', args.chip,
         '--port', DEVICE,
-        '--baud', '115200',
+        '--baud', BAUD,
+        *STUB_ARGS,
         'erase_region',
         '0xf000',  # otadata partition offset (default ESP-IDF partition table)
         '0x2000',  # otadata partition size (default ESP-IDF partition table)
@@ -227,7 +245,8 @@ def flash() -> None:
                 'esptool.py',
                 '--chip', CHIP,
                 '--port', DEVICE,
-                '--baud', '921600',
+                '--baud', BAUD,
+                *STUB_ARGS,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'write_flash',
