@@ -195,11 +195,16 @@ def build_gpio(en: str, g0: str) -> GpioController:
 
 
 def parse_host(host: str) -> Tuple[str, str]:
-    """Split a ``user@host[:path]`` string into (ssh_target, remote_path)."""
-    if ':' in host:
-        target, path = host.split(':', 1)
-        return target, path
-    return host, '~/lizard'
+    """Split a ``user@host[:path]`` string into (ssh_target, remote_path).
+
+    A trailing colon means the remote home directory, as in scp/rsync -- mapped to ``~``
+    explicitly, because a literal empty path would make rsync/ssh mutate the wrong
+    remote location. Without a colon the default ``~/lizard`` is used.
+    """
+    if ':' not in host:
+        return host, '~/lizard'
+    target, _, path = host.partition(':')
+    return target, path or '~'
 
 
 def quote_remote_path(path: str) -> str:
