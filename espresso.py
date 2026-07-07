@@ -259,10 +259,12 @@ def parse_host(host: str) -> Tuple[str, str]:
 
 
 def quote_remote_path(path: str) -> str:
-    """Shell-quote a remote path, but let a leading ``~`` / ``~user`` still expand.
+    """Quote a remote path for the ssh command line, letting a leading ``~`` / ``~user`` expand.
 
     The tail after the home prefix is quoted, so spaces and shell metacharacters in a
-    user-supplied ``--host`` path cannot break out into remote shell syntax.
+    user-supplied ``--host`` path cannot break out into remote shell syntax. Only the ssh
+    command needs this: rsync destinations get the raw path, because rsync (>= 3.2.4)
+    escapes remote args itself and quoting would end up literal in the directory name.
     """
     match = re.match(r'^(~[\w-]*)(/.*)?$', path)
     if match:
@@ -328,7 +330,6 @@ def run_remote(host: str, command: List[str], *, artifact_includes: List[str],
     target, path = parse_host(host)
     if target.startswith('-'):
         raise RuntimeError(f'Refusing host {target!r}: a leading dash could be parsed as an ssh/rsync option.')
-    quoted_path = quote_remote_path(path)
     script_dir = Path(__file__).resolve().parent
     runner = _print_remote if dry_run else _run_checked
 
@@ -338,13 +339,13 @@ def run_remote(host: str, command: List[str], *, artifact_includes: List[str],
             raise RuntimeError(f'No build/ directory next to espresso.py ({build_dir}); run the ESP-IDF build first.')
         print_bold(f'Copying build artifacts to {target}:{path}...')
         runner(['rsync', '-zarv', '--prune-empty-dirs', *artifact_includes, '--exclude=*',
-                str(build_dir), f'{target}:{quoted_path}'])
+                str(build_dir), f'{target}:{path}'])
     print_bold(f'Copying espresso.py to {target}:{path}...')
-    runner(['rsync', '-z', str(script_dir / 'espresso.py'), f'{target}:{quoted_path}/'])
+    runner(['rsync', '-z', str(script_dir / 'espresso.py'), f'{target}:{path}/'])
 
     print_bold(f'Running "espresso.py {" ".join(command)}" on {target}...')
     sudo = 'sudo ' if use_sudo else ''
-    remote = f'cd {quoted_path} && {sudo}./espresso.py ' + ' '.join(shlex.quote(token) for token in command)
+    remote = f'cd {quote_remote_path(path)} && {sudo}./espresso.py ' + ' '.join(shlex.quote(token) for token in command)
     runner(['ssh', '-t', target, f'bash --login -c {shlex.quote(remote)}'])
 
 
