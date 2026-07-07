@@ -108,13 +108,11 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         int axis_error;
         std::memcpy(&axis_error, data, 4);
         this->properties.at("axis_error")->integer_value = axis_error;
-        int axis_state;
-        std::memcpy(&axis_state, data + 4, 1);
+        const uint8_t axis_state = data[4];
         this->axis_state = axis_state;
         this->properties.at("axis_state")->integer_value = axis_state;
         if (version == 6) {
-            int message_byte;
-            std::memcpy(&message_byte, data + 5, 1);
+            const uint8_t message_byte = data[5];
             this->properties.at("motor_error_flag")->integer_value = message_byte & 0x01;
         }
         break;
