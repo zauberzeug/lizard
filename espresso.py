@@ -124,12 +124,13 @@ gpio: GpioController = GpioController('PR.04', 'PAC.06')
 def build_parser() -> argparse.ArgumentParser:
     """Build the espresso argument parser.
 
-    Value flags default to ``None`` so that "explicitly set by the user" can be told
-    apart from "left at its default" -- which is what lets ``--host`` forward only the
-    flags the user actually typed (see remote_command) and resolve the real defaults on
-    the machine that will use them.
+    Value flags default to ``None``; the real defaults are resolved in main() on the
+    machine that ultimately runs the command (under ``--host`` that is the remote).
+    Abbreviated flags are disabled so that every token has exactly one spelling and the
+    argv pass-through in remote_command cannot misread e.g. ``--ho`` for ``--host``.
     """
-    parser = argparse.ArgumentParser(description='Flash and control an ESP32 microcontroller from a Jetson board')
+    parser = argparse.ArgumentParser(description='Flash and control an ESP32 microcontroller from a Jetson board',
+                                     allow_abbrev=False)
     parser.add_argument('command', choices=['flash', 'enable', 'disable', 'reset', 'erase', 'release_pins', 'coredump'],
                         help='Command to execute')
     parser.add_argument('--host', default=None,
@@ -239,34 +240,30 @@ def _require_build_relative(flag: str, value: str, suffix: str) -> None:
                            f'(only build/**/*{suffix} is rsynced to the remote for this command).')
 
 
-def remote_command(parsed: argparse.Namespace, parser: argparse.ArgumentParser) -> List[str]:
-    """Rebuild the espresso argument list to run on the remote, minus ``--host``/``--dry-run``.
+def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
+    """Return the argument list to run on the remote: the local argv minus ``--host``/``--dry-run``.
 
-    The forwarded flags are DERIVED from the parser's own actions -- every option whose value
-    differs from its default is forwarded -- rather than a hand-maintained list. That way a
-    new flag (like a future ``--baud``) is forwarded automatically and can never be silently
-    dropped, so ``--baud X --host ...`` cannot flash the remote at the wrong rate.
-
-    Only flags the user explicitly set are forwarded (value flags default to ``None``), so
-    device/pin/L4T resolution and the path defaults all happen on the remote machine -- a
-    local default (e.g. a Mac's serial device) can never leak into the remote invocation.
-    ``--dry-run`` is orchestrated locally (see run_remote) and is deliberately not forwarded.
+    The user's tokens pass through verbatim instead of being reconstructed from parsed
+    values, so nothing the user typed can be dropped or reshaped and no locally resolved
+    default can leak into the remote invocation. Only the two orchestration flags are
+    stripped: ``--host`` (it IS the remote dispatch) and ``--dry-run`` (a dry run prints
+    the rsync/ssh commands locally and must not run anything remotely, see run_remote).
     """
-    command = [parsed.command]
-    for action in parser._actions:  # pylint: disable=protected-access
-        dest = action.dest
-        if dest in ('help', 'command', 'host', 'dry_run'):
-            continue
-        value = getattr(parsed, dest, None)
-        if value is None or value == action.default:
-            continue
-        option = max(action.option_strings, key=len)
-        if isinstance(value, bool):  # store_true flag the user turned on
-            command.append(option)
-            continue
-        if dest in ARTIFACT_SUFFIX:
-            _require_build_relative(option, str(value), ARTIFACT_SUFFIX[dest])
-        command += [option, str(value)]
+    for dest, suffix in ARTIFACT_SUFFIX.items():
+        value = getattr(parsed, dest)
+        if value is not None:
+            _require_build_relative('--' + dest.replace('_', '-'), str(value), suffix)
+    command = []
+    skip_value = False
+    for token in argv:
+        if skip_value:
+            skip_value = False
+        elif token == '--host':
+            skip_value = True
+        elif token.startswith('--host=') or token in ('-d', '--dry-run'):
+            pass
+        else:
+            command.append(token)
     return command
 
 
@@ -499,7 +496,7 @@ def main(argv: List[str]) -> None:
         # Validate the arguments locally with the real parser (done above), then hand the
         # command to the remote machine, which resolves its own device/pins/L4T. sudo is only
         # for the pin/flash commands; coredump wraps esp_coredump (pip --user, dialout not root).
-        run_remote(args.host, remote_command(args, parser),
+        run_remote(args.host, remote_command(argv, args),
                    artifact_includes=REMOTE_ARTIFACT_INCLUDES.get(args.command, []),
                    use_sudo=args.command in PIN_COMMANDS,
                    dry_run=args.dry_run)
