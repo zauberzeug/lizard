@@ -148,7 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
     parser.add_argument('--device', nargs='?', default=None, help='Serial device path (auto-detected on Jetson)')
     parser.add_argument('--baud', type=int, default=None,
-                        help='Baud rate for flashing and erasing (default: 921600)')
+                        help='Baud rate (default: 921600 for flashing and erasing, 115200 for coredump)')
     parser.add_argument('--no-stub', action='store_true',
                         help="Do not upload esptool's RAM stub (slower, but avoids stub upload failures "
                              'on some USB-UART bridges)')
@@ -434,12 +434,13 @@ def coredump() -> None:
     Wraps esp_coredump, reusing espresso's serial-device selection and --chip. Import is
     deferred so the flash path does not depend on esp_coredump being installed.
     """
+    baud = args.baud or 115200  # esp_coredump's own default; the flash/erase 921600 would be wrong here
     print_bold('Reading core dump...')
-    print(f'  port={DEVICE} chip={CHIP} elf={ELF}')
+    print(f'  port={DEVICE} chip={CHIP} baud={baud} elf={ELF}')
     if DRY_RUN:
         return
     from esp_coredump import CoreDump  # pylint: disable=import-outside-toplevel
-    dump = CoreDump(chip=CHIP, port=DEVICE, baud=115200, prog=ELF)
+    dump = CoreDump(chip=CHIP, port=DEVICE, baud=baud, prog=ELF)
     if args.debug:
         dump.dbg_corefile()
     else:
