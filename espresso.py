@@ -168,7 +168,9 @@ def resolve_default_device() -> str:
         if major == 36:
             return '/dev/ttyTHS1'
         raise RuntimeError(f'Unsupported L4T (Linux for Tegra) version: {major}')
-    return '/dev/tty.SLAB_USBtoUART'
+    if sys.platform.startswith('linux'):
+        return '/dev/ttyUSB0'  # a USB-UART bridge on a non-Jetson Linux host
+    return '/dev/tty.SLAB_USBtoUART'  # the same CP210x bridge under macOS
 
 
 def build_gpio(en: str, g0: str) -> GpioController:
