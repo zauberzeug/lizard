@@ -343,7 +343,9 @@ def run_remote(host: str, command: List[str], *, artifact_includes: List[str],
         runner(['rsync', '-zarv', '--prune-empty-dirs', *artifact_includes, '--exclude=*',
                 str(build_dir), f'{target}:{path}'])
     print_bold(f'Copying espresso.py to {target}:{path}...')
-    runner(['rsync', '-z', str(script_dir / 'espresso.py'), f'{target}:{path}/'])
+    # -p restores the exec bit on a pre-existing non-executable remote copy, whose
+    # permissions a plain rsync would keep forever ("./espresso.py: Permission denied").
+    runner(['rsync', '-zp', str(script_dir / 'espresso.py'), f'{target}:{path}/'])
 
     print_bold(f'Running "espresso.py {" ".join(command)}" on {target}...')
     sudo = 'sudo ' if use_sudo else ''
