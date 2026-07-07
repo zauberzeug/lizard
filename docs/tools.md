@@ -193,6 +193,8 @@ If Lizard crashes, the ESP32 can store a core dump that you read back over the s
 This needs a compiled ELF at `build/lizard.elf` and the `esp-coredump` package.
 Add `--host user@robot-brain` to pull a core dump off a Robot Brain without logging in;
 `esp-coredump` must then be installed on the Robot Brain itself, which reads the dump.
+Unlike flashing, the remote core dump runs without sudo,
+so the SSH user needs access to the serial device (e.g. membership in the `dialout` group).
 
 ### Releasing
 
