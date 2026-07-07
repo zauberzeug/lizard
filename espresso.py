@@ -439,7 +439,11 @@ def coredump() -> None:
     print(f'  port={DEVICE} chip={CHIP} baud={baud} elf={ELF}')
     if DRY_RUN:
         return
-    from esp_coredump import CoreDump  # pylint: disable=import-outside-toplevel
+    try:
+        from esp_coredump import CoreDump  # pylint: disable=import-outside-toplevel
+    except ImportError as error:
+        raise RuntimeError('Module esp_coredump is required for the coredump command, but it is not installed. '
+                           'Install it on the machine reading the dump (e.g. "pip install esp-coredump").') from error
     dump = CoreDump(chip=CHIP, port=DEVICE, baud=baud, prog=ELF)
     if args.debug:
         dump.dbg_corefile()

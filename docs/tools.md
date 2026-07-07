@@ -191,7 +191,8 @@ If Lizard crashes, the ESP32 can store a core dump that you read back over the s
 ```
 
 This needs a compiled ELF at `build/lizard.elf` and the `esp-coredump` package.
-Add `--host user@robot-brain` to pull a core dump off a Robot Brain without logging in.
+Add `--host user@robot-brain` to pull a core dump off a Robot Brain without logging in;
+`esp-coredump` must then be installed on the Robot Brain itself, which reads the dump.
 
 ### Releasing
 
