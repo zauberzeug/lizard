@@ -8,6 +8,9 @@ binaries plus espresso.py itself and runs the command on the remote:
 
 --host works for every command (flash/erase/enable/disable/reset/coredump), so remote
 recovery workflows the old wrapper only hinted at are now first-class.
+
+Note that espresso.py supports Jetson Orin only (L4T 35/36). For Nano/Xavier Robot
+Brains use release 0.12.x or earlier, which still ships flash.py and upload_ssh.py.
 """
 import sys
 
