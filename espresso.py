@@ -268,6 +268,9 @@ def _require_relative(flag: str, value: str) -> None:
     if posix.is_absolute() or '..' in posix.parts:
         raise RuntimeError(f'{flag} {value!r}: under --host, artifact paths must be relative and free of ".." '
                            '(they are copied below the remote target directory).')
+    if value.startswith('-'):
+        raise RuntimeError(f'{flag} {value!r}: under --host, artifact paths must not start with "-" '
+                           '(rsync would parse it as an option).')
 
 
 def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
@@ -313,6 +316,10 @@ def run_remote(host: str, command: List[str], *, artifacts: List[str],
     target, path = parse_host(host)
     if target.startswith('-'):
         raise RuntimeError(f'Refusing host {target!r}: a leading dash could be parsed as an ssh/rsync option.')
+    if re.search(r'\s', path):
+        # rsync >= 3.2.4 escapes the destination itself, but stock macOS openrsync and rsync < 3.2.4
+        # word-split it and copy to the wrong remote path with exit code 0.
+        raise RuntimeError(f'Refusing remote path {path!r}: whitespace is not portable across rsync variants.')
     script_dir = Path(__file__).resolve().parent
     runner = _print_remote if dry_run else _run_checked
 
@@ -328,7 +335,7 @@ def run_remote(host: str, command: List[str], *, artifacts: List[str],
 
     print_bold(f'Running "espresso.py {" ".join(command)}" on {target}...')
     sudo = 'sudo ' if use_sudo else ''
-    remote = f'cd {quote_remote_path(path)} && {sudo}./espresso.py ' + ' '.join(shlex.quote(token) for token in command)
+    remote = f'cd -- {quote_remote_path(path)} && {sudo}./espresso.py ' + ' '.join(shlex.quote(token) for token in command)
     runner(['ssh', '-t', target, f'bash --login -c {shlex.quote(remote)}'])
 
 
@@ -346,8 +353,10 @@ def _pin_config(config: Config) -> Generator[None, None, None]:
     print_bold('Configuring EN and G0 pins...')
     config.gpio.request_outputs(consumer='espresso')
     time.sleep(0.5)
-    yield
-    _release_pins(config)
+    try:
+        yield
+    finally:
+        _release_pins(config)
 
 
 def _release_pins(config: Config) -> None:
@@ -362,8 +371,10 @@ def _flash_mode(config: Config) -> Generator[None, None, None]:
     set_en(config, config.on)
     set_g0(config, config.on)
     set_en(config, config.off)
-    yield
-    _reset(config)
+    try:
+        yield
+    finally:
+        _reset(config)
 
 
 def enable(config: Config) -> None:
@@ -511,10 +522,13 @@ COMMANDS: Dict[str, Command] = {
 
 def run(config: Config, *run_args: str) -> bool:
     """Run a command and return whether it was successful."""
-    print(f'  {" ".join(run_args)}')
+    print(f'  {" ".join(run_args)}', flush=True)
     if config.dry_run:
         return True
-    result = subprocess.run(run_args, check=False)
+    try:
+        result = subprocess.run(run_args, check=False)
+    except FileNotFoundError as error:
+        raise RuntimeError(f'Command "{run_args[0]}" not found; is it installed and on the PATH?') from error
     return result.returncode == 0
 
 
@@ -537,11 +551,11 @@ def print_ok(message: str) -> None:
 
 
 def print_bold(message: str) -> None:
-    print(f'\033[1m{message}\033[0m')
+    print(f'\033[1m{message}\033[0m', flush=True)
 
 
 def print_fail(message: str) -> None:
-    print(f'\033[91m{message}\033[0m')
+    print(f'\033[91m{message}\033[0m', flush=True)
 
 
 def main(argv: List[str]) -> None:
