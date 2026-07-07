@@ -190,9 +190,13 @@ If Lizard crashes, the ESP32 can store a core dump that you read back over the s
 ./espresso.py coredump --debug    # start a GDB debug session, then return to the shell
 ```
 
-This needs a compiled ELF at `build/lizard.elf` and the `esp-coredump` package.
+This needs a compiled ELF at `build/lizard.elf` and, on the machine reading the dump,
+a sourced ESP-IDF environment: `esp_coredump` looks up the core dump partition via
+`$IDF_PATH/components/partition_table/parttool.py` and symbolizes with the matching GDB
+(`xtensa-esp32-elf-gdb`/`xtensa-esp32s3-elf-gdb`), so the pip package alone is not enough
+and it must be importable by `python3` (not just a CLI on the `PATH`).
 Add `--host user@robot-brain` to pull a core dump off a Robot Brain without logging in;
-`esp-coredump` must then be installed on the Robot Brain itself, which reads the dump.
+the requirements above then apply to the Robot Brain itself, which reads the dump.
 Unlike flashing, the remote core dump runs without sudo,
 so the SSH user needs access to the serial device (e.g. membership in the `dialout` group).
 
