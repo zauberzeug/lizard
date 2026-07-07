@@ -330,7 +330,7 @@ The main loop runs every **10ms** (`delay(10)` in `app_main`). Any operation tha
 
 Modules self-register via `REGISTER_MODULE(ClassName, &create_X)` in their own `.cpp`. The macro keys off the class's `static constexpr const char *TYPE` constant — both the factory and the static `ClassName::get_defaults()` method are registered under that string. Forgetting either the macro or the `TYPE` constant causes the DSL to report `unknown module type "ClassName"`. Two modules trying to register under the same `TYPE` throw a hard error at static-init time, so collisions are caught at first boot rather than silently shadowing.
 
-The class must define `static const std::map<std::string, Variable_ptr> get_defaults()` (return an empty map if there are no defaults) and pass only the instance name to the `Module(name)` base constructor — the runtime type identity comes from RTTI on the polymorphic `Module`.
+The class must define `static const std::map<std::string, Variable_ptr> get_defaults()` (return an empty map if there are no defaults) and pass only the instance name to the `Module(name)` base constructor — the runtime type identity comes from RTTI on the polymorphic `Module`. Inheriting `get_defaults()` from an intermediate base class (e.g. `Wheels`) is fine; a subclass that adds properties must shadow `get_defaults()` and pass its result to the base constructor, so that the registered defaults always equal the constructed properties — expander proxies seed their properties exclusively from the registered `get_defaults()`, so a property that exists only in a constructor breaks proxied instances at runtime.
 
 #### `WHOLE_ARCHIVE` is mandatory
 
