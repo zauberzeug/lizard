@@ -323,9 +323,11 @@ def run_remote(host: str, command: List[str], *, artifact_includes: List[str],
 
     Only the artifacts the command actually uses are copied: ``artifact_includes`` is empty for
     pin-only commands (erase/enable/disable/reset/release_pins), so they no longer die in an
-    rsync of a missing build/ on a fresh clone. sources resolve against the script's own
-    directory, so espresso can be invoked from any cwd. Under ``dry_run`` nothing is sent or run
-    on the remote -- the rsync/ssh commands are printed so a dry run never mutates the remote.
+    rsync of a missing build/ on a fresh clone. build/ resolves against the cwd -- the same base
+    a local run uses for the artifact paths -- so the remote flashes exactly what a local flash
+    would; only espresso.py itself is taken from the script's own directory. Under ``dry_run``
+    nothing is sent or run on the remote -- the rsync/ssh commands are printed so a dry run
+    never mutates the remote.
     """
     target, path = parse_host(host)
     if target.startswith('-'):
@@ -334,9 +336,9 @@ def run_remote(host: str, command: List[str], *, artifact_includes: List[str],
     runner = _print_remote if dry_run else _run_checked
 
     if artifact_includes:
-        build_dir = script_dir / 'build'
-        if not dry_run and not build_dir.exists():
-            raise RuntimeError(f'No build/ directory next to espresso.py ({build_dir}); run the ESP-IDF build first.')
+        build_dir = Path('build')
+        if not dry_run and not build_dir.is_dir():
+            raise RuntimeError(f'No build/ directory in {Path.cwd()}; run the ESP-IDF build first.')
         print_bold(f'Copying build artifacts to {target}:{path}...')
         runner(['rsync', '-zarv', '--prune-empty-dirs', *artifact_includes, '--exclude=*',
                 str(build_dir), f'{target}:{path}'])
