@@ -31,7 +31,7 @@ This rsyncs the binaries and `espresso.py` to the target and runs the command th
 ./espresso.py flash --host user@robot-brain[:path]
 ```
 
-`--host` works for every command (`flash`, `erase`, `enable`, `disable`, `reset`, `coredump`),
+`--host` works for every command (`flash`, `erase`, `enable`, `disable`, `reset`, `release_pins`, `coredump`),
 so e.g. `./espresso.py erase --host user@robot-brain` performs a remote recovery erase.
 
 ## Interaction
