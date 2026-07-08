@@ -19,6 +19,7 @@ else:
 
 IS_JETSON = Path('/etc/nv_tegra_release').exists()
 
+
 class GpioController:
     """No-op fallback controller; also the base class for the real gpiod-backed ones."""
 
@@ -335,7 +336,8 @@ def run_remote(host: str, command: List[str], *, artifacts: List[str],
 
     print_bold(f'Running "espresso.py {" ".join(command)}" on {target}...')
     sudo = 'sudo ' if use_sudo else ''
-    remote = f'cd -- {quote_remote_path(path)} && {sudo}./espresso.py ' + ' '.join(shlex.quote(token) for token in command)
+    remote = f'cd -- {quote_remote_path(path)} && {sudo}./espresso.py ' + \
+        ' '.join(shlex.quote(token) for token in command)
     runner(['ssh', '-t', target, f'bash --login -c {shlex.quote(remote)}'])
 
 
