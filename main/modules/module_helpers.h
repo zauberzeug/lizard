@@ -4,7 +4,6 @@
 #include "../global.h"
 #include "driver/gpio.h"
 #include "module.h"
-#include "proxy.h"
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -24,8 +23,7 @@ inline std::shared_ptr<M> get_module_argument(const ConstExpression_ptr &arg) {
     if (auto typed = std::dynamic_pointer_cast<M>(module)) {
         return typed;
     }
-    if (std::dynamic_pointer_cast<Proxy>(module)) {
-        return std::static_pointer_cast<M>(module);
-    }
+    // No Proxy fallback: static_pointer_cast<M> of a proxy is UB (#233). A proxy is
+    // usable only as a base Module, so use get_module_argument<Module> for those.
     throw std::runtime_error("module \"" + name + "\" is no " + M::TYPE);
 }
