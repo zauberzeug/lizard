@@ -6,12 +6,12 @@ const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
-        {"drivable", std::make_shared<BooleanVariable>(true)},
+        {"locked", std::make_shared<BooleanVariable>(false)},
     };
 }
 
 // The gate properties that must stay in sync between a master and its shadows.
-static constexpr const char *GATE_PROPERTIES[] = {"drivable", "enabled"};
+static constexpr const char *GATE_PROPERTIES[] = {"locked", "enabled"};
 
 static bool is_gate_property(const std::string &property_name) {
     for (const char *gate : GATE_PROPERTIES) {
@@ -33,7 +33,7 @@ void Wheels::update_speeds(double left_speed, double right_speed) {
 }
 
 bool Wheels::may_drive() const {
-    return this->properties.at("enabled")->boolean_value && this->properties.at("drivable")->boolean_value;
+    return this->properties.at("enabled")->boolean_value && !this->properties.at("locked")->boolean_value;
 }
 
 void Wheels::suspend_hold() {
@@ -52,10 +52,10 @@ void Wheels::step() {
         }
     }
 
-    // Drivable interlock: hold the wheels at standstill while enabled but not drivable, so the
-    // hold engages even when no drive command arrives — e.g. the rule that cleared drivable ran
-    // because the host went silent. The hold is sent once on the falling edge and refreshed at a
-    // low rate to re-assert it after a motor reboot without flooding the bus.
+    // Lock interlock: hold the wheels at standstill while enabled but locked, so the hold
+    // engages even when no drive command arrives — e.g. the rule that set locked ran because
+    // the host went silent. The hold is sent once on the rising edge of locked and refreshed
+    // at a low rate to re-assert it after a motor reboot without flooding the bus.
     const bool should_hold = this->properties.at("enabled")->boolean_value && !this->may_drive();
     if (!should_hold) {
         this->holding = false;
