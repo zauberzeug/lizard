@@ -559,6 +559,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` and `off()` still switch the motors off, and a locked but switched-off robot can be pushed by hand.
 `off()` also suspends the hold until `enable()` is called or `locked` changes.
 Driving resumes as soon as `locked` is `false` again.
+Writes to `locked` and `enabled` are forwarded to shadow modules, so shadowed wheels stop together with their master.
 
 ## RMD Motor
 
@@ -706,6 +707,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` and `off()` still switch the motors off, and a locked but switched-off robot can be pushed by hand.
 `off()` also suspends the hold until `enable()` is called or `locked` changes.
 Driving resumes as soon as `locked` is `false` again.
+Writes to `locked` and `enabled` are forwarded to shadow modules, so shadowed wheels stop together with their master.
 
 ## Stepper Motor
 
@@ -1040,6 +1042,7 @@ This lets a rule block driving while some other condition is unmet, for example 
 The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 Driving resumes as soon as `locked` is `false` again.
+Writes to `locked` and `enabled` are forwarded to shadow modules, so shadowed wheels stop together with their master.
 
 ## Analog Unit
 
