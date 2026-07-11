@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-import argparse
-import subprocess
+"""Deprecated: remote flashing now lives in espresso.py.
 
-parser = argparse.ArgumentParser(description='Upload Lizard to a remote host and flash to a microcontroller.')
-parser.add_argument('host', type=str, help='user@host or user@host:~/path/to/lizard')
-parser.add_argument('flash_args', type=str, nargs='*', help='flash arguments')
-args = parser.parse_args()
-host, *path = args.host.split(':')
-target = path[0] if path else '~/lizard'
+Kept as a one-release pointer. Use espresso.py's --host instead, which rsyncs the
+binaries plus espresso.py itself and runs the command on the remote:
 
-print(f'Copying binary files to {host}:{target}...')
-command = f'rsync -zarv --prune-empty-dirs --include="*/" --include="*.bin" --exclude="*" build {host}:{target}'
-subprocess.run(command, shell=True, check=True)
+    ./espresso.py flash --host user@host[:path] [--nand] [--device /dev/ttyTHS0] ...
 
-print('Flashing microcontroller...')
-command = f'''ssh -t {host} "bash --login -c 'cd {target} && sudo ./flash.py {" ".join(args.flash_args)}'"'''
-subprocess.run(command, shell=True, check=True)
+--host works for every command (flash/erase/enable/disable/reset/coredump), so remote
+recovery workflows the old wrapper only hinted at are now first-class.
+
+Note that espresso.py supports Jetson Orin only (L4T 35/36). For Nano/Xavier Robot
+Brains use release 0.12.x or earlier, which still ships flash.py and upload_ssh.py.
+"""
+import sys
+
+print(__doc__, file=sys.stderr)
+sys.exit(2)

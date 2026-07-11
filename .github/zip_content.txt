@@ -2,13 +2,10 @@ build/bootloader/bootloader.bin
 build/partition_table/partition-table.bin
 build/lizard.elf
 build/lizard.bin
-backtrace.sh
 configure.py
-core_dumper.py
-esp.py
 espresso.py
-flash.py
 monitor.py
+upload_ssh.py
 README.md
 requirements.txt
 LICENSE

@@ -7,7 +7,7 @@
 To install Lizard on your ESP32 run
 
 ```bash
-sudo ./espresso.py flash <device_path>
+sudo ./espresso.py flash --device <device_path>
 ```
 
 Note that flashing may require root access (hence the sudo).
@@ -21,6 +21,18 @@ On boards with a native USB-Serial-JTAG port (e.g. ESP32-S3), prefer that port o
 
 The `espresso.py` script can also upload firmware on a [Robot Brain](https://www.zauberzeug.com/product-robot-brain.html)
 where the microcontroller is connected to the pin header of an NVIDIA Jetson computer.
+This requires a Jetson Orin (L4T 35 or 36);
+for Nano/Xavier Robot Brains use release 0.12.x or earlier, which still ships `flash.py`.
+
+To flash a Robot Brain over the network from a development machine, pass `--host`.
+This rsyncs the binaries and `espresso.py` to the target and runs the command there over SSH:
+
+```bash
+./espresso.py flash --host user@robot-brain[:path]
+```
+
+`--host` works for every command (`flash`, `erase`, `enable`, `disable`, `reset`, `release_pins`, `coredump`),
+so e.g. `./espresso.py erase --host user@robot-brain` performs a remote recovery erase.
 
 ## Interaction
 
@@ -158,13 +170,35 @@ To upload the compiled firmware you can use the `./espresso.py` command describe
 
 ### Backtrace
 
-In case Lizard terminates with a backtrace printed to the serial terminal, you can use the following script to print corresponding source code lines.
+In case Lizard terminates with a backtrace printed to the serial terminal,
+you can translate the addresses to source code lines with the `addr2line` tool from the ESP-IDF toolchain.
+Make sure the toolchain is on your `PATH` (e.g. by sourcing `. $IDF_PATH/export.sh`)
+and that a compiled ELF file is located at `build/lizard.elf`.
+Use the `addr2line` that matches the active ESP-IDF toolchain.
+On ESP-IDF 5.2 and newer, the unified Xtensa binary below covers both ESP32 and ESP32-S3.
 
 ```bash
-./backtrace.sh <addresses>
+xtensa-esp-elf-addr2line -e build/lizard.elf <addresses>
 ```
 
-Note that the script assumes Espressif IDF tools being installed at `~/esp/esp-tools_4.4/` and a compiled ELF file being located at `build/lizard.elf`.
+### Core Dumps
+
+If Lizard crashes, the ESP32 can store a core dump that you read back over the serial device:
+
+```bash
+./espresso.py coredump            # print core dump info
+./espresso.py coredump --debug    # start a GDB debug session, then return to the shell
+```
+
+This needs a compiled ELF at `build/lizard.elf` and, on the machine reading the dump,
+a sourced ESP-IDF environment: `esp_coredump` looks up the core dump partition via
+`$IDF_PATH/components/partition_table/parttool.py` and symbolizes with the matching GDB
+(`xtensa-esp32-elf-gdb`/`xtensa-esp32s3-elf-gdb`), so the pip package alone is not enough
+and it must be importable by `python3` (not just a CLI on the `PATH`).
+Add `--host user@robot-brain` to pull a core dump off a Robot Brain without logging in;
+the requirements above then apply to the Robot Brain itself, which reads the dump.
+Unlike flashing, the remote core dump runs without sudo,
+so the SSH user needs access to the serial device (e.g. membership in the `dialout` group).
 
 ### Releasing
 

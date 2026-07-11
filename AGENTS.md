@@ -99,7 +99,7 @@ lizard/
 ├── docs/                   # MkDocs documentation
 ├── examples/               # Usage examples (ROS integration, trajectories)
 ├── build.py               # Build script (wraps idf.py)
-├── flash.py               # Flash script
+├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
 ├── monitor.py             # Serial monitor
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
 └── gen_parser.sh          # Regenerates parser.c from language.owl
@@ -135,8 +135,8 @@ python build.py esp32s3 --clean
 ### Flash & Monitor
 
 ```bash
-# Flash to connected device
-python flash.py
+# Flash to connected device (add --device <port> if not auto-detected)
+python espresso.py flash
 
 # Monitor serial output
 python monitor.py
@@ -427,10 +427,10 @@ idf.py monitor
 
 ### Core Dumps
 
-If the device crashes, use `core_dumper.py` to analyze:
+If the device crashes, use `espresso.py coredump` to analyze:
 
 ```bash
-python core_dumper.py
+python espresso.py coredump
 ```
 
 ### Common Debug Techniques

@@ -15,7 +15,7 @@ alwaysApply: true
 ```bash
 python build.py           # Build for ESP32
 python build.py esp32s3   # Build for ESP32-S3
-python flash.py           # Flash to device
+python espresso.py flash  # Flash to device
 python monitor.py         # Serial monitor
 ./gen_parser.sh           # Regenerate parser from language.owl
 ```
