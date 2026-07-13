@@ -36,11 +36,6 @@ bool Wheels::may_drive() const {
     return this->properties.at("enabled")->boolean_value && !this->properties.at("locked")->boolean_value;
 }
 
-void Wheels::suspend_hold() {
-    this->holding = false;
-    this->hold_suspended = true;
-}
-
 void Wheels::step() {
     this->update_odometry();
 
@@ -59,13 +54,12 @@ void Wheels::step() {
     const bool should_hold = this->properties.at("enabled")->boolean_value && !this->may_drive();
     if (!should_hold) {
         this->holding = false;
-        this->hold_suspended = false;
     } else if (this->holding) {
         if (++this->hold_cycle >= HOLD_REFRESH_CYCLES) {
             this->hold_cycle = 0;
             this->do_wheel_speeds(0.0, 0.0);
         }
-    } else if (!this->hold_suspended) {
+    } else {
         this->holding = true;
         this->hold_cycle = 0;
         this->do_wheel_speeds(0.0, 0.0);
@@ -126,7 +120,6 @@ void Wheels::write_property(const std::string property_name, const ConstExpressi
 void Wheels::enable() {
     this->last_applied_enabled = true;
     this->properties.at("enabled")->boolean_value = true;
-    this->hold_suspended = false;
     this->do_enable();
 }
 

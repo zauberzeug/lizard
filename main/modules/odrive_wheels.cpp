@@ -59,7 +59,6 @@ void ODriveWheels::call(const std::string method_name, const std::vector<ConstEx
         Module::expect(arguments, 0);
         this->left_motor->off();
         this->right_motor->off();
-        this->suspend_hold();
     } else {
         Wheels::call(method_name, arguments);
     }

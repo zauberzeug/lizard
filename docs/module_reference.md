@@ -556,8 +556,8 @@ The `locked` property is a safety interlock for rules running on the microcontro
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
 The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
-`locked` only blocks commands: `disable()` and `off()` still switch the motors off, and a locked but switched-off robot can be pushed by hand.
-`off()` also suspends the hold until `enable()` is called or `locked` changes.
+`locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
+While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
 Writes to `locked` and `enabled` are forwarded to shadow modules, so shadowed wheels stop together with their master.
 
@@ -704,8 +704,8 @@ The `locked` property is a safety interlock for rules running on the microcontro
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
 The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
-`locked` only blocks commands: `disable()` and `off()` still switch the motors off, and a locked but switched-off robot can be pushed by hand.
-`off()` also suspends the hold until `enable()` is called or `locked` changes.
+`locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
+While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
 Writes to `locked` and `enabled` are forwarded to shadow modules, so shadowed wheels stop together with their master.
 

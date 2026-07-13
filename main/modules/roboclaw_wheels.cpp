@@ -80,7 +80,6 @@ void RoboClawWheels::call(const std::string method_name, const std::vector<Const
         Module::expect(arguments, 0);
         this->left_motor->power(0);
         this->right_motor->power(0);
-        this->suspend_hold();
     } else {
         Wheels::call(method_name, arguments);
     }
