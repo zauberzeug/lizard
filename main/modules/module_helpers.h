@@ -28,6 +28,8 @@ inline std::shared_ptr<Held> get_module_argument(const ConstExpression_ptr &arg)
     // A proxy is not an M in the C++ type system, so casting it to M is UB (#233).
     // But when the caller holds it only as a base (Held, e.g. Module), a proxy standing
     // for a remote M is safe: validate it by the remote type name, return it as that base.
+    // Name equality cannot model inheritance: M must be a registered type name like
+    // "Input", not a base of other registered types like "Motor".
     if constexpr (!std::is_same_v<Held, M>) {
         if (const auto proxy = std::dynamic_pointer_cast<Proxy>(module)) {
             if (proxy->module_type == M::TYPE) {
