@@ -125,6 +125,7 @@ void Wheels::enable() {
 
 void Wheels::disable() {
     this->do_disable();
+    this->holding = false; // the standstill hold died with the motors; re-send it if locking persists
     this->last_applied_enabled = false;
     this->properties.at("enabled")->boolean_value = false;
 }
