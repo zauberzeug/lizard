@@ -72,7 +72,7 @@ void RoboClawWheels::do_disable() {
 void RoboClawWheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "power") {
         Module::expect(arguments, 2, numbery, numbery);
-        if (this->properties.at("enabled")->boolean_value) {
+        if (this->may_drive()) {
             this->left_motor->power(arguments[0]->evaluate_number());
             this->right_motor->power(arguments[1]->evaluate_number());
         }
