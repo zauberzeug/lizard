@@ -194,7 +194,11 @@ DivideExpression::DivideExpression(const ConstExpression_ptr left, const ConstEx
 }
 
 int64_t DivideExpression::evaluate_integer() const {
-    return this->left->evaluate_integer() / this->right->evaluate_integer();
+    const int64_t divisor = this->right->evaluate_integer();
+    if (divisor == 0) {
+        throw std::runtime_error("division by zero");
+    }
+    return this->left->evaluate_integer() / divisor;
 }
 
 double DivideExpression::evaluate_number() const {
@@ -206,7 +210,11 @@ ModuloExpression::ModuloExpression(const ConstExpression_ptr left, const ConstEx
 }
 
 int64_t ModuloExpression::evaluate_integer() const {
-    return this->left->evaluate_integer() % this->right->evaluate_integer();
+    const int64_t divisor = this->right->evaluate_integer();
+    if (divisor == 0) {
+        throw std::runtime_error("modulo by zero");
+    }
+    return this->left->evaluate_integer() % divisor;
 }
 
 double ModuloExpression::evaluate_number() const {
@@ -218,7 +226,11 @@ FloorDivideExpression::FloorDivideExpression(const ConstExpression_ptr left, con
 }
 
 int64_t FloorDivideExpression::evaluate_integer() const {
-    return this->left->evaluate_integer() / this->right->evaluate_integer();
+    const int64_t divisor = this->right->evaluate_integer();
+    if (divisor == 0) {
+        throw std::runtime_error("division by zero");
+    }
+    return this->left->evaluate_integer() / divisor;
 }
 
 double FloorDivideExpression::evaluate_number() const {
