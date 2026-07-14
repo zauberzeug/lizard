@@ -37,7 +37,6 @@ protected:
     bool broadcast = false;
 
 public:
-    static inline constexpr const char *TYPE = "Module";
     static bool broadcast_paused;
     const std::string name;
 
