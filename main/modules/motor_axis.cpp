@@ -13,11 +13,8 @@ static Module_ptr create_motor_axis(const std::string &name, const std::vector<C
     if (!motor) {
         throw std::runtime_error("module \"" + motor_name + "\" is not a supported motor for MotorAxis");
     }
-    // Inputs must be end switches, but are read only via get_property("active"), so we
-    // validate the Input type yet hold them as base Module, which keeps a proxied end
-    // switch on an expander valid (a proxy is validated by remote type name, not cast; #233).
-    const Module_ptr input1 = get_module_argument<Input, Module>(arguments[1]);
-    const Module_ptr input2 = get_module_argument<Input, Module>(arguments[2]);
+    const Input_ptr input1 = get_module_argument<Input>(arguments[1]);
+    const Input_ptr input2 = get_module_argument<Input>(arguments[2]);
     return std::make_shared<MotorAxis>(name, motor, input1, input2);
 }
 REGISTER_MODULE(MotorAxis, &create_motor_axis)
@@ -28,7 +25,7 @@ const std::map<std::string, Variable_ptr> MotorAxis::get_defaults() {
     };
 }
 
-MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Module_ptr input1, const Module_ptr input2)
+MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2)
     : Module(name), motor(motor), input1(input1), input2(input2) {
     this->properties = MotorAxis::get_defaults();
 }

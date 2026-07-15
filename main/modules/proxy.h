@@ -8,8 +8,6 @@ private:
     const Expander_ptr expander;
 
 public:
-    const std::string module_type;
-
     Proxy(const std::string name,
           const std::string expander_name,
           const std::string module_type,

@@ -9,7 +9,7 @@ Proxy::Proxy(const std::string name,
              const std::string module_type,
              const Expander_ptr expander,
              const std::vector<ConstExpression_ptr> arguments)
-    : Module(name), expander(expander), module_type(module_type) {
+    : Module(name), expander(expander) {
     this->properties = Module::get_module_defaults(module_type);
     this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
 
