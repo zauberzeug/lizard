@@ -1142,6 +1142,9 @@ Note that the remote module has to have turned on broadcasting: `x.broadcast()`.
 
 Note that the proxy module forwards all method calls to the remote module.
 
+Proxies cannot be passed as arguments to other module constructors (e.g. as end stops for a motor axis), because the actual module only exists on the remote microcontroller.
+Declare the depending module on the same microcontroller instead.
+
 | Properties | Description                                       | Data type |
 | ---------- | ------------------------------------------------- | --------- |
 | `is_ready` | Whether the remote module has booted and is ready | `bool`    |
