@@ -339,6 +339,10 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     case ERROR_MORE_INPUT_NEEDED:
         echo("error: more input needed at range %zu %zu", range.start, range.end);
         break;
+    case ERROR_ALLOCATION_FAILURE:
+        // Must not reach process_tree: owl's accessors exit() on a failed tree, which aborts on ESP-IDF.
+        echo("error: allocation failure while parsing");
+        break;
     default:
         if (debug) {
             owl_tree_print(tree.get());
