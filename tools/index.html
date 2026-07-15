@@ -578,6 +578,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#core-dumps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Dumps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#releasing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -762,6 +773,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#core-dumps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Dumps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#releasing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -801,13 +823,24 @@
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <h3 id="flash">Flash<a class="headerlink" href="#flash" title="Permanent link">&para;</a></h3>
 <p>To install Lizard on your ESP32 run</p>
-<pre><code class="language-bash">sudo ./espresso.py flash &lt;device_path&gt;
+<pre><code class="language-bash">sudo ./espresso.py flash --device &lt;device_path&gt;
 </code></pre>
 <p>Note that flashing may require root access (hence the sudo).
 The command also does not work while the serial interface is busy communicating with another process.</p>
+<p>If flashing fails on your USB-UART bridge, you can lower the baud rate with <code>--baud</code> (default: 921600).
+If the stub upload itself fails (e.g. "Failed to write to target RAM"), pass <code>--no-stub</code> to flash via the ROM loader instead.
+On boards with a native USB-Serial-JTAG port (e.g. ESP32-S3), prefer that port over an external USB-UART bridge as the most robust way to flash.</p>
 <h3 id="robot-brain">Robot Brain<a class="headerlink" href="#robot-brain" title="Permanent link">&para;</a></h3>
 <p>The <code>espresso.py</code> script can also upload firmware on a <a href="https://www.zauberzeug.com/product-robot-brain.html">Robot Brain</a>
-where the microcontroller is connected to the pin header of an NVIDIA Jetson computer.</p>
+where the microcontroller is connected to the pin header of an NVIDIA Jetson computer.
+This requires a Jetson Orin (L4T 35 or 36);
+for Nano/Xavier Robot Brains use release 0.12.x or earlier, which still ships <code>flash.py</code>.</p>
+<p>To flash a Robot Brain over the network from a development machine, pass <code>--host</code>.
+This rsyncs the binaries and <code>espresso.py</code> to the target and runs the command there over SSH:</p>
+<pre><code class="language-bash">./espresso.py flash --host user@robot-brain[:path]
+</code></pre>
+<p><code>--host</code> works for every command (<code>flash</code>, <code>erase</code>, <code>enable</code>, <code>disable</code>, <code>reset</code>, <code>release_pins</code>, <code>coredump</code>),
+so e.g. <code>./espresso.py erase --host user@robot-brain</code> performs a remote recovery erase.</p>
 <h2 id="interaction">Interaction<a class="headerlink" href="#interaction" title="Permanent link">&para;</a></h2>
 <h3 id="serial-monitor">Serial Monitor<a class="headerlink" href="#serial-monitor" title="Permanent link">&para;</a></h3>
 <p>Use the serial monitor to read the current output and interactively send <a href="../language/">Lizard commands</a> to the microcontroller.</p>
@@ -961,10 +994,28 @@ The target node will reboot with the new firmware after a successful transfer.</
 </code></pre>
 <p>To upload the compiled firmware you can use the <code>./espresso.py</code> command described above.</p>
 <h3 id="backtrace">Backtrace<a class="headerlink" href="#backtrace" title="Permanent link">&para;</a></h3>
-<p>In case Lizard terminates with a backtrace printed to the serial terminal, you can use the following script to print corresponding source code lines.</p>
-<pre><code class="language-bash">./backtrace.sh &lt;addresses&gt;
+<p>In case Lizard terminates with a backtrace printed to the serial terminal,
+you can translate the addresses to source code lines with the <code>addr2line</code> tool from the ESP-IDF toolchain.
+Make sure the toolchain is on your <code>PATH</code> (e.g. by sourcing <code>. $IDF_PATH/export.sh</code>)
+and that a compiled ELF file is located at <code>build/lizard.elf</code>.
+Use the <code>addr2line</code> that matches the active ESP-IDF toolchain.
+On ESP-IDF 5.2 and newer, the unified Xtensa binary below covers both ESP32 and ESP32-S3.</p>
+<pre><code class="language-bash">xtensa-esp-elf-addr2line -e build/lizard.elf &lt;addresses&gt;
 </code></pre>
-<p>Note that the script assumes Espressif IDF tools being installed at <code>~/esp/esp-tools_4.4/</code> and a compiled ELF file being located at <code>build/lizard.elf</code>.</p>
+<h3 id="core-dumps">Core Dumps<a class="headerlink" href="#core-dumps" title="Permanent link">&para;</a></h3>
+<p>If Lizard crashes, the ESP32 can store a core dump that you read back over the serial device:</p>
+<pre><code class="language-bash">./espresso.py coredump            # print core dump info
+./espresso.py coredump --debug    # start a GDB debug session, then return to the shell
+</code></pre>
+<p>This needs a compiled ELF at <code>build/lizard.elf</code> and, on the machine reading the dump,
+a sourced ESP-IDF environment: <code>esp_coredump</code> looks up the core dump partition via
+<code>$IDF_PATH/components/partition_table/parttool.py</code> and symbolizes with the matching GDB
+(<code>xtensa-esp32-elf-gdb</code>/<code>xtensa-esp32s3-elf-gdb</code>), so the pip package alone is not enough
+and it must be importable by <code>python3</code> (not just a CLI on the <code>PATH</code>).
+Add <code>--host user@robot-brain</code> to pull a core dump off a Robot Brain without logging in;
+the requirements above then apply to the Robot Brain itself, which reads the dump.
+Unlike flashing, the remote core dump runs without sudo,
+so the SSH user needs access to the serial device (e.g. membership in the <code>dialout</code> group).</p>
 <h3 id="releasing">Releasing<a class="headerlink" href="#releasing" title="Permanent link">&para;</a></h3>
 <p>To build a new release, tag the commit with a "v" prefix, for example "v0.1.4".
 A GitHub action will build the binary and create a new release.

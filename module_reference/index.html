@@ -2715,6 +2715,11 @@ Otherwise, the <code>motor_temperature</code> property will remain at 0.</p>
 <td>Whether the wheels are enabled</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>wheels.locked</code></td>
+<td>Whether driving is blocked (safety interlock, see below)</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -2756,6 +2761,14 @@ Otherwise, the <code>motor_temperature</code> property will remain at 0.</p>
 <p>When the wheels are disabled, they will stop and ignore movement commands.
 This allows disabling the wheels permanently by setting <code>enabled = false</code> in conjunction with calling the <code>off()</code> method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.</p>
+<p>The <code>locked</code> property is a safety interlock for rules running on the microcontroller:
+while it is <code>true</code>, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
+This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
+The hold is sent when <code>locked</code> becomes <code>true</code> and refreshed about once per second, so it re-engages even if a motor controller restarts.
+<code>locked</code> only blocks commands: <code>disable()</code> still switches the motors off, and a locked but switched-off robot can be pushed by hand.
+While <code>locked</code> is <code>true</code>, <code>off()</code> does not stick — the hold re-engages within about a second; call <code>disable()</code> to switch the motors off durably.
+Driving resumes as soon as <code>locked</code> is <code>false</code> again.
+Writes to <code>locked</code> and <code>enabled</code> are forwarded to shadow modules, so shadowed wheels stop together with their master.</p>
 <h2 id="rmd-motor">RMD Motor<a class="headerlink" href="#rmd-motor" title="Permanent link">&para;</a></h2>
 <p>The RMD motor module controls a <a href="https://www.myactuator.com/">MyActuator</a> RMD motor via CAN.</p>
 <table>
@@ -3166,6 +3179,11 @@ It communicates with a <a href="https://www.basicmicro.com/">Basicmicro</a> Robo
 <td>Whether motors react to commands</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>wheels.locked</code></td>
+<td>Whether driving is blocked (safety interlock, see below)</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -3205,6 +3223,14 @@ It communicates with a <a href="https://www.basicmicro.com/">Basicmicro</a> Robo
 </tbody>
 </table>
 <p>When the wheels are disabled, they will stop and ignore movement commands.</p>
+<p>The <code>locked</code> property is a safety interlock for rules running on the microcontroller:
+while it is <code>true</code>, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
+This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
+The hold is sent when <code>locked</code> becomes <code>true</code> and refreshed about once per second, so it re-engages even if a motor controller restarts.
+<code>locked</code> only blocks commands: <code>disable()</code> still switches the motors off, and a locked but switched-off robot can be pushed by hand.
+While <code>locked</code> is <code>true</code>, <code>off()</code> does not stick — the hold re-engages within about a second; call <code>disable()</code> to switch the motors off durably.
+Driving resumes as soon as <code>locked</code> is <code>false</code> again.
+Writes to <code>locked</code> and <code>enabled</code> are forwarded to shadow modules, so shadowed wheels stop together with their master.</p>
 <h2 id="stepper-motor">Stepper Motor<a class="headerlink" href="#stepper-motor" title="Permanent link">&para;</a></h2>
 <p>The stepper motor module controls a stepper motor via "step" and "direction" pins.
 It uses the ESP LED Control API to generate pulses with sufficiently high frequencies and the Pulse Counter API to count steps.</p>
@@ -4121,6 +4147,11 @@ motor.set_ctrl_halt(true)
 <td>Whether the wheels are enabled</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>wheels.locked</code></td>
+<td>Whether driving is blocked (safety interlock, see below)</td>
+<td><code>bool</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -4150,6 +4181,13 @@ motor.set_ctrl_halt(true)
 </tbody>
 </table>
 <p>When the wheels are disabled, they will freewheel and ignore movement commands.</p>
+<p>The <code>locked</code> property is a safety interlock for rules running on the microcontroller:
+while it is <code>true</code>, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
+This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
+The hold is sent when <code>locked</code> becomes <code>true</code> and refreshed about once per second, so it re-engages even if a motor controller restarts.
+<code>locked</code> only blocks commands: <code>disable()</code> still switches the motors off, and a locked but switched-off robot can be pushed by hand.
+Driving resumes as soon as <code>locked</code> is <code>false</code> again.
+Writes to <code>locked</code> and <code>enabled</code> are forwarded to shadow modules, so shadowed wheels stop together with their master.</p>
 <h2 id="analog-unit">Analog Unit<a class="headerlink" href="#analog-unit" title="Permanent link">&para;</a></h2>
 <p>The AnalogUnit module owns an ADC oneshot unit and is shared by one or more <code>Analog</code> or <code>TemperatureSensor</code> modules.
 This allows multiple analog channels on the same hardware unit to be used safely without conflicts.</p>
