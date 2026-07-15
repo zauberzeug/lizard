@@ -21,7 +21,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
-          token: ${{ secrets.ACCESS_TOKEN }}
       - name: Determine version
         id: version_id
         run: echo "value=$(git describe --always --tags --dirty)" >> $GITHUB_OUTPUT
