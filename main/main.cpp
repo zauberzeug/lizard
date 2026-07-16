@@ -320,6 +320,10 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     if (debug) {
         toc("Tree creation");
     }
+    if (!tree) {
+        echo("error: allocation failure while parsing");
+        return;
+    }
     struct source_range range;
     switch (owl_tree_get_error(tree.get(), &range)) {
     case ERROR_INVALID_FILE:
@@ -340,10 +344,9 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
         echo("error: more input needed at range %zu %zu", range.start, range.end);
         break;
     case ERROR_ALLOCATION_FAILURE:
-        // Must not reach process_tree: owl's accessors exit() on a failed tree, which aborts on ESP-IDF.
         echo("error: allocation failure while parsing");
         break;
-    default:
+    case ERROR_NONE:
         if (debug) {
             owl_tree_print(tree.get());
             tic();
@@ -352,6 +355,11 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
         if (debug) {
             toc("Tree traversal");
         }
+        break;
+    default:
+        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
+        echo("error: unknown parse error");
+        break;
     }
 }
 
