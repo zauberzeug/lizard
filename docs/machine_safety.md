@@ -35,6 +35,13 @@ so that no stale commands fire after the host stopped:
 when core.last_message_age > 500 then motor.stop(); core.clear_schedule() end
 ```
 
+## Low memory
+
+Parsing a line requires a certain amount of free heap memory, which scales with the length of the line.
+When there is not enough free or contiguous memory, Lizard drops the line and responds with `error: not enough free memory to parse (<free> free, <required> required)` instead of risking a crash and reboot.
+Like a line with an incorrect checksum, the command was not executed;
+the host system should react accordingly, for example by re-sending the command later or stopping the machine.
+
 ## Expander watchdog
 
 The `expander` module provides a watchdog feature that restarts the port expander when it gets stuck and does not send messages anymore.
