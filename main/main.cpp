@@ -9,6 +9,8 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "global.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
@@ -305,10 +307,21 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
+// owl's peak transient allocation scales with the token count of the line, so the
+// required-heap floor scales with its length (base covers a short line's fixed cost).
+static constexpr size_t PARSE_HEAP_BASE = 4096;
+static constexpr size_t PARSE_HEAP_PER_CHAR = 64;
+
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     InterpreterLock lock;
     if (trigger_keep_alive) {
         core_module->keep_alive();
+    }
+
+    // owl's generated parser can abort()/deref under low heap instead of returning an error; drop the line rather than reboot.
+    if (xPortGetFreeHeapSize() < PARSE_HEAP_BASE + PARSE_HEAP_PER_CHAR * strlen(line)) {
+        echo("error: not enough free memory to parse");
+        return;
     }
 
     const bool debug = core_module->get_property("debug")->boolean_value;
