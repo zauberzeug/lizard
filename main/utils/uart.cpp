@@ -61,10 +61,14 @@ int check(char *buffer, int len, bool *checksum_ok) {
             checksum ^= buffer[i];
         }
         const std::string hex_number(&buffer[len - 2], 2);
-        if (std::stoi(hex_number, 0, 16) != checksum) {
+        try {
+            if (std::stoi(hex_number, 0, 16) != checksum) {
+                ok = false;
+            } else {
+                len -= 3;
+            }
+        } catch (...) {
             ok = false;
-        } else {
-            len -= 3;
         }
     }
     buffer[len] = 0;
