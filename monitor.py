@@ -51,8 +51,8 @@ def receive() -> None:
             if check is not None:
                 line = line[:-3]
                 checksum = 0
-                for c in line:
-                    checksum ^= ord(c)
+                for byte in line.encode('utf-8'):
+                    checksum ^= byte
                 if checksum != check:
                     print(f'ERROR: CHECKSUM MISMATCH ({checksum} vs. {check} for "{line}")')
         print(line)
@@ -63,16 +63,12 @@ async def send() -> None:
     while True:
         try:
             with patch_stdout():
-                line = await session.prompt_async('> ') + '\n'
-                checksum = 0
-                start = 0
-                for i, c in enumerate(line):
-                    if c == '\n':
-                        port.write(f'{line[start:i]}@{checksum:02x}\n'.encode('utf-8'))
-                        checksum = 0
-                        start = i
-                    else:
-                        checksum ^= ord(c)
+                line = await session.prompt_async('> ')
+                for segment in line.split('\n'):
+                    checksum = 0
+                    for byte in segment.encode('utf-8'):
+                        checksum ^= byte
+                    port.write(f'{segment}@{checksum:02x}\n'.encode('utf-8'))
         except (KeyboardInterrupt, EOFError):
             print('Bye!')
             loop.stop()

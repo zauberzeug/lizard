@@ -22,11 +22,14 @@ class SerialConnection:
         if '\n' in self.buffer:
             line, self.buffer = self.buffer.split('\r\n', 1)
             if line[-3:-2] == '@':
-                check = int(line[-2:], 16)
+                try:
+                    check = int(line[-2:], 16)
+                except ValueError:
+                    return None
                 line = line[:-3]
                 checksum = 0
-                for c in line:
-                    checksum ^= ord(c)
+                for byte in line.encode():
+                    checksum ^= byte
                 if checksum == check:
                     return line
             else:
@@ -38,8 +41,8 @@ class SerialConnection:
             return
         print(f'Sending: {line}')
         checksum = 0
-        for c in line:
-            checksum ^= ord(c)
+        for byte in line.encode():
+            checksum ^= byte
         self.port.write((f'{line}@{checksum:02x}\n').encode())
 
     def configure(self, startup_code: str) -> None:
