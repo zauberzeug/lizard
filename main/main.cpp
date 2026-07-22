@@ -9,6 +9,8 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
+#include "esp_heap_caps.h"
+#include "freertos/FreeRTOS.h"
 #include "global.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
@@ -305,10 +307,25 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
+// owl's peak transient allocation scales with the token count of the line, so the
+// required-heap floor scales with its length (base covers a short line's fixed cost).
+static constexpr size_t PARSE_HEAP_BASE = 4096;
+static constexpr size_t PARSE_HEAP_PER_CHAR = 64;
+
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     InterpreterLock lock;
     if (trigger_keep_alive) {
         core_module->keep_alive();
+    }
+
+    // owl's generated parser can abort()/deref on a failed allocation instead of returning an error, so require both
+    // enough total heap (scaled by the line's length) and a large enough contiguous block before parsing. Other tasks
+    // may allocate between the check and the parse; the padded constants absorb that. Drop the line rather than reboot.
+    const size_t required_heap = PARSE_HEAP_BASE + PARSE_HEAP_PER_CHAR * strlen(line);
+    const size_t free_heap = xPortGetFreeHeapSize();
+    if (free_heap < required_heap || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < PARSE_HEAP_BASE) {
+        echo("error: not enough free memory to parse (%u free, %u required)", (unsigned)free_heap, (unsigned)required_heap);
+        return;
     }
 
     const bool debug = core_module->get_property("debug")->boolean_value;
@@ -319,6 +336,10 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(line), owl_tree_destroy);
     if (debug) {
         toc("Tree creation");
+    }
+    if (!tree) {
+        echo("error: allocation failure while parsing");
+        return;
     }
     struct source_range range;
     switch (owl_tree_get_error(tree.get(), &range)) {
@@ -339,7 +360,10 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     case ERROR_MORE_INPUT_NEEDED:
         echo("error: more input needed at range %zu %zu", range.start, range.end);
         break;
-    default:
+    case ERROR_ALLOCATION_FAILURE:
+        echo("error: allocation failure while parsing");
+        break;
+    case ERROR_NONE:
         if (debug) {
             owl_tree_print(tree.get());
             tic();
@@ -348,6 +372,11 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
         if (debug) {
             toc("Tree traversal");
         }
+        break;
+    default:
+        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
+        echo("error: unknown parse error");
+        break;
     }
 }
 

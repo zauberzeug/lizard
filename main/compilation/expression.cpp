@@ -41,6 +41,8 @@ int Expression::print_to_buffer(char *buffer, size_t buffer_len) const {
         char escaped[buffer_len];
         int pos = 0;
         for (char c : this->evaluate_string()) {
+            if (pos + 3 > (int)buffer_len) // room for a 2-byte escape plus the final '\0' (#235)
+                throw std::runtime_error("buffer too small");
             if (c == '"' || c == '\\') {
                 escaped[pos++] = '\\';
             }

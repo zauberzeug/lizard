@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
+import argparse
 import re
+import shlex
 import subprocess
 import sys
 import time
 from contextlib import contextmanager
-from pathlib import Path
-from typing import Generator
-import argparse
+from dataclasses import dataclass, field, replace
+from pathlib import Path, PurePosixPath
+from typing import Callable, Dict, Generator, List, Optional, Tuple
 
 try:
     import gpiod
@@ -15,9 +17,13 @@ except ImportError:
 else:
     GPIOD_VERSION = 2 if hasattr(gpiod, 'request_lines') else 1
 
+IS_JETSON = Path('/etc/nv_tegra_release').exists()
+
 
 class GpioController:
-    def __init__(self, en: str, g0: str) -> None:
+    """No-op fallback controller; also the base class for the real gpiod-backed ones."""
+
+    def __init__(self, en: str = '', g0: str = '') -> None:
         pass
 
     def request_outputs(self, consumer: str) -> None:
@@ -80,137 +86,340 @@ class GpioControllerV2(GpioController):
             self._request = None
 
 
-DEFAULT_DEVICE = '/dev/tty.SLAB_USBtoUART'
-path = Path('/etc/nv_tegra_release')
-IS_JETSON = path.exists()
-if IS_JETSON and (match := re.search(r'R(\d+)', path.read_text(encoding='utf-8'))):
-    major = int(match.group(1))
-    if major == 35:
-        DEFAULT_DEVICE = '/dev/ttyTHS0'
-    elif major == 36:
-        DEFAULT_DEVICE = '/dev/ttyTHS1'
-    else:
+@dataclass(frozen=True)
+class Config:
+    """Resolved runtime configuration, passed to the command functions.
+
+    The field defaults are the single source of the option defaults: build_parser
+    interpolates them into the help texts via the DEFAULT instance and main() applies
+    them as fallbacks (the parser itself keeps None defaults so that main() can tell
+    typed flags from omitted ones). Values that depend on other fields are properties,
+    so they cannot drift from their inputs.
+    """
+    chip: str = 'esp32'
+    device: str = ''  # the real default is machine-dependent, see resolve_default_device()
+    baud: Optional[int] = None  # an explicit --baud; each command falls back to its own default
+    nand: bool = False
+    swap: bool = False
+    dry_run: bool = False
+    no_stub: bool = False
+    reset_partition: bool = False
+    debug: bool = False
+    bootloader: str = 'build/bootloader/bootloader.bin'
+    partition_table: str = 'build/partition_table/partition-table.bin'
+    firmware: str = 'build/lizard.bin'
+    elf: str = 'build/lizard.elf'
+    en_pin: str = 'PR.04'
+    g0_pin: str = 'PAC.06'
+    gpio: GpioController = field(default_factory=GpioController)  # no-op until main() builds the real one
+
+    @property
+    def on(self) -> int:
+        return 1 if self.nand else 0
+
+    @property
+    def off(self) -> int:
+        return 0 if self.nand else 1
+
+    @property
+    def en(self) -> str:
+        return self.g0_pin if self.swap else self.en_pin
+
+    @property
+    def g0(self) -> str:
+        return self.en_pin if self.swap else self.g0_pin
+
+    @property
+    def stub_args(self) -> Tuple[str, ...]:
+        return ('--no-stub',) if self.no_stub else ()
+
+    @property
+    def flash_freq(self) -> str:
+        return {'esp32': '40m', 'esp32s3': '80m'}[self.chip]
+
+    @property
+    def bootloader_offset(self) -> str:
+        return {'esp32': '0x1000', 'esp32s3': '0x0'}[self.chip]
+
+    @property
+    def flash_baud(self) -> str:
+        return str(self.baud or 921600)
+
+    @property
+    def coredump_baud(self) -> int:
+        return self.baud or 115200  # esp_coredump's own default; the flash/erase baud would be wrong here
+
+
+DEFAULT = Config()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the espresso argument parser.
+
+    Value flags default to ``None``; the real defaults are resolved in main() on the
+    machine that ultimately runs the command (under ``--host`` that is the remote).
+    Abbreviated flags are disabled so that every token has exactly one spelling and the
+    argv pass-through in remote_command cannot misread e.g. ``--ho`` for ``--host``.
+    """
+    parser = argparse.ArgumentParser(description='Flash and control an ESP32 microcontroller from a Jetson board',
+                                     allow_abbrev=False)
+    parser.add_argument('command', choices=list(COMMANDS), help='Command to execute')
+    parser.add_argument('--host', default=None,
+                        help='Run on a remote user@host[:path]: rsync espresso.py + build artifacts there '
+                             'and re-invoke the command over SSH (default path: ~/lizard)')
+    parser.add_argument('--nand', action='store_true', help='Board has NAND gates')
+    parser.add_argument('--bootloader', default=None,
+                        help=f'Path to bootloader (default: {DEFAULT.bootloader})')
+    parser.add_argument('--partition-table', default=None,
+                        help=f'Path to partition table (default: {DEFAULT.partition_table})')
+    parser.add_argument('--swap', action='store_true',
+                        help='Swap En and G0 pins for piggyboard version lower than v0.5')
+    parser.add_argument('--firmware', default=None, help=f'Path to firmware binary (default: {DEFAULT.firmware})')
+    parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default=None,
+                        help=f'ESP chip type (default: {DEFAULT.chip})')
+    parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
+    parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
+    parser.add_argument('--device', nargs='?', default=None, help='Serial device path (auto-detected on Jetson)')
+    parser.add_argument('--baud', type=int, default=None,
+                        help=f'Baud rate (default: {DEFAULT.flash_baud} for flashing and erasing, '
+                             f'{DEFAULT.coredump_baud} for coredump)')
+    parser.add_argument('--no-stub', action='store_true',
+                        help="Do not upload esptool's RAM stub (slower, but avoids stub upload failures "
+                             'on some USB-UART bridges)')
+    parser.add_argument('--elf', default=None, help=f'coredump: path to ELF file (default: {DEFAULT.elf})')
+    parser.add_argument('--debug', action='store_true',
+                        help='coredump: start a debug session, then return to the shell')
+    return parser
+
+
+def resolve_default_device() -> str:
+    """Return the default serial device for the machine actually running the command."""
+    tegra = Path('/etc/nv_tegra_release')
+    if tegra.exists() and (match := re.search(r'R(\d+)', tegra.read_text(encoding='utf-8'))):
+        major = int(match.group(1))
+        if major == 35:
+            return '/dev/ttyTHS0'
+        if major == 36:
+            return '/dev/ttyTHS1'
         raise RuntimeError(f'Unsupported L4T (Linux for Tegra) version: {major}')
+    if sys.platform.startswith('linux'):
+        return '/dev/ttyUSB0'  # a USB-UART bridge on a non-Jetson Linux host
+    return '/dev/tty.SLAB_USBtoUART'  # the same CP210x bridge under macOS
 
-parser = argparse.ArgumentParser(description='Flash and control an ESP32 microcontroller from a Jetson board')
 
-parser.add_argument('command', choices=['flash', 'enable', 'disable', 'reset', 'erase', 'release_pins'],
-                    help='Command to execute')
-parser.add_argument('--nand', action='store_true', help='Board has NAND gates')
-parser.add_argument('--bootloader', default='build/bootloader/bootloader.bin', help='Path to bootloader')
-parser.add_argument('--partition-table', default='build/partition_table/partition-table.bin',
-                    help='Path to partition table')
-parser.add_argument('--swap', action='store_true', help='Swap En and G0 pins for piggyboard version lower than v0.5')
-parser.add_argument('--firmware', default='build/lizard.bin', help='Path to firmware binary')
-parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default='esp32', help='ESP chip type')
-parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
-parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
-parser.add_argument('--device', nargs='?', default=DEFAULT_DEVICE, help='Serial device path (auto-detected on Jetson)')
-parser.add_argument('--baud', type=int, default=921600, help='Baud rate for flashing and erasing')
-parser.add_argument('--no-stub', action='store_true',
-                    help='Do not upload esptool\'s RAM stub (slower, but avoids stub upload failures '
-                         'on some USB-UART bridges)')
+def build_gpio(en: str, g0: str) -> GpioController:
+    """Return a GPIO controller for the EN/G0 pins, or hard-fail on a Jetson without gpiod.
 
-args = parser.parse_args()
-ON = 1 if args.nand else 0
-OFF = 0 if args.nand else 1
-DRY_RUN = args.dry_run
-SWAP = args.swap
-CHIP = args.chip
-DEVICE = args.device
-BAUD = str(args.baud)
-STUB_ARGS = ('--no-stub',) if args.no_stub else ()
-FLASH_FREQ = {'esp32': '40m', 'esp32s3': '80m'}.get(CHIP, '40m')
-BOOTLOADER_OFFSET = {'esp32': '0x1000', 'esp32s3': '0x0'}.get(CHIP, '0x1000')
-BOOTLOADER = args.bootloader
-PARTITION_TABLE = args.partition_table
-FIRMWARE = args.firmware
+    On a Jetson the pins MUST be controllable, so a missing/broken gpiod is fatal here
+    rather than silently degrading to the no-op controller (which would let the flash
+    proceed with no pin control and fail later with a generic error). On a non-Jetson dev
+    host we fall back to the no-op controller and rely on esptool's DTR/RTS reset.
+    """
+    if GPIOD_VERSION is None:
+        if IS_JETSON:
+            raise RuntimeError('Module gpiod is required to control the EN and G0 pins on a Jetson, '
+                               'but it is not installed. Install it (e.g. "pip install gpiod").')
+        print_fail('Module gpiod not found; relying on esptool reset only (EN and G0 pins are not controllable).')
+        return GpioController(en, g0)
+    try:
+        return {1: GpioControllerV1, 2: GpioControllerV2}[GPIOD_VERSION](en, g0)
+    except Exception as error:  # noqa: BLE001 - any gpiod/hardware error means no controllable pins
+        if IS_JETSON:
+            raise  # on a Jetson the EN/G0 lines must resolve; surface the real error instead of masking it
+        print(f'No controllable EN/G0 pins ({error}); falling back to esptool reset only.')
+        return GpioController(en, g0)
 
-EN = 'PR.04'
-G0 = 'PAC.06'
-if SWAP:
-    EN, G0 = G0, EN
-try:
-    gpio = {
-        None: GpioController,
-        1: GpioControllerV1,
-        2: GpioControllerV2,
-    }[GPIOD_VERSION](EN, G0)
-except Exception as error:  # noqa: BLE001 - any gpiod/hardware error means no controllable pins
-    if IS_JETSON:
-        raise  # on a Jetson the EN/G0 lines must resolve; surface the real error instead of masking it
-    # gpiod is installed but the EN/G0 pins are not available (e.g. not a Jetson):
-    # fall back to the no-op controller and rely on esptool's DTR/RTS reset for flashing.
-    print(f'No controllable EN/G0 pins ({error}); falling back to esptool reset only.')
-    gpio = GpioController(EN, G0)
+
+def parse_host(host: str) -> Tuple[str, str]:
+    """Split a ``user@host[:path]`` string into (ssh_target, remote_path).
+
+    A trailing colon means the remote home directory, as in scp/rsync -- mapped to ``~``
+    explicitly, because a literal empty path would make rsync/ssh mutate the wrong
+    remote location. Without a colon the default ``~/lizard`` is used.
+    """
+    if ':' not in host:
+        return host, '~/lizard'
+    target, _, path = host.partition(':')
+    return target, path or '~'
+
+
+def quote_remote_path(path: str) -> str:
+    """Quote a remote path for the ssh command line, letting a leading ``~`` / ``~user`` expand.
+
+    The tail after the home prefix is quoted, so spaces and shell metacharacters in a
+    user-supplied ``--host`` path cannot break out into remote shell syntax. Only the ssh
+    command needs this: rsync destinations get the raw path, because rsync (>= 3.2.4)
+    escapes remote args itself and quoting would end up literal in the directory name.
+    """
+    match = re.match(r'^(~[\w-]*)(/.*)?$', path)
+    if match:
+        head, tail = match.group(1), match.group(2) or ''
+        return head + ('/' + shlex.quote(tail[1:]) if tail else '')
+    return shlex.quote(path)
+
+
+def _require_relative(flag: str, value: str) -> None:
+    """Reject an artifact path that cannot land in the same place on the remote.
+
+    The artifacts are rsynced with their relative paths preserved and the remote command
+    resolves them below the target directory, so an absolute path (or one escaping via
+    "..") would be copied somewhere the remote command does not look.
+    """
+    posix = PurePosixPath(value)
+    if posix.is_absolute() or '..' in posix.parts:
+        raise RuntimeError(f'{flag} {value!r}: under --host, artifact paths must be relative and free of ".." '
+                           '(they are copied below the remote target directory).')
+    if value.startswith('-'):
+        raise RuntimeError(f'{flag} {value!r}: under --host, artifact paths must not start with "-" '
+                           '(rsync would parse it as an option).')
+
+
+def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
+    """Return the argument list to run on the remote: the local argv minus ``--host``/``--dry-run``.
+
+    The user's tokens pass through verbatim instead of being reconstructed from parsed
+    values, so nothing the user typed can be dropped or reshaped and no locally resolved
+    default can leak into the remote invocation. Only the two orchestration flags are
+    stripped: ``--host`` (it IS the remote dispatch) and ``--dry-run`` (a dry run prints
+    the rsync/ssh commands locally and must not run anything remotely, see run_remote).
+    """
+    for dest in COMMANDS[parsed.command].artifacts:
+        value = getattr(parsed, dest)
+        if value is not None:
+            _require_relative('--' + dest.replace('_', '-'), str(value))
+    command = []
+    skip_value = False
+    for token in argv:
+        if skip_value:
+            skip_value = False
+        elif token == '--host':
+            skip_value = True
+        elif token.startswith('--host=') or token in ('-d', '--dry-run'):
+            pass
+        else:
+            command.append(token)
+    return command
+
+
+def run_remote(host: str, command: List[str], *, artifacts: List[str],
+               use_sudo: bool, dry_run: bool) -> None:
+    """rsync espresso.py (+ the needed build artifacts) to the host and run the command over SSH.
+
+    Exactly the files the command uses are copied, with their relative paths preserved
+    (rsync -R), so the remote command finds them below the target directory; ``artifacts``
+    is empty for pin-only commands (erase/enable/disable/reset/release_pins), which skip
+    the artifact rsync entirely. The paths resolve against the cwd -- the same base a local
+    run uses -- so the remote flashes exactly what a local flash would; only espresso.py
+    itself is taken from the script's own directory. Under ``dry_run`` nothing is sent or
+    run on the remote -- the rsync/ssh commands are printed so a dry run never mutates the
+    remote.
+    """
+    target, path = parse_host(host)
+    if target.startswith('-'):
+        raise RuntimeError(f'Refusing host {target!r}: a leading dash could be parsed as an ssh/rsync option.')
+    if re.search(r'\s', path):
+        # rsync >= 3.2.4 escapes the destination itself, but stock macOS openrsync and rsync < 3.2.4
+        # word-split it and copy to the wrong remote path with exit code 0.
+        raise RuntimeError(f'Refusing remote path {path!r}: whitespace is not portable across rsync variants.')
+    script_dir = Path(__file__).resolve().parent
+    runner = _print_remote if dry_run else _run_checked
+
+    if artifacts:
+        if not dry_run and (missing := [artifact for artifact in artifacts if not Path(artifact).is_file()]):
+            raise RuntimeError(f'Missing build artifacts: {", ".join(missing)}; run the ESP-IDF build first.')
+        print_bold(f'Copying build artifacts to {target}:{path}...')
+        runner(['rsync', '-zavR', *artifacts, f'{target}:{path}'])
+    print_bold(f'Copying espresso.py to {target}:{path}...')
+    # -p restores the exec bit on a pre-existing non-executable remote copy, whose
+    # permissions a plain rsync would keep forever ("./espresso.py: Permission denied").
+    runner(['rsync', '-zp', str(script_dir / 'espresso.py'), f'{target}:{path}/'])
+
+    print_bold(f'Running "espresso.py {" ".join(command)}" on {target}...')
+    sudo = 'sudo ' if use_sudo else ''
+    remote = f'cd -- {quote_remote_path(path)} && {sudo}./espresso.py ' + \
+        ' '.join(shlex.quote(token) for token in command)
+    runner(['ssh', '-t', target, f'bash --login -c {shlex.quote(remote)}'])
+
+
+def _run_checked(command: List[str]) -> None:
+    subprocess.run(command, check=True)
+
+
+def _print_remote(command: List[str]) -> None:
+    print(f'  {" ".join(shlex.quote(token) for token in command)}')
 
 
 @contextmanager
-def _pin_config() -> Generator[None, None, None]:
+def _pin_config(config: Config) -> Generator[None, None, None]:
     """Configure the EN and G0 pins to control the microcontroller."""
     print_bold('Configuring EN and G0 pins...')
-    gpio.request_outputs(consumer='espresso')
+    config.gpio.request_outputs(consumer='espresso')
     time.sleep(0.5)
-    yield
-    _release_pins()
+    try:
+        yield
+    finally:
+        _release_pins(config)
 
 
-def _release_pins() -> None:
+def _release_pins(config: Config) -> None:
     """Release pins."""
-    gpio.release()
+    config.gpio.release()
 
 
 @contextmanager
-def _flash_mode() -> Generator[None, None, None]:
+def _flash_mode(config: Config) -> Generator[None, None, None]:
     """Bring the microcontroller into flash mode."""
     print_bold('Bringing the microcontroller into flash mode...')
-    set_en(ON)
-    set_g0(ON)
-    set_en(OFF)
-    yield
-    _reset()
+    set_en(config, config.on)
+    set_g0(config, config.on)
+    set_en(config, config.off)
+    try:
+        yield
+    finally:
+        _reset(config)
 
 
-def enable() -> None:
+def enable(config: Config) -> None:
     """Enable the microcontroller."""
     print_bold('Enabling the microcontroller...')
-    with _pin_config():
-        set_g0(OFF)
-        set_en(OFF)
+    with _pin_config(config):
+        set_g0(config, config.off)
+        set_en(config, config.off)
 
 
-def disable() -> None:
+def disable(config: Config) -> None:
     """Disable the microcontroller."""
     print_bold('Disabling the microcontroller...')
-    with _pin_config():
-        set_en(ON)
+    with _pin_config(config):
+        set_en(config, config.on)
 
 
-def reset() -> None:
+def reset(config: Config) -> None:
     """Reset the microcontroller."""
     print_bold('Resetting the microcontroller...')
-    with _pin_config():
-        _reset()
+    with _pin_config(config):
+        _reset(config)
 
 
-def _reset() -> None:
+def _reset(config: Config) -> None:
     """Set pins to reset the microcontroller."""
-    set_g0(OFF)
-    set_en(ON)
-    set_en(OFF)
+    set_g0(config, config.off)
+    set_en(config, config.on)
+    set_en(config, config.off)
 
 
-def erase() -> None:
+def erase(config: Config) -> None:
     """Erase the microcontroller."""
     print_bold('Erasing the microcontroller...')
-    with _pin_config():
-        with _flash_mode():
+    with _pin_config(config):
+        with _flash_mode(config):
             success = run(
+                config,
                 'esptool.py',
-                '--chip', CHIP,
-                '--port', DEVICE,
-                '--baud', BAUD,
-                *STUB_ARGS,
+                '--chip', config.chip,
+                '--port', config.device,
+                '--baud', config.flash_baud,
+                *config.stub_args,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'erase_flash',
@@ -219,15 +428,16 @@ def erase() -> None:
                 raise RuntimeError('Failed to erase flash.')
 
 
-def reset_partition() -> None:
+def reset_partition(config: Config) -> None:
     """Reset the OTA partition to the default state."""
     print_bold('Resetting partition to "ota_0"...')
     success = run(
+        config,
         'esptool.py',
-        '--chip', args.chip,
-        '--port', DEVICE,
-        '--baud', BAUD,
-        *STUB_ARGS,
+        '--chip', config.chip,
+        '--port', config.device,
+        '--baud', config.flash_baud,
+        *config.stub_args,
         'erase_region',
         '0xf000',  # otadata partition offset (default ESP-IDF partition table)
         '0x2000',  # otadata partition size (default ESP-IDF partition table)
@@ -236,54 +446,105 @@ def reset_partition() -> None:
         raise RuntimeError('Failed to reset OTA partition.')
 
 
-def flash() -> None:
+def flash(config: Config) -> None:
     """Flash the microcontroller."""
     print_bold('Flashing...')
-    with _pin_config():
-        with _flash_mode():
+    with _pin_config(config):
+        with _flash_mode(config):
             success = run(
+                config,
                 'esptool.py',
-                '--chip', CHIP,
-                '--port', DEVICE,
-                '--baud', BAUD,
-                *STUB_ARGS,
+                '--chip', config.chip,
+                '--port', config.device,
+                '--baud', config.flash_baud,
+                *config.stub_args,
                 '--before', 'default_reset',
                 '--after', 'hard_reset',
                 'write_flash',
                 '-z',
                 '--flash_mode', 'dio',
-                '--flash_freq', FLASH_FREQ,
+                '--flash_freq', config.flash_freq,
                 '--flash_size', 'detect',
-                BOOTLOADER_OFFSET, BOOTLOADER,
-                '0x8000', PARTITION_TABLE,
-                '0x20000', FIRMWARE,
+                config.bootloader_offset, config.bootloader,
+                '0x8000', config.partition_table,
+                '0x20000', config.firmware,
             )
             if not success:
                 raise RuntimeError('Flashing failed. Use "sudo" and check your parameters.')
-            if args.reset_partition:
-                reset_partition()
+            if config.reset_partition:
+                reset_partition(config)
 
 
-def run(*run_args: str) -> bool:
+def coredump(config: Config) -> None:
+    """Read (or debug) an ESP32 core dump over the serial device.
+
+    Wraps esp_coredump, reusing espresso's serial-device selection and --chip. Import is
+    deferred so the flash path does not depend on esp_coredump being installed.
+    """
+    print_bold('Reading core dump...')
+    print(f'  port={config.device} chip={config.chip} baud={config.coredump_baud} elf={config.elf}')
+    if config.dry_run:
+        return
+    try:
+        from esp_coredump import CoreDump  # pylint: disable=import-outside-toplevel
+    except ImportError as error:
+        raise RuntimeError('Module esp_coredump is required for the coredump command, but it is not installed. '
+                           'Install it on the machine reading the dump (e.g. "pip install esp-coredump").') from error
+    dump = CoreDump(chip=config.chip, port=config.device, baud=config.coredump_baud, prog=config.elf)
+    if config.debug:
+        dump.dbg_corefile()
+    else:
+        dump.info_corefile()
+
+
+@dataclass(frozen=True)
+class Command:
+    """A registered command: everything main() and the --host machinery need to know about it.
+
+    ``artifacts`` names the Config path fields the command reads; under --host exactly those
+    files are rsynced to the remote (resolved with the same defaults the remote would apply,
+    see _require_relative for the path constraint). ``uses_pins`` selects GPIO setup on a
+    local run and the sudo prefix on a remote one.
+    """
+    handler: Callable[[Config], None]
+    uses_pins: bool = False
+    artifacts: Tuple[str, ...] = ()
+
+
+COMMANDS: Dict[str, Command] = {
+    'flash': Command(flash, uses_pins=True, artifacts=('bootloader', 'partition_table', 'firmware')),
+    'enable': Command(enable, uses_pins=True),
+    'disable': Command(disable, uses_pins=True),
+    'reset': Command(reset, uses_pins=True),
+    'erase': Command(erase, uses_pins=True),
+    'release_pins': Command(_release_pins, uses_pins=True),
+    'coredump': Command(coredump, artifacts=('elf',)),
+}
+
+
+def run(config: Config, *run_args: str) -> bool:
     """Run a command and return whether it was successful."""
-    print(f'  {" ".join(run_args)}')
-    if DRY_RUN:
+    print(f'  {" ".join(run_args)}', flush=True)
+    if config.dry_run:
         return True
-    result = subprocess.run(run_args, check=False)
+    try:
+        result = subprocess.run(run_args, check=False)
+    except FileNotFoundError as error:
+        raise RuntimeError(f'Command "{run_args[0]}" not found; is it installed and on the PATH?') from error
     return result.returncode == 0
 
 
-def set_en(value: int) -> None:
+def set_en(config: Config, value: int) -> None:
     print(f'  Setting EN pin to {value}')
-    if not DRY_RUN:
-        gpio.set_value('en', value)
+    if not config.dry_run:
+        config.gpio.set_value('en', value)
         time.sleep(0.5)
 
 
-def set_g0(value: int) -> None:
+def set_g0(config: Config, value: int) -> None:
     print(f'  Setting G0 pin to {value}')
-    if not DRY_RUN:
-        gpio.set_value('g0', value)
+    if not config.dry_run:
+        config.gpio.set_value('g0', value)
         time.sleep(0.5)
 
 
@@ -292,37 +553,56 @@ def print_ok(message: str) -> None:
 
 
 def print_bold(message: str) -> None:
-    print(f'\033[1m{message}\033[0m')
+    print(f'\033[1m{message}\033[0m', flush=True)
 
 
 def print_fail(message: str) -> None:
-    print(f'\033[91m{message}\033[0m')
+    print(f'\033[91m{message}\033[0m', flush=True)
 
 
-def main(command: str) -> None:
-    print_ok('Espresso dry-running...' if DRY_RUN else 'Espresso running...')
-    if GPIOD_VERSION is None and not DRY_RUN:
-        print_fail('Module gpiod not found. Espresso is not able to control the EN and G0 pins.')
-    if command == 'enable':
-        enable()
-    elif command == 'disable':
-        disable()
-    elif command == 'reset':
-        reset()
-    elif command == 'erase':
-        erase()
-    elif command == 'flash':
-        flash()
-    elif command == 'release_pins':
-        _release_pins()
-    else:
-        raise RuntimeError(f'Invalid command "{command}".')
+def main(argv: List[str]) -> None:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    cmd = COMMANDS[args.command]
+
+    if args.host is not None:
+        # Validate the arguments locally with the real parser (done above), then hand the
+        # command to the remote machine, which resolves its own device/pins/L4T. sudo is only
+        # for the pin/flash commands; coredump wraps esp_coredump (pip --user, dialout not root).
+        run_remote(args.host, remote_command(argv, args),
+                   artifacts=[str(getattr(args, dest) or getattr(DEFAULT, dest)) for dest in cmd.artifacts],
+                   use_sudo=cmd.uses_pins,
+                   dry_run=args.dry_run)
+        return
+
+    print_ok('Espresso dry-running...' if args.dry_run else 'Espresso running...')
+
+    config = Config(
+        chip=args.chip or DEFAULT.chip,
+        device=args.device or resolve_default_device(),
+        baud=args.baud,
+        nand=args.nand,
+        swap=args.swap,
+        dry_run=args.dry_run,
+        no_stub=args.no_stub,
+        reset_partition=args.reset_partition,
+        debug=args.debug,
+        bootloader=args.bootloader or DEFAULT.bootloader,
+        partition_table=args.partition_table or DEFAULT.partition_table,
+        firmware=args.firmware or DEFAULT.firmware,
+        elf=args.elf or DEFAULT.elf,
+    )
+    if cmd.uses_pins and not args.dry_run:
+        config = replace(config, gpio=build_gpio(config.en, config.g0))
+
+    cmd.handler(config)
     print_ok('Finished. ☕️')
 
 
 if __name__ == '__main__':
     try:
-        main(args.command)
-    except RuntimeError as e:
+        main(sys.argv[1:])
+    except (RuntimeError, subprocess.CalledProcessError) as e:
         print_fail(f'Error: {e}')
         sys.exit(1)

@@ -4,7 +4,6 @@
 #include "../global.h"
 #include "driver/gpio.h"
 #include "module.h"
-#include "proxy.h"
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -21,11 +20,10 @@ template <typename M>
 inline std::shared_ptr<M> get_module_argument(const ConstExpression_ptr &arg) {
     const std::string name = arg->evaluate_identifier();
     const Module_ptr module = Global::get_module(name);
-    if (auto typed = std::dynamic_pointer_cast<M>(module)) {
+    if (const auto typed = std::dynamic_pointer_cast<M>(module)) {
         return typed;
     }
-    if (std::dynamic_pointer_cast<Proxy>(module)) {
-        return std::static_pointer_cast<M>(module);
-    }
+    // Note that this also rejects proxies of expander modules: a proxy is not an M in
+    // the C++ type system, so casting it to M would be UB (#233).
     throw std::runtime_error("module \"" + name + "\" is no " + M::TYPE);
 }
