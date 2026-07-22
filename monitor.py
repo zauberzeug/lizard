@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
-import os.path
+import glob
+import os
 
 import serial
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
+from serial.tools import list_ports
 
 parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
 parser.add_argument('device', nargs='?', help='Serial device path (e.g., /dev/ttyUSB0)')
@@ -79,23 +81,57 @@ async def send() -> None:
             return
 
 
+def find_devices() -> list[str]:
+    usb_patterns = [
+        '/dev/ttyTHS*',
+        '/dev/ttyUSB*',
+        '/dev/cu.usbserial-*',
+        '/dev/cu.usbmodem*',
+        '/dev/tty.SLAB_USBtoUART',
+        '/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_*',
+    ]
+    devices: list[str] = []
+    seen: set[str] = set()
+    for pattern in usb_patterns:
+        for path in sorted(glob.glob(pattern)):
+            real = os.path.realpath(path)
+            if real not in seen:
+                seen.add(real)
+                devices.append(path)
+    return devices
+
+
+def describe(path: str) -> str:
+    real = os.path.realpath(path)
+    for port in list_ports.comports():
+        if os.path.realpath(port.device) == real:
+            return port.description or port.manufacturer or ''
+    return ''
+
+
 def serial_connection() -> serial.Serial:
     if args.device:
         usb_path = args.device
     else:
-        usb_paths = [
-            '/dev/ttyTHS0',
-            '/dev/ttyTHS1',
-            '/dev/ttyUSB0',
-            '/dev/ttyUSB1',
-            '/dev/tty.SLAB_USBtoUART',
-            '/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0',
-        ]
-        for usb_path in usb_paths:
-            if os.path.exists(usb_path):
-                break
-        else:
+        devices = find_devices()
+        if not devices:
             raise Exception('No serial port found')
+        if len(devices) == 1:
+            usb_path = devices[0]
+        else:
+            print('Multiple serial devices found:')
+            for i, path in enumerate(devices):
+                info = describe(path)
+                print(f'  [{i}] {path}' + (f' ({info})' if info else ''))
+            while True:
+                choice = input(f'Select device [0-{len(devices) - 1}, default 0]: ').strip()
+                if not choice:
+                    usb_path = devices[0]
+                    break
+                if choice.isdigit() and int(choice) < len(devices):
+                    usb_path = devices[int(choice)]
+                    break
+                print('Invalid selection.')
 
     print(f'Connecting to {usb_path} at {args.baud} baud')
     return serial.Serial(usb_path, baudrate=args.baud, timeout=0.1)
