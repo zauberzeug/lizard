@@ -7,7 +7,7 @@ import serial
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
-from serial_devices import choose_device
+from serial_devices import resolve_device
 
 parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
 parser.add_argument('device', nargs='?', help='Serial device path (default: auto-detected, asks if ambiguous)')
@@ -82,9 +82,9 @@ async def send() -> None:
 
 
 def serial_connection() -> serial.Serial:
-    usb_path = args.device or choose_device()
-    print(f'Connecting to {usb_path} at {args.baud} baud')
-    return serial.Serial(usb_path, baudrate=args.baud, timeout=0.1)
+    device = resolve_device(args.device)
+    print(f'Connecting to {device} at {args.baud} baud')
+    return serial.Serial(device.path, baudrate=args.baud, timeout=0.1)
 
 
 if __name__ == '__main__':

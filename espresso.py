@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Callable, Dict, Generator, List, Optional, Tuple
 
-from serial_devices import IS_JETSON, choose_device
+from serial_devices import IS_JETSON, Device, choose_device
 
 try:
     import gpiod
@@ -133,9 +133,8 @@ class Config:
     def port(self) -> str:
         """The resolved serial device, for the commands that declared ``uses_serial``.
 
-        Reading it from a command that did not is the one mistake this branch already made
-        (pin-only commands used to resolve a device and discard it), so it names that cause
-        rather than passing an empty --port on to esptool.
+        Only those are given a device by main(), so reading this from any other command means
+        the declaration is missing; saying so beats handing esptool an empty --port.
         """
         if self.device is None:
             raise RuntimeError('No serial device was resolved for this command; '
@@ -584,12 +583,15 @@ def main(argv: List[str]) -> None:
 
     device = None
     if cmd.uses_serial:
-        # Resolving can ask which adapter to use, so only the commands that open the port do
-        # it. A dry run has to name the device the real run would use, so it asks too wherever
-        # there is a terminal, and settles for a placeholder on an empty bench since it never
-        # opens anything.
-        device = args.device or choose_device(ask=sys.stdin.isatty() or not args.dry_run,
-                                              allow_missing=args.dry_run)
+        # Resolving can ask which adapter to use, so only the commands that open the port do it.
+        # A dry run has to name the device the real run would use, so it asks too wherever there
+        # is a terminal, and prints a placeholder rather than a guess where it cannot ask.
+        resolved = (Device(args.device) if args.device else
+                    choose_device(ask=sys.stdin.isatty() or not args.dry_run, allow_missing=args.dry_run))
+        # Auto-detection connects without asking whenever exactly one adapter is attached, and
+        # flashing the wrong one is expensive, so name it (with its description) before starting.
+        print_bold(f'Using serial device {resolved}')
+        device = resolved.path
 
     config = Config(
         chip=args.chip or DEFAULT.chip,

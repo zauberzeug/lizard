@@ -86,7 +86,7 @@ and resume them afterwards to keep the UART link clear.
 Example:
 
 ```bash
-./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target 1 --expander p0
+./otb_update.py build/lizard.bin --target 1 --expander p0
 ```
 
 This flashes node 1 through expander `p0`.

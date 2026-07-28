@@ -8,7 +8,7 @@ from typing import Iterator
 
 import serial
 
-from serial_devices import choose_device
+from serial_devices import resolve_device
 
 parser = argparse.ArgumentParser(description='Configure an ESP32 running Lizard firmware')
 parser.add_argument('config_file', help='Path to the .liz configuration file')
@@ -48,9 +48,9 @@ def read(*, timeout: float) -> Iterator[str]:
 
 
 try:
-    device_path = args.device_path or choose_device()
-    print(f'Connecting to {device_path} at {args.baud} baud')
-    connection = serial.Serial(device_path, baudrate=args.baud, timeout=1.0)
+    device = resolve_device(args.device_path)
+    print(f'Connecting to {device} at {args.baud} baud')
+    connection = serial.Serial(device.path, baudrate=args.baud, timeout=1.0)
 except (RuntimeError, serial.SerialException) as e:
     sys.exit(f'Error: {e}')
 

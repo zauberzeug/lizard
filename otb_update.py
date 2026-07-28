@@ -7,7 +7,7 @@ from pathlib import Path
 
 import serial
 
-from serial_devices import choose_device
+from serial_devices import resolve_device
 
 CHUNK_SIZE = 174  # must match BUS_OTB_CHUNK_SIZE in main/utils/otb.h
 WINDOW = 8
@@ -29,9 +29,9 @@ file_size = firmware.stat().st_size
 number_of_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
 
 try:
-    port = args.port or choose_device()
-    print(f'Connecting to {port} at {args.baud} baud')
-    dev = serial.Serial(port, args.baud, timeout=0.5)
+    device = resolve_device(args.port)
+    print(f'Connecting to {device} at {args.baud} baud')
+    dev = serial.Serial(device.path, args.baud, timeout=0.5)
 except (RuntimeError, serial.SerialException) as e:
     sys.exit(f'Error: {e}')
 
