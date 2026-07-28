@@ -582,12 +582,14 @@ def main(argv: List[str]) -> None:
 
     print_ok('Espresso dry-running...' if args.dry_run else 'Espresso running...')
 
-    # Resolving can ask which adapter to use, so only the commands that open the port do it. A
-    # dry run prints a device it never opens, so it tolerates an empty bench -- but it has to
-    # name the one the real run would use, hence it still asks wherever there is a terminal.
-    device = args.device or (choose_device(ask=not args.dry_run or sys.stdin.isatty(),
-                                          allow_missing=args.dry_run)
-                             if cmd.uses_serial else None)
+    device = None
+    if cmd.uses_serial:
+        # Resolving can ask which adapter to use, so only the commands that open the port do
+        # it. A dry run has to name the device the real run would use, so it asks too wherever
+        # there is a terminal, and settles for a placeholder on an empty bench since it never
+        # opens anything.
+        device = args.device or choose_device(ask=sys.stdin.isatty() or not args.dry_run,
+                                              allow_missing=args.dry_run)
 
     config = Config(
         chip=args.chip or DEFAULT.chip,

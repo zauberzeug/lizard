@@ -7,7 +7,6 @@ USB-UART bridge that pyserial enumerates, with a description that tells two of t
 import glob
 import os
 import re
-import sys
 from pathlib import Path
 from typing import List, NamedTuple, Optional, Set
 
@@ -16,7 +15,7 @@ IS_JETSON = TEGRA_RELEASE.exists()
 
 JETSON_UARTS = {35: '/dev/ttyTHS0', 36: '/dev/ttyTHS1'}  # by L4T (Linux for Tegra) major version
 
-FALLBACK_DEVICE = '/dev/ttyUSB0' if sys.platform.startswith('linux') else '/dev/cu.SLAB_USBtoUART'
+NO_DEVICE = '<no serial device attached>'  # deliberately not a path: nothing may open it
 
 # USB-serial nodes pyserial can miss, e.g. behind a macOS vendor driver. Only the call-out nodes
 # ("cu."): opening the dial-in twin ("tty.") can block until a carrier appears, and listing both
@@ -102,13 +101,14 @@ def choose_device(*, ask: bool = True, allow_missing: bool = False) -> str:
 
     Both keyword arguments exist for espresso.py's dry run, which prints a device it never
     opens: ``ask=False`` keeps it off stdin where there is no terminal to ask at,
-    ``allow_missing`` gives it something to print on a machine with nothing attached. A caller
+    ``allow_missing`` gives it something honest to print on a machine with nothing attached --
+    ``NO_DEVICE``, which names no path because the real run would find none either. A caller
     that opens the port wants neither.
     """
     devices = find_devices()
     if not devices:
         if allow_missing:
-            return FALLBACK_DEVICE
+            return NO_DEVICE
         raise RuntimeError('No serial device found')
     if len(devices) == 1 or not ask:
         return devices[0].path
