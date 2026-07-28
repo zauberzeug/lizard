@@ -7,6 +7,7 @@ USB-UART bridge that pyserial enumerates, with a description that tells two of t
 import glob
 import os
 import re
+import sys
 from pathlib import Path
 from typing import List, NamedTuple, Optional, Set
 
@@ -128,24 +129,27 @@ def choose_device(*, ask: bool = True, allow_missing: bool = False) -> Device:
         if allow_missing:
             return Device(AMBIGUOUS_DEVICE)
         raise RuntimeError(cannot_ask_message(devices))
-    print('Multiple serial devices found:')
+    # The whole exchange goes to stderr: a caller whose stdout is redirected (`monitor.py > log`,
+    # `espresso.py -d | grep`) would otherwise wait at a prompt it cannot show.
+    print('Multiple serial devices found:', file=sys.stderr)
     for i, device in enumerate(devices):
-        print(f'  [{i}] {device}')
+        print(f'  [{i}] {device}', file=sys.stderr)
     while True:
         try:
-            choice = input(f'Select device [0-{len(devices) - 1}]: ').strip()
+            print(f'Select device [0-{len(devices) - 1}]: ', end='', file=sys.stderr, flush=True)
+            choice = input().strip()
         except EOFError:
-            print()
+            print(file=sys.stderr)
             raise RuntimeError(cannot_ask_message(devices)) from None
         except KeyboardInterrupt:
             # Not the same situation as EOF: the question was answerable, the user declined to
             # answer it. Advising an explicit path would address a problem they do not have.
-            print()
+            print(file=sys.stderr)
             raise SystemExit(130) from None
         # isdecimal instead of isdigit: the latter also accepts e.g. "²", which int() then rejects
         if choice.isdecimal() and int(choice) < len(devices):
             return devices[int(choice)]
-        print('Invalid selection.')
+        print('Invalid selection.', file=sys.stderr)
 
 
 def cannot_ask_message(devices: List[Device]) -> str:
