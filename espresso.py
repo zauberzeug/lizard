@@ -492,21 +492,24 @@ class Command:
     ``artifacts`` names the Config path fields the command reads; under --host exactly those
     files are rsynced to the remote (resolved with the same defaults the remote would apply,
     see _require_relative for the path constraint). ``uses_pins`` selects GPIO setup on a
-    local run and the sudo prefix on a remote one.
+    local run and the sudo prefix on a remote one. ``uses_serial`` marks the commands that
+    open the serial port, and hence the only ones for which main() resolves a device.
     """
     handler: Callable[[Config], None]
     uses_pins: bool = False
+    uses_serial: bool = False
     artifacts: Tuple[str, ...] = ()
 
 
 COMMANDS: Dict[str, Command] = {
-    'flash': Command(flash, uses_pins=True, artifacts=('bootloader', 'partition_table', 'firmware')),
+    'flash': Command(flash, uses_pins=True, uses_serial=True,
+                     artifacts=('bootloader', 'partition_table', 'firmware')),
     'enable': Command(enable, uses_pins=True),
     'disable': Command(disable, uses_pins=True),
     'reset': Command(reset, uses_pins=True),
-    'erase': Command(erase, uses_pins=True),
+    'erase': Command(erase, uses_pins=True, uses_serial=True),
     'release_pins': Command(_release_pins, uses_pins=True),
-    'coredump': Command(coredump, artifacts=('elf',)),
+    'coredump': Command(coredump, uses_serial=True, artifacts=('elf',)),
 }
 
 
@@ -566,10 +569,16 @@ def main(argv: List[str]) -> None:
 
     print_ok('Espresso dry-running...' if args.dry_run else 'Espresso running...')
 
+    # Only the commands that open the port resolve a device: choose_device() may ask which of
+    # several attached adapters to use, and a pin-only command would block on -- or, without a
+    # terminal, fail on -- an answer it never reads. A dry run prints the device it resolved but
+    # never opens it either, so it must not stop to ask.
+    device = args.device or (choose_device(ask=not args.dry_run, allow_missing=True)
+                             if cmd.uses_serial else '')
+
     config = Config(
         chip=args.chip or DEFAULT.chip,
-        # a dry run prints the device it resolved but never opens it, so it must not stop to ask
-        device=args.device or choose_device(ask=not args.dry_run, allow_missing=True),
+        device=device,
         baud=args.baud,
         nand=args.nand,
         swap=args.swap,

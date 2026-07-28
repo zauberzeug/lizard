@@ -7,31 +7,13 @@ development host with several adapters attached -- from a single CI runner.
 import builtins
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Optional, Sequence
+from typing import Iterator
 from unittest import mock
 
 import pytest
-from serial.tools.list_ports_common import ListPortInfo
 
 import serial_devices as sd
-
-
-def port(device: str, *, vid: Optional[int] = 0x10c4, description: str = 'n/a',
-         manufacturer: str = '') -> ListPortInfo:
-    """Build the port info pyserial would report for an attached device."""
-    info = ListPortInfo(device)
-    info.vid = vid
-    info.description = description
-    info.manufacturer = manufacturer
-    return info
-
-
-@contextmanager
-def attached(*ports: ListPortInfo, patterns: Sequence[str] = ()) -> Iterator[None]:
-    """Pretend the given ports are attached to a host that is not a Jetson."""
-    with mock.patch.multiple(sd, EXTRA_PATTERNS=list(patterns), IS_JETSON=False), \
-            mock.patch.object(sd.list_ports, 'comports', return_value=list(ports)):
-        yield
+from conftest import TWO_BRIDGES, answers, attached, never_asked, port
 
 
 @contextmanager
@@ -40,23 +22,6 @@ def jetson(release: str) -> Iterator[None]:
     with mock.patch.object(sd, 'IS_JETSON', True), \
             mock.patch.object(sd, 'TEGRA_RELEASE', mock.Mock(spec=Path, read_text=lambda **_: release)):
         yield
-
-
-@contextmanager
-def answers(*replies: str) -> Iterator[None]:
-    """Answer the device question with the given replies, one per prompt."""
-    with mock.patch.object(builtins, 'input', side_effect=list(replies)):
-        yield
-
-
-@contextmanager
-def never_asked() -> Iterator[None]:
-    """Fail the test if the device question is asked at all."""
-    with mock.patch.object(builtins, 'input', side_effect=AssertionError('asked for a device')):
-        yield
-
-
-TWO_BRIDGES = (port('/dev/ttyUSB0', description='first'), port('/dev/ttyUSB1', description='second'))
 
 
 def test_non_usb_ports_are_skipped() -> None:
