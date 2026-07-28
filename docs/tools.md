@@ -167,6 +167,23 @@ Get all sub modules:
 git submodule update --init --recursive
 ```
 
+### Tests
+
+The host tools (`espresso.py`, `monitor.py`, `configure.py`, `otb_update.py`) have tests that need no hardware:
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest
+```
+
+They cover the serial device detection in `serial_devices.py`,
+by mocking pyserial's enumeration and `/etc/nv_tegra_release` to stand in for both machines it exists for:
+a Jetson Robot Brain and a development host with several adapters attached.
+Install `requirements-dev.txt` into the same environment you run `pytest` from,
+otherwise an unrelated `pytest` from elsewhere on your `PATH` picks up the run.
+
+The firmware itself is tested on hardware; see [Contributing](https://github.com/zauberzeug/lizard/blob/main/CONTRIBUTING.md).
+
 ### Compile Lizard
 
 After making changes to the Lizard language definition or its C++ implementation, you can use the compile script to generate a new parser and executing the compilation in an Espressif IDF Docker container.

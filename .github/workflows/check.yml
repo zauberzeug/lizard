@@ -22,6 +22,5 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
-      # the host tools under test only need pyserial, not the full ESP-IDF requirements
-      - run: python3 -m pip install pyserial pytest
+      - run: python3 -m pip install -r requirements-dev.txt
       - run: python3 -m pytest -v

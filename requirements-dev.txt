@@ -1,0 +1,6 @@
+# Everything needed to run the host tool tests, and deliberately not requirements.txt: the
+# tools under test shell out to esptool rather than importing it, so pyserial is the only
+# runtime dependency a test run actually touches. Keeping it separate lets CI install this
+# file verbatim, and keeps pytest off a Robot Brain.
+pyserial
+pytest

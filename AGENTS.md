@@ -102,9 +102,13 @@ lizard/
 ├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
 ├── monitor.py             # Serial monitor
 ├── serial_devices.py      # Serial device discovery shared by the host tools
+├── test_*.py              # Host tool tests (pytest, no hardware needed)
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
 └── gen_parser.sh          # Regenerates parser.c from language.owl
 ```
+
+Run the host tool tests with `python3 -m pip install -r requirements-dev.txt && python3 -m pytest`;
+they mock pyserial's enumeration and `/etc/nv_tegra_release`, so they need no board attached.
 
 ### Key Entry Points
 
