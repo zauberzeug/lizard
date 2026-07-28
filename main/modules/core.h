@@ -19,6 +19,8 @@ private:
     unsigned long int last_message_millis = 0;
 
 public:
+    static std::string startup_error;
+
     Core(const std::string name);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;

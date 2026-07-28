@@ -17,6 +17,8 @@
 #include <stdexcept>
 #include <stdlib.h>
 
+std::string Core::startup_error;
+
 Core::Core(const std::string name) : Module(name) {
     this->properties["debug"] = std::make_shared<BooleanVariable>(false);
     this->properties["millis"] = std::make_shared<IntegerVariable>();
@@ -44,6 +46,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         echo("lizard version: %s", app_desc->version);
         echo("compile time: %s, %s", app_desc->date, app_desc->time);
         echo("idf version: %s", app_desc->idf_ver);
+    } else if (method_name == "startup_error") {
+        Module::expect(arguments, 0);
+        echo("startup_error: %s", Core::startup_error.c_str());
     } else if (method_name == "print") {
         static char buffer[1024];
         int pos = 0;
