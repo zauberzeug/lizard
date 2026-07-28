@@ -58,6 +58,10 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 ./monitor_ssh.sh <user@host>
 ```
 
+This copies `monitor.py` and `serial_devices.py` from this checkout to `~/lizard` on the target
+and starts the monitor there, so which device it detects does not depend on the age of the
+target's own checkout.
+
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
 ### OTB Update

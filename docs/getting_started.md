@@ -40,7 +40,10 @@ You can create a startup script for rules which should be directly applied after
 Simply write the commands into a file like `on_startup.lizard` and set them with
 
 ```bash
-./configure.py on_startup.lizard /dev/<serial device name>
+./configure.py on_startup.lizard
 ```
+
+Add the device path (e.g. `./configure.py on_startup.lizard /dev/<serial device name>`)
+if several adapters are attached or you run non-interactively.
 
 See [Tools](tools.md#configure) for more details.
