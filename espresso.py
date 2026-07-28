@@ -97,7 +97,7 @@ class Config:
     so they cannot drift from their inputs.
     """
     chip: str = 'esp32'
-    device: str = ''  # the real default is machine-dependent, see choose_device()
+    device: Optional[str] = None  # only resolved for the commands that open the port, see main()
     baud: Optional[int] = None  # an explicit --baud; each command falls back to its own default
     nand: bool = False
     swap: bool = False
@@ -128,6 +128,19 @@ class Config:
     @property
     def g0(self) -> str:
         return self.en_pin if self.swap else self.g0_pin
+
+    @property
+    def port(self) -> str:
+        """The resolved serial device, for the commands that declared ``uses_serial``.
+
+        Reading it from a command that did not is the one mistake this branch already made
+        (pin-only commands used to resolve a device and discard it), so it names that cause
+        rather than passing an empty --port on to esptool.
+        """
+        if self.device is None:
+            raise RuntimeError('No serial device was resolved for this command; '
+                               'it needs uses_serial=True in COMMANDS.')
+        return self.device
 
     @property
     def stub_args(self) -> Tuple[str, ...]:
@@ -404,7 +417,7 @@ def erase(config: Config) -> None:
                 config,
                 'esptool.py',
                 '--chip', config.chip,
-                '--port', config.device,
+                '--port', config.port,
                 '--baud', config.flash_baud,
                 *config.stub_args,
                 '--before', 'default_reset',
@@ -422,7 +435,7 @@ def reset_partition(config: Config) -> None:
         config,
         'esptool.py',
         '--chip', config.chip,
-        '--port', config.device,
+        '--port', config.port,
         '--baud', config.flash_baud,
         *config.stub_args,
         'erase_region',
@@ -442,7 +455,7 @@ def flash(config: Config) -> None:
                 config,
                 'esptool.py',
                 '--chip', config.chip,
-                '--port', config.device,
+                '--port', config.port,
                 '--baud', config.flash_baud,
                 *config.stub_args,
                 '--before', 'default_reset',
@@ -469,7 +482,7 @@ def coredump(config: Config) -> None:
     deferred so the flash path does not depend on esp_coredump being installed.
     """
     print_bold('Reading core dump...')
-    print(f'  port={config.device} chip={config.chip} baud={config.coredump_baud} elf={config.elf}')
+    print(f'  port={config.port} chip={config.chip} baud={config.coredump_baud} elf={config.elf}')
     if config.dry_run:
         return
     try:
@@ -477,7 +490,7 @@ def coredump(config: Config) -> None:
     except ImportError as error:
         raise RuntimeError('Module esp_coredump is required for the coredump command, but it is not installed. '
                            'Install it on the machine reading the dump (e.g. "pip install esp-coredump").') from error
-    dump = CoreDump(chip=config.chip, port=config.device, baud=config.coredump_baud, prog=config.elf)
+    dump = CoreDump(chip=config.chip, port=config.port, baud=config.coredump_baud, prog=config.elf)
     if config.debug:
         dump.dbg_corefile()
     else:
@@ -492,7 +505,8 @@ class Command:
     files are rsynced to the remote (resolved with the same defaults the remote would apply,
     see _require_relative for the path constraint). ``uses_pins`` selects GPIO setup on a
     local run and the sudo prefix on a remote one. ``uses_serial`` marks the commands that
-    open the serial port, and hence the only ones for which main() resolves a device.
+    open the serial port, and hence the only ones for which main() resolves a device; a
+    handler that reads Config.port without having declared it gets told so.
     """
     handler: Callable[[Config], None]
     uses_pins: bool = False
@@ -573,7 +587,7 @@ def main(argv: List[str]) -> None:
     # name the one the real run would use, hence it still asks wherever there is a terminal.
     device = args.device or (choose_device(ask=not args.dry_run or sys.stdin.isatty(),
                                           allow_missing=args.dry_run)
-                             if cmd.uses_serial else '')
+                             if cmd.uses_serial else None)
 
     config = Config(
         chip=args.chip or DEFAULT.chip,
