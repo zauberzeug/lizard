@@ -101,6 +101,7 @@ lizard/
 ├── build.py               # Build script (wraps idf.py)
 ├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
 ├── monitor.py             # Serial monitor
+├── serial_devices.py      # Serial device discovery shared by the host tools
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
 └── gen_parser.sh          # Regenerates parser.c from language.owl
 ```

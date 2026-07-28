@@ -29,7 +29,7 @@ file_size = firmware.stat().st_size
 number_of_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
 
 try:
-    port = args.port or choose_device(allow_missing=True)
+    port = args.port or choose_device()
     print(f'Connecting to {port} at {args.baud} baud')
     dev = serial.Serial(port, args.baud, timeout=0.5)
 except RuntimeError as e:

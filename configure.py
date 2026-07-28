@@ -49,11 +49,14 @@ def read(*, timeout: float) -> Iterator[str]:
 
 try:
     device_path = args.device_path or choose_device()
+    print(f'Connecting to {device_path} at {args.baud} baud')
+    connection = serial.Serial(device_path, baudrate=args.baud, timeout=1.0)
 except RuntimeError as e:
     sys.exit(f'Error: {e}')
+except serial.SerialException as e:
+    sys.exit(f'Serial error: {e}')
 
-print(f'Connecting to {device_path} at {args.baud} baud')
-with serial.Serial(device_path, baudrate=args.baud, timeout=1.0) as port:
+with connection as port:
     startup = Path(args.config_file).read_text('utf-8') + '\n'
     checksum = sum(ord(c) for c in startup) % 0x10000
 

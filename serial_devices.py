@@ -64,7 +64,9 @@ def jetson_uart() -> Optional[str]:
 
 
 def find_devices() -> List[Device]:
-    """Return the serial devices that could be a microcontroller, best candidate first.
+    """Return the serial devices that could be a microcontroller, sorted by path.
+
+    The sort order is not a ranking -- see choose_device(), which asks rather than picks.
 
     On a Jetson that is exactly the platform UART: its USB ports are for peripherals, and
     pyserial cannot see the UART anyway. On any other machine only USB devices qualify --

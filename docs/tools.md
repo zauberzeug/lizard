@@ -64,7 +64,7 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 `otb_update.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB (Over The Bus) protocol.
 
 ```bash
-./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target <peer_id> [--bus <name>] [--expander <name>]
+./otb_update.py build/lizard.bin [--port <port>] --target <peer_id> [--bus <name>] [--expander <name>]
 ```
 
 | Argument     | Description                                             |
