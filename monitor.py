@@ -65,6 +65,8 @@ async def send() -> None:
             with patch_stdout():
                 line = await session.prompt_async('> ')
                 for segment in line.split('\n'):
+                    # drop the \r of a CRLF paste, which would otherwise end up inside the checksum payload
+                    segment = segment.rstrip('\r')
                     checksum = 0
                     for byte in segment.encode():
                         checksum ^= byte
