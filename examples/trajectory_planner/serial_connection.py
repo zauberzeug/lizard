@@ -20,7 +20,8 @@ class SerialConnection:
         s = s.decode()
         self.buffer += s
         if '\n' in self.buffer:
-            line, self.buffer = self.buffer.split('\r\n', 1)
+            line, self.buffer = self.buffer.split('\n', 1)
+            line = line.rstrip('\r')
             if line[-3:-2] == '@':
                 try:
                     check = int(line[-2:], 16)
