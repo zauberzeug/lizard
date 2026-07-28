@@ -11,6 +11,8 @@ sudo ./espresso.py flash [--device <device_path>]
 ```
 
 Without `--device` the serial device is auto-detected, and you are asked which one to use if several are attached.
+The detection needs `pyserial` for the interpreter running the script, which under `sudo` is root's;
+passing `--device` skips it.
 
 Note that flashing may require root access (hence the sudo).
 The command also does not work while the serial interface is busy communicating with another process.

@@ -3,9 +3,12 @@
 ## Installation
 
 1. Download and unpack the zip file of the [latest release](https://github.com/zauberzeug/lizard/releases).
-2. Attach an Espressif ESP32 microcontroller via serial to your computer.
-3. Run `sudo ./espresso.py flash` to install Lizard on the ESP32
-   (add `--device /dev/<serial device name>` if several adapters are attached or you run non-interactively).
+2. Install the Python requirements with `python3 -m pip install -r requirements.txt`
+   (on macOS use `requirements-macos.txt`, which omits `gpiod`).
+   Flashing runs under `sudo`, so install them for the root interpreter as well.
+3. Attach an Espressif ESP32 microcontroller via serial to your computer.
+4. Run `sudo ./espresso.py flash` to install Lizard on the ESP32.
+   Add `--device /dev/<serial device name>` to pick the adapter yourself, which is required when you run non-interactively.
 
 ## Try Out
 
