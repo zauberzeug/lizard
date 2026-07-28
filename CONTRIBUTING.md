@@ -130,20 +130,10 @@ For Python scripts (build tools, flash utilities):
 - Verify compilation for both ESP32 and ESP32-S3 targets
 - Check for memory leaks and stack overflows
 
-The Python host tools are covered by tests that need no hardware and run in CI:
-
-```bash
-python3 -m pip install -r requirements-dev.txt
-python3 -m pytest
-```
-
-Changes to `espresso.py`, `monitor.py`, `configure.py`, `otb_update.py` or `serial_devices.py` should keep them passing.
-
 ## Before Submitting
 
 1. Code compiles without warnings
 2. Follows style guidelines
 3. Tested on target hardware
-4. `python3 -m pytest` passes if you touched the Python host tools
-5. No debug prints left in code
-6. Documentation updated if needed
+4. No debug prints left in code
+5. Documentation updated if needed

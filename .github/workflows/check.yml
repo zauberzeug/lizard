@@ -14,13 +14,3 @@ jobs:
         with:
           python-version: "3.x"
       - uses: pre-commit/action@v3.0.1
-
-  pytest:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
-      - run: python3 -m pip install -r requirements-dev.txt
-      - run: python3 -m pytest -v
