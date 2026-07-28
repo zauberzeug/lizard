@@ -66,8 +66,14 @@ def find_devices() -> List[Device]:
         return [Device(uart, 'Jetson UART')]
 
     # Deferred so that espresso.py, which shells out to esptool, needs no pyserial for its
-    # pin-only commands or on a Jetson -- where root's interpreter cannot see a --user install.
-    from serial.tools import list_ports  # pylint: disable=import-outside-toplevel
+    # pin-only commands or on a Jetson -- where the root interpreter cannot see a --user install.
+    try:
+        from serial.tools import list_ports  # pylint: disable=import-outside-toplevel
+    except ImportError as error:
+        raise RuntimeError('Module pyserial is required to detect the serial device, but it is not '
+                           'installed for this interpreter (e.g. "pip install pyserial"). Under sudo '
+                           'that is the root interpreter, which sees neither a --user nor a virtualenv '
+                           'install; passing the device path explicitly skips the detection.') from error
 
     devices: List[Device] = []
     seen: Set[str] = set()
