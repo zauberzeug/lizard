@@ -227,7 +227,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 }
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr module = Module::create(module_type, module_name, arguments, process_lizard);
+                Module_ptr module;
+                try {
+                    module = Module::create(module_type, module_name, arguments, process_lizard);
+                } catch (const std::exception &e) {
+                    throw std::runtime_error("module \"" + module_name + "\" (" + module_type + "): " + e.what());
+                }
                 Global::add_module(module_name, module);
             } else {
                 const std::string module_name = identifier_to_string(constructor.module_name);
@@ -543,6 +548,7 @@ void app_main() {
             process_lizard(Storage::startup.c_str());
         }
     } catch (const std::exception &e) {
+        Core::startup_error = e.what();
         boot_guard::startup_failed(e.what());
     } catch (...) {
         boot_guard::startup_failed("unknown exception");
