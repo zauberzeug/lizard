@@ -69,9 +69,11 @@ def jetson_uart() -> Optional[str]:
 
 
 def find_devices() -> List[Device]:
-    """Return the serial devices that could be a microcontroller, sorted by path.
+    """Return the serial devices that could be a microcontroller.
 
-    The sort order is not a ranking -- see choose_device(), which asks rather than picks.
+    The enumerated devices come first, sorted by path, then whatever EXTRA_PATTERNS adds on top.
+    Neither the order nor the grouping is a ranking -- see choose_device(), which asks rather
+    than picks.
 
     On a Jetson that is exactly the platform UART: its USB ports are for peripherals, and
     pyserial cannot see the UART anyway. On any other machine only USB devices qualify --
@@ -119,14 +121,17 @@ def choose_device(*, ask: bool = True, allow_missing: bool = False) -> str:
     /dev/ttyACM0 and sorts ahead of the /dev/ttyUSB0 bridge -- and the callers go on to write
     firmware to whatever comes back. When the answer cannot be read (no terminal, Ctrl+C) it
     raises a RuntimeError rather than falling back to a guess, so a non-interactive run fails
-    with the candidates named instead of flashing the wrong board.
+    with the candidates named instead of flashing the wrong board. For the same reason the
+    question has no default: an empty answer would be the one-keystroke version of exactly the
+    guess this function exists to avoid.
 
     ``ask=False`` takes the first candidate silently, for a caller that never opens the port
     and prints the resolved path anyway (a dry run, which would otherwise block on stdin).
-    ``allow_missing`` names FALLBACK_DEVICE when nothing is attached instead of raising, so
-    the failure surfaces from the connection attempt rather than from the lookup -- which keeps
-    a dry run working on a machine with no adapter plugged in, and leaves an adapter that
-    pyserial cannot enumerate at all reachable under its conventional path.
+    ``allow_missing`` names FALLBACK_DEVICE when nothing is attached instead of raising, for
+    that same dry run: it has a device to print either way, and should not fail on a machine
+    with no adapter plugged in. A caller that goes on to open the port does not use it -- the
+    lookup's "No serial device found" beats a failure to open a path that was only a guess, and
+    an adapter pyserial cannot enumerate is reached by passing it explicitly.
     """
     devices = find_devices()
     if not devices:
@@ -140,14 +145,12 @@ def choose_device(*, ask: bool = True, allow_missing: bool = False) -> str:
         print(f'  [{i}] {device}')
     while True:
         try:
-            choice = input(f'Select device [0-{len(devices) - 1}, default 0]: ').strip()
+            choice = input(f'Select device [0-{len(devices) - 1}]: ').strip()
         except (EOFError, KeyboardInterrupt):
             print()
             raise RuntimeError('Cannot ask which of several serial devices to use: '
                                f'{", ".join(str(device) for device in devices)}. '
                                'Pass the device path explicitly.') from None
-        if not choice:
-            return devices[0].path
         # isdecimal instead of isdigit: the latter also accepts e.g. "²", which int() then rejects
         if choice.isdecimal() and int(choice) < len(devices):
             return devices[int(choice)].path

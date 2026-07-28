@@ -51,9 +51,10 @@ def test_glob_fallback_dedups_against_pyserial() -> None:
         assert sd.find_devices() == [sd.Device('/dev/null', 'pyserial')]
 
 
-def test_empty_answer_takes_the_first_device() -> None:
-    with attached(*TWO_BRIDGES), answers(''):
-        assert sd.choose_device() == '/dev/ttyUSB0'
+def test_empty_answer_is_rejected_instead_of_guessing() -> None:
+    """A default would be the one-keystroke version of the guess the question exists to avoid."""
+    with attached(*TWO_BRIDGES), answers('', '1'):
+        assert sd.choose_device() == '/dev/ttyUSB1'
 
 
 def test_explicit_answer_is_honoured() -> None:

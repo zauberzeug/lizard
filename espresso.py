@@ -293,7 +293,7 @@ def run_remote(host: str, command: List[str], *, artifacts: List[str],
 
     Exactly the files the command uses are copied, with their relative paths preserved
     (rsync -R), so the remote command finds them below the target directory; ``artifacts``
-    is empty for pin-only commands (erase/enable/disable/reset/release_pins), which skip
+    is empty for the commands that build nothing (enable/disable/reset/erase/release_pins), which skip
     the artifact rsync entirely. The paths resolve against the cwd -- the same base a local
     run uses -- so the remote flashes exactly what a local flash would; only espresso.py
     itself is taken from the script's own directory. Under ``dry_run`` nothing is sent or
@@ -572,8 +572,10 @@ def main(argv: List[str]) -> None:
     # Only the commands that open the port resolve a device: choose_device() may ask which of
     # several attached adapters to use, and a pin-only command would block on -- or, without a
     # terminal, fail on -- an answer it never reads. A dry run prints the device it resolved but
-    # never opens it either, so it must not stop to ask.
-    device = args.device or (choose_device(ask=not args.dry_run, allow_missing=True)
+    # never opens it either, so it neither stops to ask nor minds that nothing is attached; a
+    # real run reports that as "No serial device found" instead of handing esptool a fallback
+    # path it can only fail to open.
+    device = args.device or (choose_device(ask=not args.dry_run, allow_missing=args.dry_run)
                              if cmd.uses_serial else '')
 
     config = Config(

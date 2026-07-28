@@ -16,6 +16,7 @@ from unittest import mock
 import pytest
 
 import espresso
+import serial_devices as sd
 from conftest import TWO_BRIDGES, answers, attached, never_asked
 
 # Commands that only toggle the EN/G0 pins, and hence never look at config.device.
@@ -68,6 +69,22 @@ def test_a_dry_run_resolves_without_a_question() -> None:
     with attached(*TWO_BRIDGES), never_asked(), recorded('flash') as captured:
         espresso.main(['flash', '--dry-run'])
     assert captured['config'].device == '/dev/ttyUSB0'
+
+
+def test_a_dry_run_survives_an_empty_bench() -> None:
+    """Nothing is opened, so a machine with no adapter attached still has a device to print."""
+    with attached(), never_asked(), recorded('flash') as captured:
+        espresso.main(['flash', '--dry-run'])
+    assert captured['config'].device == sd.FALLBACK_DEVICE
+
+
+@pytest.mark.parametrize('command', SERIAL_COMMANDS)
+def test_a_real_run_reports_a_missing_device(command: str) -> None:
+    """The same message as monitor.py/configure.py/otb_update.py, rather than a path esptool
+    could only fail to open. An adapter pyserial cannot enumerate is reached with --device."""
+    with attached(), never_asked(), recorded(command):
+        with pytest.raises(RuntimeError, match='No serial device found'):
+            espresso.main([command])
 
 
 def test_every_command_declares_whether_it_opens_the_port() -> None:
