@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Iterator
 
 import serial
 
+from serial_devices import choose_device
+
 parser = argparse.ArgumentParser(description='Configure an ESP32 running Lizard firmware')
 parser.add_argument('config_file', help='Path to the .liz configuration file')
-parser.add_argument('device_path', help='Serial device path (e.g., /dev/ttyUSB0)')
+parser.add_argument('device_path', nargs='?',
+                    help='Serial device path (default: auto-detected, asks if ambiguous)')
 parser.add_argument('--baud', type=int, default=115200, help='Baud rate (default: 115200)')
 parser.add_argument('--serial-bus', type=int, metavar='NODE_ID',
                     help='Send configuration via serial bus to the specified node ID')
@@ -43,7 +47,13 @@ def read(*, timeout: float) -> Iterator[str]:
             continue
 
 
-with serial.Serial(args.device_path, baudrate=args.baud, timeout=1.0) as port:
+try:
+    device_path = args.device_path or choose_device()
+except RuntimeError as e:
+    sys.exit(f'Error: {e}')
+
+print(f'Connecting to {device_path} at {args.baud} baud')
+with serial.Serial(device_path, baudrate=args.baud, timeout=1.0) as port:
     startup = Path(args.config_file).read_text('utf-8') + '\n'
     checksum = sum(ord(c) for c in startup) % 0x10000
 

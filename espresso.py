@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Callable, Dict, Generator, List, Optional, Tuple
 
-from serial_devices import IS_JETSON, resolve_default_device
+from serial_devices import IS_JETSON, choose_device
 
 try:
     import gpiod
@@ -97,7 +97,7 @@ class Config:
     so they cannot drift from their inputs.
     """
     chip: str = 'esp32'
-    device: str = ''  # the real default is machine-dependent, see resolve_default_device()
+    device: str = ''  # the real default is machine-dependent, see choose_device()
     baud: Optional[int] = None  # an explicit --baud; each command falls back to its own default
     nand: bool = False
     swap: bool = False
@@ -179,7 +179,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help=f'ESP chip type (default: {DEFAULT.chip})')
     parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
     parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
-    parser.add_argument('--device', nargs='?', default=None, help='Serial device path (auto-detected on Jetson)')
+    parser.add_argument('--device', nargs='?', default=None,
+                        help='Serial device path (default: auto-detected, asks if ambiguous)')
     parser.add_argument('--baud', type=int, default=None,
                         help=f'Baud rate (default: {DEFAULT.flash_baud} for flashing and erasing, '
                              f'{DEFAULT.coredump_baud} for coredump)')
@@ -567,7 +568,8 @@ def main(argv: List[str]) -> None:
 
     config = Config(
         chip=args.chip or DEFAULT.chip,
-        device=args.device or resolve_default_device(),
+        # a dry run prints the device it resolved but never opens it, so it must not stop to ask
+        device=args.device or choose_device(ask=not args.dry_run, allow_missing=True),
         baud=args.baud,
         nand=args.nand,
         swap=args.swap,
