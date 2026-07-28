@@ -5,6 +5,13 @@ machine: a Jetson Robot Brain reaches the microcontroller over a fixed platform 
 is not part of any USB enumeration and therefore has to be derived from the L4T version,
 while a development host uses a USB-UART bridge that pyserial can enumerate -- including a
 human-readable description that tells two attached bridges apart.
+
+Importing this module costs nothing but stdlib: pyserial is imported inside find_devices(),
+and only on the branch that actually enumerates USB devices. That matters for espresso.py,
+which shells out to esptool instead of importing it and so needs no pyserial of its own -- not
+for its pin-only commands, and not on a Jetson, which resolves its UART without enumerating.
+Requiring it at import time would break `sudo ./espresso.py enable` on a Robot Brain whose
+pyserial came from a "pip install --user", which root's interpreter cannot see.
 """
 import glob
 import os
@@ -12,8 +19,6 @@ import re
 import sys
 from pathlib import Path
 from typing import List, NamedTuple, Optional, Set
-
-from serial.tools import list_ports
 
 TEGRA_RELEASE = Path('/etc/nv_tegra_release')
 IS_JETSON = TEGRA_RELEASE.exists()
@@ -79,6 +84,10 @@ def find_devices() -> List[Device]:
     uart = jetson_uart()
     if uart is not None:
         return [Device(uart, 'Jetson UART')]
+
+    # Deferred so that a machine which never enumerates -- a Jetson, or any command that does
+    # not open a port -- needs no pyserial at all; see the module docstring.
+    from serial.tools import list_ports  # pylint: disable=import-outside-toplevel
 
     devices: List[Device] = []
     seen: Set[str] = set()

@@ -51,10 +51,8 @@ try:
     device_path = args.device_path or choose_device()
     print(f'Connecting to {device_path} at {args.baud} baud')
     connection = serial.Serial(device_path, baudrate=args.baud, timeout=1.0)
-except RuntimeError as e:
+except (RuntimeError, serial.SerialException) as e:
     sys.exit(f'Error: {e}')
-except serial.SerialException as e:
-    sys.exit(f'Serial error: {e}')
 
 with connection as port:
     startup = Path(args.config_file).read_text('utf-8') + '\n'

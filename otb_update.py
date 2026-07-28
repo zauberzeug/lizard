@@ -32,10 +32,8 @@ try:
     port = args.port or choose_device()
     print(f'Connecting to {port} at {args.baud} baud')
     dev = serial.Serial(port, args.baud, timeout=0.5)
-except RuntimeError as e:
+except (RuntimeError, serial.SerialException) as e:
     sys.exit(f'Error: {e}')
-except serial.SerialException as e:
-    sys.exit(f'Serial error: {e}')
 
 
 class OtbError(Exception):

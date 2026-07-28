@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from typing import Iterator, Optional, Sequence
 from unittest import mock
 
+from serial.tools import list_ports
 from serial.tools.list_ports_common import ListPortInfo
 
 import serial_devices as sd
@@ -30,9 +31,13 @@ TWO_BRIDGES = (port('/dev/ttyUSB0', description='first'), port('/dev/ttyUSB1', d
 
 @contextmanager
 def attached(*ports: ListPortInfo, patterns: Sequence[str] = ()) -> Iterator[None]:
-    """Pretend the given ports are attached to a host that is not a Jetson."""
+    """Pretend the given ports are attached to a host that is not a Jetson.
+
+    comports() is patched on pyserial itself rather than on serial_devices, which imports it
+    inside find_devices() so that importing the module needs no pyserial at all.
+    """
     with mock.patch.multiple(sd, EXTRA_PATTERNS=list(patterns), IS_JETSON=False), \
-            mock.patch.object(sd.list_ports, 'comports', return_value=list(ports)):
+            mock.patch.object(list_ports, 'comports', return_value=list(ports)):
         yield
 
 
