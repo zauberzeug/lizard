@@ -10,7 +10,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from serial_devices import choose_device
 
 parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
-parser.add_argument('device', nargs='?', help='Serial device path (e.g., /dev/ttyUSB0)')
+parser.add_argument('device', nargs='?', help='Serial device path (default: auto-detected, asks if ambiguous)')
 parser.add_argument('--baud', type=int, default=115200, help='Baud rate (default: 115200)')
 args = parser.parse_args()
 

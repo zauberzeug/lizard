@@ -50,6 +50,7 @@ Without a device path the monitor detects the serial device itself:
 on a Robot Brain that is the Jetson's UART to the microcontroller, on a development host the attached USB-UART bridge.
 If multiple bridges are attached, it lists them with their descriptions and asks which one to use.
 Pass the device path explicitly when running non-interactively.
+Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see [Robot Brain](#robot-brain)).
 
 You can also use an SSH monitor to access a microcontroller via SSH:
 
