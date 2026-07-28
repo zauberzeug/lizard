@@ -44,7 +44,10 @@ Use the serial monitor to read the current output and interactively send [Lizard
 ./monitor.py [<device_path>]
 ```
 
-You can also use an SSH monitor to access a microcontroller via SSH:
+Without a device path the monitor detects the serial device itself:
+on a Robot Brain that is the Jetson's UART to the microcontroller, on a development host the attached USB-UART bridge.
+If multiple bridges are attached, it lists them with their descriptions and asks which one to use.
+Pass the device path explicitly when running non-interactively.
 
 ```bash
 ./monitor_ssh.sh <user@host>
@@ -63,7 +66,7 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 | Argument     | Description                                           |
 | ------------ | ----------------------------------------------------- |
 | `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`) |
-| `--port`     | Serial port (default: `/dev/ttyUSB0`)                 |
+| `--port`     | Serial port (default: auto-detected)                  |
 | `--baud`     | Baudrate (default: `115200`)                          |
 | `--target`   | Bus ID of the target node (required)                  |
 | `--bus`      | Name of the SerialBus module (default: `bus`)         |
