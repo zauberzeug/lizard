@@ -14,3 +14,14 @@ jobs:
         with:
           python-version: "3.x"
       - uses: pre-commit/action@v3.0.1
+
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      # the host tools under test only need pyserial, not the full ESP-IDF requirements
+      - run: python3 -m pip install pyserial pytest
+      - run: python3 -m pytest -v
