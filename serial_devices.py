@@ -1,17 +1,8 @@
 """Serial device discovery shared by the Lizard host tools.
 
-All host tools have to agree on which device they talk to, but the answer depends on the
-machine: a Jetson Robot Brain reaches the microcontroller over a fixed platform UART, which
-is not part of any USB enumeration and therefore has to be derived from the L4T version,
-while a development host uses a USB-UART bridge that pyserial can enumerate -- including a
-human-readable description that tells two attached bridges apart.
-
-Importing this module costs nothing but stdlib: pyserial is imported inside find_devices(),
-and only on the branch that actually enumerates USB devices. That matters for espresso.py,
-which shells out to esptool instead of importing it and so needs no pyserial of its own -- not
-for its pin-only commands, and not on a Jetson, which resolves its UART without enumerating.
-Requiring it at import time would break `sudo ./espresso.py enable` on a Robot Brain whose
-pyserial came from a "pip install --user", which root's interpreter cannot see.
+A Jetson Robot Brain reaches the microcontroller over a fixed platform UART that no USB
+enumeration can see, so it has to be derived from the L4T version; a development host uses a
+USB-UART bridge that pyserial enumerates, with a description that tells two of them apart.
 """
 import glob
 import os
@@ -23,17 +14,13 @@ from typing import List, NamedTuple, Optional, Set
 TEGRA_RELEASE = Path('/etc/nv_tegra_release')
 IS_JETSON = TEGRA_RELEASE.exists()
 
-# Where the Jetson's UART to the microcontroller sits, by L4T (Linux for Tegra) major version.
-JETSON_UARTS = {35: '/dev/ttyTHS0', 36: '/dev/ttyTHS1'}
+JETSON_UARTS = {35: '/dev/ttyTHS0', 36: '/dev/ttyTHS1'}  # by L4T (Linux for Tegra) major version
 
-# The conventional path per platform, named when nothing is attached; see choose_device().
 FALLBACK_DEVICE = '/dev/ttyUSB0' if sys.platform.startswith('linux') else '/dev/cu.SLAB_USBtoUART'
 
-# USB-serial nodes pyserial's enumeration can miss, e.g. when a macOS vendor driver (Silicon
-# Labs VCP, CH34x) creates a /dev node without exposing full USB metadata. Only the macOS
-# call-out nodes ("cu.") are listed: opening the matching dial-in node ("tty.") can block
-# until a carrier signal appears, and since both are separate paths they would otherwise
-# turn one physical adapter into two candidates.
+# USB-serial nodes pyserial can miss, e.g. behind a macOS vendor driver. Only the call-out nodes
+# ("cu."): opening the dial-in twin ("tty.") can block until a carrier appears, and listing both
+# would turn one adapter into two candidates.
 EXTRA_PATTERNS = [
     '/dev/cu.usbserial*',
     '/dev/cu.usbmodem*',
@@ -51,11 +38,10 @@ class Device(NamedTuple):
 
 
 def jetson_uart() -> Optional[str]:
-    """Return the Jetson's UART to the microcontroller, or None on a machine that is not a Jetson.
+    """Return the Jetson's UART to the microcontroller, or None when not running on a Jetson.
 
-    An unreadable L4T version is fatal rather than a reason to fall back to USB enumeration:
-    on a Jetson that enumeration finds no microcontroller (its USB ports carry peripherals),
-    so the run would end in a missing-device error that hides the real cause.
+    An unreadable L4T version raises instead of falling back to USB enumeration, which on a
+    Jetson finds no microcontroller and would hide the real cause behind a missing-device error.
     """
     if not IS_JETSON:
         return None
@@ -69,26 +55,19 @@ def jetson_uart() -> Optional[str]:
 
 
 def find_devices() -> List[Device]:
-    """Return the serial devices that could be a microcontroller.
+    """Return the serial devices that could be a microcontroller, in no meaningful order.
 
-    The enumerated devices come first, sorted by path, then whatever EXTRA_PATTERNS adds on top.
-    Neither the order nor the grouping is a ranking -- see choose_device(), which asks rather
-    than picks.
-
-    On a Jetson that is exactly the platform UART: its USB ports are for peripherals, and
-    pyserial cannot see the UART anyway. On any other machine only USB devices qualify --
-    built-in and virtual ports (`/dev/ttyS*`, Bluetooth) are skipped, because a Lizard always
-    sits behind a USB-UART bridge there and listing them would turn an unambiguous match into
-    a pointless question. Duplicates are collapsed by their real path, so an adapter that both
-    pyserial and EXTRA_PATTERNS report -- the usual case on macOS, where pyserial also names
-    the call-out node -- counts as one device, keeping the description pyserial supplied.
+    Only USB devices qualify on a development host: a Lizard always sits behind a bridge there,
+    so listing built-in and virtual ports (`/dev/ttyS*`, Bluetooth) would turn an unambiguous
+    match into a pointless question. Duplicates are collapsed by their real path, since on macOS
+    pyserial and EXTRA_PATTERNS report the same call-out node.
     """
     uart = jetson_uart()
     if uart is not None:
         return [Device(uart, 'Jetson UART')]
 
-    # Deferred so that a machine which never enumerates -- a Jetson, or any command that does
-    # not open a port -- needs no pyserial at all; see the module docstring.
+    # Deferred so that espresso.py, which shells out to esptool, needs no pyserial for its
+    # pin-only commands or on a Jetson -- where root's interpreter cannot see a --user install.
     from serial.tools import list_ports  # pylint: disable=import-outside-toplevel
 
     devices: List[Device] = []
@@ -104,7 +83,7 @@ def find_devices() -> List[Device]:
         if port.vid is None:
             continue
         description = port.description or ''
-        if description in ('', 'n/a'):  # pyserial's placeholder when the kernel reports no product name
+        if description in ('', 'n/a'):  # pyserial's placeholder for a missing product name
             description = port.manufacturer or ''
         add(port.device, description)
     for pattern in EXTRA_PATTERNS:
@@ -116,22 +95,14 @@ def find_devices() -> List[Device]:
 def choose_device(*, ask: bool = True, allow_missing: bool = False) -> str:
     """Return the serial device to talk to, asking which one when several are attached.
 
-    Asking is what keeps an ambiguous bench safe: the first enumerated device is not
-    necessarily the Lizard -- a CDC-ACM gadget (Arduino, GNSS receiver) enumerates as
-    /dev/ttyACM0 and sorts ahead of the /dev/ttyUSB0 bridge -- and the callers go on to write
-    firmware to whatever comes back. When the answer cannot be read (no terminal, Ctrl+C) it
-    raises a RuntimeError rather than falling back to a guess, so a non-interactive run fails
-    with the candidates named instead of flashing the wrong board. For the same reason the
-    question has no default: an empty answer would be the one-keystroke version of exactly the
-    guess this function exists to avoid.
+    Asking keeps an ambiguous bench safe: the first candidate is not necessarily the Lizard --
+    a CDC-ACM gadget sorts ahead of a /dev/ttyUSB0 bridge -- and the callers go on to flash
+    whatever comes back. For the same reason the question has no default, and an unreadable
+    answer (no terminal, Ctrl+C) raises with the candidates named instead of guessing.
 
-    ``ask=False`` takes the first candidate silently, for a caller that never opens the port
-    and prints the resolved path anyway (a dry run, which would otherwise block on stdin).
-    ``allow_missing`` names FALLBACK_DEVICE when nothing is attached instead of raising, for
-    that same dry run: it has a device to print either way, and should not fail on a machine
-    with no adapter plugged in. A caller that goes on to open the port does not use it -- the
-    lookup's "No serial device found" beats a failure to open a path that was only a guess, and
-    an adapter pyserial cannot enumerate is reached by passing it explicitly.
+    Both keyword arguments exist for espresso.py's dry run, which prints a device it never
+    opens: ``ask=False`` keeps it off stdin, ``allow_missing`` gives it something to print on a
+    machine with nothing attached. A caller that opens the port wants neither.
     """
     devices = find_devices()
     if not devices:

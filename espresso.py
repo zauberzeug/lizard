@@ -318,7 +318,6 @@ def run_remote(host: str, command: List[str], *, artifacts: List[str],
     print_bold(f'Copying espresso.py and serial_devices.py to {target}:{path}...')
     # -p restores the exec bit on a pre-existing non-executable remote copy, whose
     # permissions a plain rsync would keep forever ("./espresso.py: Permission denied").
-    # serial_devices.py travels along because espresso.py imports it to resolve the device.
     runner(['rsync', '-zp', str(script_dir / 'espresso.py'), str(script_dir / 'serial_devices.py'),
             f'{target}:{path}/'])
 
@@ -569,12 +568,8 @@ def main(argv: List[str]) -> None:
 
     print_ok('Espresso dry-running...' if args.dry_run else 'Espresso running...')
 
-    # Only the commands that open the port resolve a device: choose_device() may ask which of
-    # several attached adapters to use, and a pin-only command would block on -- or, without a
-    # terminal, fail on -- an answer it never reads. A dry run prints the device it resolved but
-    # never opens it either, so it neither stops to ask nor minds that nothing is attached; a
-    # real run reports that as "No serial device found" instead of handing esptool a fallback
-    # path it can only fail to open.
+    # Resolving can ask which adapter to use, so only the commands that open the port do it; a
+    # dry run neither asks nor minds an empty bench, since it prints a device it never opens.
     device = args.device or (choose_device(ask=not args.dry_run, allow_missing=args.dry_run)
                              if cmd.uses_serial else '')
 
