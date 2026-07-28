@@ -97,12 +97,13 @@ def choose_device(*, ask: bool = True, allow_missing: bool = False) -> str:
 
     Asking keeps an ambiguous bench safe: the first candidate is not necessarily the Lizard --
     a CDC-ACM gadget sorts ahead of a /dev/ttyUSB0 bridge -- and the callers go on to flash
-    whatever comes back. For the same reason the question has no default, and an unreadable
-    answer (no terminal, Ctrl+C) raises with the candidates named instead of guessing.
+    whatever comes back. For the same reason the question has no default, and a question that
+    cannot be answered at all raises with the candidates named instead of guessing.
 
     Both keyword arguments exist for espresso.py's dry run, which prints a device it never
-    opens: ``ask=False`` keeps it off stdin, ``allow_missing`` gives it something to print on a
-    machine with nothing attached. A caller that opens the port wants neither.
+    opens: ``ask=False`` keeps it off stdin where there is no terminal to ask at,
+    ``allow_missing`` gives it something to print on a machine with nothing attached. A caller
+    that opens the port wants neither.
     """
     devices = find_devices()
     if not devices:
@@ -117,11 +118,16 @@ def choose_device(*, ask: bool = True, allow_missing: bool = False) -> str:
     while True:
         try:
             choice = input(f'Select device [0-{len(devices) - 1}]: ').strip()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             print()
             raise RuntimeError('Cannot ask which of several serial devices to use: '
                                f'{", ".join(str(device) for device in devices)}. '
                                'Pass the device path explicitly.') from None
+        except KeyboardInterrupt:
+            # Not the same situation as EOF: the question was answerable, the user declined to
+            # answer it. Advising an explicit path would address a problem they do not have.
+            print()
+            raise SystemExit(130) from None
         # isdecimal instead of isdigit: the latter also accepts e.g. "²", which int() then rejects
         if choice.isdecimal() and int(choice) < len(devices):
             return devices[int(choice)].path
