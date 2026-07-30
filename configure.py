@@ -27,8 +27,8 @@ def send(payload: str) -> None:
         line_ = payload
     print(f'Sending: {line_}')
     checksum_ = 0
-    for c in line_:
-        checksum_ ^= ord(c)
+    for byte in line_.encode():
+        checksum_ ^= byte
     port.write((f'{line_}@{checksum_:02x}\n').encode())
 
 
@@ -45,7 +45,7 @@ def read(*, timeout: float) -> Iterator[str]:
 
 with serial.Serial(args.device_path, baudrate=args.baud, timeout=1.0) as port:
     startup = Path(args.config_file).read_text('utf-8') + '\n'
-    checksum = sum(ord(c) for c in startup) % 0x10000
+    checksum = sum(startup.encode()) % 0x10000
 
     send('!-')
     for line in startup.splitlines():

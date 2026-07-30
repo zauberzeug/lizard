@@ -78,7 +78,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "startup_checksum") {
         uint16_t checksum = 0;
         for (char const &c : Storage::startup) {
-            checksum += c;
+            checksum += static_cast<uint8_t>(c);
         }
         echo("checksum: %04x", checksum);
     } else if (method_name == "get_pin_status") {
