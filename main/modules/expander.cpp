@@ -11,6 +11,15 @@
 #include <cstring>
 #include <stdexcept>
 
+// The expander is flashed with our own running partition, so it is always the same target as we are.
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#define BOOT_MODE_PIN 46
+#define FLASH_VOLTAGE_PIN 45
+#else
+#define BOOT_MODE_PIN 2
+#define FLASH_VOLTAGE_PIN 12
+#endif
+
 static Module_ptr create_expander(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler message_handler) {
     if (arguments.size() != 1 && arguments.size() != 3) {
         throw std::runtime_error("unexpected number of arguments");
@@ -178,9 +187,10 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         Storage::clear_nvs();
         gpio_set_level(this->boot_pin, 0);
         if (!force) {
+            char command[32];
             this->serial->write_checked_line("core.get_pin_status(0)");
-            this->serial->write_checked_line("core.get_pin_status(2)");
-            this->serial->write_checked_line("core.get_pin_status(12)");
+            this->serial->write_checked_line(command, csprintf(command, sizeof(command), "core.get_pin_status(%d)", BOOT_MODE_PIN));
+            this->serial->write_checked_line(command, csprintf(command, sizeof(command), "core.get_pin_status(%d)", FLASH_VOLTAGE_PIN));
             delay(100);
             this->handle_messages(true);
         }
@@ -209,22 +219,18 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
 }
 
 void Expander::check_strapping_pins(const char *buffer) {
-    // We only need to check GPIO 0, 2 and 12 because they directly influence boot mode and flash voltage selection,
-    // ensuring correct operation during boot and flashing. These are not directly controllable by the expander.
-    if (strstr(buffer, "GPIO_Status[12]|") != nullptr) {
-        if (strstr(buffer, "GPIO_Status[12]| Level: 1") != nullptr) {
-            echo("warning: GPIO12 state is HIGH, this can cause issues with flash voltage selection");
-        }
+    // These strapping pins are sampled at reset and are not directly controllable by the expander.
+    char pattern[32];
+    csprintf(pattern, sizeof(pattern), "GPIO_Status[%d]| Level: 1", FLASH_VOLTAGE_PIN);
+    if (strstr(buffer, pattern) != nullptr) {
+        echo("warning: GPIO%d state is HIGH, this can cause issues with flash voltage selection", FLASH_VOLTAGE_PIN);
     }
-    if (strstr(buffer, "GPIO_Status[0]|") != nullptr) {
-        if (strstr(buffer, "GPIO_Status[0]| Level: 1") != nullptr) {
-            throw std::runtime_error("GPIO0 current state is HIGH - must be LOW for boot mode");
-        }
+    if (strstr(buffer, "GPIO_Status[0]| Level: 1") != nullptr) {
+        throw std::runtime_error("GPIO0 current state is HIGH - must be LOW for boot mode");
     }
-    if (strstr(buffer, "GPIO_Status[2]|") != nullptr) {
-        if (strstr(buffer, "GPIO_Status[2]| Level: 1") != nullptr) {
-            throw std::runtime_error("GPIO2 current state is HIGH - must be LOW or floating for flash mode");
-        }
+    csprintf(pattern, sizeof(pattern), "GPIO_Status[%d]| Level: 1", BOOT_MODE_PIN);
+    if (strstr(buffer, pattern) != nullptr) {
+        throw std::runtime_error("GPIO" + std::to_string(BOOT_MODE_PIN) + " current state is HIGH - must be LOW or floating for flash mode");
     }
 }
 

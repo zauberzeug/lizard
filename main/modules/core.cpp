@@ -131,31 +131,35 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             throw std::runtime_error("invalid pin");
         }
         const uint32_t strapping_reg = REG_READ(GPIO_STRAP_REG);
-        // Register 4.13. GPIO_STRAP_REG (0x0038)
-        // https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf
+#ifdef CONFIG_IDF_TARGET_ESP32
+        // GPIO_STRAPPING is {10'b0, MTDI, GPIO0, GPIO2, GPIO4, MTDO, GPIO5}, see soc/gpio_reg.h
         switch (gpio_num) {
         case GPIO_NUM_0:
-            echo("Strapping GPIO0: %d", (strapping_reg & BIT(0)) ? 1 : 0);
+            echo("Strapping GPIO0: %d", (strapping_reg & BIT(4)) ? 1 : 0);
             break;
         case GPIO_NUM_2:
-            echo("Strapping GPIO2: %d", (strapping_reg & BIT(1)) ? 1 : 0);
+            echo("Strapping GPIO2: %d", (strapping_reg & BIT(3)) ? 1 : 0);
             break;
         case GPIO_NUM_4:
-            echo("Strapping GPIO4: %d", (strapping_reg & BIT(5)) ? 1 : 0);
+            echo("Strapping GPIO4: %d", (strapping_reg & BIT(2)) ? 1 : 0);
             break;
         case GPIO_NUM_5:
-            echo("Strapping GPIO5: %d", (strapping_reg & BIT(4)) ? 1 : 0);
+            echo("Strapping GPIO5: %d", (strapping_reg & BIT(0)) ? 1 : 0);
             break;
         case GPIO_NUM_12:
-            echo("Strapping GPIO12 (MTDI): %d", (strapping_reg & BIT(3)) ? 1 : 0);
+            echo("Strapping GPIO12 (MTDI): %d", (strapping_reg & BIT(5)) ? 1 : 0);
             break;
         case GPIO_NUM_15:
-            echo("Strapping GPIO15 (MTDO): %d", (strapping_reg & BIT(2)) ? 1 : 0);
+            echo("Strapping GPIO15 (MTDO): %d", (strapping_reg & BIT(1)) ? 1 : 0);
             break;
         default:
             echo("Not a strapping pin");
             break;
         }
+#else
+        // Other targets strap different pins into different bits; soc/gpio_reg.h does not document the layout.
+        echo("Strapping register: 0x%04x", strapping_reg);
+#endif
     } else if (method_name == "forget_serial_bus") {
         Module::expect(arguments, 0);
         bus_backup::remove();

@@ -354,8 +354,8 @@ The constructor expects up to seven arguments:
 - `port`: I²C port number (default: 0)
 - `sda`: SDA pin (default matches target, e.g. 21 on ESP32)
 - `scl`: SCL pin (default matches target, e.g. 22 on ESP32)
-- `int`: Interrupt pin (default: 26)
-- `rst`: Reset pin (default: 32)
+- `int`: Interrupt pin (default: 26 on ESP32, none on ESP32-S3)
+- `rst`: Reset pin (default: 32 on ESP32, none on ESP32-S3)
 - `address`: I²C address (default: 0x4A)
 - `clk`: I²C clock in Hz (default: 400000)
 
