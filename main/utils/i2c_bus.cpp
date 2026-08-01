@@ -1,11 +1,13 @@
 #include "i2c_bus.h"
 
 #include <stdexcept>
+#include "hal/i2c_ll.h"
 
 namespace {
 constexpr int I2C_MASTER_TX_BUF_DISABLE = 0;
 constexpr int I2C_MASTER_RX_BUF_DISABLE = 0;
-constexpr uint32_t DEFAULT_TIMEOUT_TICKS = 1048575;
+// I2C_LL_MAX_TIMEOUT is a cycle count on ESP32 (~13 ms) but an exponent on ESP32-S3 (~54 s)
+constexpr uint32_t DEFAULT_TIMEOUT_TICKS = I2C_LL_MAX_TIMEOUT;
 } // namespace
 
 std::map<i2c_port_t, I2cBusManager::BusConfig> I2cBusManager::configs;
@@ -35,6 +37,7 @@ void I2cBusManager::ensure(i2c_port_t port, gpio_num_t sda_pin, gpio_num_t scl_p
         throw std::runtime_error("could not install i2c driver");
     }
     if (i2c_set_timeout(port, DEFAULT_TIMEOUT_TICKS) != ESP_OK) {
+        i2c_driver_delete(port);
         throw std::runtime_error("could not set i2c timeout");
     }
 
