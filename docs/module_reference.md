@@ -95,6 +95,21 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
+| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
+
+| Properties        | Description                                                                                             | Data type |
+| ----------------- | ------------------------------------------------------------------------------------------------------- | --------- |
+| `bus.offset_<id>` | Estimated clock offset of peer `<id>` in milliseconds (coordinator only, requires `enable_time_sync()`) | `float`   |
+
+**Time Synchronization:**
+Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation.
+Each peer stamps its local `esp_timer` clock into the DONE response of every poll cycle.
+The coordinator estimates the per-peer clock offset with a windowed-maximum filter
+(the least delayed samples carry the least queueing latency)
+and publishes it as the property `offset_<id>` in milliseconds.
+The estimate converges within about 2 seconds after the bus starts polling.
+A peer timestamp `t_peer` maps to coordinator time as `t_peer - offset_<id>`.
+This is intended for timestamping sensor data (e.g. wheel odometry) received from bus peers.
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.

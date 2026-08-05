@@ -7,6 +7,7 @@
 #include "../utils/uart.h"
 #include "module_helpers.h"
 #include "serial.h"
+#include <esp_timer.h>
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -67,6 +68,18 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 }
 
 void SerialBus::step() {
+    if (this->sync_ready) {
+        for (auto &clock : this->peer_clocks) {
+            if (!clock.locked) {
+                continue;
+            }
+            portENTER_CRITICAL(&this->sync_mux);
+            const int64_t offset_us = clock.offset_us;
+            portEXIT_CRITICAL(&this->sync_mux);
+            this->properties.at("offset_" + std::to_string(clock.peer_id))->number_value = offset_us / 1000.0;
+        }
+    }
+
     IncomingMessage message;
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_incoming_message(message);
@@ -115,8 +128,58 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             peers.push_back(static_cast<uint8_t>(peer_value));
         }
         this->peer_ids = peers;
+        this->ensure_peer_clocks();
+    } else if (method_name == "enable_time_sync") {
+        Module::expect(arguments, 0);
+        this->time_sync_enabled = true;
+        this->ensure_peer_clocks();
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+void SerialBus::ensure_peer_clocks() {
+    if (!this->time_sync_enabled || this->peer_ids.empty()) {
+        return;
+    }
+    this->sync_ready = false; // comm task must not iterate while we rebuild
+    for (const uint8_t id : this->peer_ids) {
+        const bool known = std::any_of(this->peer_clocks.begin(), this->peer_clocks.end(),
+                                       [id](const PeerClock &clock) { return clock.peer_id == id; });
+        if (!known) {
+            PeerClock clock;
+            clock.peer_id = id;
+            this->peer_clocks.push_back(clock);
+            this->properties["offset_" + std::to_string(id)] = std::make_shared<NumberVariable>();
+        }
+    }
+    this->sync_ready = true;
+}
+
+void SerialBus::update_peer_offset(const uint8_t sender, const int64_t raw_offset_us) {
+    if (!this->sync_ready) {
+        return;
+    }
+    for (auto &clock : this->peer_clocks) {
+        if (clock.peer_id != sender) {
+            continue;
+        }
+        clock.window_max_us = std::max(clock.window_max_us, raw_offset_us);
+        if (++clock.window_count >= SYNC_WINDOW) {
+            portENTER_CRITICAL(&this->sync_mux);
+            if (!clock.locked) {
+                clock.offset_us = clock.window_max_us;
+                clock.locked = true;
+            } else {
+                // approach the new window maximum halfway per window: follows crystal
+                // drift (tens of us per window) while damping outliers
+                clock.offset_us += (clock.window_max_us - clock.offset_us) / 2;
+            }
+            portEXIT_CRITICAL(&this->sync_mux);
+            clock.window_max_us = INT64_MIN;
+            clock.window_count = 0;
+        }
+        return;
     }
 }
 
@@ -149,7 +212,16 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
                         bus->ready_pending = false;
                     }
                     bus->send_outgoing_queue();
-                    bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
+                    if (bus->time_sync_enabled) {
+                        // stamp as late as possible; the coordinator's max-filter discards
+                        // samples that were delayed behind queued frames in the TX buffer
+                        char done_payload[48];
+                        const int done_len = std::snprintf(done_payload, sizeof(done_payload), "%s%lld",
+                                                           DONE_CMD, (long long)esp_timer_get_time());
+                        bus->send_message(bus->requesting_node, done_payload, done_len);
+                    } else {
+                        bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
+                    }
                 } catch (const std::exception &e) {
                     bus->print_to_incoming_queue("warning: serial bus %s error while responding to poll: %s", bus->name.c_str(), e.what());
                 }
@@ -192,10 +264,21 @@ void SerialBus::process_uart() {
             continue;
         }
 
-        // handle done command
-        if (std::strcmp(message.payload, DONE_CMD) == 0) {
-            if (message.sender == this->peer_ids[this->poll_index]) {
+        // handle done command (optionally carrying the peer's esp_timer stamp in us)
+        if (std::strncmp(message.payload, DONE_CMD, sizeof(DONE_CMD) - 1) == 0) {
+            const int64_t t_receive = esp_timer_get_time();
+            if (!this->peer_ids.empty() && message.sender == this->peer_ids[this->poll_index]) {
                 this->is_polling = false;
+            }
+            const char *stamp = message.payload + sizeof(DONE_CMD) - 1;
+            if (this->time_sync_enabled && *stamp != '\0') {
+                char *end = nullptr;
+                const long long peer_us = std::strtoll(stamp, &end, 10);
+                if (end != stamp && *end == '\0') {
+                    // len still holds the raw frame length incl. newline -> wire airtime
+                    const int64_t airtime_us = (int64_t)len * 10 * 1000000LL / this->serial->baud_rate;
+                    this->update_peer_offset(message.sender, peer_us - (t_receive - airtime_us));
+                }
             }
             continue;
         }

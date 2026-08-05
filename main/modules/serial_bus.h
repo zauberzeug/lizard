@@ -6,6 +6,7 @@
 #include "freertos/task.h"
 #include "module.h"
 #include "serial.h"
+#include <climits>
 #include <cstdint>
 #include <vector>
 
@@ -41,6 +42,26 @@ private:
     };
 
     std::vector<uint8_t> peer_ids;
+
+    // --- time sync (see enable_time_sync) ---------------------------------
+    // The peer stamps its esp_timer time into each DONE frame; the coordinator
+    // estimates the per-peer clock offset with a windowed maximum (the least
+    // delayed samples carry the least queueing latency) and publishes it as a
+    // module property "offset_<id>" in milliseconds.
+    struct PeerClock {
+        uint8_t peer_id = 0;
+        bool locked = false;
+        int64_t window_max_us = INT64_MIN;
+        size_t window_count = 0;
+        int64_t offset_us = 0; // published value, guarded by sync_mux
+    };
+    static constexpr size_t SYNC_WINDOW = 128;
+    bool time_sync_enabled = false;
+    volatile bool sync_ready = false; // peer_clocks fully built, safe for the comm task
+    std::vector<PeerClock> peer_clocks;
+    mutable portMUX_TYPE sync_mux = portMUX_INITIALIZER_UNLOCKED;
+    void ensure_peer_clocks();
+    void update_peer_offset(const uint8_t sender, const int64_t raw_offset_us);
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
