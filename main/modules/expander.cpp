@@ -182,7 +182,12 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             this->serial->write_checked_line("core.get_pin_status(2)");
             this->serial->write_checked_line("core.get_pin_status(12)");
             delay(100);
-            this->handle_messages(true);
+            try {
+                this->handle_messages(true);
+            } catch (...) {
+                gpio_set_level(this->boot_pin, 1);
+                throw;
+            }
         }
         deinstall();
         bool success = ZZ::Replicator::flashReplica(this->serial->uart_num,
