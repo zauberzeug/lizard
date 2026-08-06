@@ -230,6 +230,7 @@ void Expander::check_strapping_pins(const char *buffer) {
 
 void Expander::deinstall() {
     this->serial->deinstall();
+    this->properties.at("is_ready")->boolean_value = false;
     if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(this->boot_pin);
         gpio_reset_pin(this->enable_pin);
