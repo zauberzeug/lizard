@@ -9,4 +9,5 @@ serial_devices.py
 upload_ssh.py
 README.md
 requirements.txt
+requirements-macos.txt
 LICENSE

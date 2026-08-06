@@ -25,23 +25,23 @@ It is automatically created right after the boot sequence.
 | `core.heap`             | Free heap memory (bytes)                                        | `int`     |
 | `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
 
-| Methods                          | Description                                        | Arguments    |
-| -------------------------------- | -------------------------------------------------- | ------------ |
-| `core.restart()`                 | Restart the microcontroller                        |              |
-| `core.version()`                 | Show lizard version                                |              |
-| `core.info()`                    | Show lizard version, compile time and IDF version  |              |
-| `core.print(...)`                | Print arbitrary arguments to the command line      | arbitrary    |
-| `core.output(format)`            | Define the output format                           | `str`        |
-| `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
-| `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
-| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
-| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
-| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS  |              |
-| `core.set_baudrate(baud)`        | Persist UART0 baud rate (applied after restart)    | `int`        |
-| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
-| `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
-| `core.clear_schedule()`          | Discard all pending scheduled blocks               |              |
-| `core.keep_alive()`              | Reset `last_message_age` without producing output  |              |
+| Methods                          | Description                                                         | Arguments    |
+| -------------------------------- | ------------------------------------------------------------------- | ------------ |
+| `core.restart()`                 | Restart the microcontroller                                         |              |
+| `core.version()`                 | Show lizard version                                                 |              |
+| `core.info()`                    | Show lizard version, compile time and IDF version                   |              |
+| `core.print(...)`                | Print arbitrary arguments to the command line                       | arbitrary    |
+| `core.output(format)`            | Define the output format                                            | `str`        |
+| `core.startup_checksum()`        | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |              |
+| `core.get_pin_status(pin)`       | Print the status of the chosen pin                                  | `int`        |
+| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level                     | `int`, `int` |
+| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register                  | `int`        |
+| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS                   |              |
+| `core.set_baudrate(baud)`        | Persist UART0 baud rate (applied after restart)                     | `int`        |
+| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)                             |              |
+| `core.resume_broadcasts()`       | Resume property broadcasts                                          |              |
+| `core.clear_schedule()`          | Discard all pending scheduled blocks                                |              |
+| `core.keep_alive()`              | Reset `last_message_age` without producing output                   |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.

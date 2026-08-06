@@ -44,7 +44,7 @@ def receive() -> None:
     line_reader = LineReader(port)
     while True:
         # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
-        line = line_reader.readline().decode('utf-8', errors='replace').strip('\r\n')
+        line = line_reader.readline().decode(errors='replace').strip('\r\n')
         if line[-3:-2] == '@':
             try:
                 check = int(line[-2:], 16)
@@ -53,8 +53,8 @@ def receive() -> None:
             if check is not None:
                 line = line[:-3]
                 checksum = 0
-                for c in line:
-                    checksum ^= ord(c)
+                for byte in line.encode():
+                    checksum ^= byte
                 if checksum != check:
                     print(f'ERROR: CHECKSUM MISMATCH ({checksum} vs. {check} for "{line}")')
         print(line)
@@ -65,16 +65,14 @@ async def send() -> None:
     while True:
         try:
             with patch_stdout():
-                line = await session.prompt_async('> ') + '\n'
-                checksum = 0
-                start = 0
-                for i, c in enumerate(line):
-                    if c == '\n':
-                        port.write(f'{line[start:i]}@{checksum:02x}\n'.encode('utf-8'))
-                        checksum = 0
-                        start = i
-                    else:
-                        checksum ^= ord(c)
+                line = await session.prompt_async('> ')
+                for segment in line.split('\n'):
+                    # drop the \r of a CRLF paste, which would otherwise end up inside the checksum payload
+                    segment = segment.rstrip('\r')
+                    checksum = 0
+                    for byte in segment.encode():
+                        checksum ^= byte
+                    port.write(f'{segment}@{checksum:02x}\n'.encode())
         except (KeyboardInterrupt, EOFError):
             print('Bye!')
             loop.stop()
