@@ -11,8 +11,6 @@ sudo ./espresso.py flash [--device <device_path>]
 ```
 
 Without `--device` the serial device is auto-detected, and you are asked which one to use if several are attached.
-The detection needs `pyserial` for the interpreter running the script, which under `sudo` is root's;
-passing `--device` skips it.
 
 Note that flashing may require root access (hence the sudo).
 The command also does not work while the serial interface is busy communicating with another process.
@@ -50,7 +48,7 @@ Use the serial monitor to read the current output and interactively send [Lizard
 
 Without a device path the monitor detects the serial device itself:
 on a Robot Brain that is the Jetson's UART to the microcontroller, on a development host the attached USB-UART bridge.
-If multiple bridges are attached, it lists them with their descriptions and asks which one to use.
+If multiple bridges are attached, it lists them and asks which one to use.
 Pass the device path explicitly when running non-interactively.
 Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see [Robot Brain](#robot-brain)).
 

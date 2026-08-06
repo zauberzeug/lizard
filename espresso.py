@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Callable, Dict, Generator, List, Optional, Tuple
 
-from serial_devices import IS_JETSON, Device, choose_device
+from serial_devices import IS_JETSON, resolve_device
 
 try:
     import gpiod
@@ -97,7 +97,7 @@ class Config:
     so they cannot drift from their inputs.
     """
     chip: str = 'esp32'
-    device: Optional[str] = None  # only resolved for the commands that open the port, see main()
+    device: Optional[str] = None  # an explicit --device; otherwise .port detects one on first read
     baud: Optional[int] = None  # an explicit --baud; each command falls back to its own default
     nand: bool = False
     swap: bool = False
@@ -131,15 +131,12 @@ class Config:
 
     @property
     def port(self) -> str:
-        """The resolved serial device, for the commands that declared ``uses_serial``.
+        """The serial device, detected on first read.
 
-        Only those are given a device by main(), so reading this from any other command means
-        the declaration is missing; saying so beats handing esptool an empty --port.
+        Lazy so that a pin-only command (enable, disable, reset, release_pins) never resolves
+        one -- and hence never asks which of several adapters to use for a port it won't open.
         """
-        if self.device is None:
-            raise RuntimeError('No serial device was resolved for this command; '
-                               'it needs uses_serial=True in COMMANDS.')
-        return self.device
+        return self.device or resolve_device()
 
     @property
     def stub_args(self) -> Tuple[str, ...]:
@@ -503,25 +500,21 @@ class Command:
     ``artifacts`` names the Config path fields the command reads; under --host exactly those
     files are rsynced to the remote (resolved with the same defaults the remote would apply,
     see _require_relative for the path constraint). ``uses_pins`` selects GPIO setup on a
-    local run and the sudo prefix on a remote one. ``uses_serial`` marks the commands that
-    open the serial port, and hence the only ones for which main() resolves a device; a
-    handler that reads Config.port without having declared it gets told so.
+    local run and the sudo prefix on a remote one.
     """
     handler: Callable[[Config], None]
     uses_pins: bool = False
-    uses_serial: bool = False
     artifacts: Tuple[str, ...] = ()
 
 
 COMMANDS: Dict[str, Command] = {
-    'flash': Command(flash, uses_pins=True, uses_serial=True,
-                     artifacts=('bootloader', 'partition_table', 'firmware')),
+    'flash': Command(flash, uses_pins=True, artifacts=('bootloader', 'partition_table', 'firmware')),
     'enable': Command(enable, uses_pins=True),
     'disable': Command(disable, uses_pins=True),
     'reset': Command(reset, uses_pins=True),
-    'erase': Command(erase, uses_pins=True, uses_serial=True),
+    'erase': Command(erase, uses_pins=True),
     'release_pins': Command(_release_pins, uses_pins=True),
-    'coredump': Command(coredump, uses_serial=True, artifacts=('elf',)),
+    'coredump': Command(coredump, artifacts=('elf',)),
 }
 
 
@@ -581,21 +574,9 @@ def main(argv: List[str]) -> None:
 
     print_ok('Espresso dry-running...' if args.dry_run else 'Espresso running...')
 
-    device = None
-    if cmd.uses_serial:
-        # Resolving can ask which adapter to use, so only the commands that open the port do it.
-        # A dry run has to name the device the real run would use, so it asks too wherever there
-        # is a terminal, and prints a placeholder rather than a guess where it cannot ask.
-        resolved = (Device(args.device) if args.device else
-                    choose_device(ask=sys.stdin.isatty() or not args.dry_run, allow_missing=args.dry_run))
-        # Auto-detection connects without asking whenever exactly one adapter is attached, and
-        # flashing the wrong one is expensive, so name it (with its description) before starting.
-        print_bold(f'Using serial device {resolved}')
-        device = resolved.path
-
     config = Config(
         chip=args.chip or DEFAULT.chip,
-        device=device,
+        device=args.device,
         baud=args.baud,
         nand=args.nand,
         swap=args.swap,

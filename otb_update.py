@@ -31,7 +31,7 @@ number_of_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
 try:
     device = resolve_device(args.port)
     print(f'Connecting to {device} at {args.baud} baud')
-    dev = serial.Serial(device.path, args.baud, timeout=0.5)
+    dev = serial.Serial(device, args.baud, timeout=0.5)
 except (RuntimeError, serial.SerialException) as e:
     sys.exit(f'Error: {e}')
 

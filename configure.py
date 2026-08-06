@@ -50,7 +50,7 @@ def read(*, timeout: float) -> Iterator[str]:
 try:
     device = resolve_device(args.device_path)
     print(f'Connecting to {device} at {args.baud} baud')
-    connection = serial.Serial(device.path, baudrate=args.baud, timeout=1.0)
+    connection = serial.Serial(device, baudrate=args.baud, timeout=1.0)
 except (RuntimeError, serial.SerialException) as e:
     sys.exit(f'Error: {e}')
 

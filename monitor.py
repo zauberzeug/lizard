@@ -84,7 +84,7 @@ async def send() -> None:
 def serial_connection() -> serial.Serial:
     device = resolve_device(args.device)
     print(f'Connecting to {device} at {args.baud} baud')
-    return serial.Serial(device.path, baudrate=args.baud, timeout=0.1)
+    return serial.Serial(device, baudrate=args.baud, timeout=0.1)
 
 
 if __name__ == '__main__':
