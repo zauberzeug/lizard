@@ -139,7 +139,7 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
             throw std::runtime_error("buffer too small, but cannot discard line. flushed serial.");
         }
 
-        for (int i = 0; i < pos; i++)
+        for (int i = 0; i <= pos; i++)
             this->read();
         throw std::runtime_error("buffer too small. discarded line.");
     }
