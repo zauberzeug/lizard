@@ -504,10 +504,16 @@ Version 0.5.6 allows to read the motor error flag.
 | `motor.motor_error`       | Motor error flat (requires version 0.5.6) | `int`     |
 | `motor.enabled`           | Whether the motor is enabled              | `bool`    |
 | `motor.motor_temperature` | Motor temperature (°C)                    | `float`   |
+| `motor.current`           | Measured motor current Iq (A)             | `float`   |
+| `motor.current_setpoint`  | Commanded motor current Iq (A)            | `float`   |
 
 The `motor_temperature` will only update if the firmware generated from the
 [zauberzeug/ODrive](https://github.com/zauberzeug/ODrive) fork is installed on the ODrive.
 Otherwise, the `motor_temperature` property will remain at 0.
+
+The ODrive sends its current only when asked to, so `current` and `current_setpoint` stay at 0
+until the periodic message is switched on for the axis — `<axis>.config.can.iq_rate_ms` defaults
+to 0 and is the interval in milliseconds.
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |

@@ -28,6 +28,8 @@ const std::map<std::string, Variable_ptr> ODriveMotor::get_defaults() {
         {"axis_error", std::make_shared<IntegerVariable>()},
         {"motor_error_flag", std::make_shared<IntegerVariable>()},
         {"motor_temperature", std::make_shared<NumberVariable>()},
+        {"current", std::make_shared<NumberVariable>()},
+        {"current_setpoint", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
@@ -40,6 +42,7 @@ ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32
 void ODriveMotor::subscribe_to_can() {
     this->can->subscribe(this->can_id + 0x001, std::static_pointer_cast<Module>(this->shared_from_this()));
     this->can->subscribe(this->can_id + 0x009, std::static_pointer_cast<Module>(this->shared_from_this()));
+    this->can->subscribe(this->can_id + 0x014, std::static_pointer_cast<Module>(this->shared_from_this()));
     this->can->subscribe(this->can_id + 0x01e, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
@@ -130,6 +133,15 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
             ticks_per_second *
             (this->properties.at("reversed")->boolean_value ? -1 : 1) *
             this->properties.at("m_per_tick")->number_value;
+        break;
+    }
+    case 0x014: {
+        float iq_setpoint;
+        std::memcpy(&iq_setpoint, data, 4);
+        this->properties.at("current_setpoint")->number_value = iq_setpoint;
+        float iq_measured;
+        std::memcpy(&iq_measured, data + 4, 4);
+        this->properties.at("current")->number_value = iq_measured;
         break;
     }
     case 0x01e: {
