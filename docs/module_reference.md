@@ -28,8 +28,8 @@ It is automatically created right after the boot sequence.
 | Methods                          | Description                                                         | Arguments    |
 | -------------------------------- | ------------------------------------------------------------------- | ------------ |
 | `core.restart()`                 | Restart the microcontroller                                         |              |
-| `core.version()`                 | Show lizard version                                                 |              |
-| `core.info()`                    | Show lizard version, compile time and IDF version                   |              |
+| `core.version()`                 | Show project name and version                                       |              |
+| `core.info()`                    | Show project name, version, compile time and IDF version            |              |
 | `core.print(...)`                | Print arbitrary arguments to the command line                       | arbitrary    |
 | `core.output(format)`            | Define the output format                                            | `str`        |
 | `core.startup_checksum()`        | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |              |

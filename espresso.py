@@ -192,6 +192,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def resolve_default_artifact(default: str) -> str:
+    """Return ``default``, or the single sibling artifact with the same suffix if ``default`` is absent.
+
+    The .bin/.elf names follow the CMake project name, which integrators can override via
+    -DLIZARD_PROJECT_NAME, so a renamed artifact is found by its suffix instead.
+    """
+    path = Path(default)
+    if path.exists():
+        return default
+    matches = sorted(path.parent.glob(f'*{path.suffix}'))
+    return str(matches[0]) if len(matches) == 1 else default
+
+
 def resolve_default_device() -> str:
     """Return the default serial device for the machine actually running the command."""
     tegra = Path('/etc/nv_tegra_release')
@@ -571,7 +584,8 @@ def main(argv: List[str]) -> None:
         # command to the remote machine, which resolves its own device/pins/L4T. sudo is only
         # for the pin/flash commands; coredump wraps esp_coredump (pip --user, dialout not root).
         run_remote(args.host, remote_command(argv, args),
-                   artifacts=[str(getattr(args, dest) or getattr(DEFAULT, dest)) for dest in cmd.artifacts],
+                   artifacts=[str(getattr(args, dest) or resolve_default_artifact(getattr(DEFAULT, dest)))
+                              for dest in cmd.artifacts],
                    use_sudo=cmd.uses_pins,
                    dry_run=args.dry_run)
         return
@@ -590,8 +604,8 @@ def main(argv: List[str]) -> None:
         debug=args.debug,
         bootloader=args.bootloader or DEFAULT.bootloader,
         partition_table=args.partition_table or DEFAULT.partition_table,
-        firmware=args.firmware or DEFAULT.firmware,
-        elf=args.elf or DEFAULT.elf,
+        firmware=args.firmware or resolve_default_artifact(DEFAULT.firmware),
+        elf=args.elf or resolve_default_artifact(DEFAULT.elf),
     )
     if cmd.uses_pins and not args.dry_run:
         config = replace(config, gpio=build_gpio(config.en, config.g0))
