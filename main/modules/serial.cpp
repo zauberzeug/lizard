@@ -116,7 +116,7 @@ int Serial::available() const {
 }
 
 bool Serial::has_buffered_lines() const {
-    return uart_pattern_get_pos(this->uart_num) != -1;
+    return uart_is_driver_installed(this->uart_num) && uart_pattern_get_pos(this->uart_num) != -1;
 }
 
 void Serial::flush() const {
