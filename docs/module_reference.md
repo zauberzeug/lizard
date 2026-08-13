@@ -512,8 +512,8 @@ The `motor_temperature` will only update if the firmware generated from the
 Otherwise, the `motor_temperature` property will remain at 0.
 
 The ODrive sends its current only when asked to, so `current` and `current_setpoint` stay at 0
-until the periodic message is switched on for the axis — `<axis>.config.can.iq_rate_ms` defaults
-to 0 and is the interval in milliseconds.
+until the periodic message is switched on for the axis — `<axis>.config.can.iq_rate_ms` (requires version 0.5.6)
+defaults to 0 and is the interval in milliseconds.
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |

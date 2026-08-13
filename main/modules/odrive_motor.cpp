@@ -136,12 +136,13 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         break;
     }
     case 0x014: {
+        const int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
         float iq_setpoint;
         std::memcpy(&iq_setpoint, data, 4);
-        this->properties.at("current_setpoint")->number_value = iq_setpoint;
+        this->properties.at("current_setpoint")->number_value = iq_setpoint * sign;
         float iq_measured;
         std::memcpy(&iq_measured, data + 4, 4);
-        this->properties.at("current")->number_value = iq_measured;
+        this->properties.at("current")->number_value = iq_measured * sign;
         break;
     }
     case 0x01e: {
