@@ -164,6 +164,10 @@ void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
     while (this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
+        if (len < 0) {
+            this->print_to_incoming_queue("warning: serial bus %s error while processing uart: %s", this->name.c_str(), Serial::read_line_error(len));
+            continue;
+        }
         if (bool ok; (check(buffer, len, &ok), !ok)) {
             this->print_to_incoming_queue("warning: serial bus %s checksum mismatch: %s", this->name.c_str(), buffer);
             continue;
