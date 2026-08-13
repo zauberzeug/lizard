@@ -116,6 +116,7 @@ void Expander::ping() {
             echo("warning: expander %s connection lost", this->name.c_str());
             // TODO: trigger error code
             this->properties.at("is_ready")->boolean_value = false;
+            this->boot_start_time = 0;
         }
     }
 }
