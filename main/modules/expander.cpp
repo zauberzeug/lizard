@@ -81,6 +81,10 @@ void Expander::check_boot_progress() {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
+        if (len < 0) {
+            echo("%s: error while checking boot progress: %s", this->name.c_str(), Serial::read_line_error(len));
+            continue;
+        }
         bool checksum_ok = true;
         check(buffer, len, &checksum_ok);
         if (!checksum_ok) {
@@ -132,6 +136,10 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer, sizeof(buffer));
+        if (len < 0) {
+            echo("%s: error while handling messages: %s", this->name.c_str(), Serial::read_line_error(len));
+            continue;
+        }
         bool checksum_ok = true;
         len = check(buffer, len, &checksum_ok);
         if (!checksum_ok) {
@@ -182,7 +190,12 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             this->serial->write_checked_line("core.get_pin_status(2)");
             this->serial->write_checked_line("core.get_pin_status(12)");
             delay(100);
-            this->handle_messages(true);
+            try {
+                this->handle_messages(true);
+            } catch (...) {
+                gpio_set_level(this->boot_pin, 1);
+                throw;
+            }
         }
         deinstall();
         bool success = ZZ::Replicator::flashReplica(this->serial->uart_num,
@@ -230,6 +243,7 @@ void Expander::check_strapping_pins(const char *buffer) {
 
 void Expander::deinstall() {
     this->serial->deinstall();
+    this->properties.at("is_ready")->boolean_value = false;
     if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(this->boot_pin);
         gpio_reset_pin(this->enable_pin);

@@ -235,11 +235,10 @@ void SerialBus::update_peer_offset(const uint8_t sender, const int64_t raw_offse
 void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
     while (this->serial->has_buffered_lines()) {
-        int len;
-        try {
-            len = this->serial->read_line(buffer, sizeof(buffer));
-        } catch (const std::runtime_error &e) {
-            continue; // oversized garbage line (e.g. cross-baud boot chatter); skip it
+        const int len = this->serial->read_line(buffer, sizeof(buffer));
+        if (len < 0) {
+            this->print_to_incoming_queue("warning: serial bus %s error while processing uart: %s", this->name.c_str(), Serial::read_line_error(len));
+            continue;
         }
         if (bool ok; (check(buffer, len, &ok), !ok)) {
             this->print_to_incoming_queue("warning: serial bus %s checksum mismatch: %s", this->name.c_str(), buffer);
