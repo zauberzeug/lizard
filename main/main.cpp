@@ -330,7 +330,13 @@ struct StartupLoadScope {
 static void report_parse_error(const std::string &message) {
     echo("error: %s", message.c_str());
     if (loading_startup) {
-        core_module->get_property("startup_error")->string_value = message;
+        std::string value = message;
+        for (char &c : value) {
+            if (static_cast<unsigned char>(c) < ' ') {
+                c = ' '; // the offending token can be a newline, which would split the property over two lines
+            }
+        }
+        core_module->get_property("startup_error")->string_value = value;
     }
 }
 
