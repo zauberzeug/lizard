@@ -156,8 +156,30 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             echo("Not a strapping pin");
             break;
         }
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+        // The S3's soc/gpio_reg.h does not document the strapping layout. GPIO0 = bit 3 and GPIO46 = bit 2 follow
+        // from soc/boot_mode.h (download boot requires both bits to be low); GPIO45 = bit 4 matches esptool's
+        // GPIO_STRAP_VDDSPI_MASK. GPIO3 (JTAG source selection) is also a strapping pin, but no ESP-IDF or esptool
+        // source documents its bit position, so we only report the raw register for it.
+        switch (gpio_num) {
+        case GPIO_NUM_0:
+            echo("Strapping GPIO0: %d", (strapping_reg & BIT(3)) ? 1 : 0);
+            break;
+        case GPIO_NUM_45:
+            echo("Strapping GPIO45: %d", (strapping_reg & BIT(4)) ? 1 : 0);
+            break;
+        case GPIO_NUM_46:
+            echo("Strapping GPIO46: %d", (strapping_reg & BIT(2)) ? 1 : 0);
+            break;
+        case GPIO_NUM_3:
+            echo("Strapping GPIO3: unknown bit position, register: 0x%04x", strapping_reg);
+            break;
+        default:
+            echo("Not a strapping pin");
+            break;
+        }
 #else
-        // Other targets strap different pins into different bits; soc/gpio_reg.h does not document the layout.
+        // Other targets strap different pins into different bits; decode them here when a new target is added.
         echo("Strapping register: 0x%04x", strapping_reg);
 #endif
     } else if (method_name == "forget_serial_bus") {
