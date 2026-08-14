@@ -33,7 +33,8 @@ protected:
     std::map<std::string, Variable_ptr> properties;
     bool output_on = false;
     bool broadcast = false;
-    bool enabled = true; // last value applied to the hardware; `sync_enabled()` edge-detects direct property writes against it
+    bool enabled = true;          // last value applied to the hardware; `sync_enabled()` edge-detects direct property writes against it
+    bool syncing_enabled = false; // a sync is in flight; guards against re-entry via a nested step()
 
     /// Apply a direct write to the `enabled` property by calling enable()/disable(); call from step().
     void sync_enabled();

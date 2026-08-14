@@ -72,12 +72,19 @@ void Module::step() {
 }
 
 void Module::sync_enabled() {
+    // enable()/disable() may re-enter step() (Output::deactivate() does), and the flag is still
+    // at its old value until they return — without this guard the transition recurses forever.
+    if (this->syncing_enabled) {
+        return;
+    }
     if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        this->syncing_enabled = true;
         if (this->properties.at("enabled")->boolean_value) {
             this->enable();
         } else {
             this->disable();
         }
+        this->syncing_enabled = false;
     }
 }
 
