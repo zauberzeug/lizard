@@ -33,6 +33,16 @@ protected:
     std::map<std::string, Variable_ptr> properties;
     bool output_on = false;
     bool broadcast = false;
+    bool enabled = true; // last value applied to the hardware; `sync_enabled()` edge-detects direct property writes against it
+
+    /// Apply a direct write to the `enabled` property by calling enable()/disable(); call from step().
+    void sync_enabled();
+
+    /// Module-specific part of enable()/disable(); the shared bookkeeping happens around it.
+    /// `do_enable()` runs after the flag is set, `do_disable()` before it is cleared, so both
+    /// can use methods that are gated on `enabled`.
+    virtual void do_enable() {}
+    virtual void do_disable() {}
 
 public:
     static bool broadcast_paused;
@@ -47,6 +57,10 @@ public:
                              MessageHandler message_handler);
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    /// Switch the module on/off and keep the `enabled` member and property in sync.
+    /// Only for modules that declare an `enabled` property.
+    virtual void enable();
+    virtual void disable();
     static void register_module(const std::string &type_name, ModuleFactory factory, DefaultsFunction defaults);
     static const std::map<std::string, Variable_ptr> get_module_defaults(const std::string &type_name);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);

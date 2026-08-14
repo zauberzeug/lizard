@@ -74,13 +74,7 @@ void RmdPair::throttle(TrajectoryPart &part, double factor) const {
 }
 
 void RmdPair::step() {
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     Module::step();
 }
 
@@ -143,16 +137,12 @@ void RmdPair::call(const std::string method_name, const std::vector<ConstExpress
     }
 }
 
-void RmdPair::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
+void RmdPair::do_enable() {
     this->rmd1->enable();
     this->rmd2->enable();
 }
 
-void RmdPair::disable() {
+void RmdPair::do_disable() {
     this->rmd1->disable();
     this->rmd2->disable();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }

@@ -198,27 +198,17 @@ void ODriveMotor::reset_motor_error() {
 }
 
 void ODriveMotor::step() {
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 
     Module::step();
 }
 
-void ODriveMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
+void ODriveMotor::do_enable() {
     this->reset_motor_error();
 }
 
-void ODriveMotor::disable() {
+void ODriveMotor::do_disable() {
     this->stop();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 void ODriveMotor::stop() {

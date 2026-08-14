@@ -51,19 +51,15 @@ void MksServoMotor::send(const uint8_t *data, uint8_t len) {
     this->can->send(this->can_id, buf, false, len + 1);
 }
 
-void MksServoMotor::enable() {
+void MksServoMotor::do_enable() {
     uint8_t data[] = {0xF3, 0x01};
     this->send(data, 2);
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
 }
 
-void MksServoMotor::disable() {
+void MksServoMotor::do_disable() {
     this->send_stop_internal(0);
     uint8_t data[] = {0xF3, 0x00};
     this->send(data, 2);
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 void MksServoMotor::send_set_mode(uint8_t mode) {
@@ -183,13 +179,7 @@ void MksServoMotor::send_speed_read() {
 }
 
 void MksServoMotor::step() {
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     this->send_position_read();
     this->send_speed_read();
     Module::step();

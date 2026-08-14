@@ -146,13 +146,7 @@ void D1Motor::step() {
     this->sdo_read(0x2014, 0);
     this->sdo_read(0x6064, 0);
     this->sdo_read(0x606C, 0);
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     Module::step();
 }
 
@@ -229,13 +223,6 @@ void D1Motor::stop() {
     this->sdo_write(0x6040, 0, 16, 7);
 }
 
-void D1Motor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void D1Motor::disable() {
+void D1Motor::do_disable() {
     this->stop();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }

@@ -8,9 +8,9 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
 /**
  * Shared base for differential-drive wheels modules.
  *
- * Owns the common properties (`width`, `linear_speed`, `angular_speed`, `enabled`, `locked`),
- * the enabled-sync in `step()` and the `speed`/`enable`/`disable` command flow. Concrete
- * drivetrains provide the motor-specific parts through the protected hooks.
+ * Owns the common properties (`width`, `linear_speed`, `angular_speed`, `enabled`, `locked`)
+ * and the `speed`/`enable`/`disable` command flow; the enabled-sync itself comes from `Module`.
+ * Concrete drivetrains provide the motor-specific parts through the protected hooks.
  *
  * `locked` is a safety interlock: while `true`, drive commands are ignored and the wheels are
  * actively held at standstill (zero-speed setpoint, motors stay enabled), so a rule can block
@@ -24,9 +24,8 @@ class Wheels : public Module {
 private:
     static constexpr unsigned int HOLD_REFRESH_CYCLES = 100; // re-send the standstill hold about once per second
 
-    bool last_applied_enabled = true; // last value synced to the motors; `step()` edge-detects direct property writes against it
-    bool holding = false;             // wheels are currently held at standstill by the `locked` interlock
-    unsigned int hold_cycle = 0;      // `step()` cycles since the hold was last sent
+    bool holding = false;        // wheels are currently held at standstill by the `locked` interlock
+    unsigned int hold_cycle = 0; // `step()` cycles since the hold was last sent
 
     /// Copy the gate properties (`locked`, `enabled`) from this module onto a freshly attached shadow.
     void sync_gate_properties(Module &shadow) const;
@@ -40,8 +39,8 @@ protected:
 
     /// Apply per-wheel target speeds (already split from linear/angular via `width`).
     virtual void do_wheel_speeds(double left, double right) = 0;
-    virtual void do_enable() = 0;
-    virtual void do_disable() = 0;
+    void do_enable() override = 0;
+    void do_disable() override = 0;
     /// Update `linear_speed`/`angular_speed` from the motors; called every `step()`.
     virtual void update_odometry() = 0;
 
@@ -51,8 +50,7 @@ public:
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void write_property(const std::string property_name, const ConstExpression_ptr expression,
                         const bool from_expander = false) override;
-    void enable();
-    void disable();
+    void disable() override;
     /// Shared property defaults; subclasses that add properties shadow this and pass the result to the constructor.
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

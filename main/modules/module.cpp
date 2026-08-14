@@ -71,6 +71,28 @@ void Module::step() {
     }
 }
 
+void Module::sync_enabled() {
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+}
+
+void Module::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+    this->do_enable();
+}
+
+void Module::disable() {
+    this->do_disable();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
+}
+
 void Module::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "mute") {
         Module::expect(arguments, 0);
