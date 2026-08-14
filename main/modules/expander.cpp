@@ -81,6 +81,10 @@ void Expander::check_boot_progress() {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
+        if (len < 0) {
+            echo("%s: error while checking boot progress: %s", this->name.c_str(), Serial::read_line_error(len));
+            continue;
+        }
         bool checksum_ok = true;
         check(buffer, len, &checksum_ok);
         if (!checksum_ok) {
@@ -132,6 +136,10 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
     static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
         int len = this->serial->read_line(buffer, sizeof(buffer));
+        if (len < 0) {
+            echo("%s: error while handling messages: %s", this->name.c_str(), Serial::read_line_error(len));
+            continue;
+        }
         bool checksum_ok = true;
         len = check(buffer, len, &checksum_ok);
         if (!checksum_ok) {

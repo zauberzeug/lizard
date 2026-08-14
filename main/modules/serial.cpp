@@ -132,18 +132,23 @@ int Serial::read(uint32_t timeout) const {
 int Serial::read_line(char *buffer, size_t buffer_len) const {
     int pos = uart_pattern_pop_pos(this->uart_num);
     if (pos >= static_cast<int>(buffer_len)) {
-        if (this->available() < pos) {
+        if (this->available() <= pos) {
             uart_flush_input(this->uart_num);
             while (uart_pattern_pop_pos(this->uart_num) > 0)
                 ;
-            throw std::runtime_error("buffer too small, but cannot discard line. flushed serial.");
+            return LINE_FLUSHED;
         }
 
-        for (int i = 0; i < pos; i++)
+        for (int i = 0; i <= pos; i++)
             this->read();
-        throw std::runtime_error("buffer too small. discarded line.");
+        return LINE_DISCARDED;
     }
     return pos >= 0 ? uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0) : 0;
+}
+
+const char *Serial::read_line_error(const int result) {
+    return result == LINE_FLUSHED ? "buffer too small, but cannot discard line. flushed serial."
+                                  : "buffer too small. discarded line.";
 }
 
 void Serial::clear() const {
