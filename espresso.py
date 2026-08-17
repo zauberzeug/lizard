@@ -193,7 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def resolve_default_artifact(default: str) -> str:
-    """Return ``default``, or the single sibling artifact with the same suffix if ``default`` is absent.
+    """Return ``default``, or the same-suffix artifact of the build's only .bin/.elf pair if it is absent.
 
     The .bin/.elf names follow the CMake project name, which integrators can override via
     -DLIZARD_PROJECT_NAME, so a renamed artifact is found by its suffix instead.
@@ -201,8 +201,8 @@ def resolve_default_artifact(default: str) -> str:
     path = Path(default)
     if path.exists():
         return default
-    matches = sorted(path.parent.glob(f'*{path.suffix}'))
-    return str(matches[0]) if len(matches) == 1 else default
+    stems = sorted(p.stem for p in path.parent.glob('*.bin') if p.with_suffix('.elf').exists())
+    return str(path.parent / f'{stems[0]}{path.suffix}') if len(stems) == 1 else default
 
 
 def resolve_default_device() -> str:
