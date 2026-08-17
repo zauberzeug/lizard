@@ -17,7 +17,6 @@
 #include "modules/expander.h"
 #include "modules/module.h"
 #include "nvs_flash.h"
-#include "parser_heap.h"
 #include "proxy.h"
 #include "rom/gpio.h"
 #include "rom/uart.h"
@@ -308,6 +307,11 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
+// owl's peak transient allocation scales with the token count of the line, so the
+// required-heap floor scales with its length (base covers a short line's fixed cost).
+static constexpr size_t PARSE_HEAP_BASE = 4096;
+static constexpr size_t PARSE_HEAP_PER_CHAR = 64;
+
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     InterpreterLock lock;
     if (trigger_keep_alive) {
@@ -315,13 +319,11 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     }
 
     // owl's generated parser can abort()/deref on a failed allocation instead of returning an error, so require both
-    // enough total heap and a contiguous block for its largest buffer before parsing. Other tasks may allocate
-    // between the check and the parse; the padded requirements absorb that. Drop the line rather than reboot.
-    const size_t length = strlen(line);
-    const size_t required_heap = owl_parse_heap_requirement(length);
+    // enough total heap (scaled by the line's length) and a large enough contiguous block before parsing. Other tasks
+    // may allocate between the check and the parse; the padded constants absorb that. Drop the line rather than reboot.
+    const size_t required_heap = PARSE_HEAP_BASE + PARSE_HEAP_PER_CHAR * strlen(line);
     const size_t free_heap = xPortGetFreeHeapSize();
-    const size_t required_block = owl_parse_block_requirement(length);
-    if (free_heap < required_heap || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < required_block) {
+    if (free_heap < required_heap || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < PARSE_HEAP_BASE) {
         echo("error: not enough free memory to parse (%u free, %u required)", (unsigned)free_heap, (unsigned)required_heap);
         return;
     }
