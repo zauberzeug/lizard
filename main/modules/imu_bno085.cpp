@@ -6,6 +6,16 @@
 
 #include "esp_log.h"
 
+// These pins are specific to the BNO085 module, so they live here rather than in module_helpers.h.
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+// GPIO26 and GPIO32 carry SPI flash and PSRAM on the ESP32-S3, so there is no safe default here.
+#define DEFAULT_BNO085_INT_PIN GPIO_NUM_NC
+#define DEFAULT_BNO085_RST_PIN GPIO_NUM_NC
+#else
+#define DEFAULT_BNO085_INT_PIN GPIO_NUM_26
+#define DEFAULT_BNO085_RST_PIN GPIO_NUM_32
+#endif
+
 static Module_ptr create_imu_bno085(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     if (arguments.size() > 7) {
         throw std::runtime_error("unexpected number of arguments");
@@ -14,8 +24,8 @@ static Module_ptr create_imu_bno085(const std::string &name, const std::vector<C
     const i2c_port_t port = arguments.size() > 0 ? (i2c_port_t)arguments[0]->evaluate_integer() : I2C_NUM_0;
     const gpio_num_t sda_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : DEFAULT_I2C_SDA_PIN;
     const gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : DEFAULT_I2C_SCL_PIN;
-    const gpio_num_t int_pin = arguments.size() > 3 ? (gpio_num_t)arguments[3]->evaluate_integer() : GPIO_NUM_26;
-    const gpio_num_t rst_pin = arguments.size() > 4 ? (gpio_num_t)arguments[4]->evaluate_integer() : GPIO_NUM_32;
+    const gpio_num_t int_pin = arguments.size() > 3 ? (gpio_num_t)arguments[3]->evaluate_integer() : DEFAULT_BNO085_INT_PIN;
+    const gpio_num_t rst_pin = arguments.size() > 4 ? (gpio_num_t)arguments[4]->evaluate_integer() : DEFAULT_BNO085_RST_PIN;
     const uint8_t address = arguments.size() > 5 ? arguments[5]->evaluate_integer() : 0x4A;
     const int clk_speed = arguments.size() > 6 ? arguments[6]->evaluate_integer() : 400000;
     return std::make_shared<ImuBno085>(name, port, sda_pin, scl_pin, int_pin, rst_pin, address, clk_speed);

@@ -186,9 +186,11 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         Storage::clear_nvs();
         gpio_set_level(this->boot_pin, 0);
         if (!force) {
-            this->serial->write_checked_line("core.get_pin_status(0)");
-            this->serial->write_checked_line("core.get_pin_status(2)");
-            this->serial->write_checked_line("core.get_pin_status(12)");
+            char command[32];
+            for (const int pin : {0, BOOT_MODE_PIN, FLASH_VOLTAGE_PIN}) {
+                const int length = csprintf(command, sizeof(command), "core.get_pin_status(%d)", pin);
+                this->serial->write_checked_line(command, length);
+            }
             delay(100);
             try {
                 this->handle_messages(true);
@@ -221,23 +223,25 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
     }
 }
 
+static bool strapping_pin_is_high(const char *buffer, const int pin) {
+    char pattern[32];
+    csprintf(pattern, sizeof(pattern), "GPIO_Status[%d]| Level: 1", pin);
+    return strstr(buffer, pattern) != nullptr;
+}
+
 void Expander::check_strapping_pins(const char *buffer) {
-    // We only need to check GPIO 0, 2 and 12 because they directly influence boot mode and flash voltage selection,
-    // ensuring correct operation during boot and flashing. These are not directly controllable by the expander.
-    if (strstr(buffer, "GPIO_Status[12]|") != nullptr) {
-        if (strstr(buffer, "GPIO_Status[12]| Level: 1") != nullptr) {
-            echo("warning: GPIO12 state is HIGH, this can cause issues with flash voltage selection");
-        }
+    // These strapping pins are sampled at reset and are not directly controllable by the expander.
+    if (strapping_pin_is_high(buffer, FLASH_VOLTAGE_PIN)) {
+        echo("warning: GPIO%d state is HIGH, this can cause issues with flash voltage selection", FLASH_VOLTAGE_PIN);
     }
-    if (strstr(buffer, "GPIO_Status[0]|") != nullptr) {
-        if (strstr(buffer, "GPIO_Status[0]| Level: 1") != nullptr) {
-            throw std::runtime_error("GPIO0 current state is HIGH - must be LOW for boot mode");
-        }
+    if (strapping_pin_is_high(buffer, 0)) {
+        throw std::runtime_error("GPIO0 current state is HIGH - must be LOW for boot mode");
     }
-    if (strstr(buffer, "GPIO_Status[2]|") != nullptr) {
-        if (strstr(buffer, "GPIO_Status[2]| Level: 1") != nullptr) {
-            throw std::runtime_error("GPIO2 current state is HIGH - must be LOW or floating for flash mode");
-        }
+    if (strapping_pin_is_high(buffer, BOOT_MODE_PIN)) {
+        char message[96];
+        csprintf(message, sizeof(message),
+                 "GPIO%d current state is HIGH - must be LOW or floating for flash mode", BOOT_MODE_PIN);
+        throw std::runtime_error(message);
     }
 }
 
