@@ -26,14 +26,17 @@ Bluetooth::Bluetooth(const std::string name, const std::string device_name, Mess
     }
     // Only copy the line here: this callback runs on the NimBLE host task, whose stack is far
     // too small for the parser. The line is parsed in step() on the main task instead.
-    ZZ::BleCommand::init(device_name, [this](const std::string_view &message) {
+    // Capture just the queue handle so the callback holds no reference to this module.
+    // The bounded wait applies backpressure to bulk uploads; before, the whole parse ran here.
+    QueueHandle_t queue = this->line_queue;
+    ZZ::BleCommand::init(device_name, [queue](const std::string_view &message) {
         char *line = static_cast<char *>(malloc(message.length() + 1));
         if (!line) {
             return;
         }
         memcpy(line, message.data(), message.length());
         line[message.length()] = '\0';
-        if (xQueueSend(this->line_queue, &line, 0) != pdTRUE) {
+        if (xQueueSend(queue, &line, pdMS_TO_TICKS(100)) != pdTRUE) {
             free(line);
             echo("warning: bluetooth line queue is full, dropping message");
         }
