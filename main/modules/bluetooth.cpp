@@ -2,6 +2,9 @@
 #include "../storage.h"
 #include "../utils/uart.h"
 #include "uart.h"
+#include <cstdlib>
+#include <cstring>
+#include <stdexcept>
 
 static Module_ptr create_bluetooth(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler message_handler) {
     Module::expect(arguments, 1, string);
@@ -14,17 +17,41 @@ const std::map<std::string, Variable_ptr> Bluetooth::get_defaults() {
     return {};
 }
 
+static constexpr size_t LINE_QUEUE_LENGTH = 8;
+
 Bluetooth::Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler)
-    : Module(name), device_name(device_name) {
-    ZZ::BleCommand::init(device_name, [message_handler](const std::string_view &message) {
-        try {
-            std::string message_string(message.data(), message.length());
-            message_handler(message_string.c_str(), true, false);
-        } catch (const std::exception &e) {
-            echo("error in bluetooth message handler: %s", e.what());
+    : Module(name), device_name(device_name), message_handler(message_handler) {
+    if (!(this->line_queue = xQueueCreate(LINE_QUEUE_LENGTH, sizeof(char *)))) {
+        throw std::runtime_error("failed to create bluetooth line queue");
+    }
+    // Only copy the line here: this callback runs on the NimBLE host task, whose stack is far
+    // too small for the parser. The line is parsed in step() on the main task instead.
+    ZZ::BleCommand::init(device_name, [this](const std::string_view &message) {
+        char *line = static_cast<char *>(malloc(message.length() + 1));
+        if (!line) {
+            return;
+        }
+        memcpy(line, message.data(), message.length());
+        line[message.length()] = '\0';
+        if (xQueueSend(this->line_queue, &line, 0) != pdTRUE) {
+            free(line);
+            echo("warning: bluetooth line queue is full, dropping message");
         }
     });
     this->properties = Bluetooth::get_defaults();
+}
+
+void Bluetooth::step() {
+    char *line;
+    while (xQueueReceive(this->line_queue, &line, 0) == pdTRUE) {
+        try {
+            this->message_handler(line, true, false);
+        } catch (const std::exception &e) {
+            echo("error in bluetooth message handler: %s", e.what());
+        }
+        free(line);
+    }
+    Module::step();
 }
 
 void Bluetooth::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
