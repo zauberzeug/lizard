@@ -17,9 +17,8 @@ extern void process_line(const char *line, const int len);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
-// 8 inbound slots x ~264 bytes; the inbound queue is drained every main-loop step, so deeper
-// only costs heap. The outbound queue is drained by the communication task (gated by
-// !is_polling) and must stay above WINDOW = 8 in otb_update.py, or a stalled poll aborts OTB.
+// ~264 bytes per slot; outbound must stay above WINDOW = 8 in otb_update.py, or a stalled
+// poll (outbound drains on the comm task, gated by !is_polling) aborts an OTB update.
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 16;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 8;
 static constexpr const char ECHO_CMD[] = "__ECHO__";
