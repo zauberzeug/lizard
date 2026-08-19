@@ -69,7 +69,7 @@ void sensor_handler(void *cookie, sh2_SensorEvent_t *event);
 
 Bno08x::Bno08x(gpio_num_t reset_pin)
     : port(I2C_NUM_0), address(I2C_ADDR_DEFAULT), int_pin(GPIO_NUM_NC),
-      reset_pin(reset_pin), pending_value(nullptr), reset_occurred(false) {
+      reset_pin(reset_pin), reset_occurred(false) {
     std::memset(&prodIds, 0, sizeof(prodIds));
     std::memset(&hal, 0, sizeof(hal));
 }
@@ -172,14 +172,29 @@ bool Bno08x::enableReport(sh2_SensorId_t sensorId, uint32_t interval_us) {
 }
 
 bool Bno08x::getSensorEvent(sh2_SensorValue_t *value) {
-    pending_value = value;
-    value->timestamp = 0;
+    if (queue_count == 0) {
+        sh2_service(); // decodes every report of the next packet into the queue via sensor_handler
+    }
+    return popSensorEvent(value);
+}
 
-    sh2_service();
+void Bno08x::pushSensorEvent(const sh2_SensorValue_t &value) {
+    if (queue_count == EVENT_QUEUE_SIZE) {
+        // consumer too slow: drop the oldest event, the sensor keeps reporting anyway
+        queue_head = (queue_head + 1) % EVENT_QUEUE_SIZE;
+        --queue_count;
+    }
+    event_queue[(queue_head + queue_count) % EVENT_QUEUE_SIZE] = value;
+    ++queue_count;
+}
 
-    if (value->timestamp == 0 && value->sensorId != SH2_GYRO_INTEGRATED_RV) {
+bool Bno08x::popSensorEvent(sh2_SensorValue_t *value) {
+    if (queue_count == 0) {
         return false;
     }
+    *value = event_queue[queue_head];
+    queue_head = (queue_head + 1) % EVENT_QUEUE_SIZE;
+    --queue_count;
     return true;
 }
 
@@ -314,15 +329,17 @@ void hal_callback(void *cookie, sh2_AsyncEvent_t *event) {
 
 void sensor_handler(void *cookie, sh2_SensorEvent_t *event) {
     auto *imu = static_cast<Bno08x *>(cookie);
-    if (!imu || !imu->pending_value) {
+    if (!imu) {
         return;
     }
 
-    int rc = sh2_decodeSensorEvent(imu->pending_value, event);
+    sh2_SensorValue_t value{};
+    int rc = sh2_decodeSensorEvent(&value, event);
     if (rc != SH2_OK) {
         ESP_LOGE(TAG, "sh2_decodeSensorEvent failed: %d", rc);
-        imu->pending_value->timestamp = 0;
+        return;
     }
+    imu->pushSensorEvent(value);
 }
 
 } // namespace

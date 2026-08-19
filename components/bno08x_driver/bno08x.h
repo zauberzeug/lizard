@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -25,6 +27,10 @@ public:
     bool wasReset();
 
     bool enableReport(sh2_SensorId_t sensor, uint32_t interval_us = 10000);
+
+    /// Pops the next decoded sensor event. Services the SH2 transport when the queue is empty; one SHTP
+    /// packet may carry several reports (all sensors due at the same tick are bundled), and every one of
+    /// them is queued — the Adafruit driver this is derived from kept only the last report per packet.
     bool getSensorEvent(sh2_SensorValue_t *value);
 
     I2cDevice *get_device() const;
@@ -43,6 +49,13 @@ private:
 
 public:
     // accessed by SH2 HAL callbacks
-    sh2_SensorValue_t *pending_value;
+    void pushSensorEvent(const sh2_SensorValue_t &value);
     bool reset_occurred;
+
+private:
+    static constexpr size_t EVENT_QUEUE_SIZE = 32;
+    std::array<sh2_SensorValue_t, EVENT_QUEUE_SIZE> event_queue{};
+    size_t queue_head = 0;  // next event to pop
+    size_t queue_count = 0; // events waiting
+    bool popSensorEvent(sh2_SensorValue_t *value);
 };

@@ -364,6 +364,7 @@ The BNO085 offers improved accuracy and better sensor fusion algorithms compared
 Unlike the BNO055 module, euler angles (`yaw`, `roll`, `pitch`) are not computed on-device —
 only quaternion output (`quat_w/x/y/z`) is provided.
 Euler conversion should be done upstream.
+The gyroscope (`gyr_x/y/z`) is reported in **rad/s** (the SH2 calibrated gyroscope report), not degrees/s as on the BNO055.
 
 | Methods              | Description                   | Arguments |
 | -------------------- | ----------------------------- | --------- |
