@@ -6,6 +6,7 @@
 #include "freertos/task.h"
 #include "module.h"
 #include "serial.h"
+#include <atomic>
 #include <cstdint>
 #include <vector>
 
@@ -44,6 +45,8 @@ private:
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
+    // written by the communication task, drained and reported by step() on the main task
+    mutable std::atomic<uint32_t> dropped_inbound{0};
     TaskHandle_t communication_task = nullptr;
     bool is_polling = false;
     unsigned long poll_start_millis = 0;

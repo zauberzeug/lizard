@@ -17,8 +17,10 @@ extern void process_line(const char *line, const int len);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
-static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
-static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
+// 8 slots x ~264 bytes per direction; the queues are drained every main-loop step and
+// senders pace themselves (enqueue blocks up to 50 ms), so deeper queues only cost heap.
+static constexpr size_t OUTGOING_QUEUE_LENGTH = 8;
+static constexpr size_t INCOMING_QUEUE_LENGTH = 8;
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
@@ -70,6 +72,12 @@ void SerialBus::step() {
     IncomingMessage message;
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_incoming_message(message);
+    }
+
+    // the communication task cannot echo() itself, and a full inbound queue would swallow its warnings
+    const uint32_t dropped = this->dropped_inbound.exchange(0);
+    if (dropped > 0) {
+        echo("warning: serial bus %s dropped %u inbound messages (queue full)", this->name.c_str(), (unsigned)dropped);
     }
 
     if (this->otb_session.handle != 0) {
@@ -199,9 +207,9 @@ void SerialBus::process_uart() {
             continue;
         }
 
-        // enqueue message in inbound queue
+        // enqueue message in inbound queue; a warning could not pass the full queue either, so count the drop
         if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
-            this->print_to_incoming_queue("warning: serial bus %s could not enqueue message: %s", this->name.c_str(), buffer);
+            this->dropped_inbound++;
         }
     }
 }
@@ -328,7 +336,9 @@ void SerialBus::print_to_incoming_queue(const char *format, ...) const {
     va_start(args, format);
     message.length = std::vsnprintf(message.payload, PAYLOAD_CAPACITY, format, args);
     va_end(args);
-    xQueueSend(this->inbound_queue, &message, 0);
+    if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
+        this->dropped_inbound++;
+    }
 }
 
 void SerialBus::handle_echo(const char *line) {
