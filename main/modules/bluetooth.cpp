@@ -28,8 +28,7 @@ Bluetooth::Bluetooth(const std::string name, const std::string device_name, Mess
     // too small for the parser. The line is parsed in step() on the main task instead.
     // Capture just the queue handle so the callback holds no reference to this module.
     // The bounded wait applies backpressure to bulk uploads; before, the whole parse ran here.
-    QueueHandle_t queue = this->line_queue;
-    ZZ::BleCommand::init(device_name, [queue](const std::string_view &message) {
+    ZZ::BleCommand::init(device_name, [queue = this->line_queue](const std::string_view &message) {
         char *line = static_cast<char *>(malloc(message.length() + 1));
         if (!line) {
             return;
