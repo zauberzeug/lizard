@@ -97,18 +97,23 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
 | `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
 
-| Properties        | Description                                                                                             | Data type |
-| ----------------- | ------------------------------------------------------------------------------------------------------- | --------- |
-| `bus.offset_<id>` | Estimated clock offset of peer `<id>` in milliseconds (coordinator only, requires `enable_time_sync()`) | `float`   |
+| Properties        | Description                                                                                                                | Data type |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `bus.offset_<id>` | Estimated clock offset of peer `<id>` in milliseconds, NaN while invalid (coordinator only, requires `enable_time_sync()`) | `float`   |
 
 **Time Synchronization:**
 Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation.
-Each peer stamps its local `esp_timer` clock into the DONE response of every poll cycle.
+Update the coordinator's firmware first: peers then stamp their local `esp_timer` clock (microseconds) into the DONE response of every poll cycle,
+and `__DONE__<digits>` payloads are reserved for this protocol.
 The coordinator estimates the per-peer clock offset with a windowed-maximum filter
 (the least delayed samples carry the least queueing latency)
 and publishes it as the property `offset_<id>` in milliseconds.
-The estimate converges within about 2 seconds after the bus starts polling.
-A peer timestamp `t_peer` maps to coordinator time as `t_peer - offset_<id>`.
+The property is NaN until the first window of 128 poll rounds completes and returns to NaN whenever the estimate turns invalid
+(the peer's poll timed out, e.g. across a peer reboot, or the peer was dropped by a later `make_coordinator()`).
+Convergence takes 128 poll rounds per window; the poll rate is shared, so it scales with the number of peers.
+While polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.
+A peer timestamp `t_peer` in milliseconds maps to coordinator time as `t_peer - offset_<id>`
+(mind the units: the DONE stamp is in microseconds, the property in milliseconds).
 This is intended for timestamping sensor data (e.g. wheel odometry) received from bus peers.
 
 **Bus Backup:**
