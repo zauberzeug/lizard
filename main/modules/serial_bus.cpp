@@ -7,10 +7,12 @@
 #include "../utils/uart.h"
 #include "module_helpers.h"
 #include "serial.h"
+#include <esp_timer.h>
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 extern void process_line(const char *line, const int len);
@@ -22,6 +24,7 @@ static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
+static constexpr size_t MAX_STAMP_DIGITS = 18; // beyond this strtoll saturates and skews the offset
 
 static Module_ptr create_serial_bus(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 2, identifier, integer);
@@ -67,6 +70,17 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 }
 
 void SerialBus::step() {
+    // peer_clocks is restructured only on this task, so iterating here is safe;
+    // the fields still race the communication task and are read under the lock.
+    for (auto &clock : this->peer_clocks) {
+        portENTER_CRITICAL(&this->sync_mux);
+        const bool locked = clock.locked;
+        const int64_t offset_us = clock.offset_us;
+        portEXIT_CRITICAL(&this->sync_mux);
+        this->properties.at("offset_" + std::to_string(clock.peer_id))->number_value =
+            locked ? offset_us / 1000.0 : std::numeric_limits<double>::quiet_NaN();
+    }
+
     IncomingMessage message;
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_incoming_message(message);
@@ -114,28 +128,144 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             }
             peers.push_back(static_cast<uint8_t>(peer_value));
         }
-        this->peer_ids = peers;
+        // The communication task indexes peer_ids concurrently: swap (no allocation)
+        // under the lock and restart polling from a known-good index.
+        portENTER_CRITICAL(&this->sync_mux);
+        this->peer_ids.swap(peers);
+        this->poll_index = 0;
+        this->is_polling = false;
+        portEXIT_CRITICAL(&this->sync_mux);
+        this->rebuild_peer_clocks();
+    } else if (method_name == "enable_time_sync") {
+        Module::expect(arguments, 0);
+        this->time_sync_enabled = true;
+        this->rebuild_peer_clocks();
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void SerialBus::rebuild_peer_clocks() {
+    if (!this->time_sync_enabled || this->peer_ids.empty()) {
+        return;
+    }
+    // Allocate outside the lock, swap inside: the comm task iterates peer_clocks under
+    // sync_mux, so the vector must never reallocate while it is visible to that task.
+    std::vector<PeerClock> snapshot;
+    snapshot.reserve(this->peer_clocks.size());
+    portENTER_CRITICAL(&this->sync_mux);
+    for (const auto &clock : this->peer_clocks) {
+        snapshot.push_back(clock);
+    }
+    portEXIT_CRITICAL(&this->sync_mux);
+
+    std::vector<PeerClock> next;
+    next.reserve(this->peer_ids.size());
+    for (const uint8_t id : this->peer_ids) {
+        const auto known = std::find_if(snapshot.begin(), snapshot.end(),
+                                        [id](const PeerClock &clock) { return clock.peer_id == id; });
+        if (known != snapshot.end()) {
+            next.push_back(*known); // a peer that stays keeps its running estimate
+        } else {
+            PeerClock clock;
+            clock.peer_id = id;
+            next.push_back(clock);
+            auto &property = this->properties["offset_" + std::to_string(id)];
+            property = std::make_shared<NumberVariable>();
+            property->number_value = std::numeric_limits<double>::quiet_NaN();
+        }
+    }
+    // A dropped peer's property stays NaN instead of freezing its last value; the fresh
+    // clock a re-used ID gets above keeps it from inheriting the previous board's state.
+    for (const auto &clock : snapshot) {
+        const bool kept = std::any_of(this->peer_ids.begin(), this->peer_ids.end(),
+                                      [&clock](const uint8_t id) { return id == clock.peer_id; });
+        if (!kept) {
+            this->properties.at("offset_" + std::to_string(clock.peer_id))->number_value =
+                std::numeric_limits<double>::quiet_NaN();
+        }
+    }
+
+    portENTER_CRITICAL(&this->sync_mux);
+    this->peer_clocks.swap(next);
+    portEXIT_CRITICAL(&this->sync_mux);
+}
+
+void SerialBus::update_peer_offset(const uint8_t sender, const int64_t raw_offset_us) {
+    // Short and non-allocating, so the whole iteration can hold the lock.
+    portENTER_CRITICAL(&this->sync_mux);
+    for (auto &clock : this->peer_clocks) {
+        if (clock.peer_id != sender) {
+            continue;
+        }
+        clock.window_max_us = std::max(clock.window_max_us, raw_offset_us);
+        if (++clock.window_count >= SYNC_WINDOW) {
+            if (!clock.locked) {
+                clock.offset_us = clock.window_max_us;
+                clock.locked = true;
+            } else {
+                // approach the new window maximum halfway per window: follows crystal
+                // drift (tens of us per window) while damping outliers
+                clock.offset_us += (clock.window_max_us - clock.offset_us) / 2;
+            }
+            clock.window_max_us = INT64_MIN;
+            clock.window_count = 0;
+        }
+        break;
+    }
+    portEXIT_CRITICAL(&this->sync_mux);
+}
+
+void SerialBus::reset_peer_clock(const uint8_t peer_id) {
+    // A poll timeout invalidates the estimate: drop the lock (the property turns NaN) and
+    // restart the window, so recovery after a peer reboot takes one window instead of ~32.
+    portENTER_CRITICAL(&this->sync_mux);
+    for (auto &clock : this->peer_clocks) {
+        if (clock.peer_id == peer_id) {
+            clock.locked = false;
+            clock.window_max_us = INT64_MIN;
+            clock.window_count = 0;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&this->sync_mux);
 }
 
 [[noreturn]] void SerialBus::communication_loop(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
     while (true) {
         bus->process_uart();
-        if (bus->is_coordinator()) {
+        // the main task can swap the peer list and restart polling at any time
+        portENTER_CRITICAL(&bus->sync_mux);
+        const bool coordinator = !bus->peer_ids.empty();
+        const bool polling = bus->is_polling;
+        portEXIT_CRITICAL(&bus->sync_mux);
+        if (coordinator) {
             // poll next peer
-            if (!bus->is_polling && !bus->send_outgoing_queue()) {
+            if (!polling && !bus->send_outgoing_queue()) {
+                // stamped before the send so that picking the peer and marking the poll cannot be split
+                portENTER_CRITICAL(&bus->sync_mux);
                 bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
-                bus->send_message(bus->peer_ids[bus->poll_index], POLL_CMD, sizeof(POLL_CMD) - 1);
+                const uint8_t poll_target = bus->peer_ids[bus->poll_index];
                 bus->poll_start_millis = millis();
                 bus->is_polling = true;
+                portEXIT_CRITICAL(&bus->sync_mux);
+                bus->send_message(poll_target, POLL_CMD, sizeof(POLL_CMD) - 1);
             }
             // handle poll timeout
-            if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->peer_ids[bus->poll_index]);
+            const unsigned long now = millis();
+            portENTER_CRITICAL(&bus->sync_mux);
+            const bool expired = bus->is_polling && now - bus->poll_start_millis > POLL_TIMEOUT_MS;
+            const uint8_t timed_out = expired && bus->poll_index < bus->peer_ids.size()
+                                          ? bus->peer_ids[bus->poll_index]
+                                          : 0;
+            if (expired) {
                 bus->is_polling = false;
+            }
+            portEXIT_CRITICAL(&bus->sync_mux);
+            if (timed_out != 0) {
+                bus->reset_peer_clock(timed_out);
+                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), timed_out);
             }
         } else {
             // respond to poll
@@ -149,7 +279,16 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
                         bus->ready_pending = false;
                     }
                     bus->send_outgoing_queue();
-                    bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
+                    if (bus->time_sync_enabled) {
+                        // stamp as late as possible; the coordinator's max-filter discards
+                        // samples that were delayed behind queued frames in the TX buffer
+                        char done_payload[48];
+                        const int done_len = std::snprintf(done_payload, sizeof(done_payload), "%s%lld",
+                                                           DONE_CMD, (long long)esp_timer_get_time());
+                        bus->send_message(bus->requesting_node, done_payload, done_len);
+                    } else {
+                        bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
+                    }
                 } catch (const std::exception &e) {
                     bus->print_to_incoming_queue("warning: serial bus %s error while responding to poll: %s", bus->name.c_str(), e.what());
                 }
@@ -191,12 +330,34 @@ void SerialBus::process_uart() {
             continue;
         }
 
-        // handle done command
-        if (std::strcmp(message.payload, DONE_CMD) == 0) {
-            if (message.sender == this->peer_ids[this->poll_index]) {
-                this->is_polling = false;
+        // handle done command (optionally carrying the peer's esp_timer stamp in us);
+        // any other suffix is a user payload that merely shares the prefix
+        if (std::strncmp(message.payload, DONE_CMD, sizeof(DONE_CMD) - 1) == 0) {
+            const char *stamp = message.payload + sizeof(DONE_CMD) - 1;
+            bool stamp_is_digits = true;
+            size_t stamp_digits = 0;
+            for (const char *c = stamp; *c != '\0'; ++c) {
+                if (!std::isdigit(static_cast<unsigned char>(*c)) || ++stamp_digits > MAX_STAMP_DIGITS) {
+                    stamp_is_digits = false;
+                    break;
+                }
             }
-            continue;
+            if (stamp_is_digits) {
+                const int64_t t_receive = esp_timer_get_time();
+                portENTER_CRITICAL(&this->sync_mux);
+                if (this->poll_index < this->peer_ids.size() &&
+                    this->peer_ids[this->poll_index] == message.sender) {
+                    this->is_polling = false;
+                }
+                portEXIT_CRITICAL(&this->sync_mux);
+                if (this->time_sync_enabled && *stamp != '\0') {
+                    const long long peer_us = std::strtoll(stamp, nullptr, 10);
+                    // len still holds the raw frame length incl. newline -> wire airtime
+                    const int64_t airtime_us = (int64_t)len * 10 * 1000000LL / this->serial->baud_rate;
+                    this->update_peer_offset(message.sender, peer_us - (t_receive - airtime_us));
+                }
+                continue;
+            }
         }
 
         // enqueue message in inbound queue

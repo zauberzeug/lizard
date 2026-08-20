@@ -95,6 +95,26 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
+| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
+
+| Properties        | Description                                                                                                   | Data type |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
+| `bus.offset_<id>` | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
+
+**Time Synchronization:**
+Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation:
+peers stamp their local `esp_timer` clock into the DONE response of every poll cycle,
+and the coordinator estimates the per-peer clock offset with a windowed-maximum filter
+(the least delayed samples carry the least queueing latency),
+publishing it as the property `offset_<id>`.
+This is intended for timestamping sensor data (e.g. wheel odometry) received from bus peers.
+
+- Applying it: a peer timestamp `t_peer` in milliseconds maps to coordinator time as `t_peer - offset_<id>`; mind the units, since the DONE stamp is in microseconds and the property in milliseconds.
+- Sign: the offset is the peer's clock minus the coordinator's, so it is positive while the peer's `esp_timer` runs ahead; as both sides count from their own boot, a peer that booted later than the coordinator has a negative offset.
+- Validity: the property is NaN until the first window completes and returns to NaN whenever the estimate turns invalid, i.e. when the peer's poll times out (e.g. across a peer reboot) or the peer is dropped by a later `make_coordinator()`.
+- Scope: the property exists only on the coordinator and only for the IDs in the current `make_coordinator()` list, so referencing it on a peer or for an unlisted ID is an unknown-property error rather than NaN.
+- Convergence: one window is 128 poll rounds, and the poll rate is shared, so convergence scales with the number of peers; while polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.
+- Compatibility: update the coordinator's firmware first, and treat `__DONE__<digits>` payloads as reserved for this protocol.
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
