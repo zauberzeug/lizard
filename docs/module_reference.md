@@ -95,6 +95,29 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
+| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
+
+| Properties                 | Description                                                                                                   | Data type |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
+| `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
+| `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
+
+**Time Synchronization:**
+Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle:
+the coordinator stamps its local `esp_timer` clock when it sends a POLL (T1) and when it receives the DONE response (T4),
+and the peer reports its own receive and send stamps (T2, T3) in the DONE response.
+Like NTP, the offset is estimated as `((T2 - T1) + (T3 - T4)) / 2`, so the peer's processing time between T2 and T3 cancels out,
+and the remaining unknown transport delay bounds the error of each sample.
+The coordinator publishes the estimate as the property `offset_<id>` and its bound as `offset_<id>_accuracy`.
+This is intended for timestamping sensor data (e.g. wheel odometry) received from bus peers.
+
+- Applying it: a peer timestamp `t_peer` in milliseconds maps to coordinator time as `t_peer - offset_<id>`; mind the units, since the peer's `esp_timer` stamps are in microseconds and the properties in milliseconds.
+- Sign: the offset is the peer's clock minus the coordinator's, so it is positive while the peer's `esp_timer` runs ahead; as both sides count from their own boot, a peer that booted later than the coordinator has a negative offset.
+- Accuracy: each sample's error bound is half the transport time that is not explained by the known airtime of the two frames; samples within 0.5 ms replace the estimate immediately, otherwise the best sample of every 2 s does, so the estimate keeps following crystal drift even on a busy bus. Systematic asymmetries such as RS485 turnaround are not covered by the bound.
+- Validity: the properties are NaN until the first sample is accepted and return to NaN whenever the estimate turns invalid, i.e. when the peer's poll times out (e.g. across a peer reboot), or when `make_coordinator()` or `enable_time_sync()` is called again, which restarts all estimates.
+- Scope: the properties exist only on the coordinator and only for the IDs in the current `make_coordinator()` list, so referencing them on a peer or for an unlisted ID is an unknown-property error rather than NaN.
+- Convergence: a single accepted sample locks the estimate, typically within the first poll round; while polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.
+- Compatibility: update the coordinator's firmware first, and treat `__DONE__<digits>[,<digits>]` payloads as reserved for this protocol.
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
