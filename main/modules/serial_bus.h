@@ -41,9 +41,7 @@ private:
         char payload[PAYLOAD_CAPACITY];
     };
 
-    // Restructured only by the main task (make_coordinator); every access from the
-    // communication task and every swap happens under sync_mux, keeping poll_index in step.
-    std::vector<uint8_t> peer_ids;
+    std::vector<uint8_t> peer_ids; // guarded by sync_mux
 
     // --- time sync (see enable_time_sync) ---------------------------------
     // The peer stamps its esp_timer time into each DONE frame; the coordinator
@@ -61,7 +59,10 @@ private:
     };
     static constexpr size_t SYNC_WINDOW = 128;
     bool time_sync_enabled = false;
-    std::vector<PeerClock> peer_clocks; // fields guarded by sync_mux; restructured only by the main task
+    std::vector<PeerClock> peer_clocks;
+    // Guards peer_ids, peer_clocks and the polling state against the communication task: the
+    // main task rebuilds them outside the lock and swaps them in, so that task never holds a
+    // reference or index into storage that can reallocate under it.
     mutable portMUX_TYPE sync_mux = portMUX_INITIALIZER_UNLOCKED;
     void rebuild_peer_clocks();
     void update_peer_offset(const uint8_t sender, const int64_t raw_offset_us);
@@ -70,6 +71,7 @@ private:
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
     TaskHandle_t communication_task = nullptr;
+    // guarded by sync_mux
     bool is_polling = false;
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;

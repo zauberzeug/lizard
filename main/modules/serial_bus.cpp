@@ -24,6 +24,7 @@ static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
+static constexpr size_t MAX_STAMP_DIGITS = 18; // beyond this strtoll saturates and skews the offset
 
 static Module_ptr create_serial_bus(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 2, identifier, integer);
@@ -151,7 +152,7 @@ void SerialBus::rebuild_peer_clocks() {
     // Allocate outside the lock, swap inside: the comm task iterates peer_clocks under
     // sync_mux, so the vector must never reallocate while it is visible to that task.
     std::vector<PeerClock> snapshot;
-    snapshot.reserve(this->peer_clocks.size()); // only this task restructures, so the size holds
+    snapshot.reserve(this->peer_clocks.size());
     portENTER_CRITICAL(&this->sync_mux);
     for (const auto &clock : this->peer_clocks) {
         snapshot.push_back(clock);
@@ -234,34 +235,37 @@ void SerialBus::reset_peer_clock(const uint8_t peer_id) {
     SerialBus *bus = static_cast<SerialBus *>(param);
     while (true) {
         bus->process_uart();
-        // peer_ids is swapped by the main task under sync_mux: read it (and poll_index,
-        // which the swap resets) only under the same lock, and never index unbounded.
+        // the main task can swap the peer list and restart polling at any time
         portENTER_CRITICAL(&bus->sync_mux);
         const bool coordinator = !bus->peer_ids.empty();
+        const bool polling = bus->is_polling;
         portEXIT_CRITICAL(&bus->sync_mux);
         if (coordinator) {
             // poll next peer
-            if (!bus->is_polling && !bus->send_outgoing_queue()) {
+            if (!polling && !bus->send_outgoing_queue()) {
+                // stamped before the send so that picking the peer and marking the poll cannot be split
                 portENTER_CRITICAL(&bus->sync_mux);
                 bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
                 const uint8_t poll_target = bus->peer_ids[bus->poll_index];
-                portEXIT_CRITICAL(&bus->sync_mux);
-                bus->send_message(poll_target, POLL_CMD, sizeof(POLL_CMD) - 1);
                 bus->poll_start_millis = millis();
                 bus->is_polling = true;
+                portEXIT_CRITICAL(&bus->sync_mux);
+                bus->send_message(poll_target, POLL_CMD, sizeof(POLL_CMD) - 1);
             }
             // handle poll timeout
-            if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                portENTER_CRITICAL(&bus->sync_mux);
-                const uint8_t timed_out = bus->poll_index < bus->peer_ids.size()
-                                              ? bus->peer_ids[bus->poll_index]
-                                              : 0;
-                portEXIT_CRITICAL(&bus->sync_mux);
-                if (timed_out != 0) {
-                    bus->reset_peer_clock(timed_out);
-                    bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), timed_out);
-                }
+            const unsigned long now = millis();
+            portENTER_CRITICAL(&bus->sync_mux);
+            const bool expired = bus->is_polling && now - bus->poll_start_millis > POLL_TIMEOUT_MS;
+            const uint8_t timed_out = expired && bus->poll_index < bus->peer_ids.size()
+                                          ? bus->peer_ids[bus->poll_index]
+                                          : 0;
+            if (expired) {
                 bus->is_polling = false;
+            }
+            portEXIT_CRITICAL(&bus->sync_mux);
+            if (timed_out != 0) {
+                bus->reset_peer_clock(timed_out);
+                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), timed_out);
             }
         } else {
             // respond to poll
@@ -331,8 +335,9 @@ void SerialBus::process_uart() {
         if (std::strncmp(message.payload, DONE_CMD, sizeof(DONE_CMD) - 1) == 0) {
             const char *stamp = message.payload + sizeof(DONE_CMD) - 1;
             bool stamp_is_digits = true;
+            size_t stamp_digits = 0;
             for (const char *c = stamp; *c != '\0'; ++c) {
-                if (!std::isdigit(static_cast<unsigned char>(*c))) {
+                if (!std::isdigit(static_cast<unsigned char>(*c)) || ++stamp_digits > MAX_STAMP_DIGITS) {
                     stamp_is_digits = false;
                     break;
                 }
@@ -340,12 +345,11 @@ void SerialBus::process_uart() {
             if (stamp_is_digits) {
                 const int64_t t_receive = esp_timer_get_time();
                 portENTER_CRITICAL(&this->sync_mux);
-                const bool from_polled_peer = this->poll_index < this->peer_ids.size() &&
-                                              this->peer_ids[this->poll_index] == message.sender;
-                portEXIT_CRITICAL(&this->sync_mux);
-                if (from_polled_peer) {
+                if (this->poll_index < this->peer_ids.size() &&
+                    this->peer_ids[this->poll_index] == message.sender) {
                     this->is_polling = false;
                 }
+                portEXIT_CRITICAL(&this->sync_mux);
                 if (this->time_sync_enabled && *stamp != '\0') {
                     const long long peer_us = std::strtoll(stamp, nullptr, 10);
                     // len still holds the raw frame length incl. newline -> wire airtime
