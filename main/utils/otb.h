@@ -21,6 +21,7 @@ constexpr const char OTB_ACK_COMMIT[] = "__OTB_ACK_COMMIT__";
 constexpr const char OTB_ERROR_PREFIX[] = "__OTB_ERROR__";
 
 constexpr size_t BUS_OTB_CHUNK_SIZE = 174;
+constexpr size_t BUS_OTB_WINDOW = 8; // unacked chunks in flight, must match WINDOW in otb_update.py
 constexpr size_t BUS_OTB_BUFFER_SIZE = 256;
 constexpr unsigned long BUS_OTB_SESSION_TIMEOUT_MS = 10000;
 

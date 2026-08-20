@@ -8,7 +8,7 @@ from pathlib import Path
 import serial
 
 CHUNK_SIZE = 174  # must match BUS_OTB_CHUNK_SIZE in main/utils/otb.h
-WINDOW = 8
+WINDOW = 8  # must match BUS_OTB_WINDOW in main/utils/otb.h
 
 parser = argparse.ArgumentParser(description='Push firmware via SerialBus OTB')
 parser.add_argument('firmware', help='Path to firmware binary')
