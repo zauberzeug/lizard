@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 import argparse
 import base64
+import re
 import sys
 import time
+import zlib
 from pathlib import Path
 
 import serial
 
-CHUNK_SIZE = 174  # must match BUS_OTB_CHUNK_SIZE in main/utils/otb.h
+CHUNK_SIZE = 165  # with the CRC field the line must stay within the bus payload (cap: BUS_OTB_CHUNK_SIZE)
 WINDOW = 8
+ACK_TIMEOUT = 2.0  # resend the window when no ack arrives for this long
+PACE = 0.01  # seconds between chunk writes: a saturated coordinator console tears incoming lines apart
 
 parser = argparse.ArgumentParser(description='Push firmware via SerialBus OTB')
 parser.add_argument('firmware', help='Path to firmware binary')
@@ -62,20 +66,61 @@ try:
 
     print(f'Starting OTB to node {args.target} ({file_size} bytes)...')
     started = time.time()
-    transact('__OTB_BEGIN__', '__OTB_ACK_BEGIN__')
+    for attempt in range(3):  # the begin frame can fall into a still-booting target
+        try:
+            transact('__OTB_BEGIN__', '__OTB_ACK_BEGIN__')
+            break
+        except OtbError as e:
+            if attempt == 2 or 'Timeout' not in str(e):
+                raise
 
-    seq = 0
-    with firmware.open('rb') as fh:
-        while chunk := fh.read(CHUNK_SIZE):
-            transact(f'__OTB_CHUNK_{seq}__:{base64.b64encode(chunk).decode()}')
-            seq += 1
-            if seq >= WINDOW:
-                wait_ack('__OTB_ACK_CHUNK_')
-            print(f'\rSending chunk {seq}/{number_of_chunks}...', end='')
-    for _ in range(min(seq, WINDOW - 1)):
-        wait_ack('__OTB_ACK_CHUNK_')
+    # Sliding window with go-back-N retransmission: the receiver re-acks its last written chunk
+    # on any gap or duplicate, so a lost frame (either direction) rewinds instead of aborting.
+    data = firmware.read_bytes()
+    ack_pattern = re.compile(r'__OTB_ACK_CHUNK_(\d+)__')
+    acked = -1  # highest chunk the receiver has confirmed written
+    sent = -1   # last chunk we pushed out
+    resends = 0
+    recovering = False  # one rewind per loss: the stale window keeps dup-acking, ignore those
+    last_ack_at = time.time()
+    while acked < number_of_chunks - 1:
+        while sent - acked < WINDOW and sent < number_of_chunks - 1:
+            sent += 1
+            chunk = data[sent * CHUNK_SIZE:(sent + 1) * CHUNK_SIZE]
+            transact(f'__OTB_CHUNK_{sent}__:{zlib.crc32(chunk):08x}:{base64.b64encode(chunk).decode()}')
+            time.sleep(PACE)
+        raw = dev.readline()
+        if not raw:
+            if time.time() - last_ack_at > ACK_TIMEOUT:
+                resends += sent - acked
+                sent = acked  # nothing came back: resend the whole window
+                recovering = True
+                last_ack_at = time.time()
+            continue
+        line = raw.decode(errors='ignore')
+        if '__OTB_ERROR__' in line:
+            raise OtbError(line)
+        if '__OTB_ACK_BEGIN__' in line and acked < 0 and not recovering:
+            resends += sent + 1
+            sent = -1  # chunk 0 got lost before anything was written
+            recovering = True
+            last_ack_at = time.time()
+            continue
+        if match := ack_pattern.search(line):
+            n = int(match.group(1))
+            last_ack_at = time.time()
+            if n > acked:
+                acked = n
+                recovering = False
+            elif n == acked and sent > acked and not recovering:
+                resends += sent - acked
+                sent = acked  # duplicate ack: the chunk after it got lost, go back
+                recovering = True
+            if acked % 50 == 0 or acked == number_of_chunks - 1:
+                print(f'\rSending chunk {acked + 1}/{number_of_chunks} ({resends} resends)...', end='')
+    print(f'\rSent {number_of_chunks}/{number_of_chunks} chunks ({resends} resends).      ')
 
-    print('\nCommitting image...')
+    print('Committing image...')
     transact('__OTB_COMMIT__', '__OTB_ACK_COMMIT__')
 
     print(f'Transfer finished in {time.time() - started:.1f}s, restarting node...')

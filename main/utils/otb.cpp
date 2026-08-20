@@ -7,6 +7,19 @@
 
 namespace otb {
 
+// zlib-compatible CRC32 for the per-chunk end-to-end check (the bus frames' own 8-bit
+// XOR checksum lets roughly one in 256 corrupted frames through, which a firmware image cannot afford).
+static uint32_t crc32_zlib(const uint8_t *data, size_t len) {
+    uint32_t crc = 0xffffffff;
+    for (size_t i = 0; i < len; ++i) {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; ++bit) {
+            crc = (crc >> 1) ^ (crc & 1 ? 0xedb88320u : 0u);
+        }
+    }
+    return ~crc;
+}
+
 static void respond(BusOtbSession &session, uint8_t receiver, const char *fmt, ...) {
     char buf[OTB_RESPONSE_SIZE];
     va_list args;
@@ -38,6 +51,12 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
     // __OTB_BEGIN__
     if (msg == OTB_BEGIN_PREFIX) {
         if (session.handle) {
+            // A begin retry after a lost ack is idempotent while nothing has been written yet.
+            if (session.sender == sender && session.next_seq == 0) {
+                session.last_activity = millis();
+                respond(session, sender, OTB_ACK_BEGIN);
+                return true;
+            }
             respond(session, sender, "%s:session already active", OTB_ERROR_PREFIX);
             return true;
         }
@@ -95,16 +114,46 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
 
         char *end;
         const unsigned long seq = std::strtoul(rest.data(), &end, 10);
-        if (end != rest.data() + sep || seq != session.next_seq) {
+        if (end != rest.data() + sep) {
             return fail(session, sender, "unexpected sequence number");
         }
+        // Frames get lost or corrupted under load (flash-write stalls, and the frame checksum is
+        // only 8 bits), so a bad chunk must not kill the session: re-acking the last written chunk
+        // makes the sender rewind and resend from there.
+        const auto resend_from_last_written = [&] {
+            session.last_activity = millis();
+            if (session.next_seq > 0) {
+                respond(session, sender, "%s%lu__", OTB_ACK_CHUNK_PREFIX, static_cast<unsigned long>(session.next_seq - 1));
+            } else {
+                respond(session, sender, OTB_ACK_BEGIN); // nothing written yet: resend from chunk 0
+            }
+            return true;
+        };
+        if (seq != session.next_seq) {
+            return resend_from_last_written();
+        }
 
-        const std::string_view b64 = rest.substr(sep + 3);
+        // Optional end-to-end integrity: __OTB_CHUNK_<seq>__:<8-hex-crc32>:<base64> (base64 never
+        // contains ':', so the presence of the CRC field is unambiguous).
+        std::string_view b64 = rest.substr(sep + 3);
+        bool has_crc = false;
+        uint32_t expected_crc = 0;
+        if (b64.size() > 9 && b64[8] == ':') {
+            char *crc_end;
+            expected_crc = std::strtoul(b64.data(), &crc_end, 16);
+            if (crc_end == b64.data() + 8) {
+                has_crc = true;
+                b64 = b64.substr(9);
+            }
+        }
         uint8_t buf[BUS_OTB_BUFFER_SIZE];
         size_t len;
         const int err = mbedtls_base64_decode(buf, sizeof(buf), &len, reinterpret_cast<const unsigned char *>(b64.data()), b64.size());
         if (err != 0 || len == 0 || len > BUS_OTB_CHUNK_SIZE) {
-            return fail(session, sender, "base64 decode failed");
+            return resend_from_last_written(); // corrupted in flight: ask for it again
+        }
+        if (has_crc && crc32_zlib(buf, len) != expected_crc) {
+            return resend_from_last_written(); // corruption that slipped past the 8-bit frame checksum
         }
         if (esp_ota_write(session.handle, buf, len) != ESP_OK) {
             return fail(session, sender, "flash write failed");

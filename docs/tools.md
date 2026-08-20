@@ -128,6 +128,8 @@ Host                            Target
 
 On error at any point, the target responds with `__OTB_ERROR__:<message>` with a human-readable error message.
 
+**Retransmission and integrity:** frames can get lost or corrupted on a busy bus (e.g. while the target stalls on flash writes), so the transfer recovers instead of aborting: on a gap, duplicate, or corrupted chunk the target re-acknowledges the last chunk it has written (or `__OTB_ACK_BEGIN__` when nothing arrived yet), and the host treats such a duplicate acknowledgement — or an acknowledgement timeout — as a signal to rewind and resend from there (go-back-N). Chunks are only ever written in order, so duplicates are discarded safely. Because the bus frames' own checksum is only 8 bits, each chunk additionally carries a CRC32 over its decoded bytes (`__OTB_CHUNK_<seq>__:<8-hex-crc32>:<base64>`); the target skips the check for chunks sent without the CRC field, which keeps older senders working.
+
 ### Configure
 
 Use the configure script to send a new startup script to the microcontroller.
