@@ -33,6 +33,10 @@ public:
     /// them is queued — the Adafruit driver this is derived from kept only the last report per packet.
     bool getSensorEvent(sh2_SensorValue_t *value);
 
+    /// Drops every queued event, e.g. after a report configuration change so that reports of the old
+    /// configuration (decoded while sh2_setSensorConfig waited for its response) are not published.
+    void clearSensorEvents();
+
     I2cDevice *get_device() const;
 
 private:
@@ -53,9 +57,13 @@ public:
     bool reset_occurred;
 
 private:
-    static constexpr size_t EVENT_QUEUE_SIZE = 32;
-    std::array<sh2_SensorValue_t, EVENT_QUEUE_SIZE> event_queue{};
+    bool popSensorEvent(sh2_SensorValue_t *value);
+
+    // One SHTP cargo carries at most one report per enabled sensor (7 in ndof mode) when the host keeps up;
+    // after a host stall the hub may batch a few ticks into one cargo, which is pushed in a single burst.
+    static constexpr size_t EVENT_QUEUE_SIZE = 16;
+    std::array<sh2_SensorValue_t, EVENT_QUEUE_SIZE> event_queue;
     size_t queue_head = 0;  // next event to pop
     size_t queue_count = 0; // events waiting
-    bool popSensorEvent(sh2_SensorValue_t *value);
+    bool overflow_logged = false;
 };

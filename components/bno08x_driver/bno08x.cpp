@@ -180,12 +180,22 @@ bool Bno08x::getSensorEvent(sh2_SensorValue_t *value) {
 
 void Bno08x::pushSensorEvent(const sh2_SensorValue_t &value) {
     if (queue_count == EVENT_QUEUE_SIZE) {
-        // consumer too slow: drop the oldest event, the sensor keeps reporting anyway
+        // a single cargo pushed more reports than fit (hub batched several ticks after a host stall):
+        // drop the oldest event, the sensor keeps reporting anyway
+        if (!overflow_logged) {
+            ESP_LOGW(TAG, "sensor event queue overflow, dropping oldest event");
+            overflow_logged = true;
+        }
         queue_head = (queue_head + 1) % EVENT_QUEUE_SIZE;
         --queue_count;
     }
     event_queue[(queue_head + queue_count) % EVENT_QUEUE_SIZE] = value;
     ++queue_count;
+}
+
+void Bno08x::clearSensorEvents() {
+    queue_head = 0;
+    queue_count = 0;
 }
 
 bool Bno08x::popSensorEvent(sh2_SensorValue_t *value) {
