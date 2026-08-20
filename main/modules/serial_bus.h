@@ -40,11 +40,21 @@ private:
         char payload[PAYLOAD_CAPACITY];
     };
 
-    std::vector<uint8_t> peer_ids;
+    // The main task configures the bus by sending a Config through config_queue; the
+    // communication task adopts it at the top of its loop and exclusively owns the
+    // peer list and the polling state from then on, so no locking is needed.
+    struct Config {
+        uint8_t peer_count;
+        uint8_t peer_ids[254];
+    };
 
+    QueueHandle_t config_queue = nullptr;
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
     TaskHandle_t communication_task = nullptr;
+
+    // --- owned by the communication task -----------------------------------
+    std::vector<uint8_t> peer_ids;
     bool is_polling = false;
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
@@ -54,6 +64,7 @@ private:
     otb::BusOtbSession otb_session;
 
     [[noreturn]] static void communication_loop(void *param);
+    void adopt_config(const Config &config);
     void process_uart();
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);

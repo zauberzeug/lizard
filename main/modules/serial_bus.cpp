@@ -43,16 +43,22 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->properties = SerialBus::get_defaults();
     this->serial->enable_line_detection();
 
+    if (!(this->config_queue = xQueueCreate(1, sizeof(Config)))) {
+        throw std::runtime_error("failed to create serial bus config queue");
+    }
     if (!(this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage)))) {
+        vQueueDelete(this->config_queue);
         throw std::runtime_error("failed to create serial bus outbound queue");
     }
     if (!(this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage)))) {
+        vQueueDelete(this->config_queue);
         vQueueDelete(this->outbound_queue);
         throw std::runtime_error("failed to create serial bus inbound queue");
     }
 
     if (xTaskCreatePinnedToCore(
             SerialBus::communication_loop, "serial_bus_comm", 4096, this, 5, &this->communication_task, 1) != pdPASS) {
+        vQueueDelete(this->config_queue);
         vQueueDelete(this->outbound_queue);
         vQueueDelete(this->inbound_queue);
         throw std::runtime_error("failed to create serial bus communication task");
@@ -102,8 +108,10 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         if (arguments.empty()) {
             throw std::runtime_error("make_coordinator expects at least one peer ID");
         }
-        std::vector<uint8_t> peers;
-        peers.reserve(arguments.size());
+        if (arguments.size() > sizeof(Config::peer_ids)) {
+            throw std::runtime_error("too many peer IDs");
+        }
+        Config config{};
         for (const auto &argument : arguments) {
             if ((argument->type & integer) == 0) {
                 throw std::runtime_error("peer IDs must be integers");
@@ -112,9 +120,10 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             if (peer_value <= 0 || peer_value >= 255) {
                 throw std::runtime_error("peer IDs must be between 0 and 255");
             }
-            peers.push_back(static_cast<uint8_t>(peer_value));
+            config.peer_ids[config.peer_count++] = static_cast<uint8_t>(peer_value);
         }
-        this->peer_ids = peers;
+        // a length-1 queue with overwrite semantics: the communication task only ever sees the latest config
+        xQueueOverwrite(this->config_queue, &config);
     } else {
         Module::call(method_name, arguments);
     }
@@ -122,7 +131,11 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
 
 [[noreturn]] void SerialBus::communication_loop(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
+    Config config;
     while (true) {
+        if (xQueueReceive(bus->config_queue, &config, 0) == pdTRUE) {
+            bus->adopt_config(config);
+        }
         bus->process_uart();
         if (bus->is_coordinator()) {
             // poll next peer
@@ -160,6 +173,13 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
     }
 }
 
+void SerialBus::adopt_config(const Config &config) {
+    this->peer_ids.assign(config.peer_ids, config.peer_ids + config.peer_count);
+    // restart polling from a known-good index
+    this->poll_index = 0;
+    this->is_polling = false;
+}
+
 void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
     while (this->serial->has_buffered_lines()) {
@@ -193,7 +213,7 @@ void SerialBus::process_uart() {
 
         // handle done command
         if (std::strcmp(message.payload, DONE_CMD) == 0) {
-            if (message.sender == this->peer_ids[this->poll_index]) {
+            if (this->is_coordinator() && message.sender == this->peer_ids[this->poll_index]) {
                 this->is_polling = false;
             }
             continue;
