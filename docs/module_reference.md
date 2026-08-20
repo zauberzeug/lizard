@@ -24,6 +24,7 @@ It is automatically created right after the boot sequence.
 | `core.millis`           | Time since booting the microcontroller (ms)                     | `int`     |
 | `core.heap`             | Free heap memory (bytes)                                        | `int`     |
 | `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
+| `core.startup_error`    | Why the startup script did not run completely (empty if it did) | `str`     |
 
 | Methods                          | Description                                                         | Arguments    |
 | -------------------------------- | ------------------------------------------------------------------- | ------------ |
@@ -48,6 +49,11 @@ The `precision` is an optional integer specifying the number of decimal places f
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
+
+**Startup errors:**
+A failing startup script is reported once during boot, before `Ready.`, which a host connecting later never sees.
+`core.startup_error` keeps that message available afterwards, so a host can check whether the persisted configuration was applied at all.
+It names the module that could not be created, e.g. `"module \"imu\" (Imu): imu setup failed: I2CError: Check your wiring."`, and is also set by a syntax error, which drops the whole script.
 
 **UART baud rate:**
 The console (UART0) defaults to 115200 baud.
