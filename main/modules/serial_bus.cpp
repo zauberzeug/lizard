@@ -17,10 +17,8 @@ extern void process_line(const char *line, const int len);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
-// NOTE: the outbound queue is shared by all receivers and stops draining for POLL_TIMEOUT_MS
-// whenever a peer is unreachable; 32 keeps the healthy peers served at full rate in that case.
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
-static constexpr size_t INCOMING_QUEUE_LENGTH = 16;
+static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static_assert(OUTGOING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update
 static_assert(INCOMING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled step() must not drop an OTB chunk
 static constexpr const char ECHO_CMD[] = "__ECHO__";
