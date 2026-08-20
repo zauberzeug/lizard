@@ -1,4 +1,0 @@
-esp-coredump
-esptool
-prompt_toolkit
-pyserial

@@ -7,12 +7,14 @@ from pathlib import Path
 
 import serial
 
+from serial_devices import resolve_device
+
 CHUNK_SIZE = 174  # must match BUS_OTB_CHUNK_SIZE in main/utils/otb.h
 WINDOW = 8
 
 parser = argparse.ArgumentParser(description='Push firmware via SerialBus OTB')
 parser.add_argument('firmware', help='Path to firmware binary')
-parser.add_argument('--port', default='/dev/ttyUSB0', help='Serial port')
+parser.add_argument('--port', default=None, help='Serial port (default: auto-detected, asks if ambiguous)')
 parser.add_argument('--baud', type=int, default=115200, help='Baudrate')
 parser.add_argument('--target', type=int, required=True, help='Bus ID of target node')
 parser.add_argument('--bus', default='bus', help='SerialBus module name')
@@ -27,9 +29,11 @@ file_size = firmware.stat().st_size
 number_of_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
 
 try:
-    dev = serial.Serial(args.port, args.baud, timeout=0.5)
-except serial.SerialException as e:
-    sys.exit(f'Serial error: {e}')
+    device = resolve_device(args.port)
+    print(f'Connecting to {device} at {args.baud} baud')
+    dev = serial.Serial(device, args.baud, timeout=0.5)
+except (RuntimeError, serial.SerialException) as e:
+    sys.exit(f'Error: {e}')
 
 
 class OtbError(Exception):

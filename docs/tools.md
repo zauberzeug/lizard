@@ -7,8 +7,10 @@
 To install Lizard on your ESP32 run
 
 ```bash
-sudo ./espresso.py flash --device <device_path>
+sudo ./espresso.py flash [--device <device_path>]
 ```
+
+Without `--device` the serial device is auto-detected, and you are asked which one to use if several are attached.
 
 Note that flashing may require root access (hence the sudo).
 The command also does not work while the serial interface is busy communicating with another process.
@@ -25,7 +27,7 @@ This requires a Jetson Orin (L4T 35 or 36);
 for Nano/Xavier Robot Brains use release 0.12.x or earlier, which still ships `flash.py`.
 
 To flash a Robot Brain over the network from a development machine, pass `--host`.
-This rsyncs the binaries and `espresso.py` to the target and runs the command there over SSH:
+This rsyncs the binaries, `espresso.py` and `serial_devices.py` to the target and runs the command there over SSH:
 
 ```bash
 ./espresso.py flash --host user@robot-brain[:path]
@@ -44,11 +46,21 @@ Use the serial monitor to read the current output and interactively send [Lizard
 ./monitor.py [<device_path>]
 ```
 
+Without a device path the monitor detects the serial device itself:
+on a Robot Brain that is the Jetson's UART to the microcontroller, on a development host the attached USB-UART bridge.
+If multiple bridges are attached, it lists them and asks which one to use.
+Pass the device path explicitly when running non-interactively.
+Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see [Robot Brain](#robot-brain)).
+
 You can also use an SSH monitor to access a microcontroller via SSH:
 
 ```bash
 ./monitor_ssh.sh <user@host>
 ```
+
+This copies `monitor.py` and `serial_devices.py` from this checkout to `~/lizard` on the target
+and starts the monitor there, so which device it detects does not depend on the age of the
+target's own checkout.
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
@@ -57,17 +69,17 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 `otb_update.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB (Over The Bus) protocol.
 
 ```bash
-./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target <peer_id> [--bus <name>] [--expander <name>]
+./otb_update.py build/lizard.bin [--port <port>] --target <peer_id> [--bus <name>] [--expander <name>]
 ```
 
-| Argument     | Description                                           |
-| ------------ | ----------------------------------------------------- |
-| `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`) |
-| `--port`     | Serial port (default: `/dev/ttyUSB0`)                 |
-| `--baud`     | Baudrate (default: `115200`)                          |
-| `--target`   | Bus ID of the target node (required)                  |
-| `--bus`      | Name of the SerialBus module (default: `bus`)         |
-| `--expander` | Expander name when coordinator is behind an expander  |
+| Argument     | Description                                             |
+| ------------ | ------------------------------------------------------- |
+| `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`)   |
+| `--port`     | Serial port (default: auto-detected, asks if ambiguous) |
+| `--baud`     | Baudrate (default: `115200`)                            |
+| `--target`   | Bus ID of the target node (required)                    |
+| `--bus`      | Name of the SerialBus module (default: `bus`)           |
+| `--expander` | Expander name when coordinator is behind an expander    |
 
 **Expander chains:**
 
@@ -78,7 +90,7 @@ and resume them afterwards to keep the UART link clear.
 Example:
 
 ```bash
-./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target 1 --expander p0
+./otb_update.py build/lizard.bin --target 1 --expander p0
 ```
 
 This flashes node 1 through expander `p0`.
@@ -133,8 +145,10 @@ On error at any point, the target responds with `__OTB_ERROR__:<message>` with a
 Use the configure script to send a new startup script to the microcontroller.
 
 ```bash
-./configure.py <config_file> <device_path>
+./configure.py <config_file> [<device_path>]
 ```
+
+Without a device path the serial device is detected the same way as for the [serial monitor](#serial-monitor).
 
 Note that the configure script cannot communicate while the serial interface is busy communicating with another process.
 
@@ -147,8 +161,6 @@ Install Python requirements:
 ```python
 python3 -m pip install -r requirements.txt
 ```
-
-On macOS, use `requirements-macos.txt` instead, which omits `gpiod` (not available on macOS).
 
 Install UART drivers: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
 

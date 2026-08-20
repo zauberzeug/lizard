@@ -4,7 +4,8 @@
 
 1. Download and unpack the zip file of the [latest release](https://github.com/zauberzeug/lizard/releases).
 2. Attach an Espressif ESP32 microcontroller via serial to your computer.
-3. Run `sudo ./espresso.py flash --device /dev/<serial device name>` to install Lizard on the ESP32.
+3. Run `sudo ./espresso.py flash` to install Lizard on the ESP32.
+   Add `--device /dev/<serial device name>` to pick the adapter yourself, which is required when you run non-interactively.
 
 ## Try Out
 
@@ -39,7 +40,10 @@ You can create a startup script for rules which should be directly applied after
 Simply write the commands into a file like `on_startup.lizard` and set them with
 
 ```bash
-./configure.py on_startup.lizard /dev/<serial device name>
+./configure.py on_startup.lizard
 ```
+
+Add the device path (e.g. `./configure.py on_startup.lizard /dev/<serial device name>`)
+if several adapters are attached or you run non-interactively.
 
 See [Tools](tools.md#configure) for more details.
