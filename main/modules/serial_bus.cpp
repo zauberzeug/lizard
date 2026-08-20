@@ -17,16 +17,12 @@ extern void process_line(const char *line, const int len);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
-// NOTE: each slot costs sizeof(OutgoingMessage) / sizeof(IncomingMessage) bytes of heap.
-// Both queues must stay above otb::BUS_OTB_WINDOW: the peer's inbound queue legitimately holds the whole
-// window while step() is stalled by a flash write, and the coordinator's outbound queue only drains
-// between polls, so a single stalled poll (POLL_TIMEOUT_MS) would otherwise abort an OTB update.
-// The outbound queue is shared by all receivers and stops draining for POLL_TIMEOUT_MS whenever a peer
-// is unreachable, so it stays at 32 to keep serving the healthy peers at full rate in that case.
+// NOTE: the outbound queue is shared by all receivers and stops draining for POLL_TIMEOUT_MS
+// whenever a peer is unreachable; 32 keeps the healthy peers served at full rate in that case.
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 16;
-static_assert(OUTGOING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW);
-static_assert(INCOMING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW);
+static_assert(OUTGOING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update
+static_assert(INCOMING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled step() must not drop an OTB chunk
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static constexpr const char DONE_CMD[] = "__DONE__";
@@ -80,8 +76,7 @@ void SerialBus::step() {
         this->handle_incoming_message(message);
     }
 
-    // the communication task must not echo() itself, and a full inbound queue would swallow its warnings,
-    // so drops are counted there and reported here, at most once per second
+    // the communication task must not echo() itself, so drops are counted there and reported here, at most once per second
     if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > 1000) {
         const unsigned dropped = this->dropped_inbound.exchange(0);
         this->last_drop_report_millis = millis();
