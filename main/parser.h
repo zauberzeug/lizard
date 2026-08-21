@@ -281,6 +281,34 @@ struct parsed_number {
     double number;
 };
 
+#ifdef OWL_PARSER_TYPEDEFS
+typedef enum owl_error owl_error;
+typedef struct owl_ref owl_ref;
+typedef enum parsed_type parsed_type;
+typedef struct parsed_statements parsed_statements;
+typedef struct parsed_statement parsed_statement;
+typedef struct parsed_actions parsed_actions;
+typedef struct parsed_action parsed_action;
+typedef struct parsed_noop parsed_noop;
+typedef struct parsed_constructor parsed_constructor;
+typedef struct parsed_property_assignment parsed_property_assignment;
+typedef struct parsed_variable_assignment parsed_variable_assignment;
+typedef struct parsed_variable_declaration parsed_variable_declaration;
+typedef struct parsed_rule_definition parsed_rule_definition;
+typedef struct parsed_schedule_definition parsed_schedule_definition;
+typedef struct parsed_routine_definition parsed_routine_definition;
+typedef struct parsed_routine_call parsed_routine_call;
+typedef struct parsed_await_condition parsed_await_condition;
+typedef struct parsed_await_routine parsed_await_routine;
+typedef struct parsed_method_call parsed_method_call;
+typedef struct parsed_datatype parsed_datatype;
+typedef struct parsed_expression parsed_expression;
+typedef struct parsed_identifier parsed_identifier;
+typedef struct parsed_string parsed_string;
+typedef struct parsed_integer parsed_integer;
+typedef struct parsed_number parsed_number;
+#endif
+
 struct parsed_statements parsed_statements_get(struct owl_ref);
 struct parsed_statement parsed_statement_get(struct owl_ref);
 struct parsed_actions parsed_actions_get(struct owl_ref);
@@ -371,9 +399,13 @@ static bool grow_tree(struct owl_tree *tree, size_t size)
 }
 static void write_tree(struct owl_tree *tree, uint64_t value)
 {
+    if (tree->error != ERROR_NONE)
+        return;
     size_t reserved_size = tree->next_offset + RESERVATION_AMOUNT;
-    if (tree->parse_tree_size <= reserved_size && !grow_tree(tree, reserved_size))
-        abort();
+    if (tree->parse_tree_size <= reserved_size && !grow_tree(tree, reserved_size)) {
+        tree->error = ERROR_ALLOCATION_FAILURE;
+        return;
+    }
     while (value >> 7 != 0) {
         tree->parse_tree[tree->next_offset++] = 0x80 | (value & 0x7f);
         value >>= 7;
@@ -1280,10 +1312,10 @@ static size_t finish_token(uint32_t rule, size_t next_sibling, void *info) {
     return offset;
 }
 static void check_for_error(struct owl_tree *tree) {
-    if (tree->error == ERROR_NONE)
+    if (tree && tree->error == ERROR_NONE)
         return;
     fprintf(stderr, "parse error: ");
-    switch (tree->error) {
+    switch (owl_tree_get_error(tree, 0)) {
     case ERROR_INVALID_FILE:
         fprintf(stderr, "invalid file\n");
         break;
@@ -1807,6 +1839,8 @@ static size_t read_whitespace(const char *text, void *info);
 static size_t read_keyword_token(uint32_t *token, bool *end_token, const char *text, void *info);
 static void write_identifier_token(size_t offset, size_t length, void *info) {
     struct owl_tree *tree = info;
+    if (tree->error != ERROR_NONE)
+        return;
     size_t token_offset = tree->next_offset;
     write_tree(tree, token_offset - tree->next_identifier_token_offset);
     write_tree(tree, offset);
@@ -1816,6 +1850,8 @@ static void write_identifier_token(size_t offset, size_t length, void *info) {
 static void write_string_token(size_t offset, size_t length, const char *string, size_t string_length, bool has_escapes, void *info) {
     struct owl_tree *tree = info;
     size_t string_offset = has_escapes ? (uint8_t *)string - tree->parse_tree : 0;
+    if (tree->error != ERROR_NONE)
+        return;
     size_t token_offset = tree->next_offset;
     write_tree(tree, token_offset - tree->next_string_token_offset);
     write_tree(tree, offset);
@@ -1829,6 +1865,8 @@ static void write_string_token(size_t offset, size_t length, const char *string,
 }
 static void write_integer_token(size_t offset, size_t length, uint64_t integer, void *info) {
     struct owl_tree *tree = info;
+    if (tree->error != ERROR_NONE)
+        return;
     size_t token_offset = tree->next_offset;
     write_tree(tree, token_offset - tree->next_integer_token_offset);
     write_tree(tree, offset);
@@ -1838,6 +1876,8 @@ static void write_integer_token(size_t offset, size_t length, uint64_t integer, 
 }
 static void write_number_token(size_t offset, size_t length, double number, void *info) {
     struct owl_tree *tree = info;
+    if (tree->error != ERROR_NONE)
+        return;
     size_t token_offset = tree->next_offset;
     write_tree(tree, token_offset - tree->next_number_token_offset);
     write_tree(tree, offset);
@@ -1848,8 +1888,10 @@ static void write_number_token(size_t offset, size_t length, double number, void
 }
 static void *allocate_string_contents(size_t size, void *info) {
     struct owl_tree *tree = info;
-    if (tree->next_offset + size > tree->parse_tree_size)
-        grow_tree(tree, tree->next_offset + size);
+    if (tree->next_offset + size > tree->parse_tree_size && !grow_tree(tree, tree->next_offset + size)) {
+        tree->error = ERROR_ALLOCATION_FAILURE;
+        return 0;
+    }
     void *p = tree->parse_tree + tree->next_offset;
     tree->next_offset += size;
     return p;
@@ -2099,6 +2141,10 @@ static bool OWL_DONT_INLINE owl_default_tokenizer_advance(struct owl_default_tok
                     }
                 }
                 char *unescaped = allocate_string_contents(string_length, tokenizer->info);
+                if (!unescaped) {
+                    tokenizer->allocation_failed = true;
+                    break;
+                }
                 size_t j = 0;
                 for (i = 0;
                 i < content_length;
@@ -2207,6 +2253,7 @@ struct construct_state {
     struct construct_node *node_freelist;
     struct construct_expression *expression_freelist;
     void *info;
+    bool allocation_failed;
 };
 static struct construct_node *construct_node_alloc(struct construct_state *s, uint32_t rule) {
     struct construct_node *node;
@@ -2217,7 +2264,12 @@ static struct construct_node *construct_node_alloc(struct construct_state *s, ui
         size_t *slots = node->slots;
         if (number_of_slots > node->number_of_slots) {
             slots = realloc(slots, number_of_slots * sizeof(size_t));
-            if (!slots) abort();
+            if (!slots) {
+                node->next = s->node_freelist;
+                s->node_freelist = node;
+                s->allocation_failed = true;
+                return 0;
+            }
         }
         memset(node, 0, sizeof(struct construct_node));
         memset(slots, 0, number_of_slots * sizeof(size_t));
@@ -2225,9 +2277,16 @@ static struct construct_node *construct_node_alloc(struct construct_state *s, ui
     }
     else {
         node = calloc(1, sizeof(struct construct_node));
-        if (!node) abort();
+        if (!node) {
+            s->allocation_failed = true;
+            return 0;
+        }
         node->slots = calloc(number_of_slots, sizeof(size_t));
-        if (number_of_slots > 0 && !node->slots) abort();
+        if (number_of_slots > 0 && !node->slots) {
+            free(node);
+            s->allocation_failed = true;
+            return 0;
+        }
     }
     node->rule = rule;
     node->number_of_slots = number_of_slots;
@@ -2242,7 +2301,10 @@ static struct construct_expression *construct_expression_alloc(struct construct_
     }
     else {
         expr = calloc(1, sizeof(struct construct_expression));
-        if (!expr) abort();
+        if (!expr) {
+            s->allocation_failed = true;
+            return 0;
+        }
     }
     (left_right_operand_slots_lookup(rule, &(expr->left_slot_index), &(expr->right_slot_index), &(expr->operand_slot_index), s->info));
     expr->rule = rule;
@@ -2270,6 +2332,7 @@ static void construct_expression_reduce(struct construct_state *s, struct constr
         struct construct_node *last_operator = op;
         size_t operand = op->slots[expr->operand_slot_index];
         struct construct_node *combined_op = construct_node_alloc(s, op->rule);
+        if (!combined_op) return;
         combined_op->choice_index = op->choice_index;
         combined_op->slot_index = op->slot_index;
         combined_op->fixity_associativity = op->fixity_associativity;
@@ -2330,29 +2393,53 @@ static void construct_begin(struct construct_state *s, size_t offset, enum const
     uint32_t r = 0;
     if (type == CONSTRUCT_EXPRESSION_ROOT) {
         struct construct_expression *expr = construct_expression_alloc(s, r);
+        if (!expr) return;
         expr->parent = s->current_expression;
         s->current_expression = expr;
     }
     else {
         struct construct_node *node = construct_node_alloc(s, r);
+        if (!node) return;
         node->next = s->under_construction;
         node->end_location = offset;
         s->under_construction = node;
     }
 }
-static size_t construct_finish(struct construct_state *s, size_t offset) {
-    size_t finished = 0;
-    if (s->root_type == CONSTRUCT_EXPRESSION_ROOT) {
+static void construct_node_list_free(struct construct_state *s, struct construct_node *node) {
+    while (node) {
+        struct construct_node *next = node->next;
+        construct_node_free(s, node);
+        node = next;
+    }
+}
+static void construct_abandon(struct construct_state *s) {
+    while (s->current_expression) {
         struct construct_expression *expr = s->current_expression;
         s->current_expression = expr->parent;
-        while (expr->first_operator) construct_expression_reduce(s, expr);
-        struct construct_node *node = expr->first_value;
-        if (node) {
-            finished = (finish_node((node)->rule, (node)->choice_index, 0, (node)->slots, (node)->start_location, (node)->end_location, s->info));
-            assert(node->next == 0);
-            construct_node_free(s, node);
-        }
+        construct_node_list_free(s, expr->first_operator);
+        construct_node_list_free(s, expr->first_value);
         construct_expression_free(s, expr);
+    }
+    construct_node_list_free(s, s->under_construction);
+    s->under_construction = 0;
+}
+static size_t construct_finish(struct construct_state *s, size_t offset) {
+    size_t finished = 0;
+    if (s->allocation_failed) {
+    }
+    else if (s->root_type == CONSTRUCT_EXPRESSION_ROOT) {
+        struct construct_expression *expr = s->current_expression;
+        while (expr->first_operator && !s->allocation_failed) construct_expression_reduce(s, expr);
+        if (!s->allocation_failed) {
+            s->current_expression = expr->parent;
+            struct construct_node *node = expr->first_value;
+            if (node) {
+                finished = (finish_node((node)->rule, (node)->choice_index, 0, (node)->slots, (node)->start_location, (node)->end_location, s->info));
+                assert(node->next == 0);
+                construct_node_free(s, node);
+            }
+            construct_expression_free(s, expr);
+        }
     }
     else {
         struct construct_node *node = s->under_construction;
@@ -2360,6 +2447,10 @@ static size_t construct_finish(struct construct_state *s, size_t offset) {
         node->start_location = offset;
         finished = (finish_node((node)->rule, (node)->choice_index, 0, (node)->slots, (node)->start_location, (node)->end_location, s->info));
         construct_node_free(s, node);
+    }
+    if (s->allocation_failed) {
+        construct_abandon(s);
+        finished = 0;
     }
     while (s->node_freelist) {
         struct construct_node *node = s->node_freelist;
@@ -2375,10 +2466,12 @@ static size_t construct_finish(struct construct_state *s, size_t offset) {
     return finished;
 }
 static void construct_action_apply(struct construct_state *s, uint16_t action, size_t offset) {
+    if (s->allocation_failed) return;
     switch ((((action) >> 12) & 0xf)) {
     case 8:
         {
             struct construct_node *node = construct_node_alloc(s, rule_lookup(s->under_construction->rule, ((action) & 0xfff), s->info));
+            if (!node) return;
             node->next = s->under_construction;
             node->slot_index = ((action) & 0xfff);
             node->end_location = offset;
@@ -2388,6 +2481,7 @@ static void construct_action_apply(struct construct_state *s, uint16_t action, s
     case 9:
         {
             struct construct_expression *expr = construct_expression_alloc(s, rule_lookup(s->under_construction->rule, ((action) & 0xfff), s->info));
+            if (!expr) return;
             expr->parent = s->current_expression;
             s->current_expression = expr;
             expr->slot_index = ((action) & 0xfff);
@@ -2407,8 +2501,9 @@ static void construct_action_apply(struct construct_state *s, uint16_t action, s
     case 2:
         {
             struct construct_expression *expr = s->current_expression;
+            while (expr->first_operator && !s->allocation_failed) construct_expression_reduce(s, expr);
+            if (s->allocation_failed) return;
             s->current_expression = expr->parent;
-            while (expr->first_operator) construct_expression_reduce(s, expr);
             size_t *finished;
             finished = &s->under_construction->slots[expr->slot_index];
             struct construct_node *node = expr->first_value;
@@ -2434,6 +2529,7 @@ static void construct_action_apply(struct construct_state *s, uint16_t action, s
         {
             struct construct_expression *expr = s->current_expression;
             struct construct_node *node = construct_node_alloc(s, expr->rule);
+            if (!node) return;
             node->choice_index = ((action) & 0xfff);
             node->end_location = offset;
             node->rule = expr->rule;
@@ -2445,6 +2541,7 @@ static void construct_action_apply(struct construct_state *s, uint16_t action, s
         {
             struct construct_expression *expr = s->current_expression;
             struct construct_node *node = construct_node_alloc(s, expr->rule);
+            if (!node) return;
             node->choice_index = ((action) & 0xfff);
             node->end_location = offset;
             node->rule = expr->rule;
@@ -2478,7 +2575,11 @@ static void construct_action_apply(struct construct_state *s, uint16_t action, s
             struct construct_node *node = s->under_construction;
             node->start_location = offset;
             s->under_construction = node->next;
-            while (construct_expression_should_reduce(s, expr, node)) construct_expression_reduce(s, expr);
+            while (construct_expression_should_reduce(s, expr, node) && !s->allocation_failed) construct_expression_reduce(s, expr);
+            if (s->allocation_failed) {
+                construct_node_free(s, node);
+                return;
+            }
             node->next = expr->first_operator;
             expr->first_operator = node;
             if (node->fixity_associativity == CONSTRUCT_PREFIX) construct_expression_reduce(s, expr);
@@ -2498,6 +2599,7 @@ struct fill_run_continuation {
     size_t top_index;
     size_t capacity;
     int error;
+    bool allocation_failed;
 };
 static void bracket_entry_state(struct owl_token_run *run, struct fill_run_state *top, uint16_t token_index, uint32_t mask0);
 static void (*state_funcs[493])(struct owl_token_run *, struct fill_run_state *, uint16_t);
@@ -5123,8 +5225,12 @@ static void bracket_entry_state(struct owl_token_run *run, struct fill_run_state
         if (new_capacity <= cont->capacity)
             abort();
         struct fill_run_state *new_states = realloc(cont->stack, new_capacity * sizeof(struct fill_run_state));
-        if (!new_states)
-            abort();
+        if (!new_states) {
+            cont->top_index--;
+            cont->allocation_failed = true;
+            cont->error = 1;
+            return;
+        }
         cont->stack = new_states;
         cont->capacity = new_capacity;
         top = &cont->stack[cont->top_index];
@@ -5164,21 +5270,29 @@ static void parse_string(struct owl_tree *tree, const char *string) {
         .top_index = 0,
     };
     c.stack = calloc(c.capacity, sizeof(struct fill_run_state));
+    if (!c.stack) {
+        tree->error = ERROR_ALLOCATION_FAILURE;
+        return;
+    }
     c.stack[0].state = 0;
     c.stack[0].cont = &c;
     uint16_t failing_index = 0;
     while (owl_default_tokenizer_advance(&tokenizer, &token_run)) {
         if (!fill_run_states(token_run, &c, &failing_index)) {
             free(c.stack);
-            tree->error = ERROR_UNEXPECTED_TOKEN;
-            find_token_range(&tokenizer, token_run, failing_index, &tree->error_range.start, &tree->error_range.end);
+            if (c.allocation_failed || tree->error != ERROR_NONE)
+                tree->error = ERROR_ALLOCATION_FAILURE;
+            else {
+                tree->error = ERROR_UNEXPECTED_TOKEN;
+                find_token_range(&tokenizer, token_run, failing_index, &tree->error_range.start, &tree->error_range.end);
+            }
             free_token_runs(&token_run);
             return;
         }
     }
     struct fill_run_state top = c.stack[c.top_index];
     free(c.stack);
-    if (tokenizer.allocation_failed) {
+    if (tokenizer.allocation_failed || tree->error != ERROR_NONE) {
         tree->error = ERROR_ALLOCATION_FAILURE;
         free_token_runs(&token_run);
         return;
@@ -5280,12 +5394,22 @@ struct owl_tree *owl_tree_create_with_options(struct owl_tree_options options) {
         options.string = str;
     }
     struct owl_tree *tree = owl_tree_create_empty();
+    if (!tree) {
+        if (options.file)
+            free((void *)options.string);
+        return 0;
+    }
     if (options.file)
         tree->owns_string = true;
     parse_string(tree, options.string);
     return tree;
 }
 enum owl_error owl_tree_get_error(struct owl_tree *tree, struct source_range *error_range) {
+    if (!tree) {
+        if (error_range)
+            *error_range = (struct source_range){ 0 };
+        return ERROR_ALLOCATION_FAILURE;
+    }
     if (error_range)
         *error_range = tree->error_range;
     return tree->error;
@@ -7895,14 +8019,22 @@ static size_t build_parse_tree(struct owl_default_tokenizer *tokenizer, struct o
                     if (new_capacity <= stack_capacity)
                         abort();
                     uint32_t *new_stack = realloc(state_stack, new_capacity * sizeof(uint32_t));
-                    if (!new_stack)
-                        abort();
+                    if (!new_stack) {
+                        tree->error = ERROR_ALLOCATION_FAILURE;
+                        construct_state.allocation_failed = true;
+                        free(state_stack);
+                        free_token_runs(&run);
+                        construct_finish(&construct_state, offset);
+                        return 0;
+                    }
                     state_stack = new_stack;
                     stack_capacity = new_capacity;
                 }
                 state_stack[stack_depth++] = entry.push_nfa_state;
             }
             apply_actions(&construct_state, entry.actions, end, end + whitespace);
+            if (tree->error != ERROR_NONE)
+                construct_state.allocation_failed = true;
             if (run->states[i] == 213) {
                 if (stack_depth == 0)
                     abort();
@@ -7917,9 +8049,14 @@ static size_t build_parse_tree(struct owl_default_tokenizer *tokenizer, struct o
     }
     struct action_table_entry entry = action_table_lookup(nfa_state, UINT32_MAX, UINT32_MAX);
     apply_actions(&construct_state, entry.actions, offset, offset + whitespace);
+    if (tree->error != ERROR_NONE)
+        construct_state.allocation_failed = true;
     free(state_stack);
     free_token_runs(&run);
-    return construct_finish(&construct_state, offset);
+    size_t root_offset = construct_finish(&construct_state, offset);
+    if (construct_state.allocation_failed)
+        tree->error = ERROR_ALLOCATION_FAILURE;
+    return root_offset;
 }
 static size_t read_whitespace(const char *text, void *info) {
     switch (text[0]) {
