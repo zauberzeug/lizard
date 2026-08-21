@@ -26,6 +26,7 @@ constexpr size_t BUS_OTB_CHUNK_SIZE = 165;
 constexpr size_t BUS_OTB_MAX_SEQ_DIGITS = 5;
 constexpr size_t BUS_OTB_CHUNK_LINE_SIZE =
     sizeof(OTB_CHUNK_PREFIX) - 1 + BUS_OTB_MAX_SEQ_DIGITS + 3 + 9 + (BUS_OTB_CHUNK_SIZE + 2) / 3 * 4;
+constexpr size_t BUS_OTB_WINDOW = 8; // unacked chunks in flight, must match WINDOW in otb_update.py
 constexpr size_t BUS_OTB_BUFFER_SIZE = 256;
 constexpr unsigned long BUS_OTB_SESSION_TIMEOUT_MS = 10000;
 

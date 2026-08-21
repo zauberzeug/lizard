@@ -1,5 +1,7 @@
 #pragma once
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "module.h"
 #include "utils/ble_command.h"
 #include <string>
@@ -11,12 +13,15 @@ using ConstBluetooth_ptr = std::shared_ptr<const Bluetooth>;
 class Bluetooth : public Module {
 private:
     const std::string device_name;
+    const MessageHandler message_handler;
+    QueueHandle_t line_queue;
 
 public:
     static inline constexpr const char *TYPE = "Bluetooth";
 
     Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler);
 
+    void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

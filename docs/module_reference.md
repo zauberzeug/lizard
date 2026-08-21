@@ -28,8 +28,8 @@ It is automatically created right after the boot sequence.
 | Methods                          | Description                                                         | Arguments    |
 | -------------------------------- | ------------------------------------------------------------------- | ------------ |
 | `core.restart()`                 | Restart the microcontroller                                         |              |
-| `core.version()`                 | Show lizard version                                                 |              |
-| `core.info()`                    | Show lizard version, compile time and IDF version                   |              |
+| `core.version()`                 | Show project name and version                                       |              |
+| `core.info()`                    | Show project name, version, compile time and IDF version            |              |
 | `core.print(...)`                | Print arbitrary arguments to the command line                       | arbitrary    |
 | `core.output(format)`            | Define the output format                                            | `str`        |
 | `core.startup_checksum()`        | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |              |
@@ -60,6 +60,9 @@ Note that the ROM bootloader and the early boot log always use 115200 regardless
 
 Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
 Simply create a Bluetooth module with a device name of your choice.
+Received lines are queued and parsed on the main loop, one step later at most.
+If the main loop is blocked for long and the queue (32 lines) overflows, further lines are dropped and a warning is printed once the main loop continues.
+Clients uploading many lines at once should therefore pace their writes or wait for a response.
 
 | Constructor                          | Description                                        | Arguments |
 | ------------------------------------ | -------------------------------------------------- | --------- |
@@ -364,6 +367,7 @@ The BNO085 offers improved accuracy and better sensor fusion algorithms compared
 Unlike the BNO055 module, euler angles (`yaw`, `roll`, `pitch`) are not computed on-device —
 only quaternion output (`quat_w/x/y/z`) is provided.
 Euler conversion should be done upstream.
+The gyroscope (`gyr_x/y/z`) is reported in **rad/s** (the SH2 calibrated gyroscope report), not degrees/s as on the BNO055.
 
 | Methods              | Description                   | Arguments |
 | -------------------- | ----------------------------- | --------- |
@@ -504,10 +508,16 @@ Version 0.5.6 allows to read the motor error flag.
 | `motor.motor_error`       | Motor error flat (requires version 0.5.6) | `int`     |
 | `motor.enabled`           | Whether the motor is enabled              | `bool`    |
 | `motor.motor_temperature` | Motor temperature (°C)                    | `float`   |
+| `motor.current`           | Measured motor current Iq (A)             | `float`   |
+| `motor.current_setpoint`  | Commanded motor current Iq (A)            | `float`   |
 
 The `motor_temperature` will only update if the firmware generated from the
 [zauberzeug/ODrive](https://github.com/zauberzeug/ODrive) fork is installed on the ODrive.
 Otherwise, the `motor_temperature` property will remain at 0.
+
+The ODrive sends its current only when asked to, so `current` and `current_setpoint` stay at 0
+until the periodic message is switched on for the axis — `<axis>.config.can.iq_rate_ms` (requires version 0.5.6)
+defaults to 0 and is the interval in milliseconds.
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |

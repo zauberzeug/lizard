@@ -19,6 +19,8 @@ static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
+static_assert(OUTGOING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update
+static_assert(INCOMING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled step() must not drop an OTB chunk
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static_assert(otb::BUS_OTB_CHUNK_LINE_SIZE < SerialBus::PAYLOAD_CAPACITY, "OTB chunk lines must fit the bus payload");
@@ -71,6 +73,13 @@ void SerialBus::step() {
     IncomingMessage message;
     while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
         this->handle_incoming_message(message);
+    }
+
+    // the communication task must not echo() itself, so drops are counted there and reported here, at most once per second
+    if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > 1000) {
+        const unsigned dropped = this->dropped_inbound.exchange(0);
+        this->last_drop_report_millis = millis();
+        echo("warning: serial bus %s dropped %u inbound messages (queue full)", this->name.c_str(), dropped);
     }
 
     if (this->otb_session.handle != 0) {
@@ -194,16 +203,20 @@ void SerialBus::process_uart() {
 
         // handle done command
         if (std::strcmp(message.payload, DONE_CMD) == 0) {
-            if (message.sender == this->peer_ids[this->poll_index]) {
+            if (this->is_coordinator() && message.sender == this->peer_ids[this->poll_index]) {
                 this->is_polling = false;
             }
             continue;
         }
 
-        // enqueue message in inbound queue
-        if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
-            this->print_to_incoming_queue("warning: serial bus %s could not enqueue message: %s", this->name.c_str(), buffer);
-        }
+        this->push_incoming(message);
+    }
+}
+
+void SerialBus::push_incoming(const IncomingMessage &message) {
+    // a warning could not pass the full queue either, so count the drop and let step() report it
+    if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
+        this->dropped_inbound++;
     }
 }
 
@@ -323,13 +336,13 @@ void SerialBus::send_message(const uint8_t receiver, const char *payload, const 
     this->serial->write_checked_line(buffer, header_len + length);
 }
 
-void SerialBus::print_to_incoming_queue(const char *format, ...) const {
+void SerialBus::print_to_incoming_queue(const char *format, ...) {
     IncomingMessage message{this->node_id, this->node_id, 0, {}};
     va_list args;
     va_start(args, format);
     message.length = std::vsnprintf(message.payload, PAYLOAD_CAPACITY, format, args);
     va_end(args);
-    xQueueSend(this->inbound_queue, &message, 0);
+    this->push_incoming(message);
 }
 
 void SerialBus::handle_echo(const char *line) {
@@ -345,6 +358,8 @@ void SerialBus::handle_echo(const char *line) {
     try {
         this->enqueue_outgoing_message(this->echo_target_id, payload, len);
     } catch (const std::runtime_error &e) {
+        // echo() calls back into handle_echo(); stop relaying so the warning is not relayed (and fails) recursively
+        this->echo_target_id = 0;
         echo("warning: serial bus %s failed to relay output: %s", this->name.c_str(), e.what());
     }
 }

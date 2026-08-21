@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import re
 import shlex
 import subprocess
@@ -192,6 +193,22 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def resolve_default_artifact(default: str) -> str:
+    """Return ``default``, or the same-suffix artifact ESP-IDF recorded for the last configured build.
+
+    The .bin/.elf names follow the CMake project name, which integrators can override via
+    -DLIZARD_PROJECT_NAME. idf.py rewrites build/project_description.json (``app_bin``/``app_elf``)
+    on every configure, so it names the current artifact even when a stale default-named one
+    still sits in the build directory; without it the default is returned unchanged.
+    """
+    path = Path(default)
+    description = path.parent / 'project_description.json'
+    if not description.is_file():
+        return default
+    name = json.loads(description.read_text()).get({'.bin': 'app_bin', '.elf': 'app_elf'}[path.suffix])
+    return str(path.parent / name) if name else default
+
+
 def resolve_default_device() -> str:
     """Return the default serial device for the machine actually running the command."""
     tegra = Path('/etc/nv_tegra_release')
@@ -274,19 +291,20 @@ def _require_relative(flag: str, value: str) -> None:
                            '(rsync would parse it as an option).')
 
 
-def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
+def remote_command(argv: List[str], parsed: argparse.Namespace, artifacts: Dict[str, str]) -> List[str]:
     """Return the argument list to run on the remote: the local argv minus ``--host``/``--dry-run``.
 
     The user's tokens pass through verbatim instead of being reconstructed from parsed
     values, so nothing the user typed can be dropped or reshaped and no locally resolved
-    default can leak into the remote invocation. Only the two orchestration flags are
-    stripped: ``--host`` (it IS the remote dispatch) and ``--dry-run`` (a dry run prints
+    default (device, pins, L4T) can leak into the remote invocation. Only the two orchestration
+    flags are stripped: ``--host`` (it IS the remote dispatch) and ``--dry-run`` (a dry run prints
     the rsync/ssh commands locally and must not run anything remotely, see run_remote).
+    The one exception are ``artifacts`` (option dest -> locally resolved path): those the user
+    did not pass are appended explicitly, because the remote has no build directory of its own
+    to resolve a renamed artifact from and must use exactly the files run_remote copies over.
     """
-    for dest in COMMANDS[parsed.command].artifacts:
-        value = getattr(parsed, dest)
-        if value is not None:
-            _require_relative('--' + dest.replace('_', '-'), str(value))
+    for dest, value in artifacts.items():
+        _require_relative('--' + dest.replace('_', '-'), value)
     command = []
     skip_value = False
     for token in argv:
@@ -298,6 +316,9 @@ def remote_command(argv: List[str], parsed: argparse.Namespace) -> List[str]:
             pass
         else:
             command.append(token)
+    for dest, value in artifacts.items():
+        if getattr(parsed, dest) is None and value != getattr(DEFAULT, dest):
+            command += ['--' + dest.replace('_', '-'), value]
     return command
 
 
@@ -570,8 +591,10 @@ def main(argv: List[str]) -> None:
         # Validate the arguments locally with the real parser (done above), then hand the
         # command to the remote machine, which resolves its own device/pins/L4T. sudo is only
         # for the pin/flash commands; coredump wraps esp_coredump (pip --user, dialout not root).
-        run_remote(args.host, remote_command(argv, args),
-                   artifacts=[str(getattr(args, dest) or getattr(DEFAULT, dest)) for dest in cmd.artifacts],
+        artifacts = {dest: str(getattr(args, dest) or resolve_default_artifact(getattr(DEFAULT, dest)))
+                     for dest in cmd.artifacts}
+        run_remote(args.host, remote_command(argv, args, artifacts),
+                   artifacts=list(artifacts.values()),
                    use_sudo=cmd.uses_pins,
                    dry_run=args.dry_run)
         return
@@ -590,8 +613,8 @@ def main(argv: List[str]) -> None:
         debug=args.debug,
         bootloader=args.bootloader or DEFAULT.bootloader,
         partition_table=args.partition_table or DEFAULT.partition_table,
-        firmware=args.firmware or DEFAULT.firmware,
-        elf=args.elf or DEFAULT.elf,
+        firmware=args.firmware or resolve_default_artifact(DEFAULT.firmware),
+        elf=args.elf or resolve_default_artifact(DEFAULT.elf),
     )
     if cmd.uses_pins and not args.dry_run:
         config = replace(config, gpio=build_gpio(config.en, config.g0))

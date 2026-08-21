@@ -10,7 +10,7 @@ from pathlib import Path
 import serial
 
 CHUNK_SIZE = 165  # must match BUS_OTB_CHUNK_SIZE in main/utils/otb.h (the chunk line has to fit the bus payload)
-WINDOW = 8
+WINDOW = 8  # must match BUS_OTB_WINDOW in main/utils/otb.h
 ACK_TIMEOUT = 2.0  # resend the window when no ack arrives for this long
 STALL_TIMEOUT = 15.0  # give up when the target makes no progress for this long (its own session timeout is 10 s)
 
