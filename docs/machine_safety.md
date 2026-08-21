@@ -25,7 +25,8 @@ The following example stops a motor when there is no serial communication for 50
 when core.last_message_age > 500 then motor.stop(); end
 ```
 
-Any successfully interpreted input message resets `last_message_age`.
+Any successfully interpreted message from UART0 or Bluetooth resets `last_message_age`.
+Messages received over the [serial bus](module_reference.md#serial-bus) do _not_ reset it, so a peer pushing its state to the core cannot mask a lost host connection.
 If the host controller has no command to send but wants to signal that it is still alive, it can call `core.keep_alive()`, which resets the timer silently without producing any output.
 
 If the host streams [scheduled blocks](language.md), they should be discarded as well when the connection is lost,
