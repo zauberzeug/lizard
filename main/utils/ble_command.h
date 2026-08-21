@@ -8,10 +8,13 @@
 #define ZZ_BLE_COMMAND_H
 
 #include <functional>
+#include <memory>
 #include <string_view>
 
 namespace ZZ::BleCommand {
-using CommandCallback = std::function<void(const std::string_view &)>;
+// Called on the NimBLE host task with a NUL-terminated copy of the received line.
+// The host task's stack is small; the callback must only hand the line off, not parse it.
+using CommandCallback = std::function<void(std::unique_ptr<char[]> line)>;
 
 void init(const std::string_view &device_name, CommandCallback on_command);
 int send(const std::string_view &data);

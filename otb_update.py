@@ -10,7 +10,7 @@ from pathlib import Path
 import serial
 
 CHUNK_SIZE = 165  # with the CRC field the line must stay within the bus payload (cap: BUS_OTB_CHUNK_SIZE)
-WINDOW = 8
+WINDOW = 8  # must match BUS_OTB_WINDOW in main/utils/otb.h
 ACK_TIMEOUT = 2.0  # resend the window when no ack arrives for this long
 PACE = 0.01  # seconds between chunk writes: a saturated coordinator console tears incoming lines apart
 

@@ -9,8 +9,6 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
-#include "esp_heap_caps.h"
-#include "freertos/FreeRTOS.h"
 #include "global.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
@@ -209,6 +207,9 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 if (Global::has_module(module_name)) {
                     throw std::runtime_error("module \"" + module_name + "\" already exists");
                 }
+                if (Global::has_variable(module_name)) {
+                    throw std::runtime_error("variable \"" + module_name + "\" already exists");
+                }
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr module = Module::create(module_type, module_name, arguments, process_lizard);
@@ -217,6 +218,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_name = identifier_to_string(constructor.module_name);
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
+                if (Global::has_module(module_name)) {
+                    throw std::runtime_error("module \"" + module_name + "\" already exists");
+                }
+                if (Global::has_variable(module_name)) {
+                    throw std::runtime_error("variable \"" + module_name + "\" already exists");
+                }
                 const Module_ptr expander_module = Global::get_module(expander_name);
                 const Expander_ptr expander = std::dynamic_pointer_cast<Expander>(expander_module);
                 if (!expander) {
@@ -307,25 +314,10 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
-// owl's peak transient allocation scales with the token count of the line, so the
-// required-heap floor scales with its length (base covers a short line's fixed cost).
-static constexpr size_t PARSE_HEAP_BASE = 4096;
-static constexpr size_t PARSE_HEAP_PER_CHAR = 64;
-
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     InterpreterLock lock;
     if (trigger_keep_alive) {
         core_module->keep_alive();
-    }
-
-    // owl's generated parser can abort()/deref on a failed allocation instead of returning an error, so require both
-    // enough total heap (scaled by the line's length) and a large enough contiguous block before parsing. Other tasks
-    // may allocate between the check and the parse; the padded constants absorb that. Drop the line rather than reboot.
-    const size_t required_heap = PARSE_HEAP_BASE + PARSE_HEAP_PER_CHAR * strlen(line);
-    const size_t free_heap = xPortGetFreeHeapSize();
-    if (free_heap < required_heap || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < PARSE_HEAP_BASE) {
-        echo("error: not enough free memory to parse (%u free, %u required)", (unsigned)free_heap, (unsigned)required_heap);
-        return;
     }
 
     const bool debug = core_module->get_property("debug")->boolean_value;

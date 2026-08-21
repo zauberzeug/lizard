@@ -170,6 +170,12 @@ After making changes to the Lizard language definition or its C++ implementation
 
 To upload the compiled firmware you can use the `./espresso.py` command described above.
 
+Integrators building Lizard as part of their own project can override the project name,
+e.g. `idf.py -DLIZARD_PROJECT_NAME=lizard-zz build`.
+The name is reported by `core.version()` and also names the build artifacts (`build/lizard-zz.bin`, `build/lizard-zz.elf`);
+`espresso.py` picks them up automatically via `build/project_description.json`,
+other tools like `otb_update.py` or `addr2line` need the renamed paths passed explicitly.
+
 ### Backtrace
 
 In case Lizard terminates with a backtrace printed to the serial terminal,
