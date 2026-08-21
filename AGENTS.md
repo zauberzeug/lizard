@@ -102,7 +102,7 @@ lizard/
 ├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
 ├── monitor.py             # Serial monitor
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
-└── gen_parser.sh          # Regenerates parser.c from language.owl
+└── gen_parser.sh          # Regenerates parser.h from language.owl
 ```
 
 ### Key Entry Points
@@ -367,7 +367,7 @@ Always call parent implementations:
 
 ### Parser Regeneration
 
-After modifying `language.owl`, always run `./gen_parser.sh`. The `parser.c` file is **generated** – never edit it directly.
+After modifying `language.owl`, always run `./gen_parser.sh`. The `parser.h` file is **generated** – never edit it directly.
 
 ---
 
