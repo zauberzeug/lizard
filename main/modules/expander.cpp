@@ -72,6 +72,11 @@ void Expander::step() {
     if (this->properties.at("is_ready")->boolean_value) {
         this->ping();
         this->handle_messages();
+    } else {
+        const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
+        if (boot_timeout == 0 || millis_since(this->boot_start_time) <= boot_timeout) {
+            this->check_boot_progress();
+        }
     }
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
@@ -115,6 +120,7 @@ void Expander::ping() {
             echo("warning: expander %s connection lost", this->name.c_str());
             // TODO: trigger error code
             this->properties.at("is_ready")->boolean_value = false;
+            this->boot_start_time = 0;
         }
     }
 }
