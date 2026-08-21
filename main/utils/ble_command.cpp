@@ -265,6 +265,10 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         return 0;
 
     case BLE_GAP_EVENT_PASSKEY_ACTION: {
+        if (idle_timer) {
+            xTimerStop(idle_timer, 0);
+        }
+
         if (deactivated) {
             struct ble_sm_io pk = {};
             pk.action = event->passkey.params.action;
