@@ -372,7 +372,7 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     }
 }
 
-void process_line(const char *line, const int len) {
+void process_line(const char *line, const int len, const bool trigger_keep_alive = true) {
     InterpreterLock lock;
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
@@ -389,7 +389,7 @@ void process_line(const char *line, const int len) {
             Storage::save_startup();
             break;
         case '!':
-            process_lizard(line + 2);
+            process_lizard(line + 2, trigger_keep_alive);
             break;
         case '"':
             echo("%s", line + 2);
@@ -398,7 +398,7 @@ void process_line(const char *line, const int len) {
             throw std::runtime_error("unrecognized control command");
         }
     } else {
-        process_lizard(line);
+        process_lizard(line, trigger_keep_alive);
     }
 }
 

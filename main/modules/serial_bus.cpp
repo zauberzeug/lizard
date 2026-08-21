@@ -13,7 +13,7 @@
 #include <cstring>
 #include <stdexcept>
 
-extern void process_line(const char *line, const int len);
+extern void process_line(const char *line, const int len, const bool trigger_keep_alive);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
@@ -284,14 +284,14 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
 
     // process control commands starting with "!" silently
     if (message.payload[0] == '!') {
-        process_line(message.payload, message.length);
+        process_line(message.payload, message.length, false);
         return;
     }
 
     // process regular commands and relay any echo() output back to sender
     this->echo_target_id = message.sender;
     try {
-        process_line(message.payload, message.length);
+        process_line(message.payload, message.length, false);
     } catch (const std::exception &e) {
         echo("error processing command: %s", e.what());
     }
