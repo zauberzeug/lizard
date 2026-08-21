@@ -2,8 +2,8 @@
 #include "../storage.h"
 #include "../utils/uart.h"
 #include "uart.h"
-#include <cstdlib>
-#include <cstring>
+#include <atomic>
+#include <memory>
 #include <stdexcept>
 
 static Module_ptr create_bluetooth(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler message_handler) {
@@ -17,41 +17,39 @@ const std::map<std::string, Variable_ptr> Bluetooth::get_defaults() {
     return {};
 }
 
-static constexpr size_t LINE_QUEUE_LENGTH = 8;
+static constexpr size_t LINE_QUEUE_LENGTH = 32;
+static std::atomic<uint32_t> dropped_lines{0};
 
 Bluetooth::Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler)
     : Module(name), device_name(device_name), message_handler(message_handler) {
     if (!(this->line_queue = xQueueCreate(LINE_QUEUE_LENGTH, sizeof(char *)))) {
         throw std::runtime_error("failed to create bluetooth line queue");
     }
-    // Only copy the line here: this callback runs on the NimBLE host task, whose stack is far
-    // too small for the parser. The line is parsed in step() on the main task instead.
-    // Capture just the queue handle so the callback holds no reference to this module.
-    // The bounded wait applies backpressure to bulk uploads; before, the whole parse ran here.
-    ZZ::BleCommand::init(device_name, [queue = this->line_queue](const std::string_view &message) {
-        char *line = static_cast<char *>(malloc(message.length() + 1));
-        if (!line) {
-            return;
-        }
-        memcpy(line, message.data(), message.length());
-        line[message.length()] = '\0';
-        if (xQueueSend(queue, &line, pdMS_TO_TICKS(100)) != pdTRUE) {
-            free(line);
-            echo("warning: bluetooth line queue is full, dropping message");
+    // NOTE: This callback runs on the NimBLE host task, whose stack is far too small for the parser.
+    // It only queues the line (without blocking or echoing); step() parses it on the main task.
+    ZZ::BleCommand::init(device_name, [queue = this->line_queue](std::unique_ptr<char[]> line) {
+        char *raw = line.get();
+        if (xQueueSend(queue, &raw, 0) == pdTRUE) {
+            line.release();
+        } else {
+            dropped_lines.fetch_add(1, std::memory_order_relaxed);
         }
     });
     this->properties = Bluetooth::get_defaults();
 }
 
 void Bluetooth::step() {
-    char *line;
-    while (xQueueReceive(this->line_queue, &line, 0) == pdTRUE) {
+    if (const uint32_t dropped = dropped_lines.exchange(0, std::memory_order_relaxed)) {
+        echo("warning: dropped %lu bluetooth lines because the line queue was full", static_cast<unsigned long>(dropped));
+    }
+    char *raw;
+    while (xQueueReceive(this->line_queue, &raw, 0) == pdTRUE) {
+        const std::unique_ptr<char[]> line(raw);
         try {
-            this->message_handler(line, true, false);
+            this->message_handler(line.get(), true, false);
         } catch (const std::exception &e) {
             echo("error in bluetooth message handler: %s", e.what());
         }
-        free(line);
     }
     Module::step();
 }
