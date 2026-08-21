@@ -40,8 +40,14 @@ private:
         size_t length;
         char payload[PAYLOAD_CAPACITY];
     };
+    struct PeerPollState {
+        unsigned long backoff_start_millis = 0;
+        unsigned long backoff_duration_ms = 0; // 0 == no timeout seen yet since the last successful poll
+        bool unreachable = false;              // for one-shot unreachable/reachable-again reporting
+    };
 
     std::vector<uint8_t> peer_ids;
+    std::vector<PeerPollState> peer_poll_states; // indexed like peer_ids, resized together in make_coordinator
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
@@ -60,6 +66,9 @@ private:
     [[noreturn]] static void communication_loop(void *param);
     void process_uart();
     void push_incoming(const IncomingMessage &message);
+    size_t next_pollable_peer() const;
+    void handle_poll_success();
+    void handle_poll_timeout();
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
     void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);

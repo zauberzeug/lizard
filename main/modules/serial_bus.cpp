@@ -17,6 +17,8 @@ extern void process_line(const char *line, const int len);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
+static constexpr unsigned long POLL_BACKOFF_INITIAL_MS = 1000;
+static constexpr unsigned long POLL_BACKOFF_MAX_MS = 8000;
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
 static_assert(OUTGOING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update
@@ -124,6 +126,10 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             peers.push_back(static_cast<uint8_t>(peer_value));
         }
         this->peer_ids = peers;
+        this->peer_poll_states.assign(peers.size(), PeerPollState{});
+        // cancel any poll in flight: poll_index may be stale (out of range) for the new peer list
+        this->is_polling = false;
+        this->poll_index = 0;
     } else {
         Module::call(method_name, arguments);
     }
@@ -134,16 +140,19 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
     while (true) {
         bus->process_uart();
         if (bus->is_coordinator()) {
-            // poll next peer
+            // poll next peer that is not currently backed off
             if (!bus->is_polling && !bus->send_outgoing_queue()) {
-                bus->poll_index = (bus->poll_index + 1) % bus->peer_ids.size();
-                bus->send_message(bus->peer_ids[bus->poll_index], POLL_CMD, sizeof(POLL_CMD) - 1);
-                bus->poll_start_millis = millis();
-                bus->is_polling = true;
+                const size_t next_index = bus->next_pollable_peer();
+                if (next_index < bus->peer_ids.size()) {
+                    bus->poll_index = next_index;
+                    bus->send_message(bus->peer_ids[bus->poll_index], POLL_CMD, sizeof(POLL_CMD) - 1);
+                    bus->poll_start_millis = millis();
+                    bus->is_polling = true;
+                }
             }
             // handle poll timeout
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->peer_ids[bus->poll_index]);
+                bus->handle_poll_timeout();
                 bus->is_polling = false;
             }
         } else {
@@ -204,6 +213,7 @@ void SerialBus::process_uart() {
         if (std::strcmp(message.payload, DONE_CMD) == 0) {
             if (this->is_coordinator() && message.sender == this->peer_ids[this->poll_index]) {
                 this->is_polling = false;
+                this->handle_poll_success();
             }
             continue;
         }
@@ -216,6 +226,42 @@ void SerialBus::push_incoming(const IncomingMessage &message) {
     // a warning could not pass the full queue either, so count the drop and let step() report it
     if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
         this->dropped_inbound++;
+    }
+}
+
+// Round-robins peer_ids starting after poll_index, skipping peers still under backoff.
+// Returns peer_ids.size() if every peer is currently backed off.
+size_t SerialBus::next_pollable_peer() const {
+    const size_t peer_count = this->peer_ids.size();
+    for (size_t offset = 1; offset <= peer_count; ++offset) {
+        const size_t index = (this->poll_index + offset) % peer_count;
+        const PeerPollState &state = this->peer_poll_states[index];
+        if (millis_since(state.backoff_start_millis) >= state.backoff_duration_ms) {
+            return index;
+        }
+    }
+    return peer_count;
+}
+
+void SerialBus::handle_poll_success() {
+    PeerPollState &state = this->peer_poll_states[this->poll_index];
+    state.backoff_duration_ms = 0;
+    state.backoff_start_millis = 0;
+    if (state.unreachable) {
+        state.unreachable = false;
+        this->print_to_incoming_queue("serial bus %s: peer %u reachable again", this->name.c_str(), this->peer_ids[this->poll_index]);
+    }
+}
+
+void SerialBus::handle_poll_timeout() {
+    PeerPollState &state = this->peer_poll_states[this->poll_index];
+    state.backoff_duration_ms = state.backoff_duration_ms == 0 ? POLL_BACKOFF_INITIAL_MS
+                                                               : std::min(state.backoff_duration_ms * 2, POLL_BACKOFF_MAX_MS);
+    state.backoff_start_millis = millis();
+    if (!state.unreachable) {
+        state.unreachable = true;
+        this->print_to_incoming_queue(
+            "warning: serial bus %s: peer %u unreachable, backing off %lu ms", this->name.c_str(), this->peer_ids[this->poll_index], state.backoff_duration_ms);
     }
 }
 
