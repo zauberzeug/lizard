@@ -60,6 +60,9 @@ Note that the ROM bootloader and the early boot log always use 115200 regardless
 
 Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
 Simply create a Bluetooth module with a device name of your choice.
+Received lines are queued and parsed on the main loop, one step later at most.
+If the main loop is blocked for long and the queue (32 lines) overflows, further lines are dropped and a warning is printed once the main loop continues.
+Clients uploading many lines at once should therefore pace their writes or wait for a response.
 
 | Constructor                          | Description                                        | Arguments |
 | ------------------------------------ | -------------------------------------------------- | --------- |
