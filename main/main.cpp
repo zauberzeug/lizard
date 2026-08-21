@@ -209,6 +209,9 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 if (Global::has_module(module_name)) {
                     throw std::runtime_error("module \"" + module_name + "\" already exists");
                 }
+                if (Global::has_variable(module_name)) {
+                    throw std::runtime_error("variable \"" + module_name + "\" already exists");
+                }
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr module = Module::create(module_type, module_name, arguments, process_lizard);
@@ -217,6 +220,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_name = identifier_to_string(constructor.module_name);
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
+                if (Global::has_module(module_name)) {
+                    throw std::runtime_error("module \"" + module_name + "\" already exists");
+                }
+                if (Global::has_variable(module_name)) {
+                    throw std::runtime_error("variable \"" + module_name + "\" already exists");
+                }
                 const Module_ptr expander_module = Global::get_module(expander_name);
                 const Expander_ptr expander = std::dynamic_pointer_cast<Expander>(expander_module);
                 if (!expander) {
