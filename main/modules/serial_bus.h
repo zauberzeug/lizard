@@ -47,7 +47,10 @@ private:
     };
 
     std::vector<uint8_t> peer_ids;
-    std::vector<PeerPollState> peer_poll_states; // indexed like peer_ids, resized together in make_coordinator
+    std::vector<PeerPollState> peer_poll_states; // indexed like peer_ids, resized together under config_mux
+    // guards all reads/writes of peer_ids + peer_poll_states + poll_index + is_polling
+    // across the communication_loop task boundary (main task writes via make_coordinator)
+    portMUX_TYPE config_mux = portMUX_INITIALIZER_UNLOCKED;
 
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;

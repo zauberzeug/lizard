@@ -125,11 +125,18 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             }
             peers.push_back(static_cast<uint8_t>(peer_value));
         }
-        this->peer_ids = peers;
-        this->peer_poll_states.assign(peers.size(), PeerPollState{});
-        // cancel any poll in flight: poll_index may be stale (out of range) for the new peer list
+        // Build new vectors in locals first (may allocate — must not happen under spinlock).
+        std::vector<uint8_t> new_peer_ids = peers;
+        std::vector<PeerPollState> new_peer_poll_states(peers.size(), PeerPollState{});
+        // Commit under spinlock: cancel in-flight poll FIRST so communication_loop can't
+        // index peer_poll_states at a stale poll_index into a freshly resized (smaller) vector,
+        // then swap (O(1)) so the critical section holds no allocation.
+        portENTER_CRITICAL(&this->config_mux);
         this->is_polling = false;
         this->poll_index = 0;
+        this->peer_ids.swap(new_peer_ids);
+        this->peer_poll_states.swap(new_peer_poll_states);
+        portEXIT_CRITICAL(&this->config_mux);
     } else {
         Module::call(method_name, arguments);
     }
@@ -142,18 +149,29 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         if (bus->is_coordinator()) {
             // poll next peer that is not currently backed off
             if (!bus->is_polling && !bus->send_outgoing_queue()) {
-                const size_t next_index = bus->next_pollable_peer();
-                if (next_index < bus->peer_ids.size()) {
+                size_t next_index;
+                uint8_t peer_id;
+                bool have_peer;
+                portENTER_CRITICAL(&bus->config_mux);
+                next_index = bus->next_pollable_peer();
+                have_peer = next_index < bus->peer_ids.size();
+                if (have_peer) {
                     bus->poll_index = next_index;
-                    bus->send_message(bus->peer_ids[bus->poll_index], POLL_CMD, sizeof(POLL_CMD) - 1);
+                    peer_id = bus->peer_ids[next_index];
+                }
+                portEXIT_CRITICAL(&bus->config_mux);
+                if (have_peer) {
+                    bus->send_message(peer_id, POLL_CMD, sizeof(POLL_CMD) - 1);
                     bus->poll_start_millis = millis();
                     bus->is_polling = true;
                 }
             }
             // handle poll timeout
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
+                portENTER_CRITICAL(&bus->config_mux);
                 bus->handle_poll_timeout();
                 bus->is_polling = false;
+                portEXIT_CRITICAL(&bus->config_mux);
             }
         } else {
             // respond to poll
@@ -211,10 +229,12 @@ void SerialBus::process_uart() {
 
         // handle done command
         if (std::strcmp(message.payload, DONE_CMD) == 0) {
+            portENTER_CRITICAL(&this->config_mux);
             if (this->is_coordinator() && message.sender == this->peer_ids[this->poll_index]) {
                 this->is_polling = false;
                 this->handle_poll_success();
             }
+            portEXIT_CRITICAL(&this->config_mux);
             continue;
         }
 
