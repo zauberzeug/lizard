@@ -88,12 +88,12 @@ The target node will reboot with the new firmware after a successful transfer.
 
 The OTB (Over The Bus) protocol uses these message types:
 
-| Host → Target                  | Description                                                          |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `__OTB_BEGIN__`                | Begin firmware update session                                        |
-| `__OTB_CHUNK_<seq>__:crc:data` | Send base64-encoded firmware chunk (incl. sequence number and CRC32) |
-| `__OTB_COMMIT__`               | Commit update and set boot partition                                 |
-| `__OTB_ABORT__`                | Cancel the update session                                            |
+| Host → Target                      | Description                                                          |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `__OTB_BEGIN__`                    | Begin firmware update session                                        |
+| `__OTB_CHUNK_<seq>__:<crc>:<data>` | Send base64-encoded firmware chunk (incl. sequence number and CRC32) |
+| `__OTB_COMMIT__`                   | Commit update and set boot partition                                 |
+| `__OTB_ABORT__`                    | Cancel the update session                                            |
 
 | Host ← Target             | Description                                          |
 | ------------------------- | ---------------------------------------------------- |
@@ -105,25 +105,25 @@ The OTB (Over The Bus) protocol uses these message types:
 Flow:
 
 ```
-Host                            Target
-  |                                |
-  |--- __OTB_BEGIN__ ------------->|
-  |<-- __OTB_ACK_BEGIN__ ----------|
-  |                                |
-  |--- __OTB_CHUNK_<0>__:crc:... ->|
-  |<-- __OTB_ACK_CHUNK_<0>__ ------|
-  |                                |
-  |--- __OTB_CHUNK_<1>__:crc:... ->|
-  |<-- __OTB_ACK_CHUNK_<1>__ ------|
-  |                                |
-  |       ... more chunks ...      |
-  |                                |
-  |--- __OTB_CHUNK_<N-1>__:crc:... >|
-  |<-- __OTB_ACK_CHUNK_<N-1>__ ----|
-  |                                |
-  |--- __OTB_COMMIT__ ------------>|
-  |<-- __OTB_ACK_COMMIT__ ---------|
-  |                                |
+Host                              Target
+  |                                    |
+  |--- __OTB_BEGIN__ ----------------->|
+  |<-- __OTB_ACK_BEGIN__:crc32 --------|
+  |                                    |
+  |--- __OTB_CHUNK_<0>__:<crc>:... --->|
+  |<-- __OTB_ACK_CHUNK_<0>__ ----------|
+  |                                    |
+  |--- __OTB_CHUNK_<1>__:<crc>:... --->|
+  |<-- __OTB_ACK_CHUNK_<1>__ ----------|
+  |                                    |
+  |        ... more chunks ...         |
+  |                                    |
+  |--- __OTB_CHUNK_<N-1>__:<crc>:... ->|
+  |<-- __OTB_ACK_CHUNK_<N-1>__ --------|
+  |                                    |
+  |--- __OTB_COMMIT__ ---------------->|
+  |<-- __OTB_ACK_COMMIT__ -------------|
+  |                                    |
 ```
 
 On error at any point, the target responds with `__OTB_ERROR__:<message>` with a human-readable error message.
