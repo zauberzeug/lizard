@@ -8,11 +8,10 @@ private:
     const Motor_ptr motor;
     const Input_ptr input1;
     const Input_ptr input2;
-    bool enabled = true;
 
     bool can_move(const float speed) const;
-    void enable();
-    void disable();
+    void do_enable() override;
+    void do_disable() override;
 
 public:
     static inline constexpr const char *TYPE = "MotorAxis";

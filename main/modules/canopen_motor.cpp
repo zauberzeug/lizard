@@ -559,26 +559,16 @@ void CanOpenMotor::step() {
         return;
     }
 
-    if (this->properties["enabled"]->boolean_value != this->enabled) {
-        if (this->properties["enabled"]->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 }
 
-void CanOpenMotor::enable() {
-    this->enabled = true;
-    this->properties["enabled"]->boolean_value = true;
+void CanOpenMotor::do_enable() {
     this->properties[PROP_CTRL_ENA_OP]->boolean_value = true;
     send_control_word(build_ctrl_word(false));
 }
 
-void CanOpenMotor::disable() {
+void CanOpenMotor::do_disable() {
     this->stop();
     this->properties[PROP_CTRL_ENA_OP]->boolean_value = false;
     send_control_word(build_ctrl_word(false));
-    this->enabled = false;
-    this->properties["enabled"]->boolean_value = false;
 }

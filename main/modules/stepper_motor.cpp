@@ -150,13 +150,7 @@ void StepperMotor::step() {
     double dt = micros_since(this->last_micros) * 1e-6;
     this->last_micros = micros();
 
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 
     if (this->state != Idle && this->enabled) {
         // current state
@@ -276,13 +270,6 @@ void StepperMotor::speed(const double speed, const double acceleration) {
     set_state(this->target_speed == 0 ? Idle : Speeding);
 }
 
-void StepperMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void StepperMotor::disable() {
+void StepperMotor::do_disable() {
     this->stop();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }

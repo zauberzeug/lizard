@@ -10,8 +10,8 @@ private:
     double pulse_interval = 0.0;
     double pulse_duty_cycle = 0.5;
     virtual void set_level(bool level) const = 0;
-    bool enabled = true;
     bool active = false;
+    void do_disable() override;
 
 protected:
     Output(const std::string name);
@@ -19,8 +19,6 @@ protected:
 public:
     static inline constexpr const char *TYPE = "Output";
 
-    void enable();
-    void disable();
     void activate();
     void deactivate();
     void step() override;
