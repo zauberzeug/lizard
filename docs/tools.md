@@ -88,45 +88,60 @@ The target node will reboot with the new firmware after a successful transfer.
 
 The OTB (Over The Bus) protocol uses these message types:
 
-| Host → Target              | Description                                                |
-| -------------------------- | ---------------------------------------------------------- |
-| `__OTB_BEGIN__`            | Begin firmware update session                              |
-| `__OTB_CHUNK_<seq>__:data` | Send base64-encoded firmware chunk (incl. sequence number) |
-| `__OTB_COMMIT__`           | Commit update and set boot partition                       |
-| `__OTB_ABORT__`            | Cancel the update session                                  |
+| Host → Target                      | Description                                                          |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `__OTB_BEGIN__`                    | Begin firmware update session                                        |
+| `__OTB_CHUNK_<seq>__:<crc>:<data>` | Send base64-encoded firmware chunk (incl. sequence number and CRC32) |
+| `__OTB_COMMIT__`                   | Commit update and set boot partition                                 |
+| `__OTB_ABORT__`                    | Cancel the update session                                            |
 
-| Host ← Target             | Description                               |
-| ------------------------- | ----------------------------------------- |
-| `__OTB_ACK_BEGIN__`       | Acknowledge begin                         |
-| `__OTB_ACK_CHUNK_<seq>__` | Acknowledge chunk (incl. sequence number) |
-| `__OTB_ACK_COMMIT__`      | Acknowledge commit                        |
-| `__OTB_ERROR__:reason`    | Error response with reason code           |
+| Host ← Target             | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| `__OTB_ACK_BEGIN__:crc32` | Acknowledge begin (suffix: target checks chunk CRCs) |
+| `__OTB_ACK_CHUNK_<seq>__` | Acknowledge chunk (incl. sequence number)            |
+| `__OTB_ACK_COMMIT__`      | Acknowledge commit                                   |
+| `__OTB_ERROR__:reason`    | Error response with reason code                      |
 
 Flow:
 
 ```
-Host                            Target
-  |                                |
-  |--- __OTB_BEGIN__ ------------->|
-  |<-- __OTB_ACK_BEGIN__ ----------|
-  |                                |
-  |--- __OTB_CHUNK_<0>__:... ----->|
-  |<-- __OTB_ACK_CHUNK_<0>__ ------|
-  |                                |
-  |--- __OTB_CHUNK_<1>__:... ----->|
-  |<-- __OTB_ACK_CHUNK_<1>__ ------|
-  |                                |
-  |       ... more chunks ...      |
-  |                                |
-  |--- __OTB_CHUNK_<N-1>__:... --->|
-  |<-- __OTB_ACK_CHUNK_<N-1>__ ----|
-  |                                |
-  |--- __OTB_COMMIT__ ------------>|
-  |<-- __OTB_ACK_COMMIT__ ---------|
-  |                                |
+Host                              Target
+  |                                    |
+  |--- __OTB_BEGIN__ ----------------->|
+  |<-- __OTB_ACK_BEGIN__:crc32 --------|
+  |                                    |
+  |--- __OTB_CHUNK_<0>__:<crc>:... --->|
+  |<-- __OTB_ACK_CHUNK_<0>__ ----------|
+  |                                    |
+  |--- __OTB_CHUNK_<1>__:<crc>:... --->|
+  |<-- __OTB_ACK_CHUNK_<1>__ ----------|
+  |                                    |
+  |        ... more chunks ...         |
+  |                                    |
+  |--- __OTB_CHUNK_<N-1>__:<crc>:... ->|
+  |<-- __OTB_ACK_CHUNK_<N-1>__ --------|
+  |                                    |
+  |--- __OTB_COMMIT__ ---------------->|
+  |<-- __OTB_ACK_COMMIT__ -------------|
+  |                                    |
 ```
 
 On error at any point, the target responds with `__OTB_ERROR__:<message>` with a human-readable error message.
+
+**Retransmission and integrity:**
+frames can get lost or corrupted on a busy bus (e.g. while the target stalls on flash writes),
+so the transfer recovers instead of aborting:
+on a gap, duplicate, or corrupted chunk the target re-acknowledges the last chunk it has written
+(or `__OTB_ACK_BEGIN__` when nothing arrived yet),
+and the host treats such a duplicate acknowledgement — or an acknowledgement timeout — as a signal to rewind and resend from there (go-back-N).
+Chunks are only ever written in order, so duplicates are discarded safely;
+the session is aborted only when no chunk gets written for 10 s.
+Because the bus frames' own checksum is only 8 bits,
+each chunk additionally carries a zlib CRC32 over its decimal sequence number followed by its decoded bytes
+(`__OTB_CHUNK_<seq>__:<8-hex-crc32>:<base64>`).
+The target advertises this with the `:crc32` suffix of its begin acknowledgement;
+the host only sends the CRC field to targets that do, so older firmware can still be updated,
+and a target still accepts chunks without the field from older hosts.
 
 ### Configure
 
