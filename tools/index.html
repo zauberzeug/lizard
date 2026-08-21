@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
       
 
@@ -912,8 +912,8 @@ The target node will reboot with the new firmware after a successful transfer.</
 <td>Begin firmware update session</td>
 </tr>
 <tr>
-<td><code>__OTB_CHUNK_&lt;seq&gt;__:data</code></td>
-<td>Send base64-encoded firmware chunk (incl. sequence number)</td>
+<td><code>__OTB_CHUNK_&lt;seq&gt;__:&lt;crc&gt;:&lt;data&gt;</code></td>
+<td>Send base64-encoded firmware chunk (incl. sequence number and CRC32)</td>
 </tr>
 <tr>
 <td><code>__OTB_COMMIT__</code></td>
@@ -934,8 +934,8 @@ The target node will reboot with the new firmware after a successful transfer.</
 </thead>
 <tbody>
 <tr>
-<td><code>__OTB_ACK_BEGIN__</code></td>
-<td>Acknowledge begin</td>
+<td><code>__OTB_ACK_BEGIN__:crc32</code></td>
+<td>Acknowledge begin (suffix: target checks chunk CRCs)</td>
 </tr>
 <tr>
 <td><code>__OTB_ACK_CHUNK_&lt;seq&gt;__</code></td>
@@ -952,27 +952,41 @@ The target node will reboot with the new firmware after a successful transfer.</
 </tbody>
 </table>
 <p>Flow:</p>
-<pre><code>Host                            Target
-  |                                |
-  |--- __OTB_BEGIN__ -------------&gt;|
-  |&lt;-- __OTB_ACK_BEGIN__ ----------|
-  |                                |
-  |--- __OTB_CHUNK_&lt;0&gt;__:... -----&gt;|
-  |&lt;-- __OTB_ACK_CHUNK_&lt;0&gt;__ ------|
-  |                                |
-  |--- __OTB_CHUNK_&lt;1&gt;__:... -----&gt;|
-  |&lt;-- __OTB_ACK_CHUNK_&lt;1&gt;__ ------|
-  |                                |
-  |       ... more chunks ...      |
-  |                                |
-  |--- __OTB_CHUNK_&lt;N-1&gt;__:... ---&gt;|
-  |&lt;-- __OTB_ACK_CHUNK_&lt;N-1&gt;__ ----|
-  |                                |
-  |--- __OTB_COMMIT__ ------------&gt;|
-  |&lt;-- __OTB_ACK_COMMIT__ ---------|
-  |                                |
+<pre><code>Host                              Target
+  |                                    |
+  |--- __OTB_BEGIN__ -----------------&gt;|
+  |&lt;-- __OTB_ACK_BEGIN__:crc32 --------|
+  |                                    |
+  |--- __OTB_CHUNK_&lt;0&gt;__:&lt;crc&gt;:... ---&gt;|
+  |&lt;-- __OTB_ACK_CHUNK_&lt;0&gt;__ ----------|
+  |                                    |
+  |--- __OTB_CHUNK_&lt;1&gt;__:&lt;crc&gt;:... ---&gt;|
+  |&lt;-- __OTB_ACK_CHUNK_&lt;1&gt;__ ----------|
+  |                                    |
+  |        ... more chunks ...         |
+  |                                    |
+  |--- __OTB_CHUNK_&lt;N-1&gt;__:&lt;crc&gt;:... -&gt;|
+  |&lt;-- __OTB_ACK_CHUNK_&lt;N-1&gt;__ --------|
+  |                                    |
+  |--- __OTB_COMMIT__ ----------------&gt;|
+  |&lt;-- __OTB_ACK_COMMIT__ -------------|
+  |                                    |
 </code></pre>
 <p>On error at any point, the target responds with <code>__OTB_ERROR__:&lt;message&gt;</code> with a human-readable error message.</p>
+<p><strong>Retransmission and integrity:</strong>
+frames can get lost or corrupted on a busy bus (e.g. while the target stalls on flash writes),
+so the transfer recovers instead of aborting:
+on a gap, duplicate, or corrupted chunk the target re-acknowledges the last chunk it has written
+(or <code>__OTB_ACK_BEGIN__</code> when nothing arrived yet),
+and the host treats such a duplicate acknowledgement — or an acknowledgement timeout — as a signal to rewind and resend from there (go-back-N).
+Chunks are only ever written in order, so duplicates are discarded safely;
+the session is aborted only when no chunk gets written for 10 s.
+Because the bus frames' own checksum is only 8 bits,
+each chunk additionally carries a zlib CRC32 over its decimal sequence number followed by its decoded bytes
+(<code>__OTB_CHUNK_&lt;seq&gt;__:&lt;8-hex-crc32&gt;:&lt;base64&gt;</code>).
+The target advertises this with the <code>:crc32</code> suffix of its begin acknowledgement;
+the host only sends the CRC field to targets that do, so older firmware can still be updated,
+and a target still accepts chunks without the field from older hosts.</p>
 <h3 id="configure">Configure<a class="headerlink" href="#configure" title="Permanent link">&para;</a></h3>
 <p>Use the configure script to send a new startup script to the microcontroller.</p>
 <pre><code class="language-bash">./configure.py &lt;config_file&gt; &lt;device_path&gt;
@@ -993,6 +1007,11 @@ The target node will reboot with the new firmware after a successful transfer.</
 <pre><code class="language-bash">./compile.sh
 </code></pre>
 <p>To upload the compiled firmware you can use the <code>./espresso.py</code> command described above.</p>
+<p>Integrators building Lizard as part of their own project can override the project name,
+e.g. <code>idf.py -DLIZARD_PROJECT_NAME=lizard-zz build</code>.
+The name is reported by <code>core.version()</code> and also names the build artifacts (<code>build/lizard-zz.bin</code>, <code>build/lizard-zz.elf</code>);
+<code>espresso.py</code> picks them up automatically via <code>build/project_description.json</code>,
+other tools like <code>otb_update.py</code> or <code>addr2line</code> need the renamed paths passed explicitly.</p>
 <h3 id="backtrace">Backtrace<a class="headerlink" href="#backtrace" title="Permanent link">&para;</a></h3>
 <p>In case Lizard terminates with a backtrace printed to the serial terminal,
 you can translate the addresses to source code lines with the <code>addr2line</code> tool from the ESP-IDF toolchain.
@@ -1072,7 +1091,7 @@ After creation you can fill in a description if necessary.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

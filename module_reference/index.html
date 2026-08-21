@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
       
 
@@ -1283,12 +1283,12 @@ It is automatically created right after the boot sequence.</p>
 </tr>
 <tr>
 <td><code>core.version()</code></td>
-<td>Show lizard version</td>
+<td>Show project name and version</td>
 <td></td>
 </tr>
 <tr>
 <td><code>core.info()</code></td>
-<td>Show lizard version, compile time and IDF version</td>
+<td>Show project name, version, compile time and IDF version</td>
 <td></td>
 </tr>
 <tr>
@@ -1303,7 +1303,7 @@ It is automatically created right after the boot sequence.</p>
 </tr>
 <tr>
 <td><code>core.startup_checksum()</code></td>
-<td>Show 16-bit checksum of the startup script</td>
+<td>Show 16-bit checksum of the startup script (sum of its UTF-8 bytes)</td>
 <td></td>
 </tr>
 <tr>
@@ -1365,7 +1365,10 @@ Supported rates are 115200, 230400, 460800 and 921600.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.</p>
 <h2 id="bluetooth">Bluetooth<a class="headerlink" href="#bluetooth" title="Permanent link">&para;</a></h2>
 <p>Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
-Simply create a Bluetooth module with a device name of your choice.</p>
+Simply create a Bluetooth module with a device name of your choice.
+Received lines are queued and parsed on the main loop, one step later at most.
+If the main loop is blocked for long and the queue (32 lines) overflows, further lines are dropped and a warning is printed once the main loop continues.
+Clients uploading many lines at once should therefore pace their writes or wait for a response.</p>
 <table>
 <thead>
 <tr>
@@ -2214,8 +2217,8 @@ This module uses the same API as the <a href="#imu">IMU</a> module but offers im
 <li><code>port</code>: I²C port number (default: 0)</li>
 <li><code>sda</code>: SDA pin (default matches target, e.g. 21 on ESP32)</li>
 <li><code>scl</code>: SCL pin (default matches target, e.g. 22 on ESP32)</li>
-<li><code>int</code>: Interrupt pin (default: 26)</li>
-<li><code>rst</code>: Reset pin (default: 32)</li>
+<li><code>int</code>: Interrupt pin (default: 26 on ESP32, none on ESP32-S3)</li>
+<li><code>rst</code>: Reset pin (default: 32 on ESP32, none on ESP32-S3)</li>
 <li><code>address</code>: I²C address (default: 0x4A)</li>
 <li><code>clk</code>: I²C clock in Hz (default: 400000)</li>
 </ul>
@@ -2223,7 +2226,8 @@ This module uses the same API as the <a href="#imu">IMU</a> module but offers im
 The BNO085 offers improved accuracy and better sensor fusion algorithms compared to the BNO055.
 Unlike the BNO055 module, euler angles (<code>yaw</code>, <code>roll</code>, <code>pitch</code>) are not computed on-device —
 only quaternion output (<code>quat_w/x/y/z</code>) is provided.
-Euler conversion should be done upstream.</p>
+Euler conversion should be done upstream.
+The gyroscope (<code>gyr_x/y/z</code>) is reported in <strong>rad/s</strong> (the SH2 calibrated gyroscope report), not degrees/s as on the BNO055.</p>
 <table>
 <thead>
 <tr>
@@ -2601,11 +2605,24 @@ Version 0.5.6 allows to read the motor error flag.</p>
 <td>Motor temperature (°C)</td>
 <td><code>float</code></td>
 </tr>
+<tr>
+<td><code>motor.current</code></td>
+<td>Measured motor current Iq (A)</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>motor.current_setpoint</code></td>
+<td>Commanded motor current Iq (A)</td>
+<td><code>float</code></td>
+</tr>
 </tbody>
 </table>
 <p>The <code>motor_temperature</code> will only update if the firmware generated from the
 <a href="https://github.com/zauberzeug/ODrive">zauberzeug/ODrive</a> fork is installed on the ODrive.
 Otherwise, the <code>motor_temperature</code> property will remain at 0.</p>
+<p>The ODrive sends its current only when asked to, so <code>current</code> and <code>current_setpoint</code> stay at 0
+until the periodic message is switched on for the axis — <code>&lt;axis&gt;.config.can.iq_rate_ms</code> (requires version 0.5.6)
+defaults to 0 and is the interval in milliseconds.</p>
 <table>
 <thead>
 <tr>
@@ -4420,6 +4437,8 @@ Note that the remote module has to have turned on broadcasting: <code>x.broadcas
 </tbody>
 </table>
 <p>Note that the proxy module forwards all method calls to the remote module.</p>
+<p>Proxies cannot be passed as arguments to other module constructors (e.g. as end stops for a motor axis), because the actual module only exists on the remote microcontroller.
+Declare the depending module on the same microcontroller instead.</p>
 <table>
 <thead>
 <tr>
@@ -4488,7 +4507,7 @@ Note that the remote module has to have turned on broadcasting: <code>x.broadcas
       <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
