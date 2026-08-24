@@ -10,6 +10,7 @@
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
 #include "global.h"
+#include "main.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
 #include "modules/expander.h"
@@ -372,7 +373,7 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     }
 }
 
-void process_line(const char *line, const int len, const bool trigger_keep_alive = true) {
+void process_line(const char *line, const int len, const bool trigger_keep_alive) {
     InterpreterLock lock;
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {

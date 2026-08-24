@@ -1,5 +1,6 @@
 #include "serial_bus.h"
 
+#include "../main.h"
 #include "../utils/format.h"
 #include "../utils/otb.h"
 #include "../utils/string_utils.h"
@@ -12,8 +13,6 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
-
-extern void process_line(const char *line, const int len, const bool trigger_keep_alive);
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
