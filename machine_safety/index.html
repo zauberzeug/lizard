@@ -589,13 +589,15 @@ Any output is as well sent with a checksum.</p>
 </tbody>
 </table>
 <h2 id="keep-alive-signal">Keep-alive signal<a class="headerlink" href="#keep-alive-signal" title="Permanent link">&para;</a></h2>
-<p>The <code>core</code> module provides a property <code>last_message_age</code>, which holds the time in milliseconds since the last input message was received from UART0, parsed and successfully interpreted.
+<p>The <code>core</code> module provides a property <code>last_message_age</code>, which holds the time in milliseconds since the last input message was received from the host via UART0 or Bluetooth.
 It allows formulating rules that stop critical hardware modules when the connection to the host system is lost.</p>
 <p>The following example stops a motor when there is no serial communication for 500 ms:</p>
 <pre><code>when core.last_message_age &gt; 500 then motor.stop(); end
 </code></pre>
-<p>Any successfully interpreted input message resets <code>last_message_age</code>.
-If the host controller has no command to send but wants to signal that it is still alive, it can call <code>core.keep_alive()</code>, which resets the timer silently without producing any output.</p>
+<p>Any message from UART0 or Bluetooth that is not discarded due to an invalid <a href="#checksums">checksum</a> resets <code>last_message_age</code>, even if it cannot be parsed.
+Messages received over the <a href="../module_reference/#serial-bus">serial bus</a> do <em>not</em> reset it, so a peer pushing its state to the core cannot implicitly mask a lost host connection.
+If the host controller has no command to send but wants to signal that it is still alive, it can call <code>core.keep_alive()</code>, which resets the timer silently without producing any output.
+This also works over the serial bus: a coordinator can keep a peer's timer alive by explicitly sending it <code>core.keep_alive()</code>.</p>
 <p>If the host streams <a href="../language/">scheduled blocks</a>, they should be discarded as well when the connection is lost,
 so that no stale commands fire after the host stopped:</p>
 <pre><code>when core.last_message_age &gt; 500 then motor.stop(); core.clear_schedule() end
