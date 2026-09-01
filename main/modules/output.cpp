@@ -38,13 +38,7 @@ void Output::step() {
     this->set_level(this->target_level);
     this->properties.at("change")->integer_value = this->target_level - this->properties.at("level")->integer_value;
     this->properties.at("level")->integer_value = this->target_level;
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     if (this->properties.at("active")->boolean_value != this->active) {
         if (this->properties.at("active")->boolean_value) {
             this->activate();
@@ -121,15 +115,8 @@ void McpOutput::set_level(bool level) const {
     this->mcp->set_level(this->number, level);
 }
 
-void Output::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void Output::disable() {
+void Output::do_disable() {
     this->deactivate();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 void Output::activate() {

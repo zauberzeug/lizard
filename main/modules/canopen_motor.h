@@ -13,7 +13,9 @@ using CanOpenMotor_ptr = std::shared_ptr<CanOpenMotor>;
 class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenMotor>, virtual public Motor {
     Can_ptr can;
     const uint8_t node_id;
-    bool enabled = true;
+
+    void do_enable() override;
+    void do_disable() override;
 
     enum InitState init_state = WaitingForPreoperational;
 
@@ -69,7 +71,8 @@ public:
     void position(const double position, const double speed, const double acceleration) override;
     double get_speed() override;
     void speed(const double speed, const double acceleration) override;
-    void enable() override;
-    void disable() override;
+    // `Motor` declares these pure virtual, so they must be redeclared here to override both bases.
+    void enable() override { Module::enable(); }
+    void disable() override { Module::disable(); }
     void step() override;
 };

@@ -71,6 +71,35 @@ void Module::step() {
     }
 }
 
+void Module::sync_enabled() {
+    // enable()/disable() may re-enter step() (Output::deactivate() does), and the flag is still
+    // at its old value until they return — without this guard the transition recurses forever.
+    if (this->syncing_enabled) {
+        return;
+    }
+    if (this->properties.at("enabled")->boolean_value != this->enabled) {
+        this->syncing_enabled = true;
+        if (this->properties.at("enabled")->boolean_value) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+        this->syncing_enabled = false;
+    }
+}
+
+void Module::enable() {
+    this->enabled = true;
+    this->properties.at("enabled")->boolean_value = true;
+    this->do_enable();
+}
+
+void Module::disable() {
+    this->do_disable();
+    this->enabled = false;
+    this->properties.at("enabled")->boolean_value = false;
+}
+
 void Module::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "mute") {
         Module::expect(arguments, 0);

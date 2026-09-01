@@ -37,13 +37,7 @@ void LinearMotor::step() {
     this->properties.at("in")->boolean_value = this->get_in();
     this->properties.at("out")->boolean_value = this->get_out();
 
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 
     Module::step();
 }
@@ -76,16 +70,9 @@ void LinearMotor::call(const std::string method_name, const std::vector<ConstExp
     }
 }
 
-void LinearMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void LinearMotor::disable() {
+void LinearMotor::do_disable() {
     this->set_in(0);
     this->set_out(0);
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 GpioLinearMotor::GpioLinearMotor(const std::string name,
