@@ -16,7 +16,7 @@ The 8-bit checksum is computed as the bitwise XOR of all bytes of the UTF-8 enco
 
 ## Keep-alive signal
 
-The `core` module provides a property `last_message_age`, which holds the time in milliseconds since the last input message was received from UART0, parsed and successfully interpreted.
+The `core` module provides a property `last_message_age`, which holds the time in milliseconds since the last input message was received from the host via UART0 or Bluetooth.
 It allows formulating rules that stop critical hardware modules when the connection to the host system is lost.
 
 The following example stops a motor when there is no serial communication for 500 ms:
@@ -25,8 +25,10 @@ The following example stops a motor when there is no serial communication for 50
 when core.last_message_age > 500 then motor.stop(); end
 ```
 
-Any successfully interpreted input message resets `last_message_age`.
+Any message from UART0 or Bluetooth that is not discarded due to an invalid [checksum](#checksums) resets `last_message_age`, even if it cannot be parsed.
+Messages received over the [serial bus](module_reference.md#serial-bus) do _not_ reset it, so a peer pushing its state to the core cannot implicitly mask a lost host connection.
 If the host controller has no command to send but wants to signal that it is still alive, it can call `core.keep_alive()`, which resets the timer silently without producing any output.
+This also works over the serial bus: a coordinator can keep a peer's timer alive by explicitly sending it `core.keep_alive()`.
 
 If the host streams [scheduled blocks](language.md), they should be discarded as well when the connection is lost,
 so that no stale commands fire after the host stopped:
@@ -34,13 +36,6 @@ so that no stale commands fire after the host stopped:
 ```
 when core.last_message_age > 500 then motor.stop(); core.clear_schedule() end
 ```
-
-## Low memory
-
-Parsing a line requires a certain amount of free heap memory, which scales with the length of the line.
-When there is not enough free or contiguous memory, Lizard drops the line and responds with `error: not enough free memory to parse (<free> free, <required> required)` instead of risking a crash and reboot.
-Like a line with an incorrect checksum, the command was not executed;
-the host system should react accordingly, for example by re-sending the command later or stopping the machine.
 
 ## Expander watchdog
 

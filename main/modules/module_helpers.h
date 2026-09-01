@@ -8,12 +8,20 @@
 #include <stdexcept>
 #include <string>
 
-#ifdef CONFIG_IDF_TARGET_ESP32S3
+// The strapping pins are used by the expander's pre-flash check; since an expander is flashed with our own
+// running partition, it is always the same target as we are and compile-time constants are sufficient.
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
 #define DEFAULT_I2C_SDA_PIN GPIO_NUM_8
 #define DEFAULT_I2C_SCL_PIN GPIO_NUM_9
-#else
+#define BOOT_MODE_PIN 46
+#define FLASH_VOLTAGE_PIN 45
+#elif defined(CONFIG_IDF_TARGET_ESP32)
 #define DEFAULT_I2C_SDA_PIN GPIO_NUM_21
 #define DEFAULT_I2C_SCL_PIN GPIO_NUM_22
+#define BOOT_MODE_PIN 2
+#define FLASH_VOLTAGE_PIN 12
+#else
+#error "Unsupported IDF target: define its default and strapping pins here."
 #endif
 
 template <typename M>

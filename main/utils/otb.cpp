@@ -1,9 +1,11 @@
 #include "otb.h"
+#include "esp_rom_crc.h"
 #include "mbedtls/base64.h"
 #include "timing.h"
 #include "uart.h"
 #include <cstdio>
 #include <cstring>
+#include <optional>
 
 namespace otb {
 
@@ -23,6 +25,7 @@ static void bus_reset_session(BusOtbSession &session) {
     session.handle = 0;
     session.partition = nullptr;
     session.next_seq = 0;
+    session.uses_crc = false;
     session.bytes_written = 0;
     session.last_activity = 0;
 }
@@ -34,10 +37,28 @@ static bool fail(BusOtbSession &session, uint8_t receiver, const char *reason) {
     return true;
 }
 
+// Frames get lost or corrupted under load (flash-write stalls, and the frame checksum is only 8 bits),
+// so a bad chunk must not kill the session: re-acking the last written chunk makes the sender rewind
+// and resend from there. Deliberately no activity bump: the session times out without progress.
+static bool resend_from_last_written(BusOtbSession &session, uint8_t sender) {
+    if (session.next_seq > 0) {
+        respond(session, sender, "%s%lu__", OTB_ACK_CHUNK_PREFIX, static_cast<unsigned long>(session.next_seq - 1));
+    } else {
+        respond(session, sender, OTB_ACK_BEGIN); // nothing written yet: resend from chunk 0
+    }
+    return true;
+}
+
 bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view msg) {
     // __OTB_BEGIN__
     if (msg == OTB_BEGIN_PREFIX) {
         if (session.handle) {
+            // A begin retry after a lost ack is idempotent while nothing has been written yet.
+            if (session.sender == sender && session.next_seq == 0) {
+                session.last_activity = millis();
+                respond(session, sender, OTB_ACK_BEGIN);
+                return true;
+            }
             respond(session, sender, "%s:session already active", OTB_ERROR_PREFIX);
             return true;
         }
@@ -49,6 +70,7 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
         session.sender = sender;
         session.partition = part;
         session.next_seq = 0;
+        session.uses_crc = false;
         session.bytes_written = 0;
         session.last_activity = millis();
         echo("serial bus %s otb start from %u", session.bus_name, sender);
@@ -80,7 +102,7 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
         return true;
     }
 
-    // __OTB_CHUNK_{seq}__:{base64}
+    // __OTB_CHUNK_{seq}__:{crc32}:{base64} (the CRC field is optional for senders that predate it)
     if (std::strncmp(msg.data(), OTB_CHUNK_PREFIX, strlen(OTB_CHUNK_PREFIX)) == 0) {
         if (!session.handle || session.sender != sender) {
             respond(session, sender, "%s:invalid session", OTB_ERROR_PREFIX);
@@ -90,21 +112,46 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
         const std::string_view rest = msg.substr(strlen(OTB_CHUNK_PREFIX));
         const size_t sep = rest.find("__:");
         if (sep == std::string_view::npos) {
-            return fail(session, sender, "invalid chunk format");
+            return resend_from_last_written(session, sender); // header corrupted in flight
         }
-
         char *end;
         const unsigned long seq = std::strtoul(rest.data(), &end, 10);
         if (end != rest.data() + sep || seq != session.next_seq) {
-            return fail(session, sender, "unexpected sequence number");
+            return resend_from_last_written(session, sender); // gap, duplicate, or corrupted sequence number
         }
 
-        const std::string_view b64 = rest.substr(sep + 3);
+        // The CRC field is detected by its trailing ':' (base64 never contains one). Once a sender has used it,
+        // a chunk without it can only be corruption, because the per-chunk CRC is the only end-to-end check.
+        std::string_view b64 = rest.substr(sep + 3);
+        std::optional<uint32_t> expected_crc;
+        if (b64.size() > 9 && b64[8] == ':') {
+            char *crc_end;
+            const unsigned long crc = std::strtoul(b64.data(), &crc_end, 16);
+            if (crc_end == b64.data() + 8) {
+                expected_crc = crc;
+                b64 = b64.substr(9);
+            }
+        }
+        if (expected_crc) {
+            session.uses_crc = true;
+        } else if (session.uses_crc) {
+            return resend_from_last_written(session, sender);
+        }
+
         uint8_t buf[BUS_OTB_BUFFER_SIZE];
         size_t len;
         const int err = mbedtls_base64_decode(buf, sizeof(buf), &len, reinterpret_cast<const unsigned char *>(b64.data()), b64.size());
         if (err != 0 || len == 0 || len > BUS_OTB_CHUNK_SIZE) {
-            return fail(session, sender, "base64 decode failed");
+            return resend_from_last_written(session, sender);
+        }
+        if (expected_crc) {
+            // zlib-compatible CRC32 over the decimal sequence number and the payload, so that neither a
+            // corrupted chunk nor a chunk landing at the wrong offset passes the 8-bit frame checksum unnoticed
+            uint32_t crc = esp_rom_crc32_le(0, reinterpret_cast<const uint8_t *>(rest.data()), sep);
+            crc = esp_rom_crc32_le(crc, buf, len);
+            if (crc != *expected_crc) {
+                return resend_from_last_written(session, sender);
+            }
         }
         if (esp_ota_write(session.handle, buf, len) != ESP_OK) {
             return fail(session, sender, "flash write failed");
@@ -129,6 +176,9 @@ bool bus_handle_frame(BusOtbSession &session, uint8_t sender, std::string_view m
         return true;
     }
 
+    if (session.handle && session.sender == sender) {
+        return resend_from_last_written(session, sender); // a chunk whose prefix got corrupted in flight
+    }
     respond(session, sender, "%s:unknown command", OTB_ERROR_PREFIX);
     return true;
 }
