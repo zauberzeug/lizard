@@ -117,6 +117,7 @@ void Expander::ping() {
             // TODO: trigger error code
             this->properties.at("is_ready")->boolean_value = false;
             this->boot_start_time = 0;
+            this->ping_pending = false;
         }
     }
 }
@@ -130,6 +131,7 @@ void Expander::restart() {
     } else {
         this->serial->write_checked_line("core.restart()");
     }
+    this->serial->flush();
     this->boot_start_time = millis();
     this->properties.at("is_ready")->boolean_value = false;
 }
