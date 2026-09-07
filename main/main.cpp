@@ -469,6 +469,9 @@ void app_main() {
     // a host configuring the startup script sends a hundred-odd lines in one burst; at 921600 baud they
     // arrive faster than the main loop drains them, so the ring buffer and pattern queue hold a whole script
     uart_driver_install(UART_NUM_0, RX_RING_SIZE, 0, 20, &uart_queue, 0);
+    // fire the receive interrupt well before the 128-byte hardware FIFO fills: at 921600 baud the default
+    // threshold leaves ~70 us for the ISR, and a late one silently loses bytes of long console lines
+    uart_set_rx_full_threshold(UART_NUM_0, 32);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
 
