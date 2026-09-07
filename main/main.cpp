@@ -1,3 +1,4 @@
+#include "esp_ipc.h"
 #include "compilation/await_condition.h"
 #include "compilation/await_routine.h"
 #include "compilation/expression.h"
@@ -405,6 +406,10 @@ void process_line(const char *line, const int len, const bool trigger_keep_alive
     }
 }
 
+static void install_console_uart(void *arg) {
+    uart_driver_install(UART_NUM_0, RX_RING_SIZE, 0, 20, static_cast<QueueHandle_t *>(arg), 0);
+}
+
 void process_uart() {
     static char input[BUFFER_SIZE];
     while (true) {
@@ -468,7 +473,8 @@ void app_main() {
     QueueHandle_t uart_queue;
     // a host configuring the startup script sends a hundred-odd lines in one burst; at 921600 baud they
     // arrive faster than the main loop drains them, so the ring buffer and pattern queue hold a whole script
-    uart_driver_install(UART_NUM_0, RX_RING_SIZE, 0, 20, &uart_queue, 0);
+    // installed from core 1 so the UART0 interrupt lives there, away from the Bluetooth controller on core 0
+    esp_ipc_call_blocking(1, install_console_uart, &uart_queue);
     // fire the receive interrupt well before the 128-byte hardware FIFO fills: at 921600 baud the default
     // threshold leaves ~70 us for the ISR, and a late one silently loses bytes of long console lines
     uart_set_rx_full_threshold(UART_NUM_0, 32);
