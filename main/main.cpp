@@ -1,3 +1,4 @@
+#include "esp_ipc.h"
 #include "compilation/await_condition.h"
 #include "compilation/await_routine.h"
 #include "compilation/expression.h"
@@ -36,7 +37,9 @@
 #include <string>
 #include <vector>
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 2048     // longest console line (a core.output with many fields is well over 1024)
+#define RX_RING_SIZE 8192    // UART0 receive ring: half a startup script, the main loop drains it every tick
+#define RX_PATTERN_QUEUE 512 // line ends the driver can queue before the main loop reads them
 
 Core_ptr core_module;
 
@@ -403,12 +406,28 @@ void process_line(const char *line, const int len, const bool trigger_keep_alive
     }
 }
 
+static void install_console_uart(void *arg) {
+    uart_driver_install(UART_NUM_0, RX_RING_SIZE, 0, 20, static_cast<QueueHandle_t *>(arg), 0);
+}
+
 void process_uart() {
     static char input[BUFFER_SIZE];
     while (true) {
         const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
             break;
+        }
+        if (pos + 1 > BUFFER_SIZE) {
+            // drop the whole line: reading it into `input` would overrun the buffer
+            for (int remaining = pos + 1; remaining > 0;) {
+                const int read = uart_read_bytes(UART_NUM_0, (uint8_t *)input, remaining > BUFFER_SIZE ? BUFFER_SIZE : remaining, 0);
+                if (read <= 0) {
+                    break;
+                }
+                remaining -= read;
+            }
+            echo("warning: UART0 line longer than %d bytes discarded", BUFFER_SIZE);
+            continue;
         }
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
         bool checksum_ok = true;
@@ -452,9 +471,15 @@ void app_main() {
     };
     uart_param_config(UART_NUM_0, &uart_config);
     QueueHandle_t uart_queue;
-    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
+    // a host configuring the startup script sends a hundred-odd lines in one burst; at 921600 baud they
+    // arrive faster than the main loop drains them, so the ring buffer and pattern queue hold a whole script
+    // installed from core 1 so the UART0 interrupt lives there, away from the Bluetooth controller on core 0
+    esp_ipc_call_blocking(1, install_console_uart, &uart_queue);
+    // fire the receive interrupt well before the 128-byte hardware FIFO fills: at 921600 baud the default
+    // threshold leaves ~70 us for the ISR, and a late one silently loses bytes of long console lines
+    uart_set_rx_full_threshold(UART_NUM_0, 32);
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
-    uart_pattern_queue_reset(UART_NUM_0, 100);
+    uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
