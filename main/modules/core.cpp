@@ -2,6 +2,7 @@
 #include "../global.h"
 #include "../storage.h"
 #include "../utils/bus_backup.h"
+#include "../utils/frame.h"
 #include "../utils/scheduler.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -13,6 +14,9 @@
 #include "hal/gpio_hal.h"
 #include "soc/io_mux_reg.h"
 #include "soc/soc.h"
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <stdlib.h>
@@ -21,6 +25,8 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["debug"] = std::make_shared<BooleanVariable>(false);
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
+    this->properties["tx_us"] = std::make_shared<IntegerVariable>();
+    this->properties["tx_us_max"] = std::make_shared<IntegerVariable>();
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
 }
 
@@ -28,7 +34,109 @@ void Core::step() {
     this->properties.at("millis")->integer_value = millis();
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
+    const unsigned long start = micros();
     Module::step();
+    const unsigned long now = millis();
+    for (auto &frame : this->frames) {
+        if (now - frame.last_millis >= frame.interval) {
+            frame.last_millis = now;
+            this->emit_frame(frame, now);
+        }
+    }
+    // time spent formatting and writing telemetry this tick (text line and frames)
+    const long long tx_us = micros() - start;
+    this->properties.at("tx_us")->integer_value = tx_us;
+    if (tx_us > this->properties.at("tx_us_max")->integer_value) {
+        this->properties.at("tx_us_max")->integer_value = tx_us;
+    }
+}
+
+void Core::emit_frame(frame_t &frame, unsigned long now) const {
+    static uint8_t payload[frame::MAX_PAYLOAD];
+    size_t pos = 0;
+    size_t bit = 0;
+    uint8_t bits[16] = {0};
+    for (auto const &field : frame.fields) {
+        const Variable_ptr variable =
+            field.module ? field.module->get_property(field.property_name) : Global::get_variable(field.property_name);
+        double value = 0;
+        switch (variable->type) {
+        case boolean:
+            value = variable->boolean_value ? 1 : 0;
+            break;
+        case integer:
+            value = static_cast<double>(variable->integer_value);
+            break;
+        case number:
+            value = variable->number_value;
+            break;
+        default:
+            throw std::runtime_error("unsupported frame field type");
+        }
+        if (field.type == '?') {
+            if (value != 0) {
+                bits[bit / 8] |= 1 << (bit % 8);
+            }
+            ++bit;
+            continue;
+        }
+        const double scaled = value * field.scale;
+        union {
+            int8_t b;
+            uint8_t B;
+            int16_t h;
+            uint16_t H;
+            int32_t i;
+            uint32_t I;
+            float f;
+            uint8_t raw[4];
+        } u;
+        size_t size = 0;
+        switch (field.type) {
+        case 'b':
+            u.b = static_cast<int8_t>(scaled);
+            size = 1;
+            break;
+        case 'B':
+            u.B = static_cast<uint8_t>(scaled);
+            size = 1;
+            break;
+        case 'h':
+            u.h = static_cast<int16_t>(scaled);
+            size = 2;
+            break;
+        case 'H':
+            u.H = static_cast<uint16_t>(scaled);
+            size = 2;
+            break;
+        case 'i':
+            u.i = static_cast<int32_t>(scaled);
+            size = 4;
+            break;
+        case 'I':
+            u.I = static_cast<uint32_t>(scaled);
+            size = 4;
+            break;
+        case 'f':
+            u.f = static_cast<float>(scaled);
+            size = 4;
+            break;
+        default:
+            throw std::runtime_error("unknown frame field type");
+        }
+        if (pos + size > sizeof(payload)) {
+            throw std::runtime_error("frame payload too large");
+        }
+        memcpy(&payload[pos], u.raw, size);
+        pos += size;
+    }
+    const size_t bit_bytes = (bit + 7) / 8;
+    if (pos + bit_bytes > sizeof(payload)) {
+        throw std::runtime_error("frame payload too large");
+    }
+    memcpy(&payload[pos], bits, bit_bytes);
+    pos += bit_bytes;
+    frame::write(0, frame.id, frame.seq++, now, payload, pos);
 }
 
 void Core::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -76,6 +184,47 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             }
         }
         this->output_on = true;
+    } else if (method_name == "frame") {
+        // frame(id, "field[:type[scale]] ...", interval_ms); types ? b B h H i I f, scale = decimal digits
+        Module::expect(arguments, 3, integer, string, integer);
+        frame_t frame{static_cast<uint8_t>(arguments[0]->evaluate_integer()),
+                      static_cast<unsigned long>(arguments[2]->evaluate_integer()),
+                      0,
+                      0,
+                      {}};
+        std::string format = arguments[1]->evaluate_string();
+        while (!format.empty()) {
+            std::string element = cut_first_word(format);
+            std::string name = cut_first_word(element, ':');
+            ConstModule_ptr module = nullptr;
+            std::string property_name = name;
+            if (name.find('.') != std::string::npos) {
+                const std::string module_name = cut_first_word(name, '.');
+                module = Global::get_module(module_name);
+                property_name = name;
+            }
+            char type = 0;
+            double scale = 1;
+            if (!element.empty()) {
+                type = element[0];
+                if (element.size() > 1) {
+                    scale = pow(10, atoi(element.c_str() + 1));
+                }
+            } else {
+                const Variable_ptr variable = module ? module->get_property(property_name) : Global::get_variable(property_name);
+                type = variable->type == boolean ? '?' : variable->type == integer ? 'i'
+                                                                                   : 'f';
+            }
+            frame.fields.push_back({module, property_name, type, scale});
+        }
+        this->frames.erase(std::remove_if(this->frames.begin(), this->frames.end(),
+                                          [&](const frame_t &f) { return f.id == frame.id; }),
+                           this->frames.end());
+        this->frames.push_back(frame);
+    } else if (method_name == "frame_clear") {
+        Module::expect(arguments, 0);
+        this->frames.clear();
+        this->properties.at("tx_us_max")->integer_value = 0;
     } else if (method_name == "startup_checksum") {
         uint16_t checksum = 0;
         for (char const &c : Storage::startup) {
