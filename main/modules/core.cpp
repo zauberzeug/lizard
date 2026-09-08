@@ -3,6 +3,7 @@
 #include "../storage.h"
 #include "../utils/bus_backup.h"
 #include "../utils/frame.h"
+#include "serial_bus.h"
 #include "../utils/scheduler.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -27,6 +28,7 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["heap"] = std::make_shared<IntegerVariable>();
     this->properties["tx_us"] = std::make_shared<IntegerVariable>();
     this->properties["tx_us_max"] = std::make_shared<IntegerVariable>();
+    this->properties["frame_drops"] = std::make_shared<IntegerVariable>();
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
 }
 
@@ -51,7 +53,7 @@ void Core::step() {
     }
 }
 
-void Core::emit_frame(frame_t &frame, unsigned long now) const {
+void Core::emit_frame(frame_t &frame, unsigned long now) {
     static uint8_t payload[frame::MAX_PAYLOAD];
     size_t pos = 0;
     size_t bit = 0;
@@ -136,7 +138,26 @@ void Core::emit_frame(frame_t &frame, unsigned long now) const {
     }
     memcpy(&payload[pos], bits, bit_bytes);
     pos += bit_bytes;
-    frame::write(0, frame.id, frame.seq++, now, payload, pos);
+    // on a bus peer the frame travels to the coordinator, which passes it through to its console
+    SerialBus_ptr peer_bus;
+    for (auto const &[module_name, module] : Global::modules) {
+        const auto bus = std::dynamic_pointer_cast<SerialBus>(module);
+        if (bus && bus->is_peer_with_coordinator()) {
+            peer_bus = bus;
+            break;
+        }
+    }
+    if (!peer_bus) {
+        frame::write(0, frame.id, frame.seq++, now, payload, pos);
+        return;
+    }
+    static uint8_t body[frame::MAX_BODY];
+    const size_t body_length = frame::build_body(peer_bus->node_id, frame.id, frame.seq++, now, payload, pos, body);
+    try {
+        peer_bus->send_frame(body, body_length);
+    } catch (const std::runtime_error &e) {
+        this->properties.at("frame_drops")->integer_value++;
+    }
 }
 
 void Core::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

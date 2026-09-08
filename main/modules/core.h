@@ -32,7 +32,7 @@ class Core : public Module {
 private:
     std::list<struct output_element_t> output_list;
     std::vector<frame_t> frames;
-    void emit_frame(frame_t &frame, unsigned long now) const;
+    void emit_frame(frame_t &frame, unsigned long now);
     unsigned long int last_message_millis = 0;
 
 public:
