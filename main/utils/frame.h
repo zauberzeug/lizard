@@ -9,7 +9,7 @@
 namespace frame {
 
 constexpr size_t MAX_PAYLOAD = 200;
-constexpr size_t HEADER_SIZE = 8; // marker src id seq millis[4] len
+constexpr size_t HEADER_SIZE = 9; // marker src id seq millis[4] len
 constexpr size_t MAX_BODY = HEADER_SIZE + MAX_PAYLOAD + 2;
 constexpr uint8_t BUS_MARKER = 0x01;
 constexpr uint8_t BUS_ESCAPE = 0x7d;
