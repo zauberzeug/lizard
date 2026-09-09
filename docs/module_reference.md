@@ -18,36 +18,52 @@ The `broadcast` method is used internally with [port expanders](#expander).
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
 It is automatically created right after the boot sequence.
 
-| Properties              | Description                                                     | Data type |
-| ----------------------- | --------------------------------------------------------------- | --------- |
-| `core.debug`            | Whether to output debug information to the command line         | `bool`    |
-| `core.millis`           | Time since booting the microcontroller (ms)                     | `int`     |
-| `core.heap`             | Free heap memory (bytes)                                        | `int`     |
-| `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
+| Properties              | Description                                                          | Data type |
+| ----------------------- | -------------------------------------------------------------------- | --------- |
+| `core.debug`            | Whether to output debug information to the command line              | `bool`    |
+| `core.millis`           | Time since booting the microcontroller (ms)                          | `int`     |
+| `core.heap`             | Free heap memory (bytes)                                             | `int`     |
+| `core.last_message_age` | Time since last input message was received and interpreted (ms)      | `int`     |
+| `core.frame_drops`      | Telemetry frames a serial bus peer could not hand to its coordinator | `int`     |
 
-| Methods                          | Description                                                         | Arguments    |
-| -------------------------------- | ------------------------------------------------------------------- | ------------ |
-| `core.restart()`                 | Restart the microcontroller                                         |              |
-| `core.version()`                 | Show project name and version                                       |              |
-| `core.info()`                    | Show project name, version, compile time and IDF version            |              |
-| `core.print(...)`                | Print arbitrary arguments to the command line                       | arbitrary    |
-| `core.output(format)`            | Define the output format                                            | `str`        |
-| `core.startup_checksum()`        | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |              |
-| `core.get_pin_status(pin)`       | Print the status of the chosen pin                                  | `int`        |
-| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level                     | `int`, `int` |
-| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register                  | `int`        |
-| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS                   |              |
-| `core.set_baudrate(baud)`        | Persist UART0 baud rate (applied after restart)                     | `int`        |
-| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)                             |              |
-| `core.resume_broadcasts()`       | Resume property broadcasts                                          |              |
-| `core.clear_schedule()`          | Discard all pending scheduled blocks                                |              |
-| `core.keep_alive()`              | Reset `last_message_age` without producing output                   |              |
+| Methods                            | Description                                                         | Arguments           |
+| ---------------------------------- | ------------------------------------------------------------------- | ------------------- |
+| `core.restart()`                   | Restart the microcontroller                                         |                     |
+| `core.version()`                   | Show project name and version                                       |                     |
+| `core.info()`                      | Show project name, version, compile time and IDF version            |                     |
+| `core.print(...)`                  | Print arbitrary arguments to the command line                       | arbitrary           |
+| `core.output(format)`              | Define the output format                                            | `str`               |
+| `core.startup_checksum()`          | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |                     |
+| `core.frame(id, format, interval)` | Stream properties as a binary telemetry frame every `interval` ms   | `int`, `str`, `int` |
+| `core.frame_clear()`               | Remove all telemetry frames                                         |                     |
+| `core.get_pin_status(pin)`         | Print the status of the chosen pin                                  | `int`               |
+| `core.set_pin_level(pin, value)`   | Turns the pin into an output and sets its level                     | `int`, `int`        |
+| `core.get_pin_strapping(pin)`      | Print value of the pin from the strapping register                  | `int`               |
+| `core.forget_serial_bus()`         | Remove the saved SerialBus configuration from NVS                   |                     |
+| `core.set_baudrate(baud)`          | Persist UART0 baud rate (applied after restart)                     | `int`               |
+| `core.pause_broadcasts()`          | Pause property broadcasts (all modules)                             |                     |
+| `core.resume_broadcasts()`         | Resume property broadcasts                                          |                     |
+| `core.clear_schedule()`            | Discard all pending scheduled blocks                                |                     |
+| `core.keep_alive()`                | Reset `last_message_age` without producing output                   |                     |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
+
+**Binary telemetry frames:**
+Besides the text output, `core.frame(id, format, interval)` streams a set of properties as a compact binary frame every `interval` milliseconds.
+The `format` string lists space-separated elements of the pattern `<module>.<property>[:<type>[<digits>]]` or `<variable>[:<type>[<digits>]]`.
+The type is one of `?` (bool), `b`/`B` (signed/unsigned 8-bit integer), `h`/`H` (16-bit), `i`/`I` (32-bit) and `f` (32-bit float); without a type, booleans become `?`, integers `i` and numbers `f`.
+The optional `digits` scales the value by 10^`digits` before it is stored, so `motor.position:h2` sends the position in hundredths as a 16-bit integer.
+Numeric fields are written little-endian in the order listed; all `?` fields are packed as bits, least significant first, into the bytes after them.
+Calling `core.frame` again with the same `id` replaces that frame, `core.frame_clear()` removes all frames.
+For example, `core.frame(1, "motor.position:h2 motor.enabled input.level", 100)` sends 3 payload bytes every 100 ms.
+
+A frame body is `0x00 | src | id | seq | millis[4] | len | payload | crc16[2]`: `src` is 0 on the console host and the node id on a serial bus peer, `seq` counts the frames of an `id`, `millis` is `core.millis` when the frame was built, `len` the payload length, and the CRC-16/CCITT-FALSE covers everything before it.
+On the console the body is written as `0x00 | COBS(body) | 0x00`, so a reader tells frames from text lines by the `0x01` that follows a `0x00`; `monitor.py` prints each frame as `[frame src=… id=… seq=… millis=… payload=…]`.
+A `SerialBus` peer sends its frames to the coordinator instead, which passes them through to its console unchanged, so a host reads one stream for the whole bus; frames a peer cannot hand over, e.g. before the first poll, are counted in `core.frame_drops`.
 
 **UART baud rate:**
 The console (UART0) defaults to 115200 baud.
