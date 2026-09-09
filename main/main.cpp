@@ -37,9 +37,9 @@
 #include <string>
 #include <vector>
 
-#define BUFFER_SIZE 2048     // longest console line (a core.output with many fields is well over 1024)
-#define RX_RING_SIZE 8192    // UART0 receive ring: half a startup script, the main loop drains it every tick
-#define RX_PATTERN_QUEUE 512 // line ends the driver can queue before the main loop reads them
+#define BUFFER_SIZE CONSOLE_LINE_SIZE // longest console line (a core.output with many fields is well over 1024)
+#define RX_RING_SIZE 8192             // UART0 receive ring: half a startup script, the main loop drains it every tick
+#define RX_PATTERN_QUEUE 512          // line ends the driver can queue before the main loop reads them
 
 Core_ptr core_module;
 
