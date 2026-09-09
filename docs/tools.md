@@ -52,7 +52,8 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
-Binary telemetry frames (see [`core.frame`](module_reference.md#core)) are printed as one line each, `[frame src=… id=… seq=… millis=… payload=<hex>]`; a frame that fails its length or CRC check shows as `[corrupt frame: <hex>]`.
+Binary telemetry frames (see [`core.frame`](module_reference.md#core)) are printed as one line each, `[frame src=… id=… seq=… millis=… payload=<hex>]`.
+A frame that fails its length or CRC check shows as `[corrupt frame: <hex>]`.
 
 ### OTB Update
 
