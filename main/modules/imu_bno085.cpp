@@ -135,6 +135,10 @@ void ImuBno085::apply_mode(const std::string &mode) {
             active_reports[i] = desired[i];
         }
     }
+
+    // sh2_setSensorConfig services the transport while waiting for its response, so reports of the
+    // previous configuration (or from before a hub reset) may have been queued meanwhile
+    bno->clearSensorEvents();
 }
 
 ImuBno085::ImuBno085(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin,

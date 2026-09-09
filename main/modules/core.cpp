@@ -37,11 +37,12 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         esp_restart();
     } else if (method_name == "version") {
         const esp_app_desc_t *app_desc = esp_app_get_description();
-        echo("version: %s", app_desc->version);
+        echo("version: %s %s", app_desc->project_name, app_desc->version);
     } else if (method_name == "info") {
         Module::expect(arguments, 0);
         const esp_app_desc_t *app_desc = esp_app_get_description();
-        echo("lizard version: %s", app_desc->version);
+        echo("project name: %s", app_desc->project_name);
+        echo("version: %s", app_desc->version);
         echo("compile time: %s, %s", app_desc->date, app_desc->time);
         echo("idf version: %s", app_desc->idf_ver);
     } else if (method_name == "print") {

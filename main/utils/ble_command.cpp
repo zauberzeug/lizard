@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstring>
+#include <new>
 
 #include <nvs.h>
 #include <nvs_flash.h>
@@ -325,15 +326,14 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
 
             const uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
             if (len > 0 && client_callback) {
-                char *buf = (char *)malloc(len + 1);
-                if (buf && ble_hs_mbuf_to_flat(ctxt->om, buf, len, NULL) == 0) {
+                std::unique_ptr<char[]> buf(new (std::nothrow) char[len + 1]);
+                if (buf && ble_hs_mbuf_to_flat(ctxt->om, buf.get(), len, NULL) == 0) {
                     buf[len] = '\0';
 #if ZZ_BLE_DEBUG
-                    echo("BLE rx: %s", buf);
+                    echo("BLE rx: %s", buf.get());
 #endif
-                    client_callback(std::string_view(buf, len));
+                    client_callback(std::move(buf));
                 }
-                free(buf);
             }
             return 0;
         }

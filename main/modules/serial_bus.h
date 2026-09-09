@@ -6,6 +6,7 @@
 #include "freertos/task.h"
 #include "module.h"
 #include "serial.h"
+#include <atomic>
 #include <climits>
 #include <cstdint>
 #include <vector>
@@ -91,6 +92,9 @@ private:
     QueueHandle_t offset_queue = nullptr;
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
+    // written by the communication task, drained and reported by step() on the main task
+    std::atomic<unsigned> dropped_inbound{0};
+    unsigned long last_drop_report_millis = 0;
     TaskHandle_t communication_task = nullptr;
 
     // --- owned by the main task --------------------------------------------
@@ -118,6 +122,7 @@ private:
     [[noreturn]] static void communication_loop(void *param);
     void adopt_config(const Config &config);
     void process_uart();
+    void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
     void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
@@ -129,7 +134,7 @@ private:
     void reset_peer_clock(const uint8_t peer_id);
     void publish_peer_clock(const PeerClock &clock) const;
 
-    void print_to_incoming_queue(const char *format, ...) const;
+    void print_to_incoming_queue(const char *format, ...);
     void handle_echo(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
 };
