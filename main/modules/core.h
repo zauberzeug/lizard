@@ -34,6 +34,7 @@ private:
     mutable bool output_overflow_reported = false;
     std::vector<frame_t> frames;
     void emit_frame(frame_t &frame, unsigned long now);
+    void parse_frame_fields(std::string format, std::vector<frame_field_t> &fields) const;
     unsigned long int last_message_millis = 0;
 
 public:
