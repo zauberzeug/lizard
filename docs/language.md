@@ -207,6 +207,8 @@ Lizard currently supports five data types:
 
 Note that identifiers cannot be created via variable declarations, but only via constructors.
 
+Floating point numbers can also be `nan` (not a number) and `inf` (infinity), both as literals and in outputs; comparisons with `nan` are always false.
+
 Implicit conversion only happens from integers to floating point numbers:
 
 ```
