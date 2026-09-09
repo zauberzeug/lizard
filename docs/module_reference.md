@@ -114,11 +114,15 @@ This is intended for timestamping sensor data (e.g. wheel odometry) received fro
 
 - Applying it: a peer timestamp `t_peer` in milliseconds maps to coordinator time as `t_peer - offset_<id>`; mind the units, since the peer's `esp_timer` stamps are in microseconds and the properties in milliseconds.
 - Sign: the offset is the peer's clock minus the coordinator's, so it is positive while the peer's `esp_timer` runs ahead; as both sides count from their own boot, a peer that booted later than the coordinator has a negative offset.
-- Accuracy: each sample's error bound is half the transport time that is not explained by the known airtime of the two frames; samples within 0.5 ms replace the estimate immediately, otherwise the best sample of every 2 s does, so the estimate keeps following crystal drift even on a busy bus. Systematic asymmetries such as RS485 turnaround are not covered by the bound.
-- Validity: the properties are NaN until the first sample arrives and return to NaN whenever the estimate turns invalid, i.e. when the peer's poll times out (e.g. across a peer reboot), or when `make_coordinator()` or `enable_time_sync()` is called again, which restarts all estimates. An expander's broadcast skips NaN properties, so a proxied offset keeps its last value while the estimate is invalid.
-- Scope: the properties exist only on the coordinator and only for the IDs in the current `make_coordinator()` list, so referencing them on a peer or for an unlisted ID is an unknown-property error rather than NaN.
+- Accuracy: each sample's error bound is half the transport time that is not explained by the known airtime of the two frames; samples within 0.5 ms replace the estimate immediately, otherwise the best sample of every 2 s does, so the estimate keeps following crystal drift even on a busy bus.
+  Systematic asymmetries such as RS485 turnaround are not covered by the bound.
+- Validity: the properties are NaN until the first sample arrives and return to NaN whenever the estimate turns invalid, i.e. when the peer's poll times out (e.g. across a peer reboot), or when `make_coordinator()` or `enable_time_sync()` is called again, which restarts all estimates.
+  An expander's broadcast skips NaN properties, so a proxied offset keeps its last value while the estimate is invalid.
+- Scope: the properties exist only on the coordinator, are created once both `make_coordinator()` and `enable_time_sync()` have been called, and stay (as NaN) for IDs dropped from a later list.
+  Referencing them on a peer, before they are created, or for an ID that was never listed is an unknown-property error rather than NaN.
 - Convergence: the first sample after enabling or after a timeout locks the estimate, whatever its bound, within two poll rounds; while polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.
-- Compatibility: update the coordinator's firmware first, and treat `__POLL__<digits>` and `__DONE__<digits>,<digits>,<digits>` payloads as reserved for this protocol. A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.
+- Compatibility: update the coordinator's firmware first, and treat `__POLL__<digits>` and `__DONE__<digits>,<digits>,<digits>` payloads as reserved for this protocol.
+  A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.

@@ -50,7 +50,7 @@ private:
         uint32_t generation; // stamps OffsetUpdates so the main task can drop ones from a superseded config
         bool time_sync_enabled;
         uint8_t peer_count;
-        uint8_t peer_ids[254];
+        uint8_t peer_ids[254]; // one slot per valid ID (1..254)
     };
     struct OffsetUpdate {
         uint32_t generation;

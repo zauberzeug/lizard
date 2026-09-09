@@ -58,32 +58,22 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->properties = SerialBus::get_defaults();
     this->serial->enable_line_detection();
 
-    if (!(this->config_queue = xQueueCreate(1, sizeof(Config)))) {
-        throw std::runtime_error("failed to create serial bus config queue");
-    }
-    if (!(this->offset_queue = xQueueCreate(OFFSET_QUEUE_LENGTH, sizeof(OffsetUpdate)))) {
-        vQueueDelete(this->config_queue);
-        throw std::runtime_error("failed to create serial bus offset queue");
-    }
-    if (!(this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage)))) {
-        vQueueDelete(this->config_queue);
-        vQueueDelete(this->offset_queue);
-        throw std::runtime_error("failed to create serial bus outbound queue");
-    }
-    if (!(this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage)))) {
-        vQueueDelete(this->config_queue);
-        vQueueDelete(this->offset_queue);
-        vQueueDelete(this->outbound_queue);
-        throw std::runtime_error("failed to create serial bus inbound queue");
-    }
-
-    if (xTaskCreatePinnedToCore(
+    this->config_queue = xQueueCreate(1, sizeof(Config));
+    this->offset_queue = xQueueCreate(OFFSET_QUEUE_LENGTH, sizeof(OffsetUpdate));
+    this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage));
+    this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage));
+    const bool queues_created = this->config_queue && this->offset_queue && this->outbound_queue && this->inbound_queue;
+    if (!queues_created ||
+        xTaskCreatePinnedToCore(
             SerialBus::communication_loop, "serial_bus_comm", 4096, this, 5, &this->communication_task, 1) != pdPASS) {
-        vQueueDelete(this->config_queue);
-        vQueueDelete(this->offset_queue);
-        vQueueDelete(this->outbound_queue);
-        vQueueDelete(this->inbound_queue);
-        throw std::runtime_error("failed to create serial bus communication task");
+        for (const QueueHandle_t queue :
+             {this->config_queue, this->offset_queue, this->outbound_queue, this->inbound_queue}) {
+            if (queue) {
+                vQueueDelete(queue);
+            }
+        }
+        throw std::runtime_error(queues_created ? "failed to create serial bus communication task"
+                                                : "failed to create serial bus queues");
     }
 
     register_echo_callback([this](const char *line) { this->handle_echo(line); });
@@ -250,18 +240,17 @@ void SerialBus::apply_offset_update(const OffsetUpdate &update) {
                         bus->ready_pending = false;
                     }
                     bus->send_outgoing_queue();
+                    char done[sizeof(DONE_CMD) + DONE_STAMP_FIELDS * (MAX_STAMP_DIGITS + 1)];
+                    int done_len = std::snprintf(done, sizeof(done), "%s", DONE_CMD);
                     if (bus->time_sync_enabled) {
                         // T3 is stamped as late as possible; the elapsed time since T2 lets the
                         // coordinator cancel everything that happened on this side in between
                         const int64_t t3 = esp_timer_get_time();
-                        char done_payload[80];
-                        const int done_len = std::snprintf(done_payload, sizeof(done_payload), "%s%lld,%lld,%lu",
-                                                           DONE_CMD, (long long)t3, (long long)(t3 - bus->poll_received_us),
-                                                           (unsigned long)bus->poll_received_seq);
-                        bus->send_message(bus->requesting_node, done_payload, done_len);
-                    } else {
-                        bus->send_message(bus->requesting_node, DONE_CMD, sizeof(DONE_CMD) - 1);
+                        done_len += std::snprintf(done + done_len, sizeof(done) - done_len, "%lld,%lld,%lu",
+                                                  (long long)t3, (long long)(t3 - bus->poll_received_us),
+                                                  (unsigned long)bus->poll_received_seq);
                     }
+                    bus->send_message(bus->requesting_node, done, done_len);
                 } catch (const std::exception &e) {
                     bus->print_to_incoming_queue("warning: serial bus %s error while responding to poll: %s", bus->name.c_str(), e.what());
                 }
@@ -283,7 +272,7 @@ void SerialBus::adopt_config(const Config &config) {
         clock.peer_id = id;
         this->peer_clocks.push_back(clock);
     }
-    // restart polling from a known-good index, but let an outstanding POLL finish first: a second POLL
+    // restart polling with the first listed peer, but let an outstanding POLL finish first: a second POLL
     // would collide with the DONE that is still on its way and could be paired with the wrong T1
     this->poll_index = 0;
 }
@@ -372,8 +361,8 @@ void SerialBus::push_incoming(const IncomingMessage &message) {
 }
 
 void SerialBus::send_poll() {
-    this->poll_index = (this->poll_index + 1) % this->peer_ids.size();
     this->polled_peer_id = this->peer_ids[this->poll_index];
+    this->poll_index = (this->poll_index + 1) % this->peer_ids.size();
     char payload[sizeof(POLL_CMD) + MAX_STAMP_DIGITS];
     int length = std::snprintf(payload, sizeof(payload), "%s", POLL_CMD);
     // The sequence number pairs the DONE with this POLL's T1. Only a peer that has answered with a
@@ -403,7 +392,7 @@ void SerialBus::handle_done(const uint8_t sender, const int64_t *stamp, const in
         return;
     }
     clock->sync_capable = stamped;
-    if (stamped && seq != 0) {
+    if (seq != 0) { // the stamped answer to a bare POLL (seq 0) only proves the peer capable
         this->handle_sync_sample(*clock, stamp[0], stamp[1], t4, done_frame_len);
     }
 }
