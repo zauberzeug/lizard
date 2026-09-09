@@ -117,9 +117,10 @@ This is intended for timestamping sensor data (e.g. wheel odometry) received fro
 - Accuracy: each sample's error bound is half the transport time that is not explained by the known airtime of the two frames; samples within 0.5 ms replace the estimate immediately, otherwise the best sample of every 2 s does, so the estimate keeps following crystal drift even on a busy bus.
   Systematic asymmetries such as RS485 turnaround are not covered by the bound.
 - Validity: the properties are NaN until the first sample arrives and return to NaN whenever the estimate turns invalid, i.e. when the peer's poll times out (e.g. across a peer reboot), or when `make_coordinator()` or `enable_time_sync()` is called again, which restarts all estimates.
-  An expander's broadcast skips NaN properties, so a proxied offset keeps its last value while the estimate is invalid.
+  An expander's broadcast carries NaN as the literal `nan`, so a proxied offset turns NaN as well; the host firmware has to know that literal.
 - Scope: the properties exist only on the coordinator, are created once both `make_coordinator()` and `enable_time_sync()` have been called, and stay (as NaN) for IDs dropped from a later list.
   Referencing them on a peer, before they are created, or for an ID that was never listed is an unknown-property error rather than NaN.
+  Behind an expander, the host learns them with the first broadcast after `enable_time_sync()`, so a startup script cannot reference them yet.
 - Convergence: the first sample after enabling or after a timeout locks the estimate, whatever its bound, within two poll rounds; while polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.
 - Compatibility: update the coordinator's firmware first, and treat `__POLL__<digits>` and `__DONE__<digits>,<digits>,<digits>` payloads as reserved for this protocol.
   A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.
