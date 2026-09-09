@@ -2,6 +2,7 @@
 #include "../global.h"
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
+#include <cmath>
 #include <stdarg.h>
 #include <typeinfo>
 
@@ -63,6 +64,9 @@ void Module::step() {
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "!!");
         for (auto const &[property_name, property] : this->properties) {
+            if (property->type == number && std::isnan(property->number_value)) {
+                continue; // the host could not parse "nan"; its proxy keeps the last value instead
+            }
             pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.%s=", this->name.c_str(), property_name.c_str());
             pos += property->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
             pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ";");

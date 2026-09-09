@@ -97,7 +97,7 @@ void Serial::write_checked_line(const char *message, const int length) const {
         if (i >= length || message[i] == '\n') {
             csprintf(checksum_buffer, sizeof(checksum_buffer), "@%02x\n", checksum);
             uart_write_bytes(this->uart_num, &message[start], i - start);
-            uart_write_bytes(this->uart_num, checksum_buffer, 4);
+            uart_write_bytes(this->uart_num, checksum_buffer, CHECKSUM_TRAILER_LENGTH);
             start = i + 1;
             checksum = 0;
         } else {
