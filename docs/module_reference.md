@@ -35,6 +35,7 @@ It is automatically created right after the boot sequence.
 | `core.output(format)`              | Define the output format                                            | `str`               |
 | `core.startup_checksum()`          | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |                     |
 | `core.frame(id, format, interval)` | Stream properties as a binary telemetry frame every `interval` ms   | `int`, `str`, `int` |
+| `core.frame_add(id, format)`       | Append fields to the telemetry frame `id`                           | `int`, `str`        |
 | `core.frame_clear()`               | Remove all telemetry frames                                         |                     |
 | `core.get_pin_status(pin)`         | Print the status of the chosen pin                                  | `int`               |
 | `core.set_pin_level(pin, value)`   | Turns the pin into an output and sets its level                     | `int`, `int`        |
@@ -58,7 +59,7 @@ The `format` string lists space-separated elements of the pattern `<module>.<pro
 The type is one of `?` (bool), `b`/`B` (signed/unsigned 8-bit integer), `h`/`H` (16-bit), `i`/`I` (32-bit) and `f` (32-bit float); without a type, booleans become `?`, integers `i` and numbers `f`.
 The optional `digits` scales the value by 10^`digits` before it is stored, so `motor.position:h2` sends the position in hundredths as a 16-bit integer.
 Numeric fields are written little-endian in the order listed; all `?` fields are packed as bits, least significant first, into the bytes after them.
-Calling `core.frame` again with the same `id` replaces that frame, `core.frame_clear()` removes all frames.
+Calling `core.frame` again with the same `id` replaces that frame, `core.frame_add(id, format)` appends fields to it when one line would get too long (e.g. for a serial bus startup), and `core.frame_clear()` removes all frames.
 For example, `core.frame(1, "motor.position:h2 motor.enabled input.level", 100)` sends 3 payload bytes every 100 ms.
 
 A frame body is `0x00 | src | id | seq | millis[4] | len | payload | crc16[2]`: `src` is 0 on the console host and the node id on a serial bus peer, `seq` counts the frames of an `id`, `millis` is `core.millis` when the frame was built, `len` the payload length, and the CRC-16/CCITT-FALSE covers everything before it.

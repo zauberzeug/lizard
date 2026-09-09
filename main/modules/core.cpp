@@ -26,8 +26,6 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["debug"] = std::make_shared<BooleanVariable>(false);
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
-    this->properties["tx_us"] = std::make_shared<IntegerVariable>();
-    this->properties["tx_us_max"] = std::make_shared<IntegerVariable>();
     this->properties["frame_drops"] = std::make_shared<IntegerVariable>();
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
 }
@@ -36,7 +34,6 @@ void Core::step() {
     this->properties.at("millis")->integer_value = millis();
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
-    const unsigned long start = micros();
     Module::step();
     const unsigned long now = millis();
     for (auto &frame : this->frames) {
@@ -45,11 +42,32 @@ void Core::step() {
             this->emit_frame(frame, now);
         }
     }
-    // time spent formatting and writing telemetry this tick (text line and frames)
-    const long long tx_us = micros() - start;
-    this->properties.at("tx_us")->integer_value = tx_us;
-    if (tx_us > this->properties.at("tx_us_max")->integer_value) {
-        this->properties.at("tx_us_max")->integer_value = tx_us;
+}
+
+void Core::parse_frame_fields(std::string format, std::vector<frame_field_t> &fields) const {
+    while (!format.empty()) {
+        std::string element = cut_first_word(format);
+        std::string name = cut_first_word(element, ':');
+        ConstModule_ptr module = nullptr;
+        std::string property_name = name;
+        if (name.find('.') != std::string::npos) {
+            const std::string module_name = cut_first_word(name, '.');
+            module = Global::get_module(module_name);
+            property_name = name;
+        }
+        char type = 0;
+        double scale = 1;
+        if (!element.empty()) {
+            type = element[0];
+            if (element.size() > 1) {
+                scale = pow(10, atoi(element.c_str() + 1));
+            }
+        } else {
+            const Variable_ptr variable = module ? module->get_property(property_name) : Global::get_variable(property_name);
+            type = variable->type == boolean ? '?' : variable->type == integer ? 'i'
+                                                                               : 'f';
+        }
+        fields.push_back({module, property_name, type, scale});
     }
 }
 
@@ -213,39 +231,23 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
                       0,
                       0,
                       {}};
-        std::string format = arguments[1]->evaluate_string();
-        while (!format.empty()) {
-            std::string element = cut_first_word(format);
-            std::string name = cut_first_word(element, ':');
-            ConstModule_ptr module = nullptr;
-            std::string property_name = name;
-            if (name.find('.') != std::string::npos) {
-                const std::string module_name = cut_first_word(name, '.');
-                module = Global::get_module(module_name);
-                property_name = name;
-            }
-            char type = 0;
-            double scale = 1;
-            if (!element.empty()) {
-                type = element[0];
-                if (element.size() > 1) {
-                    scale = pow(10, atoi(element.c_str() + 1));
-                }
-            } else {
-                const Variable_ptr variable = module ? module->get_property(property_name) : Global::get_variable(property_name);
-                type = variable->type == boolean ? '?' : variable->type == integer ? 'i'
-                                                                                   : 'f';
-            }
-            frame.fields.push_back({module, property_name, type, scale});
-        }
+        this->parse_frame_fields(arguments[1]->evaluate_string(), frame.fields);
         this->frames.erase(std::remove_if(this->frames.begin(), this->frames.end(),
                                           [&](const frame_t &f) { return f.id == frame.id; }),
                            this->frames.end());
         this->frames.push_back(frame);
+    } else if (method_name == "frame_add") {
+        // frame_add(id, "field[:type[scale]] ..."): append fields to a frame whose definition line got too long
+        Module::expect(arguments, 2, integer, string);
+        const uint8_t id = static_cast<uint8_t>(arguments[0]->evaluate_integer());
+        const auto it = std::find_if(this->frames.begin(), this->frames.end(), [&](const frame_t &f) { return f.id == id; });
+        if (it == this->frames.end()) {
+            throw std::runtime_error("unknown frame id " + std::to_string(id));
+        }
+        this->parse_frame_fields(arguments[1]->evaluate_string(), it->fields);
     } else if (method_name == "frame_clear") {
         Module::expect(arguments, 0);
         this->frames.clear();
-        this->properties.at("tx_us_max")->integer_value = 0;
     } else if (method_name == "startup_checksum") {
         uint16_t checksum = 0;
         for (char const &c : Storage::startup) {
