@@ -54,20 +54,8 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
 **Binary telemetry frames:**
-Besides the text output, `core.frame(id, format, interval)` streams a set of properties as a compact binary frame every `interval` milliseconds.
-The `format` string lists space-separated elements of the pattern `<module>.<property>[:<type>[<digits>]]` or `<variable>[:<type>[<digits>]]`.
-The type is one of `?` (bool), `b`/`B` (signed/unsigned 8-bit integer), `h`/`H` (16-bit), `i`/`I` (32-bit) and `f` (32-bit float); without a type, booleans become `?`, integers `i` and numbers `f`.
-The optional `digits` scales the value by 10^`digits` before it is stored, so `motor.position:h2` sends the position in hundredths as a 16-bit integer.
-Numeric fields are written little-endian in the order listed; all `?` fields are packed as bits, least significant first, into the bytes after them.
-Calling `core.frame` again with the same `id` replaces that frame.
-`core.frame_add(id, format)` appends fields to it when one line would get too long (e.g. for a serial bus startup), and `core.frame_clear()` removes all frames.
-For example, `core.frame(1, "motor.position:h2 motor.enabled input.level", 100)` sends 3 payload bytes every 100 ms.
-
-A frame body is `0x00 | src | id | seq | millis[4] | len | payload | crc16[2]`: `src` is 0 on the console host and the node id on a serial bus peer, `seq` counts the frames of an `id`, `millis` is `core.millis` when the frame was built, `len` the payload length, and the CRC-16/CCITT-FALSE covers everything before it.
-On the console the body is written as `0x00 | COBS(body) | 0x00`, so a reader tells frames from text lines by the `0x01` that follows a `0x00`.
-`monitor.py` prints each frame as `[frame src=… id=… seq=… millis=… payload=…]`.
-A `SerialBus` peer sends its frames to the coordinator instead, which passes them through to its console unchanged, so a host reads one stream for the whole bus.
-Frames a peer cannot hand over, e.g. before the first poll, are counted in `core.frame_drops`.
+`core.frame(id, format, interval)` streams a set of properties as a compact binary frame every `interval` milliseconds, next to the text output; `core.frame_add` continues a long field list and `core.frame_clear` removes all frames.
+The format string, the payload layout, the frame body and how frames travel over the console and the serial bus are described in [Telemetry Frames](telemetry_frames.md).
 
 **UART baud rate:**
 The console (UART0) defaults to 115200 baud.
