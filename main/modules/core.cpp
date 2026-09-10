@@ -2,6 +2,8 @@
 #include "../global.h"
 #include "../storage.h"
 #include "../utils/bus_backup.h"
+#include "../utils/frame.h"
+#include "serial_bus.h"
 #include "../utils/scheduler.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -13,6 +15,9 @@
 #include "hal/gpio_hal.h"
 #include "soc/io_mux_reg.h"
 #include "soc/soc.h"
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <stdlib.h>
@@ -21,6 +26,7 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["debug"] = std::make_shared<BooleanVariable>(false);
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
+    this->properties["frame_drops"] = std::make_shared<IntegerVariable>();
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
 }
 
@@ -29,6 +35,147 @@ void Core::step() {
     this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
+    const unsigned long now = millis();
+    for (auto &frame : this->frames) {
+        if (now - frame.last_millis >= frame.interval) {
+            frame.last_millis = now;
+            this->emit_frame(frame, now);
+        }
+    }
+}
+
+void Core::parse_frame_fields(std::string format, std::vector<frame_field_t> &fields) const {
+    while (!format.empty()) {
+        std::string element = cut_first_word(format);
+        std::string name = cut_first_word(element, ':');
+        ConstModule_ptr module = nullptr;
+        std::string property_name = name;
+        if (name.find('.') != std::string::npos) {
+            const std::string module_name = cut_first_word(name, '.');
+            module = Global::get_module(module_name);
+            property_name = name;
+        }
+        char type = 0;
+        double scale = 1;
+        if (!element.empty()) {
+            type = element[0];
+            if (element.size() > 1) {
+                scale = pow(10, atoi(element.c_str() + 1));
+            }
+        } else {
+            const Variable_ptr variable = module ? module->get_property(property_name) : Global::get_variable(property_name);
+            type = variable->type == boolean ? '?' : variable->type == integer ? 'i'
+                                                                               : 'f';
+        }
+        fields.push_back({module, property_name, type, scale});
+    }
+}
+
+void Core::emit_frame(frame_t &frame, unsigned long now) {
+    static uint8_t payload[frame::MAX_PAYLOAD];
+    size_t pos = 0;
+    size_t bit = 0;
+    uint8_t bits[16] = {0};
+    for (auto const &field : frame.fields) {
+        const Variable_ptr variable =
+            field.module ? field.module->get_property(field.property_name) : Global::get_variable(field.property_name);
+        double value = 0;
+        switch (variable->type) {
+        case boolean:
+            value = variable->boolean_value ? 1 : 0;
+            break;
+        case integer:
+            value = static_cast<double>(variable->integer_value);
+            break;
+        case number:
+            value = variable->number_value;
+            break;
+        default:
+            throw std::runtime_error("unsupported frame field type");
+        }
+        if (field.type == '?') {
+            if (value != 0) {
+                bits[bit / 8] |= 1 << (bit % 8);
+            }
+            ++bit;
+            continue;
+        }
+        const double scaled = value * field.scale;
+        union {
+            int8_t b;
+            uint8_t B;
+            int16_t h;
+            uint16_t H;
+            int32_t i;
+            uint32_t I;
+            float f;
+            uint8_t raw[4];
+        } u;
+        size_t size = 0;
+        switch (field.type) {
+        case 'b':
+            u.b = static_cast<int8_t>(scaled);
+            size = 1;
+            break;
+        case 'B':
+            u.B = static_cast<uint8_t>(scaled);
+            size = 1;
+            break;
+        case 'h':
+            u.h = static_cast<int16_t>(scaled);
+            size = 2;
+            break;
+        case 'H':
+            u.H = static_cast<uint16_t>(scaled);
+            size = 2;
+            break;
+        case 'i':
+            u.i = static_cast<int32_t>(scaled);
+            size = 4;
+            break;
+        case 'I':
+            u.I = static_cast<uint32_t>(scaled);
+            size = 4;
+            break;
+        case 'f':
+            u.f = static_cast<float>(scaled);
+            size = 4;
+            break;
+        default:
+            throw std::runtime_error("unknown frame field type");
+        }
+        if (pos + size > sizeof(payload)) {
+            throw std::runtime_error("frame payload too large");
+        }
+        memcpy(&payload[pos], u.raw, size);
+        pos += size;
+    }
+    const size_t bit_bytes = (bit + 7) / 8;
+    if (pos + bit_bytes > sizeof(payload)) {
+        throw std::runtime_error("frame payload too large");
+    }
+    memcpy(&payload[pos], bits, bit_bytes);
+    pos += bit_bytes;
+    // on a bus peer the frame travels to the coordinator, which passes it through to its console
+    SerialBus_ptr peer_bus;
+    for (auto const &[module_name, module] : Global::modules) {
+        const auto bus = std::dynamic_pointer_cast<SerialBus>(module);
+        if (bus && bus->is_peer_with_coordinator()) {
+            peer_bus = bus;
+            break;
+        }
+    }
+    if (!peer_bus) {
+        frame::write(0, frame.id, frame.seq++, now, payload, pos);
+        return;
+    }
+    static uint8_t body[frame::MAX_BODY];
+    const size_t body_length = frame::build_body(peer_bus->node_id, frame.id, frame.seq++, now, payload, pos, body);
+    try {
+        peer_bus->send_frame(body, body_length);
+    } catch (const std::runtime_error &e) {
+        this->properties.at("frame_drops")->integer_value++;
+    }
 }
 
 void Core::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -76,6 +223,31 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             }
         }
         this->output_on = true;
+    } else if (method_name == "frame") {
+        // frame(id, "field[:type[scale]] ...", interval_ms); types ? b B h H i I f, scale = decimal digits
+        Module::expect(arguments, 3, integer, string, integer);
+        frame_t frame{static_cast<uint8_t>(arguments[0]->evaluate_integer()),
+                      static_cast<unsigned long>(arguments[2]->evaluate_integer()),
+                      0,
+                      0,
+                      {}};
+        this->parse_frame_fields(arguments[1]->evaluate_string(), frame.fields);
+        this->frames.erase(std::remove_if(this->frames.begin(), this->frames.end(),
+                                          [&](const frame_t &f) { return f.id == frame.id; }),
+                           this->frames.end());
+        this->frames.push_back(frame);
+    } else if (method_name == "frame_add") {
+        // frame_add(id, "field[:type[scale]] ..."): append fields to a frame whose definition line got too long
+        Module::expect(arguments, 2, integer, string);
+        const uint8_t id = static_cast<uint8_t>(arguments[0]->evaluate_integer());
+        const auto it = std::find_if(this->frames.begin(), this->frames.end(), [&](const frame_t &f) { return f.id == id; });
+        if (it == this->frames.end()) {
+            throw std::runtime_error("unknown frame id " + std::to_string(id));
+        }
+        this->parse_frame_fields(arguments[1]->evaluate_string(), it->fields);
+    } else if (method_name == "frame_clear") {
+        Module::expect(arguments, 0);
+        this->frames.clear();
     } else if (method_name == "startup_checksum") {
         uint16_t checksum = 0;
         for (char const &c : Storage::startup) {
