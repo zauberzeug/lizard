@@ -221,7 +221,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
 }
 
 std::string Core::get_output() const {
-    static char output_buffer[1024];
+    static char output_buffer[CONSOLE_LINE_SIZE];
     int pos = 0;
     for (auto const &element : this->output_list) {
         if (pos > 0) {
