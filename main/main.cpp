@@ -467,8 +467,10 @@ void app_main() {
     try {
         Storage::init();
         process_lizard(Storage::startup.c_str());
-    } catch (const std::runtime_error &e) {
+    } catch (const std::exception &e) {
         echo("error while loading startup script: %s", e.what());
+    } catch (...) {
+        echo("error while loading startup script: unknown exception");
     }
 
     bus_backup::save_if_present();
