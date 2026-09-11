@@ -80,6 +80,9 @@ void Serial::reinitialize_after_flash() const {
 }
 
 size_t Serial::write(const uint8_t byte) const {
+    if (!uart_is_driver_installed(this->uart_num)) {
+        return 0;
+    }
     const char send = byte;
     uart_write_bytes(this->uart_num, &send, 1);
     return 1;
@@ -90,6 +93,9 @@ void Serial::write_checked_line(const char *message) const {
 }
 
 void Serial::write_checked_line(const char *message, const int length) const {
+    if (!uart_is_driver_installed(this->uart_num)) {
+        return;
+    }
     static char checksum_buffer[16];
     uint8_t checksum = 0;
     int start = 0;
@@ -120,16 +126,25 @@ bool Serial::has_buffered_lines() const {
 }
 
 void Serial::flush() const {
+    if (!uart_is_driver_installed(this->uart_num)) {
+        return;
+    }
     uart_flush(this->uart_num);
 }
 
 int Serial::read(uint32_t timeout) const {
+    if (!uart_is_driver_installed(this->uart_num)) {
+        return -1;
+    }
     uint8_t data = 0;
     const int length = uart_read_bytes(this->uart_num, &data, 1, timeout);
     return length > 0 ? data : -1;
 }
 
 int Serial::read_line(char *buffer, size_t buffer_len) const {
+    if (!uart_is_driver_installed(this->uart_num)) {
+        return 0;
+    }
     int pos = uart_pattern_pop_pos(this->uart_num);
     if (pos >= static_cast<int>(buffer_len)) {
         if (this->available() <= pos) {
