@@ -28,6 +28,7 @@
 #include "utils/uart.h"
 #include <chrono>
 #include <functional>
+#include <math.h>
 #include <memory>
 #include <stdexcept>
 #include <stdint.h>
@@ -69,6 +70,10 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
         return std::make_shared<BooleanExpression>(true);
     case PARSED_FALSE:
         return std::make_shared<BooleanExpression>(false);
+    case PARSED_NAN:
+        return std::make_shared<NumberExpression>(NAN);
+    case PARSED_INF:
+        return std::make_shared<NumberExpression>(INFINITY);
     case PARSED_STRING: {
         const struct parsed_string string = parsed_string_get(expression.string);
         return std::make_shared<StringExpression>(std::string(string.string, string.length));
