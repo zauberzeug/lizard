@@ -28,12 +28,12 @@
 #include "utils/uart.h"
 #include <chrono>
 #include <functional>
+#include <math.h>
 #include <memory>
 #include <stdexcept>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <cmath>
 #include <string>
 #include <vector>
 
