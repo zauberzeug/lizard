@@ -121,6 +121,8 @@ This is intended for timestamping sensor data (e.g. wheel odometry) received fro
 - Scope: the properties exist only on the coordinator, are created once both `make_coordinator()` and `enable_time_sync()` have been called, and stay (as NaN) for IDs dropped from a later list.
   Referencing them on a peer, before they are created, or for an ID that was never listed is an unknown-property error rather than NaN.
   Behind an expander, the host learns them with the first broadcast after `enable_time_sync()`, so a startup script cannot reference them yet.
+  The two properties per peer also count against the coordinator's 1024-byte broadcast line, which overflows at roughly 16 peers;
+  from then on the coordinator reports `buffer too small` on every step instead of broadcasting any of its properties.
 - Convergence: the first sample after enabling or after a timeout locks the estimate, whatever its bound, within two poll rounds; while polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.
 - Compatibility: update the coordinator's firmware first, and treat `__POLL__<digits>` and `__DONE__<digits>,<digits>,<digits>` payloads as reserved for this protocol.
   A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.
