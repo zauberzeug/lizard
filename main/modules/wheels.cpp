@@ -39,13 +39,7 @@ bool Wheels::may_drive() const {
 void Wheels::step() {
     this->update_odometry();
 
-    if (this->properties.at("enabled")->boolean_value != this->last_applied_enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 
     // Lock interlock: hold the wheels at standstill while enabled but locked, so the hold
     // engages even when no drive command arrives — e.g. the rule that set locked ran because
@@ -117,15 +111,7 @@ void Wheels::write_property(const std::string property_name, const ConstExpressi
     }
 }
 
-void Wheels::enable() {
-    this->last_applied_enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-    this->do_enable();
-}
-
 void Wheels::disable() {
-    this->do_disable();
+    Module::disable();
     this->holding = false; // the standstill hold died with the motors; re-send it if locking persists
-    this->last_applied_enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
