@@ -147,10 +147,6 @@ void Storage::save_startup() {
     Storage::put(Storage::startup);
 }
 
-void Storage::clear_nvs() {
-    Storage::put("");
-}
-
 void Storage::set_user_pin(const std::uint32_t pin) {
     write_u32("ble_pins", "user_pin", pin);
 }
