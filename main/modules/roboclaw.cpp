@@ -22,8 +22,20 @@ const std::map<std::string, Variable_ptr> RoboClaw::get_defaults() {
 }
 
 RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address)
-    : Module(name), address(address), serial(serial) {
+    : Module(name), timeout(RoboClaw::read_timeout(serial->baud_rate)), address(address), serial(serial) {
     this->properties = RoboClaw::get_defaults();
+}
+
+uint32_t RoboClaw::read_timeout(const long baud_rate) {
+    // The timeout for the first reply byte has to cover a whole exchange: the UART driver only releases a short
+    // reply after its RX idle timeout of 10 character times, and every retry flushes the FIFO, so a reply that is
+    // still waiting for that idle time is lost instead of being picked up by the next attempt. The longest exchange
+    // is 19 characters (8-byte command + ACK, or 2-byte request + 7-byte encoder reply, plus the idle time);
+    // on top of that the RoboClaw needs a few milliseconds to answer.
+    const uint32_t exchange_characters = 19;
+    const uint32_t processing_ms = 10;
+    const uint32_t exchange_ms = (exchange_characters * 10 * 1000 + baud_rate - 1) / baud_rate;
+    return pdMS_TO_TICKS(exchange_ms + processing_ms);
 }
 
 void RoboClaw::step() {
