@@ -6,7 +6,7 @@
 static constexpr uint32_t READ_TASK_STACK_SIZE = 4096;
 static constexpr UBaseType_t READ_TASK_PRIORITY = 5;
 static constexpr BaseType_t READ_TASK_CORE = 1;
-static constexpr TickType_t READ_PERIOD = pdMS_TO_TICKS(10); // the BNO055 fuses at 100 Hz, faster reads only repeat values
+static constexpr TickType_t READ_PERIOD = pdMS_TO_TICKS(10); // the BNO055's fusion rate; a slower read just free-runs
 
 namespace {
 
@@ -110,8 +110,8 @@ void Imu::read_loop(void *imu) {
         } catch (const std::exception &) {
             self->read_failed.store(true);
         }
-        // Same drift-free cadence as the main loop, see main.cpp: on overrun xTaskDelayUntil
-        // returns pdFALSE without blocking, so re-anchor and yield a tick to the idle task.
+        // Reading all nine blocks takes longer than the period, so this usually overruns:
+        // re-anchor and yield one tick so the idle task keeps feeding the watchdog.
         if (xTaskDelayUntil(&last_wake, READ_PERIOD) == pdFALSE) {
             last_wake = xTaskGetTickCount();
             vTaskDelay(1);
