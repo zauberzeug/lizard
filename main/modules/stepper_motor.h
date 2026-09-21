@@ -54,9 +54,6 @@ public:
     int32_t get_target_speed() const { return this->target_speed; }
     uint32_t get_target_acceleration() const { return this->target_acceleration; }
 
-    // `Motor` declares these pure virtual, so they must be redeclared here to override both bases.
-    void enable() override { Module::enable(); }
-    void disable() override { Module::disable(); }
     void stop() override;
     double get_position() override;
     void position(const double position, const double speed, const double acceleration) override;

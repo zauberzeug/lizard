@@ -5,6 +5,7 @@
 
 class MotorAxis : public Module {
 private:
+    const Module_ptr motor_module; // the same object as `motor`, for enable()/disable()
     const Motor_ptr motor;
     const Input_ptr input1;
     const Input_ptr input2;
@@ -16,7 +17,7 @@ private:
 public:
     static inline constexpr const char *TYPE = "MotorAxis";
 
-    MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2);
+    MotorAxis(const std::string name, const Module_ptr motor_module, const Input_ptr input1, const Input_ptr input2);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();

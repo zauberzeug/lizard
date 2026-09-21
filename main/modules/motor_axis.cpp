@@ -8,14 +8,13 @@
 static Module_ptr create_motor_axis(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 3, identifier, identifier, identifier);
     const std::string motor_name = arguments[0]->evaluate_identifier();
-    const Module_ptr module = Global::get_module(motor_name);
-    const Motor_ptr motor = std::dynamic_pointer_cast<Motor>(module);
-    if (!motor) {
+    const Module_ptr motor_module = Global::get_module(motor_name);
+    if (!std::dynamic_pointer_cast<Motor>(motor_module)) {
         throw std::runtime_error("module \"" + motor_name + "\" is not a supported motor for MotorAxis");
     }
     const Input_ptr input1 = get_module_argument<Input>(arguments[1]);
     const Input_ptr input2 = get_module_argument<Input>(arguments[2]);
-    return std::make_shared<MotorAxis>(name, motor, input1, input2);
+    return std::make_shared<MotorAxis>(name, motor_module, input1, input2);
 }
 REGISTER_MODULE(MotorAxis, &create_motor_axis)
 
@@ -25,8 +24,12 @@ const std::map<std::string, Variable_ptr> MotorAxis::get_defaults() {
     };
 }
 
-MotorAxis::MotorAxis(const std::string name, const Motor_ptr motor, const Input_ptr input1, const Input_ptr input2)
-    : Module(name), motor(motor), input1(input1), input2(input2) {
+MotorAxis::MotorAxis(const std::string name, const Module_ptr motor_module, const Input_ptr input1, const Input_ptr input2)
+    : Module(name),
+      motor_module(motor_module),
+      motor(std::dynamic_pointer_cast<Motor>(motor_module)),
+      input1(input1),
+      input2(input2) {
     this->properties = MotorAxis::get_defaults();
 }
 
@@ -92,10 +95,10 @@ void MotorAxis::call(const std::string method_name, const std::vector<ConstExpre
 }
 
 void MotorAxis::do_enable() {
-    this->motor->enable();
+    this->motor_module->enable();
 }
 
 void MotorAxis::do_disable() {
     this->motor->stop();
-    this->motor->disable();
+    this->motor_module->disable();
 }

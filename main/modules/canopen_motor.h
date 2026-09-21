@@ -71,8 +71,5 @@ public:
     void position(const double position, const double speed, const double acceleration) override;
     double get_speed() override;
     void speed(const double speed, const double acceleration) override;
-    // `Motor` declares these pure virtual, so they must be redeclared here to override both bases.
-    void enable() override { Module::enable(); }
-    void disable() override { Module::disable(); }
     void step() override;
 };
