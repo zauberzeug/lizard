@@ -24,7 +24,7 @@ void echo(const char *format, ...) {
     if (pos > CONSOLE_PAYLOAD_SIZE) {
         // a truncated line would still carry a valid checksum, so report the loss instead of the line
         pos = std::snprintf(buffer, CONSOLE_PAYLOAD_SIZE + 1, "warning: console line of %d bytes exceeds %d bytes and was dropped",
-                            pos + 4, CONSOLE_LINE_SIZE);
+                            pos + 5, CONSOLE_LINE_SIZE);
     }
 
     buffer[pos++] = '\n';

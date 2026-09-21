@@ -4,8 +4,8 @@
 #include <functional>
 #include <vector>
 
-constexpr int CONSOLE_LINE_SIZE = 2048;                     // longest line on the wire in either direction, including "@xx\n"
-constexpr int CONSOLE_PAYLOAD_SIZE = CONSOLE_LINE_SIZE - 4; // what a line may carry before its checksum and newline
+constexpr int CONSOLE_LINE_SIZE = 2048;                     // longest line on the wire in either direction, line ending included
+constexpr int CONSOLE_PAYLOAD_SIZE = CONSOLE_LINE_SIZE - 5; // what a line may carry before "@xx\r\n" (stdout ends lines with CRLF)
 
 void echo(const char *fmt, ...);
 typedef std::function<void(const char *line)> EchoCallback;
