@@ -77,23 +77,25 @@ void Expander::step() {
     Module::step();
 }
 
+// lines from the expander are console lines of its own, so they can be as long as ours
+static char line_buffer[CONSOLE_LINE_SIZE];
+
 void Expander::check_boot_progress() {
-    static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
-        const int len = this->serial->read_line(buffer, sizeof(buffer));
+        const int len = this->serial->read_line(line_buffer, sizeof(line_buffer));
         if (len < 0) {
             echo("%s: error while checking boot progress: %s", this->name.c_str(), Serial::read_line_error(len));
             continue;
         }
         bool checksum_ok = true;
-        check(buffer, len, &checksum_ok);
+        check(line_buffer, len, &checksum_ok);
         if (!checksum_ok) {
             echo("%s: Checksum mismatch while checking boot progress", this->name.c_str());
             continue;
         }
         this->last_message_millis = millis();
-        echo("%s: %s", this->name.c_str(), buffer);
-        if (strcmp("Ready.", buffer) == 0) {
+        echo("%s: %s", this->name.c_str(), line_buffer);
+        if (strcmp("Ready.", line_buffer) == 0) {
             this->properties.at("is_ready")->boolean_value = true;
             echo("%s: Booting process completed successfully", this->name.c_str());
             break;
@@ -133,15 +135,14 @@ void Expander::restart() {
 }
 
 void Expander::handle_messages(bool check_for_strapping_pins) {
-    static char buffer[1024];
     while (this->serial->has_buffered_lines()) {
-        int len = this->serial->read_line(buffer, sizeof(buffer));
+        int len = this->serial->read_line(line_buffer, sizeof(line_buffer));
         if (len < 0) {
             echo("%s: error while handling messages: %s", this->name.c_str(), Serial::read_line_error(len));
             continue;
         }
         bool checksum_ok = true;
-        len = check(buffer, len, &checksum_ok);
+        len = check(line_buffer, len, &checksum_ok);
         if (!checksum_ok) {
             echo("%s: Checksum mismatch while handling messages", this->name.c_str());
             this->last_message_millis = millis();
@@ -149,16 +150,16 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
             continue;
         }
         if (check_for_strapping_pins) {
-            this->check_strapping_pins(buffer);
+            this->check_strapping_pins(line_buffer);
         }
         this->last_message_millis = millis();
         this->ping_pending = false;
-        if (buffer[0] == '!' && buffer[1] == '!') {
-            this->message_handler(&buffer[2], false, true);
-        } else if (strcmp("\"__PONG__\"", buffer) == 0) {
+        if (line_buffer[0] == '!' && line_buffer[1] == '!') {
+            this->message_handler(&line_buffer[2], false, true);
+        } else if (strcmp("\"__PONG__\"", line_buffer) == 0) {
             // No echo for pong
         } else {
-            echo("%s: %s", this->name.c_str(), buffer);
+            echo("%s: %s", this->name.c_str(), line_buffer);
         }
     }
 }
