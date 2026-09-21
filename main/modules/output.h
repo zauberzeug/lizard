@@ -11,6 +11,8 @@ private:
     double pulse_duty_cycle = 0.5;
     virtual void set_level(bool level) const = 0;
     bool active = false;
+    /// Write `target_level` to the pin and update the `level`/`change` properties.
+    void apply_level();
     void do_disable() override;
 
 protected:
