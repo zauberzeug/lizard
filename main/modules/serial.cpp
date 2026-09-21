@@ -1,12 +1,12 @@
 #include "serial.h"
-#include "esp_ipc.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
+#include "utils/uart_driver.h"
 #include <cstring>
 #include <stdexcept>
 
-#define RX_BUF_SIZE 2048
+#define RX_BUF_SIZE (2 * CONSOLE_LINE_SIZE) // a maximal line plus what arrives while the main loop handles it
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
 
@@ -40,10 +40,6 @@ Serial::~Serial() {
     this->deinstall();
 }
 
-static void install_uart_driver(void *arg) {
-    uart_driver_install(*static_cast<const uart_port_t *>(arg), RX_BUF_SIZE, TX_BUF_SIZE, UART_PATTERN_QUEUE_SIZE, NULL, 0);
-}
-
 void Serial::initialize_uart() const {
     const uart_config_t uart_config = {
         .baud_rate = baud_rate,
@@ -57,8 +53,9 @@ void Serial::initialize_uart() const {
     };
     uart_param_config(uart_num, &uart_config);
     uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    // install from core 1 so the UART interrupt is allocated there, away from the Bluetooth controller on core 0
-    esp_ipc_call_blocking(1, install_uart_driver, const_cast<uart_port_t *>(&uart_num));
+    if (install_uart_driver_on_core1(uart_num, RX_BUF_SIZE, TX_BUF_SIZE) != ESP_OK) {
+        throw std::runtime_error("could not install the uart driver");
+    }
 }
 
 void Serial::enable_line_detection() const {

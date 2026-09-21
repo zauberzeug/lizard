@@ -47,4 +47,6 @@ CONFIG_ESP_COREDUMP_MAX_TASKS_NUM=16
 CONFIG_FREERTOS_HZ=1000
 
 CONFIG_COMPILER_CXX_RTTI=y
+# uart_driver_install runs on the core-1 IPC task (main/utils/uart_driver.cpp); doubled from the IDF default of 1024
+# alongside the S3 (whose default boot-loops), verified on hardware, not measured with a high-water mark
 CONFIG_ESP_IPC_TASK_STACK_SIZE=2048

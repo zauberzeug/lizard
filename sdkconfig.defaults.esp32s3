@@ -53,4 +53,5 @@ CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=n
 CONFIG_FREERTOS_HZ=1000
 
 CONFIG_COMPILER_CXX_RTTI=y
+# uart_driver_install runs on the core-1 IPC task (main/utils/uart_driver.cpp); the IDF default of 1280 boot-loops
 CONFIG_ESP_IPC_TASK_STACK_SIZE=4096
