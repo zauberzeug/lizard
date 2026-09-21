@@ -49,6 +49,8 @@ datatype =
 expression =
     'true' : true
     'false' : false
+    'nan' : nan
+    'inf' : inf
     string : string
     integer : integer
     number : number
