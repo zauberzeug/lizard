@@ -43,6 +43,9 @@
 // than the main loop drains them, so the receive ring and the pattern queue hold a whole script
 constexpr int RX_RING_SIZE = 8192;
 constexpr int RX_PATTERN_QUEUE = 512;
+// process_uart only reads once a line end is queued; a ring no larger than a line fills before the flush guard
+// can see the overflow, the driver then disables the receive interrupts and UART0 stays deaf until a reset
+static_assert(RX_RING_SIZE > CONSOLE_LINE_SIZE, "the receive ring must hold more than one line");
 
 Core_ptr core_module;
 
