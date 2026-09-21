@@ -12,22 +12,23 @@ void register_echo_callback(const EchoCallback &callback) {
 }
 
 void echo(const char *format, ...) {
-    static char buffer[CONSOLE_LINE_SIZE];
+    static char buffer[CONSOLE_PAYLOAD_SIZE + 2]; // payload, newline, terminator
 
     va_list args;
     va_start(args, format);
-    int pos = std::vsnprintf(buffer, sizeof(buffer) - 1, format, args);
+    int pos = std::vsnprintf(buffer, CONSOLE_PAYLOAD_SIZE + 1, format, args);
     va_end(args);
     if (pos < 0) {
         return;
     }
-    if (pos > static_cast<int>(sizeof(buffer) - 2)) {
+    if (pos > CONSOLE_PAYLOAD_SIZE) {
         // a truncated line would still carry a valid checksum, so report the loss instead of the line
-        pos = std::snprintf(buffer, sizeof(buffer) - 1, "warning: console line of %d bytes exceeds %d bytes and was dropped",
-                            pos, static_cast<int>(sizeof(buffer) - 2));
+        pos = std::snprintf(buffer, CONSOLE_PAYLOAD_SIZE + 1, "warning: console line of %d bytes exceeds %d bytes and was dropped",
+                            pos + 4, CONSOLE_LINE_SIZE);
     }
 
-    pos += std::sprintf(&buffer[pos], "\n");
+    buffer[pos++] = '\n';
+    buffer[pos] = '\0';
 
     uint8_t checksum = 0;
     int start = 0;
