@@ -112,6 +112,8 @@ void Wheels::write_property(const std::string property_name, const ConstExpressi
 }
 
 void Wheels::disable() {
+    // The standstill hold dies with the motors; clear it first so a throwing do_disable()
+    // cannot leave it stale, and re-send it if locking persists.
+    this->holding = false;
     Module::disable();
-    this->holding = false; // the standstill hold died with the motors; re-send it if locking persists
 }
