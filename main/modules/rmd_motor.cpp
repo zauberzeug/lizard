@@ -66,13 +66,7 @@ void RmdMotor::step() {
     }
     this->send(0x9c, 0, 0, 0, 0, 0, 0, 0);
 
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 
     Module::step();
 }
@@ -200,15 +194,8 @@ void RmdMotor::call(const std::string method_name, const std::vector<ConstExpres
     }
 }
 
-void RmdMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void RmdMotor::disable() {
+void RmdMotor::do_disable() {
     this->stop();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 double modulo_encoder_range(double position, double range) {

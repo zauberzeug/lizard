@@ -65,13 +65,7 @@ void PwmOutput::step() {
     uint32_t duty = this->properties.at("duty")->integer_value;
     ledc_set_duty(SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
     ledc_update_duty(SPEED_MODE, this->ledc_channel);
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     Module::step();
 }
 
@@ -97,13 +91,6 @@ void PwmOutput::call(const std::string method_name, const std::vector<ConstExpre
     }
 }
 
-void PwmOutput::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void PwmOutput::disable() {
+void PwmOutput::do_disable() {
     this->is_on = false;
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
