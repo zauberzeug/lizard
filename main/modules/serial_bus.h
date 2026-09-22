@@ -23,6 +23,7 @@ public:
     const uint8_t node_id;
 
     SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id);
+    ~SerialBus() override;
 
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
@@ -49,6 +50,9 @@ private:
     std::atomic<unsigned> dropped_inbound{0};
     unsigned long last_drop_report_millis = 0;
     TaskHandle_t communication_task = nullptr;
+    std::atomic<bool> stop_requested{false};
+    std::atomic<bool> stopped{false};
+    int echo_callback_handle = 0;
     bool is_polling = false;
     unsigned long poll_start_millis = 0;
     size_t poll_index = 0;
@@ -57,7 +61,7 @@ private:
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;
 
-    [[noreturn]] static void communication_loop(void *param);
+    static void communication_loop(void *param);
     void process_uart();
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;

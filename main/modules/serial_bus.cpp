@@ -60,12 +60,26 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
         throw std::runtime_error("failed to create serial bus communication task");
     }
 
-    register_echo_callback([this](const char *line) { this->handle_echo(line); });
+    this->echo_callback_handle = register_echo_callback([this](const char *line) { this->handle_echo(line); });
 
     this->otb_session.bus_name = this->name.c_str();
     this->otb_session.send_fn = [this](uint8_t receiver, const char *data, size_t len) {
         this->enqueue_outgoing_message(receiver, data, len);
     };
+}
+
+// only reached when construction is unwound by a later failure; the task must be gone before the queues and `this` are
+SerialBus::~SerialBus() {
+    unregister_echo_callback(this->echo_callback_handle);
+    this->stop_requested = true;
+    for (int i = 0; i < 100 && !this->stopped; ++i) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    if (!this->stopped) {
+        vTaskDelete(this->communication_task);
+    }
+    vQueueDelete(this->outbound_queue);
+    vQueueDelete(this->inbound_queue);
 }
 
 void SerialBus::step() {
@@ -129,9 +143,9 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
     }
 }
 
-[[noreturn]] void SerialBus::communication_loop(void *param) {
+void SerialBus::communication_loop(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
-    while (true) {
+    while (!bus->stop_requested) {
         bus->process_uart();
         if (bus->is_coordinator()) {
             // poll next peer
@@ -167,6 +181,8 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
+    bus->stopped = true;
+    vTaskDelete(nullptr);
 }
 
 void SerialBus::process_uart() {
