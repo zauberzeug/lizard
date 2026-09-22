@@ -120,7 +120,7 @@ Peers learn each other's address from received frames and then send acknowledged
 | `bridge.unlink()`           | stop forwarding                                                |              |
 | `bridge.ping()`             | echo `<name> pong` (round-trip probe)                          |              |
 
-Robot and dongle startup scripts for a transparent console:
+Robot and dongle startup scripts for a transparent console (see the [examples](examples.md#use-a-wireless-console-dongle) for the complete setup):
 
 ```
 robot = EspNowBridge("robot")
