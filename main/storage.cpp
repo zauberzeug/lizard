@@ -47,6 +47,10 @@ std::string read(const std::string ns, const std::string key) {
         throw std::runtime_error("could not peek storage " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     char *value = (char *)malloc(size);
+    if (value == NULL) {
+        nvs_close(handle);
+        throw std::runtime_error("could not allocate " + std::to_string(size) + " bytes for storage " + ns + "." + key);
+    }
     if (size > 0) {
         if ((err = nvs_get_str(handle, key.c_str(), value, &size)) != ESP_OK) {
             free(value);
