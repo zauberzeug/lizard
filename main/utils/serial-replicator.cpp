@@ -143,10 +143,7 @@ static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
 
     // the target gets a blank NVS instead of a copy of ours, so it boots with an empty startup and default settings
     const esp_partition_t *nvs = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, nullptr);
-    static std::vector<std::byte> blank;
-    if (nvs != nullptr) {
-        blank.assign(transferBlockSize, std::byte{0xFF});
-    }
+    std::vector<std::byte> blank(nvs != nullptr ? transferBlockSize : 0, std::byte{0xFF});
 
     /* Send all non-partial block */
     int count = 0;
