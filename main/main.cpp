@@ -470,8 +470,14 @@ void app_main() {
         exit(1);
     }
 
+    // a storage error is not a failed startup: report it and continue with an empty script so the console stays reachable
     try {
         Storage::init();
+    } catch (const std::exception &e) {
+        echo("error while reading startup script from storage: %s", e.what());
+    }
+
+    try {
         if (boot_guard::should_run_startup()) {
             process_lizard(Storage::startup.c_str());
         }
