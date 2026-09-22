@@ -7,9 +7,18 @@
 #include <string>
 
 static std::vector<EchoCallback> echo_callbacks;
+static Uart0Interceptor uart0_interceptor;
 
 void register_echo_callback(const EchoCallback &callback) {
     echo_callbacks.push_back(callback);
+}
+
+void set_uart0_interceptor(const Uart0Interceptor &interceptor) {
+    uart0_interceptor = interceptor;
+}
+
+bool intercept_uart0(const char *line, int len) {
+    return uart0_interceptor && uart0_interceptor(line, len);
 }
 
 void echo(const char *format, ...) {
