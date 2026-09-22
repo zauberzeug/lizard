@@ -422,6 +422,9 @@ void process_uart() {
             echo("warning: Checksum mismatch while processing UART0");
             continue;
         }
+        if (intercept_uart0(input, len)) {
+            continue;
+        }
         process_line(input, len);
     }
 }
