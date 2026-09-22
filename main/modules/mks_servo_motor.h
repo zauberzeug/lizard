@@ -11,7 +11,6 @@ class MksServoMotor : public Module, public std::enable_shared_from_this<MksServ
 private:
     Can_ptr can;
     const uint16_t can_id;
-    bool enabled = true;
 
     void send(const uint8_t *data, uint8_t len);
     bool crc_ok(const uint8_t *data, int count) const;
@@ -20,8 +19,8 @@ private:
     void send_speed_read();
 
     // Private helpers
-    void enable();
-    void disable();
+    void do_enable() override;
+    void do_disable() override;
     void send_set_mode(uint8_t mode);
     void send_set_bitrate(int64_t hz);
     void send_set_can_id(int64_t new_id);

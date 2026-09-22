@@ -172,25 +172,15 @@ double DunkerMotor::get_speed() {
     return this->properties.at("speed")->number_value;
 }
 
-void DunkerMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
+void DunkerMotor::do_enable() {
     this->sdo_write(0x4004, 1, 8, 1);
 }
 
-void DunkerMotor::disable() {
+void DunkerMotor::do_disable() {
     this->sdo_write(0x4004, 1, 8, 0);
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 void DunkerMotor::step() {
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     Module::step();
 }

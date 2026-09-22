@@ -71,6 +71,40 @@ void Module::step() {
     }
 }
 
+const Variable_ptr &Module::get_enabled_property() {
+    if (!this->enabled_property) {
+        const auto it = this->properties.find("enabled");
+        if (it == this->properties.end()) {
+            throw std::runtime_error("module has no \"enabled\" property");
+        }
+        this->enabled_property = it->second;
+    }
+    return this->enabled_property;
+}
+
+void Module::sync_enabled() {
+    const bool target = this->get_enabled_property()->boolean_value;
+    if (target != this->enabled) {
+        if (target) {
+            this->enable();
+        } else {
+            this->disable();
+        }
+    }
+}
+
+void Module::enable() {
+    this->do_enable();
+    this->enabled = true;
+    this->get_enabled_property()->boolean_value = true;
+}
+
+void Module::disable() {
+    this->do_disable();
+    this->enabled = false;
+    this->get_enabled_property()->boolean_value = false;
+}
+
 void Module::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "mute") {
         Module::expect(arguments, 0);

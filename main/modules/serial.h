@@ -31,6 +31,7 @@ public:
     int read(const uint32_t timeout = 0) const;
     static constexpr int LINE_DISCARDED = -1;
     static constexpr int LINE_FLUSHED = -2;
+    static constexpr size_t CHECKSUM_TRAILER_LENGTH = 4; // "@xx\n" appended by write_checked_line
     int read_line(char *buffer, size_t buffer_len) const;
     static const char *read_line_error(const int result);
     size_t write(const uint8_t byte) const;
