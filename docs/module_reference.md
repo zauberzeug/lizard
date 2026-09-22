@@ -86,6 +86,54 @@ When a fifth connects, the oldest entry is removed.
 
 To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
 
+## ESP-NOW Bridge
+
+The ESP-NOW bridge carries the Lizard console over ESP-NOW: connectionless 802.11 frames on one fixed WLAN channel, without access point or pairing.
+Every node runs the same firmware and declares the module with a unique node name; all nodes must share the channel.
+A node that receives a command from a peer forwards its whole console output to that peer from then on, like a client on UART0.
+Without a link, remote console lines are printed as `[<node>] <line>`.
+
+A dongle is an ESP32 on the host's USB port whose bridge is linked to a robot node.
+Every line the host writes to the dongle's UART0 is forwarded to the robot, and the robot's console comes back unprefixed, so the host talks to the dongle as if it were the robot's UART0.
+Only lines starting with the dongle module's own name (e.g. `usb.unlink()`) stay on the dongle.
+Write the dongle's own startup script before linking, because `!+` and `!.` are forwarded as well.
+Lines are split into frames of at most 250 bytes and reassembled on the receiver; a lost fragment drops the line.
+Peers learn each other's address from received frames and then send acknowledged unicast frames, unknown peers are reached by broadcast.
+
+| Constructor                            | Description                            | Arguments    |
+| -------------------------------------- | -------------------------------------- | ------------ |
+| `bridge = EspNowBridge(node)`          | join the radio on channel 1            | `str`        |
+| `bridge = EspNowBridge(node, channel)` | same, with an explicit channel (1..13) | `str`, `int` |
+
+| Properties    | Description                                       | Data type |
+| ------------- | ------------------------------------------------- | --------- |
+| `bridge.node` | this node's name                                  | `str`     |
+| `bridge.link` | node that receives every UART0 line, `""` if none | `str`     |
+| `bridge.rx`   | frames received for this node                     | `int`     |
+| `bridge.tx`   | frames sent                                       | `int`     |
+| `bridge.lost` | frames the radio could not deliver                | `int`     |
+
+| Methods                     | Description                                                    | Arguments    |
+| --------------------------- | -------------------------------------------------------------- | ------------ |
+| `bridge.send(target, line)` | run `line` on node `target` (`"*"` = every other node)         | `str`, `str` |
+| `bridge.link(target)`       | forward every UART0 line to `target`, print its console as own | `str`        |
+| `bridge.unlink()`           | stop forwarding                                                |              |
+| `bridge.ping()`             | echo `<name> pong` (round-trip probe)                          |              |
+
+Robot and dongle startup scripts for a transparent console:
+
+```
+robot = EspNowBridge("robot")
+```
+
+```
+usb = EspNowBridge("dongle")
+usb.link("robot")
+```
+
+The radio costs about 65 KB of heap and adds roughly 10 ms to a console round trip.
+Only one bridge can exist per node.
+
 ## Serial Bus
 
 The serial bus module lets multiple ESP32s share a UART link with a coordinator that polls peers in turn.

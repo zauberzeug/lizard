@@ -74,7 +74,7 @@ end
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Core**              | `Core` (always present)                                                                                                                                          |
 | **I/O**               | `Input`, `Output`, `PwmOutput`, `Analog`, `AnalogUnit`                                                                                                           |
-| **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander`                                                                                                            |
+| **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `EspNowBridge`, `Expander`                                                                                            |
 | **Motor Controllers** | `LinearMotor`, `ODriveMotor`, `ODriveWheels`, `RmdMotor`, `RmdPair`, `StepperMotor`, `RoboClawMotor`, `RoboClawWheels`, `D1Motor`, `DunkerMotor`, `DunkerWheels` |
 | **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                  |
 | **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                       |
