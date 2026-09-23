@@ -416,6 +416,17 @@ void process_line(const char *line, const int len, const bool trigger_keep_alive
     }
 }
 
+// drops `count` bytes from UART0, reading them through `scratch` in chunks
+static void discard_uart_input(char *scratch, const size_t scratch_size, int count) {
+    while (count > 0) {
+        const int read = uart_read_bytes(UART_NUM_0, (uint8_t *)scratch, std::min<size_t>(count, scratch_size), 0);
+        if (read <= 0) {
+            break;
+        }
+        count -= read;
+    }
+}
+
 void process_uart() {
     static char input[CONSOLE_LINE_SIZE];
     static bool discarding = false; // an unterminated run exceeded a line: drop everything up to its line end
@@ -424,12 +435,18 @@ void process_uart() {
         if (pos < 0) {
             size_t buffered = 0;
             uart_get_buffered_data_len(UART_NUM_0, &buffered);
+            if (uart_pattern_get_pos(UART_NUM_0) >= 0) {
+                // a line end arrived after the pop, so `buffered` may contain complete lines: pop them first
+                continue;
+            }
+            // the driver updates the byte count and the pattern queue together, so all `buffered` bytes are
+            // unterminated; a flush would also drop whatever arrives from here on, including the next line end
             if (discarding && buffered > 0) {
-                uart_flush_input(UART_NUM_0);
+                discard_uart_input(input, sizeof(input), buffered);
             } else if (buffered > CONSOLE_LINE_SIZE) {
                 // bytes without a line end that already exceed a line can never be processed; a ring they fill up
-                // disables the receive interrupts until something reads or flushes, so flush them now
-                uart_flush_input(UART_NUM_0);
+                // disables the receive interrupts until something reads or flushes, so drop them now
+                discard_uart_input(input, sizeof(input), buffered);
                 discarding = true;
                 echo("warning: UART0 input exceeds %d bytes without a line end and is discarded up to the next line end",
                      CONSOLE_LINE_SIZE);
@@ -438,13 +455,7 @@ void process_uart() {
         }
         if (discarding || pos + 1 > CONSOLE_LINE_SIZE) {
             // drop the whole line: reading it into `input` would overrun the buffer
-            for (int remaining = pos + 1; remaining > 0;) {
-                const int read = uart_read_bytes(UART_NUM_0, (uint8_t *)input, std::min(remaining, CONSOLE_LINE_SIZE), 0);
-                if (read <= 0) {
-                    break;
-                }
-                remaining -= read;
-            }
+            discard_uart_input(input, sizeof(input), pos + 1);
             if (!discarding) {
                 echo("warning: UART0 line of %d bytes exceeds %d bytes and was discarded", pos + 1, CONSOLE_LINE_SIZE);
             }
