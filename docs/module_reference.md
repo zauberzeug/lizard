@@ -1152,6 +1152,8 @@ The expander module allows communication with another microcontroller connected 
 
 The `flash()` method requires the `boot` and `enable` pins to be defined.
 The optional `force` argument skips the default check whether certain strapping pins are set correctly.
+Flashing erases the other microcontroller's NVS:
+its startup script, a persisted console baud rate and the bus backup are reset to defaults.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
 Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.

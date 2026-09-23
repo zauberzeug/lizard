@@ -5,8 +5,10 @@
 
 namespace ZZ::Replicator {
 
-/* Clones the current flash image, up until the end of the last partition,
- * onto the target connected via UART1. Returns true on success.
+/* Clones the current flash image, from address 0 up to the size of the running
+ * app partition, onto the target connected via UART1. The NVS partition is not
+ * copied but written as 0xFF, so the target boots with an empty startup script
+ * and default settings. Returns true on success.
  * On failure, returns false and prints a message detailing what went wrong
  * to the error log. */
 auto flashReplica(const uart_port_t uart_num,

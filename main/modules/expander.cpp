@@ -186,7 +186,6 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             throw std::runtime_error("expander \"" + this->name + "\" does not support flashing, pins not set");
         }
         this->serial->require_sole_user(this->name);
-        Storage::clear_nvs();
         gpio_set_level(this->boot_pin, 0);
         if (!force) {
             char command[32];
@@ -209,7 +208,6 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
                                                     this->serial->rx_pin,
                                                     this->serial->tx_pin,
                                                     this->serial->baud_rate);
-        Storage::save_startup();
         delay(100);
         this->serial->reinitialize_after_flash();
         if (!success) {
