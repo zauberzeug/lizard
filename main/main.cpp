@@ -427,6 +427,21 @@ static void discard_uart_input(char *scratch, const size_t scratch_size, int cou
     }
 }
 
+// checks and runs one UART0 line; its errors are reported here so that the lines after it in the same read still run
+static void process_uart_line(char *line, const int len) {
+    bool checksum_ok = true;
+    const int payload_len = check(line, len, &checksum_ok);
+    if (!checksum_ok) {
+        echo("warning: Checksum mismatch while processing UART0");
+        return;
+    }
+    try {
+        process_line(line, payload_len);
+    } catch (const std::exception &e) {
+        echo("error processing uart0: %s", e.what());
+    }
+}
+
 void process_uart() {
     static char input[CONSOLE_LINE_SIZE];
     static bool discarding = false; // an unterminated run exceeded a line: drop everything up to its line end
@@ -462,14 +477,14 @@ void process_uart() {
             discarding = false;
             continue;
         }
-        int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        bool checksum_ok = true;
-        len = check(input, len, &checksum_ok);
-        if (!checksum_ok) {
-            echo("warning: Checksum mismatch while processing UART0");
-            continue;
+        const int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+        // the driver queues only the last line end of each receive chunk, so one read can hold several lines
+        for (int start = 0; start < len;) {
+            const char *const line_end = static_cast<const char *>(memchr(input + start, '\n', len - start));
+            const int end = line_end ? line_end - input + 1 : len;
+            process_uart_line(input + start, end - start);
+            start = end;
         }
-        process_line(input, len);
     }
 }
 
