@@ -28,11 +28,28 @@ using DefaultsFunction = std::function<std::map<std::string, Variable_ptr>()>;
     } // namespace
 
 class Module {
+private:
+    Variable_ptr enabled_property; // cached by get_enabled_property()
+
+    /// The `enabled` property; throws a runtime_error for modules that do not declare one.
+    const Variable_ptr &get_enabled_property();
+
 protected:
     std::list<Module_ptr> shadow_modules;
     std::map<std::string, Variable_ptr> properties;
     bool output_on = false;
     bool broadcast = false;
+    bool enabled = true; // last value applied to the hardware; `sync_enabled()` edge-detects direct property writes against it
+
+    /// Apply a direct write to the `enabled` property by calling enable()/disable(); call from step().
+    void sync_enabled();
+
+    /// Module-specific part of enable()/disable(). Both hooks run while `enabled` still holds the
+    /// old value, and the flags are committed only after the hook returned, so a hook that throws
+    /// leaves the transition pending and `sync_enabled()` retries it on the next step.
+    /// Hence `do_disable()` may still use methods gated on `enabled`, but `do_enable()` may not.
+    virtual void do_enable() {}
+    virtual void do_disable() {}
 
 public:
     static bool broadcast_paused;
@@ -47,6 +64,10 @@ public:
                              MessageHandler message_handler);
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    /// Switch the module on/off and keep the `enabled` member and property in sync.
+    /// Throws for modules that do not declare an `enabled` property.
+    virtual void enable();
+    virtual void disable();
     static void register_module(const std::string &type_name, ModuleFactory factory, DefaultsFunction defaults);
     static const std::map<std::string, Variable_ptr> get_module_defaults(const std::string &type_name);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);

@@ -29,13 +29,7 @@ RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw
 }
 
 void RoboClawMotor::step() {
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 
     uint8_t status;
     bool valid;
@@ -106,13 +100,6 @@ void RoboClawMotor::speed(int value) {
     throw std::runtime_error("could not set speed after " + std::to_string(max_retries) + " retries");
 }
 
-void RoboClawMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void RoboClawMotor::disable() {
-    this->speed(0);
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
+void RoboClawMotor::do_disable() {
+    this->speed(0); // must run before `enabled` is cleared: `speed()` is gated on it
 }
