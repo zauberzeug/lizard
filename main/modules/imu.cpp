@@ -180,7 +180,7 @@ void Imu::step() {
 
     Module::step();
 
-    // Every failed read is reported, which the retry delay limits to about once per second while the sensor is down.
+    // Every failed read is reported, which the retry delay limits to at most once per second while the sensor is down.
     const uint32_t failed_reads = this->failed_reads.load();
     if (failed_reads != this->reported_failed_reads) {
         this->reported_failed_reads = failed_reads;
