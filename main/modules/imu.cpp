@@ -237,7 +237,7 @@ void Imu::publish(const Sample &sample) {
         this->properties.at("grav_z")->number_value = sample.gravity.z;
     }
     if (sample.data_select & 0x0100) {
-        this->properties.at("temp")->number_value = sample.temperature;
+        this->properties.at("temp")->integer_value = sample.temperature;
     }
 }
 
