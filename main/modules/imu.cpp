@@ -1,28 +1,16 @@
 #include "imu.h"
+#include "esp_log.h"
 #include "i2c_bus.h"
 #include "module_helpers.h"
+#include "mutex_guard.h"
+#include "uart.h"
 #include <stdexcept>
 
 static constexpr uint32_t READ_TASK_STACK_SIZE = 4096;
 static constexpr UBaseType_t READ_TASK_PRIORITY = 5;
 static constexpr BaseType_t READ_TASK_CORE = 1;
 static constexpr TickType_t READ_PERIOD = pdMS_TO_TICKS(10); // the BNO055's fusion rate; a slower read just free-runs
-
-namespace {
-
-class MutexGuard {
-public:
-    explicit MutexGuard(SemaphoreHandle_t mutex) : mutex(mutex) { xSemaphoreTake(this->mutex, portMAX_DELAY); }
-    ~MutexGuard() { xSemaphoreGive(this->mutex); }
-
-    MutexGuard(const MutexGuard &) = delete;
-    MutexGuard &operator=(const MutexGuard &) = delete;
-
-private:
-    const SemaphoreHandle_t mutex;
-};
-
-} // namespace
+static constexpr TickType_t RETRY_DELAY = pdMS_TO_TICKS(1000);
 
 static Module_ptr create_imu(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     if (arguments.size() > 5) {
@@ -73,6 +61,9 @@ const std::map<std::string, Variable_ptr> Imu::get_defaults() {
 
 Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
     : Module(name), i2c_port(i2c_port), address(address) {
+    // The driver logs every failed retry round (up to 64 per transaction) straight to UART0, without checksum and
+    // from the read task, flooding the console on a bad bus. Failures are reported through step() instead.
+    esp_log_level_set("BNO055", ESP_LOG_NONE);
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     this->bno = std::make_shared<BNO055>((i2c_port_t)i2c_port, address);
     try {
@@ -86,37 +77,63 @@ Imu::Imu(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_n
 
     this->bno_mutex = xSemaphoreCreateMutex();
     this->sample_queue = xQueueCreate(1, sizeof(Sample));
-    if (!this->bno_mutex || !this->sample_queue ||
+    this->read_task_stopped = xSemaphoreCreateBinary();
+    if (!this->bno_mutex || !this->sample_queue || !this->read_task_stopped ||
         xTaskCreatePinnedToCore(Imu::read_loop, "imu_read", READ_TASK_STACK_SIZE, this,
-                                READ_TASK_PRIORITY, nullptr, READ_TASK_CORE) != pdPASS) {
-        if (this->bno_mutex) {
-            vSemaphoreDelete(this->bno_mutex);
-        }
-        if (this->sample_queue) {
-            vQueueDelete(this->sample_queue);
-        }
+                                READ_TASK_PRIORITY, &this->read_task, READ_TASK_CORE) != pdPASS) {
+        this->delete_task_resources();
         throw std::runtime_error("imu setup failed: could not start the read task");
+    }
+}
+
+Imu::~Imu() {
+    // Stop the task cooperatively: deleting it from outside could catch it holding the bus or the heap lock.
+    this->stop_requested.store(true);
+    xTaskNotifyGive(this->read_task); // cut a retry delay short
+    xSemaphoreTake(this->read_task_stopped, portMAX_DELAY);
+    this->delete_task_resources();
+}
+
+void Imu::delete_task_resources() {
+    if (this->bno_mutex) {
+        vSemaphoreDelete(this->bno_mutex);
+    }
+    if (this->sample_queue) {
+        vQueueDelete(this->sample_queue);
+    }
+    if (this->read_task_stopped) {
+        vSemaphoreDelete(this->read_task_stopped);
     }
 }
 
 void Imu::read_loop(void *imu) {
     Imu *const self = static_cast<Imu *>(imu);
     TickType_t last_wake = xTaskGetTickCount();
-    while (true) {
+    while (!self->stop_requested.load()) {
+        bool failed = false;
         try {
             const Sample sample = self->read_sample(self->requested_data_select.load());
             xQueueOverwrite(self->sample_queue, &sample);
-            self->read_failed.store(false);
         } catch (const std::exception &) {
-            self->read_failed.store(true);
+            failed = true;
         }
-        // Reading all nine blocks takes longer than the period, so this usually overruns:
-        // re-anchor and yield one tick so the idle task keeps feeding the watchdog.
-        if (xTaskDelayUntil(&last_wake, READ_PERIOD) == pdFALSE) {
+        self->read_failed.store(failed);
+        if (failed) {
+            // A dead sensor fails every read after all retry rounds; back off instead of hammering the bus.
+            self->failed_reads.fetch_add(1);
+            ulTaskNotifyTake(pdTRUE, RETRY_DELAY);
+            last_wake = xTaskGetTickCount();
+        } else if (xTaskDelayUntil(&last_wake, READ_PERIOD) == pdFALSE) {
+            // Reading all nine blocks takes longer than the period, so this usually overruns:
+            // re-anchor and yield one tick so the idle task keeps feeding the watchdog.
             last_wake = xTaskGetTickCount();
             vTaskDelay(1);
         }
     }
+    // The destructor frees `self` once it is given the semaphore, so copy the handle first.
+    const SemaphoreHandle_t stopped = self->read_task_stopped;
+    xSemaphoreGive(stopped);
+    vTaskDelete(nullptr);
 }
 
 Imu::Sample Imu::read_sample(const uint16_t data_select) const {
@@ -161,14 +178,19 @@ void Imu::step() {
         this->publish(sample);
     }
 
-    const bool failed = this->read_failed.load();
-    const bool became_failed = failed && !this->read_failure_reported;
-    this->read_failure_reported = failed;
-    if (became_failed) {
-        throw std::runtime_error("reading the imu failed");
-    }
-
     Module::step();
+
+    // Every failed read is reported, which the retry delay limits to about once per second while the sensor is down.
+    const uint32_t failed_reads = this->failed_reads.load();
+    if (failed_reads != this->reported_failed_reads) {
+        this->reported_failed_reads = failed_reads;
+        this->read_failure_reported = true;
+        throw std::runtime_error("reading the imu failed, properties keep their last values");
+    }
+    if (this->read_failure_reported && !this->read_failed.load()) {
+        this->read_failure_reported = false;
+        echo("module \"%s\": reading the imu works again", this->name.c_str());
+    }
 }
 
 void Imu::publish(const Sample &sample) {

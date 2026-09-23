@@ -333,6 +333,10 @@ The following bits are available:
 - 0x0080: gravity
 - 0x0100: temperature
 
+The IMU is read in a background task, so the properties hold the newest completed sample.
+While reading fails, an error is printed about once per second and the properties keep their last values.
+A message is printed when reading works again.
+
 | Methods              | Description                   | Arguments |
 | -------------------- | ----------------------------- | --------- |
 | `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
