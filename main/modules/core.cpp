@@ -249,10 +249,11 @@ std::string Core::get_output() const {
                 throw std::runtime_error("invalid type");
             }
         }
+        this->output_overflow_reported = false; // a line that fits again ends the episode, the next overflow is reported
     } catch (const BufferTooSmallError &) {
-        // one error instead of a warning every tick; core.output(...) with fewer fields lifts the suppression
+        // one error per episode instead of a warning every tick
         if (!this->output_overflow_reported) {
-            echo("error: the core line with %d output fields exceeds %d bytes and is suppressed until core.output is set again",
+            echo("error: the core line with %d output fields exceeds %d bytes and is suppressed until it fits again",
                  static_cast<int>(this->output_list.size()), CONSOLE_LINE_SIZE);
             this->output_overflow_reported = true;
         }
