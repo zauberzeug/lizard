@@ -56,6 +56,7 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
     : Module(name), serial(serial), node_id(node_id) {
     this->properties = SerialBus::get_defaults();
+    this->serial->claim(name);
     this->serial->enable_line_detection();
 
     this->config_queue = xQueueCreate(1, sizeof(Config));
