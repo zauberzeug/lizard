@@ -35,6 +35,22 @@ void write(const std::string ns, const std::string key, const std::string value)
     nvs_close(handle);
 }
 
+// false only if the namespace or the key does not exist; any other error is left for read() to report
+static bool exists(const std::string ns, const std::string key) {
+    nvs_handle handle;
+    esp_err_t err = nvs_open(ns.c_str(), NVS_READONLY, &handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        return false;
+    }
+    if (err != ESP_OK) {
+        return true;
+    }
+    size_t size = 0;
+    err = nvs_get_str(handle, key.c_str(), NULL, &size);
+    nvs_close(handle);
+    return err != ESP_ERR_NVS_NOT_FOUND;
+}
+
 std::string read(const std::string ns, const std::string key) {
     esp_err_t err;
     nvs_handle handle;
@@ -47,6 +63,10 @@ std::string read(const std::string ns, const std::string key) {
         throw std::runtime_error("could not peek storage " + ns + "." + key + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     char *value = (char *)malloc(size);
+    if (value == NULL) {
+        nvs_close(handle);
+        throw std::runtime_error("could not allocate " + std::to_string(size) + " bytes for storage " + ns + "." + key);
+    }
     if (size > 0) {
         if ((err = nvs_get_str(handle, key.c_str(), value, &size)) != ESP_OK) {
             free(value);
@@ -94,13 +114,15 @@ bool read_u32(const std::string ns, const std::string key, std::uint32_t &out) {
 }
 
 void Storage::put(const std::string value) {
-    try {
-        const int old_num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
-        for (int i = 0; i < old_num_chunks; i++) {
-            nvs_delete_key(NAMESPACE, "chunk" + std::to_string(i));
+    if (exists(NAMESPACE, "num_chunks")) {
+        try {
+            const int old_num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
+            for (int i = 0; i < old_num_chunks; i++) {
+                nvs_delete_key(NAMESPACE, "chunk" + std::to_string(i));
+            }
+        } catch (...) {
+            echo("warning: could not delete old chunks before writing new ones");
         }
-    } catch (...) {
-        echo("warning: could not delete old chunks before writing new ones");
     }
 
     write(NAMESPACE, "num_chunks", std::to_string((value.length() + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE));
@@ -111,6 +133,9 @@ void Storage::put(const std::string value) {
 
 std::string Storage::get() {
     std::string result = "";
+    if (!exists(NAMESPACE, "num_chunks")) {
+        return result; // fresh or erased NVS: no startup script yet
+    }
     const int num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
     for (int i = 0; i < num_chunks; i++) {
         result += read(NAMESPACE, "chunk" + std::to_string(i));

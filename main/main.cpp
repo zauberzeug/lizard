@@ -20,6 +20,7 @@
 #include "rom/gpio.h"
 #include "rom/uart.h"
 #include "storage.h"
+#include "utils/boot_guard.h"
 #include "utils/bus_backup.h"
 #include "utils/interpreter_lock.h"
 #include "utils/scheduler.h"
@@ -469,11 +470,21 @@ void app_main() {
         exit(1);
     }
 
+    // a storage error is not a failed startup: report it and continue with an empty script so the console stays reachable
     try {
         Storage::init();
-        process_lizard(Storage::startup.c_str());
-    } catch (const std::runtime_error &e) {
-        echo("error while loading startup script: %s", e.what());
+    } catch (const std::exception &e) {
+        echo("error while reading startup script from storage: %s", e.what());
+    }
+
+    try {
+        if (boot_guard::should_run_startup()) {
+            process_lizard(Storage::startup.c_str());
+        }
+    } catch (const std::exception &e) {
+        boot_guard::startup_failed(e.what());
+    } catch (...) {
+        boot_guard::startup_failed("unknown exception");
     }
 
     bus_backup::save_if_present();
@@ -486,9 +497,11 @@ void app_main() {
     TickType_t last_wake = xTaskGetTickCount();
 
     while (true) {
+        boot_guard::step();
+
         try {
             process_uart();
-        } catch (const std::runtime_error &e) {
+        } catch (const std::exception &e) {
             echo("error processing uart0: %s", e.what());
         }
 

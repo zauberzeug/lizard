@@ -6,10 +6,18 @@
 #include <stdio.h>
 #include <string>
 
-static std::vector<EchoCallback> echo_callbacks;
+static std::vector<std::pair<int, EchoCallback>> echo_callbacks;
 
-void register_echo_callback(const EchoCallback &callback) {
-    echo_callbacks.push_back(callback);
+int register_echo_callback(const EchoCallback &callback) {
+    static int next_handle = 0;
+    echo_callbacks.emplace_back(++next_handle, callback);
+    return next_handle;
+}
+
+void unregister_echo_callback(const int handle) {
+    echo_callbacks.erase(
+        std::remove_if(echo_callbacks.begin(), echo_callbacks.end(), [handle](const auto &entry) { return entry.first == handle; }),
+        echo_callbacks.end());
 }
 
 void echo(const char *format, ...) {
@@ -29,7 +37,7 @@ void echo(const char *format, ...) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
             printf("%s@%02x\n", &buffer[start], checksum);
-            for (const auto &callback : echo_callbacks) {
+            for (const auto &[handle, callback] : echo_callbacks) {
                 callback(&buffer[start]);
             }
             start = i + 1;
