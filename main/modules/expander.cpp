@@ -73,6 +73,8 @@ void Expander::step() {
     if (this->properties.at("is_ready")->boolean_value) {
         this->ping();
         this->handle_messages();
+    } else {
+        this->check_boot_progress();
     }
     this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
@@ -118,6 +120,7 @@ void Expander::ping() {
             echo("warning: expander %s connection lost", this->name.c_str());
             // TODO: trigger error code
             this->properties.at("is_ready")->boolean_value = false;
+            this->ping_pending = false;
         }
     }
 }
@@ -131,6 +134,7 @@ void Expander::restart() {
     } else {
         this->serial->write_checked_line("core.restart()");
     }
+    this->serial->flush();
     this->boot_start_time = millis();
     this->properties.at("is_ready")->boolean_value = false;
 }
