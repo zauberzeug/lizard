@@ -84,6 +84,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
         throw std::runtime_error(queues_created ? "failed to create serial bus communication task"
                                                 : "failed to create serial bus queues");
     }
+    // claim last: a claim is never released, so it must not outlive a constructor that throws
+    this->serial->claim(name);
 }
 
 // only reached when a constructed bus is dropped again, e.g. because Global::add_module() throws; the task must be gone

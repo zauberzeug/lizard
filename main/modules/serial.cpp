@@ -63,6 +63,18 @@ void Serial::enable_line_detection() const {
     uart_pattern_queue_reset(this->uart_num, UART_PATTERN_QUEUE_SIZE);
 }
 
+void Serial::claim(const std::string &user) const {
+    this->users.push_back(user);
+}
+
+void Serial::require_sole_user(const std::string &user) const {
+    for (const std::string &other : this->users) {
+        if (other != user) {
+            throw std::runtime_error("serial \"" + this->name + "\" is in use by \"" + other + "\"");
+        }
+    }
+}
+
 void Serial::deinstall() const {
     if (uart_is_driver_installed(this->uart_num)) {
         uart_driver_delete(this->uart_num);
@@ -110,16 +122,13 @@ void Serial::write_checked_line(const char *message, const int length) const {
 }
 
 int Serial::available() const {
-    if (!uart_is_driver_installed(this->uart_num)) {
-        return 0;
-    }
-    size_t available;
+    size_t available = 0;
     uart_get_buffered_data_len(this->uart_num, &available);
     return available;
 }
 
 bool Serial::has_buffered_lines() const {
-    return uart_is_driver_installed(this->uart_num) && uart_pattern_get_pos(this->uart_num) != -1;
+    return uart_pattern_get_pos(this->uart_num) != -1;
 }
 
 void Serial::flush() const {
@@ -152,12 +161,6 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
 const char *Serial::read_line_error(const int result) {
     return result == LINE_FLUSHED ? "buffer too small, but cannot discard line. flushed serial."
                                   : "buffer too small. discarded line.";
-}
-
-void Serial::clear() const {
-    while (this->available()) {
-        this->read();
-    }
 }
 
 std::string Serial::get_output() const {

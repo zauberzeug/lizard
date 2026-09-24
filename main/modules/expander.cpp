@@ -46,6 +46,7 @@ Expander::Expander(const std::string name,
 
     this->properties = Expander::get_defaults();
 
+    this->serial->claim(name);
     this->serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(boot_pin);
@@ -174,6 +175,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         restart();
     } else if (method_name == "disconnect") {
         Module::expect(arguments, 0);
+        this->serial->require_sole_user(this->name);
         deinstall();
     } else if (method_name == "flash") {
         if (arguments.size() > 1) {
@@ -184,6 +186,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         if (this->boot_pin == GPIO_NUM_NC || this->enable_pin == GPIO_NUM_NC) {
             throw std::runtime_error("expander \"" + this->name + "\" does not support flashing, pins not set");
         }
+        this->serial->require_sole_user(this->name);
         gpio_set_level(this->boot_pin, 0);
         if (!force) {
             char command[32];
