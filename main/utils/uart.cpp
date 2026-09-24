@@ -1,5 +1,4 @@
 #include "uart.h"
-#include <algorithm>
 #include <cstdarg>
 #include <cstdint>
 #include <stdexcept>
@@ -21,15 +20,23 @@ void unregister_echo_callback(const int handle) {
 }
 
 void echo(const char *format, ...) {
-    static char buffer[1024];
+    static char buffer[CONSOLE_PAYLOAD_SIZE + 2]; // payload, newline, terminator
 
     va_list args;
     va_start(args, format);
-    const int num_chars = std::vsnprintf(buffer, sizeof(buffer) - 1, format, args);
-    int pos = std::min(num_chars, static_cast<int>(sizeof(buffer) - 2));
+    int pos = std::vsnprintf(buffer, CONSOLE_PAYLOAD_SIZE + 1, format, args);
     va_end(args);
+    if (pos < 0) {
+        return;
+    }
+    if (pos > CONSOLE_PAYLOAD_SIZE) {
+        // a truncated line would still carry a valid checksum, so report the loss instead of the line
+        pos = std::snprintf(buffer, CONSOLE_PAYLOAD_SIZE + 1, "warning: console line of %d bytes exceeds %d bytes and was dropped",
+                            pos + 5, CONSOLE_LINE_SIZE);
+    }
 
-    pos += std::sprintf(&buffer[pos], "\n");
+    buffer[pos++] = '\n';
+    buffer[pos] = '\0';
 
     uint8_t checksum = 0;
     int start = 0;

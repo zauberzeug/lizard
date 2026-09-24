@@ -27,6 +27,8 @@
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
+#include "utils/uart_driver.h"
+#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <math.h>
@@ -38,7 +40,13 @@
 #include <string>
 #include <vector>
 
-#define BUFFER_SIZE 1024
+// a host configuring the startup script sends a hundred-odd lines in one burst; at 921600 baud they arrive faster
+// than the main loop drains them, so the receive ring and the pattern queue hold a whole script
+constexpr int RX_RING_SIZE = 8192;
+constexpr int RX_PATTERN_QUEUE = 512;
+// process_uart only reads once a line end is queued; a ring no larger than a line fills before the flush guard
+// can see the overflow, the driver then disables the receive interrupts and UART0 stays deaf until a reset
+static_assert(RX_RING_SIZE > CONSOLE_LINE_SIZE, "the receive ring must hold more than one line");
 
 Core_ptr core_module;
 
@@ -409,21 +417,75 @@ void process_line(const char *line, const int len, const bool trigger_keep_alive
     }
 }
 
+// drops `count` bytes from UART0, reading them through `scratch` in chunks
+static void discard_uart_input(char *scratch, const size_t scratch_size, int count) {
+    while (count > 0) {
+        const int read = uart_read_bytes(UART_NUM_0, (uint8_t *)scratch, std::min<size_t>(count, scratch_size), 0);
+        if (read <= 0) {
+            break;
+        }
+        count -= read;
+    }
+}
+
+// checks and runs one UART0 line; its errors are reported here so that the lines after it in the same read still run
+static void process_uart_line(char *line, const int len) {
+    bool checksum_ok = true;
+    const int payload_len = check(line, len, &checksum_ok);
+    if (!checksum_ok) {
+        echo("warning: Checksum mismatch while processing UART0");
+        return;
+    }
+    try {
+        process_line(line, payload_len);
+    } catch (const std::exception &e) {
+        echo("error processing uart0: %s", e.what());
+    }
+}
+
 void process_uart() {
-    static char input[BUFFER_SIZE];
+    static char input[CONSOLE_LINE_SIZE];
+    static bool discarding = false; // an unterminated run exceeded a line: drop everything up to its line end
     while (true) {
         const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
+            size_t buffered = 0;
+            uart_get_buffered_data_len(UART_NUM_0, &buffered);
+            if (uart_pattern_get_pos(UART_NUM_0) >= 0) {
+                // a line end arrived after the pop, so `buffered` may contain complete lines: pop them first
+                continue;
+            }
+            // the driver updates the byte count and the pattern queue together, so all `buffered` bytes are
+            // unterminated; a flush would also drop whatever arrives from here on, including the next line end
+            if (discarding && buffered > 0) {
+                discard_uart_input(input, sizeof(input), buffered);
+            } else if (buffered > CONSOLE_LINE_SIZE) {
+                // bytes without a line end that already exceed a line can never be processed; a ring they fill up
+                // disables the receive interrupts until something reads or flushes, so drop them now
+                discard_uart_input(input, sizeof(input), buffered);
+                discarding = true;
+                echo("warning: UART0 input exceeds %d bytes without a line end and is discarded up to the next line end",
+                     CONSOLE_LINE_SIZE);
+            }
             break;
         }
-        int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        bool checksum_ok = true;
-        len = check(input, len, &checksum_ok);
-        if (!checksum_ok) {
-            echo("warning: Checksum mismatch while processing UART0");
+        if (discarding || pos + 1 > CONSOLE_LINE_SIZE) {
+            // drop the whole line: reading it into `input` would overrun the buffer
+            discard_uart_input(input, sizeof(input), pos + 1);
+            if (!discarding) {
+                echo("warning: UART0 line of %d bytes exceeds %d bytes and was discarded", pos + 1, CONSOLE_LINE_SIZE);
+            }
+            discarding = false;
             continue;
         }
-        process_line(input, len);
+        const int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+        // the driver queues only the last line end of each receive chunk, so one read can hold several lines
+        for (int start = 0; start < len;) {
+            const char *const line_end = static_cast<const char *>(memchr(input + start, '\n', len - start));
+            const int end = line_end ? line_end - input + 1 : len;
+            process_uart_line(input + start, end - start);
+            start = end;
+        }
     }
 }
 
@@ -457,10 +519,9 @@ void app_main() {
         .flags = {},
     };
     uart_param_config(UART_NUM_0, &uart_config);
-    QueueHandle_t uart_queue;
-    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
+    ESP_ERROR_CHECK(install_uart_driver_on_core1(UART_NUM_0, RX_RING_SIZE, 0));
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
-    uart_pattern_queue_reset(UART_NUM_0, 100);
+    uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));

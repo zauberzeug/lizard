@@ -2,10 +2,11 @@
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
+#include "utils/uart_driver.h"
 #include <cstring>
 #include <stdexcept>
 
-#define RX_BUF_SIZE 2048
+#define RX_BUF_SIZE (2 * CONSOLE_LINE_SIZE) // a maximal line plus what arrives while the main loop handles it
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
 
@@ -52,7 +53,9 @@ void Serial::initialize_uart() const {
     };
     uart_param_config(uart_num, &uart_config);
     uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    uart_driver_install(uart_num, RX_BUF_SIZE, TX_BUF_SIZE, UART_PATTERN_QUEUE_SIZE, NULL, 0);
+    if (install_uart_driver_on_core1(uart_num, RX_BUF_SIZE, TX_BUF_SIZE) != ESP_OK) {
+        throw std::runtime_error("could not install the uart driver");
+    }
 }
 
 void Serial::enable_line_detection() const {

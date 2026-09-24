@@ -58,6 +58,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "output") {
         Module::expect(arguments, 1, string);
         this->output_list.clear();
+        this->output_overflow_reported = false;
         std::string format = arguments[0]->evaluate_string();
         while (!format.empty()) {
             std::string element = cut_first_word(format);
@@ -221,30 +222,42 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
 }
 
 std::string Core::get_output() const {
-    static char output_buffer[1024];
+    // Module::step sends this as "core <output>", so the "core " prefix comes off the payload budget (plus the terminator)
+    static char output_buffer[CONSOLE_PAYLOAD_SIZE - 5 + 1];
     int pos = 0;
-    for (auto const &element : this->output_list) {
-        if (pos > 0) {
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, " ");
+    try {
+        for (auto const &element : this->output_list) {
+            if (pos > 0) {
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, " ");
+            }
+            const Variable_ptr variable =
+                element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
+            switch (variable->type) {
+            case boolean:
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value ? "true" : "false");
+                break;
+            case integer:
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value);
+                break;
+            case number:
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value);
+                break;
+            case string:
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value.c_str());
+                break;
+            default:
+                throw std::runtime_error("invalid type");
+            }
         }
-        const Variable_ptr variable =
-            element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
-        switch (variable->type) {
-        case boolean:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value ? "true" : "false");
-            break;
-        case integer:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value);
-            break;
-        case number:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value);
-            break;
-        case string:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value.c_str());
-            break;
-        default:
-            throw std::runtime_error("invalid type");
+        this->output_overflow_reported = false; // a line that fits again ends the episode, the next overflow is reported
+    } catch (const BufferTooSmallError &) {
+        // one error per episode instead of a warning every tick
+        if (!this->output_overflow_reported) {
+            echo("error: the core line with %d output fields exceeds %d bytes and is suppressed until it fits again",
+                 static_cast<int>(this->output_list.size()), CONSOLE_LINE_SIZE);
+            this->output_overflow_reported = true;
         }
+        return "";
     }
     return std::string(output_buffer);
 }
