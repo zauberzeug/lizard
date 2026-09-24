@@ -56,7 +56,6 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
     : Module(name), serial(serial), node_id(node_id) {
     this->properties = SerialBus::get_defaults();
-    this->serial->claim(name);
     this->serial->enable_line_detection();
 
     // everything that can throw comes before the task exists: an exception from a constructor unwinds without running
@@ -85,6 +84,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
         throw std::runtime_error(queues_created ? "failed to create serial bus communication task"
                                                 : "failed to create serial bus queues");
     }
+    // claim last: a claim is never released, so it must not outlive a constructor that throws
+    this->serial->claim(name);
 }
 
 // only reached when a constructed bus is dropped again, e.g. because Global::add_module() throws; the task must be gone
