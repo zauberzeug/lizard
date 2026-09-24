@@ -1,5 +1,6 @@
 #include "serial-replicator.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <numeric>
 #include <vector>
@@ -117,7 +118,12 @@ static auto neededBlocks(const uint32_t value, const uint32_t blockSize) -> uint
     return blockCount;
 }
 
-static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
+static auto contains(const esp_partition_t *partition, const uint32_t offset) -> bool {
+    return partition != nullptr && offset >= partition->address && offset < partition->address + partition->size;
+}
+
+static auto flash(const esp_partition_t *running_partition, uint32_t transferBlockSize) -> bool {
+    const uint32_t usedSize{running_partition->size};
     const uint32_t pageCount{neededBlocks(usedSize, SPI_FLASH_MMU_PAGE_SIZE)};
     const uint32_t blockCount{neededBlocks(usedSize, transferBlockSize)};
 
@@ -139,41 +145,41 @@ static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
     const esp_partition_t *nvs = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, nullptr);
     if (nvs == nullptr) {
         ESP_LOGW(TAG, "No NVS partition found, the target receives a copy of our NVS");
-    } else if (nvs->address % transferBlockSize != 0 || nvs->size % transferBlockSize != 0) {
-        ESP_LOGE(TAG, "NVS partition at 0x%08lX with %lu bytes is not aligned to the block size of %lu bytes",
-                 nvs->address, nvs->size, transferBlockSize);
-        return false;
+    }
+    // a blank otadata makes the target boot ota_0, which gets our running app also when that runs from ota_1
+    const esp_partition_t *otadata = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
+    const esp_partition_t *ota_0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr);
+    const esp_partition_t *app_source = ota_0 != nullptr && running_partition->address != ota_0->address ? running_partition : nullptr;
+    for (const esp_partition_t *partition : {nvs, otadata, ota_0}) {
+        if (partition != nullptr && (partition->address % transferBlockSize != 0 || partition->size % transferBlockSize != 0)) {
+            ESP_LOGE(TAG, "Partition %s at 0x%08lX with %lu bytes is not aligned to the block size of %lu bytes",
+                     partition->label, partition->address, partition->size, transferBlockSize);
+            return false;
+        }
     }
     std::vector<std::byte> blank(transferBlockSize, std::byte{0xFF});
+    std::vector<std::byte> block(transferBlockSize);
 
     status = esp_loader_flash_start(0, usedSize, transferBlockSize);
     HANDLE_ERROR(status, "erasing target flash");
 
-    auto bytePtr{reinterpret_cast<const std::byte *>(ptr)};
-    uint32_t toSend = usedSize;
-
-    /* Send all non-partial block */
+    const auto mapped{reinterpret_cast<const std::byte *>(ptr)};
     int count = 0;
-    while (toSend >= transferBlockSize) {
+    for (uint32_t offset = 0; offset < usedSize; offset += transferBlockSize) {
         if ((count++) % 10 == 0) {
-            ESP_LOGI(TAG, "%lu/%lu kb", (usedSize - toSend) / 1000, usedSize / 1000);
+            ESP_LOGI(TAG, "%lu/%lu kb", offset / 1000, usedSize / 1000);
         }
-        const uint32_t offset = usedSize - toSend;
-        const bool in_nvs = nvs != nullptr && offset >= nvs->address && offset < nvs->address + nvs->size;
-        status = esp_loader_flash_write(in_nvs ? blank.data() : const_cast<std::byte *>(bytePtr), transferBlockSize);
-        ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", usedSize - toSend);
-
-        HANDLE_ERROR(status, "writing target flash");
-
-        bytePtr += transferBlockSize;
-        toSend -= transferBlockSize;
-    }
-
-    if (toSend > 0) {
-        /* Send last (partial) block */
-        status = esp_loader_flash_write(const_cast<std::byte *>(bytePtr), toSend);
-
-        ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", usedSize - toSend);
+        const uint32_t size{std::min(transferBlockSize, usedSize - offset)};
+        const std::byte *data = mapped + offset;
+        if (contains(nvs, offset) || contains(otadata, offset)) {
+            data = blank.data();
+        } else if (app_source != nullptr && contains(ota_0, offset)) {
+            const esp_err_t ec{esp_partition_read(app_source, offset - ota_0->address, block.data(), size)};
+            HANDLE_ESP_ERROR(ec, "reading the running app");
+            data = block.data();
+        }
+        status = esp_loader_flash_write(const_cast<std::byte *>(data), size);
+        ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", offset);
 
         HANDLE_ERROR(status, "writing target flash");
     }
@@ -232,7 +238,7 @@ auto flashReplica(const uart_port_t uart_num,
         return false;
     }
 
-    if (!flash(running_partition->size, block_size)) {
+    if (!flash(running_partition, block_size)) {
         return false;
     }
 
