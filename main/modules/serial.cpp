@@ -119,7 +119,7 @@ void Serial::write_checked_line(const char *message, const int length) const {
 }
 
 int Serial::available() const {
-    size_t available;
+    size_t available = 0;
     uart_get_buffered_data_len(this->uart_num, &available);
     return available;
 }
@@ -158,12 +158,6 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
 const char *Serial::read_line_error(const int result) {
     return result == LINE_FLUSHED ? "buffer too small, but cannot discard line. flushed serial."
                                   : "buffer too small. discarded line.";
-}
-
-void Serial::clear() const {
-    while (this->available()) {
-        this->read();
-    }
 }
 
 std::string Serial::get_output() const {
