@@ -1161,6 +1161,7 @@ its startup script, a persisted console baud rate and the bus backup are reset t
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
 Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
+After `disconnect()`, no other serial module can use the same UART number until the core restarts.
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 

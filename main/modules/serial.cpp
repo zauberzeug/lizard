@@ -4,11 +4,14 @@
 #include "utils/uart.h"
 #include "utils/uart_driver.h"
 #include <cstring>
+#include <set>
 #include <stdexcept>
 
 #define RX_BUF_SIZE (2 * CONSOLE_LINE_SIZE) // a maximal line plus what arrives while the main loop handles it
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
+
+static std::set<uart_port_t> reserved_ports; // held for the lifetime of their Serial, also after deinstall()
 
 static Module_ptr create_serial(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 4, integer, integer, integer, integer);
@@ -29,15 +32,17 @@ Serial::Serial(const std::string name,
     : Module(name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
     this->properties = Serial::get_defaults();
 
-    if (uart_is_driver_installed(uart_num)) {
+    if (uart_is_driver_installed(uart_num) || reserved_ports.count(uart_num)) {
         throw std::runtime_error("serial interface is already in use");
     }
 
     this->initialize_uart();
+    reserved_ports.insert(uart_num);
 }
 
 Serial::~Serial() {
     this->deinstall();
+    reserved_ports.erase(this->uart_num);
 }
 
 void Serial::initialize_uart() const {
