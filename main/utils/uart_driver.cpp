@@ -12,7 +12,8 @@ struct InstallRequest {
 
 void install(void *arg) {
     auto *request = static_cast<InstallRequest *>(arg);
-    request->result = uart_driver_install(request->port, request->rx_buffer_size, request->tx_buffer_size, 0, nullptr, 0);
+    // nothing reads the event queue, but IDF 5.3.1's receive ISR posts to it unchecked when the ring runs full at a line end (#146)
+    request->result = uart_driver_install(request->port, request->rx_buffer_size, request->tx_buffer_size, 20, nullptr, 0);
 }
 
 } // namespace
