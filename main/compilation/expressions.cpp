@@ -103,13 +103,13 @@ double VariableExpression::evaluate_number() const {
 
 std::string VariableExpression::evaluate_string() const {
     if (this->type == string)
-        return this->variable->string_value;
+        return this->variable->string_value();
     throw std::runtime_error("variable is not a string");
 }
 
 std::string VariableExpression::evaluate_identifier() const {
     if (this->type == identifier)
-        return this->variable->identifier_value;
+        return this->variable->identifier_value();
     throw std::runtime_error("variable is not an identifier");
 }
 
@@ -143,13 +143,13 @@ double PropertyExpression::evaluate_number() const {
 
 std::string PropertyExpression::evaluate_string() const {
     if (this->type == string)
-        return this->module->get_property(this->property_name)->string_value;
+        return this->module->get_property(this->property_name)->string_value();
     throw std::runtime_error("property is not a string");
 }
 
 std::string PropertyExpression::evaluate_identifier() const {
     if (this->type == identifier)
-        return this->module->get_property(this->property_name)->identifier_value;
+        return this->module->get_property(this->property_name)->identifier_value();
     throw std::runtime_error("property is not an identifier");
 }
 

@@ -80,11 +80,11 @@ void Can::step() {
     if (twai_get_status_info(&status_info) != ESP_OK) {
         throw std::runtime_error("could not get status info");
     }
-    this->properties.at("state")->string_value = status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
-                                                 : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
-                                                 : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
-                                                 : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
-                                                                                              : "UNKNOWN";
+    this->properties.at("state")->set_string_value(status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
+                                                   : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
+                                                   : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+                                                   : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                                                                : "UNKNOWN");
     this->properties.at("tx_error_counter")->integer_value = status_info.tx_error_counter;
     this->properties.at("rx_error_counter")->integer_value = status_info.rx_error_counter;
     this->properties.at("msgs_to_tx")->integer_value = status_info.msgs_to_tx;
@@ -184,7 +184,7 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
                    arguments[8]->evaluate_integer());
     } else if (method_name == "get_status") {
         Module::expect(arguments, 0);
-        echo("state:            %s", this->properties.at("state")->string_value.c_str());
+        echo("state:            %s", this->properties.at("state")->string_value().c_str());
         echo("msgs_to_tx:       %d", (int)this->properties.at("msgs_to_tx")->integer_value);
         echo("msgs_to_rx:       %d", (int)this->properties.at("msgs_to_rx")->integer_value);
         echo("tx_error_counter: %d", (int)this->properties.at("tx_error_counter")->integer_value);
