@@ -207,12 +207,12 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             }
         }
         deinstall();
-        bool success = ZZ::Replicator::flashReplica(this->serial->uart_num,
-                                                    this->enable_pin,
-                                                    this->boot_pin,
-                                                    this->serial->rx_pin,
-                                                    this->serial->tx_pin,
-                                                    this->serial->baud_rate);
+        bool success = ZZ::Replicator::flash_replica(this->serial->uart_num,
+                                                     this->enable_pin,
+                                                     this->boot_pin,
+                                                     this->serial->rx_pin,
+                                                     this->serial->tx_pin,
+                                                     this->serial->baud_rate);
         delay(100);
         this->serial->reinitialize_after_flash();
         if (!success) {
