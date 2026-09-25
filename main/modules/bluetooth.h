@@ -15,6 +15,7 @@ private:
     const std::string device_name;
     const MessageHandler message_handler;
     QueueHandle_t line_queue;
+    unsigned long last_message_millis = 0; // `millis()` when the last received line was handed to the interpreter
 
 public:
     static inline constexpr const char *TYPE = "Bluetooth";
