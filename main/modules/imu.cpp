@@ -4,6 +4,7 @@
 #include "module_helpers.h"
 #include "mutex_guard.h"
 #include "uart.h"
+#include <algorithm>
 #include <stdexcept>
 
 static constexpr uint32_t READ_TASK_STACK_SIZE = 4096;
