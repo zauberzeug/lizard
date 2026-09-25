@@ -2,14 +2,12 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <numeric>
 #include <vector>
 
 #include <esp_err.h>
-#include <esp_flash_partitions.h>
+#include <esp_flash.h>
 #include <esp_log.h>
 #include <esp_ota_ops.h>
-#include <spi_flash_mmap.h>
 
 #include <esp32_port.h>
 #include <esp_loader.h>
@@ -97,47 +95,15 @@ static auto upBaudrate(uart_port_t uart_num, uint32_t base_baud_rate) -> bool {
     return true;
 }
 
-class Unmapper {
-    spi_flash_mmap_handle_t m_handle;
-
-public:
-    Unmapper(spi_flash_mmap_handle_t handle) : m_handle(handle) {}
-
-    ~Unmapper() {
-        spi_flash_munmap(m_handle);
-    }
-};
-
-static auto neededBlocks(const uint32_t value, const uint32_t blockSize) -> uint32_t {
-    uint32_t blockCount{value / blockSize};
-
-    if (value % blockSize > 0) {
-        ++blockCount;
-    }
-
-    return blockCount;
-}
-
 static auto contains(const esp_partition_t *partition, const uint32_t offset) -> bool {
     return partition != nullptr && offset >= partition->address && offset < partition->address + partition->size;
 }
 
 static auto flash(const esp_partition_t *running_partition, uint32_t transferBlockSize) -> bool {
     const uint32_t usedSize{running_partition->size};
-    const uint32_t pageCount{neededBlocks(usedSize, SPI_FLASH_MMU_PAGE_SIZE)};
-    const uint32_t blockCount{neededBlocks(usedSize, transferBlockSize)};
+    const uint32_t blockCount{(usedSize + transferBlockSize - 1) / transferBlockSize};
 
-    ESP_LOGI(TAG, "Replicating [%lu] bytes, from [%lu] pages, in [%lu] blocks", usedSize, pageCount, blockCount);
-
-    /* Fill vector with ascending indices starting at 0 */
-    std::vector<int> pageIndices(pageCount);
-    std::iota(pageIndices.begin(), pageIndices.end(), 0);
-
-    spi_flash_mmap_handle_t handle;
-    const void *ptr;
-
-    ESP_ERROR_CHECK(spi_flash_mmap_pages(pageIndices.data(), pageIndices.size(), SPI_FLASH_MMAP_DATA, &ptr, &handle));
-    Unmapper unmapper{handle};
+    ESP_LOGI(TAG, "Replicating [%lu] bytes in [%lu] blocks", usedSize, blockCount);
 
     esp_loader_error_t status;
 
@@ -149,7 +115,6 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transferBlo
     // a blank otadata makes the target boot ota_0, which gets our running app also when that runs from ota_1
     const esp_partition_t *otadata = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
     const esp_partition_t *ota_0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr);
-    const esp_partition_t *app_source = ota_0 != nullptr && running_partition->address != ota_0->address ? running_partition : nullptr;
     for (const esp_partition_t *partition : {nvs, otadata, ota_0}) {
         if (partition != nullptr && (partition->address % transferBlockSize != 0 || partition->size % transferBlockSize != 0)) {
             ESP_LOGE(TAG, "Partition %s at 0x%08lX with %lu bytes is not aligned to the block size of %lu bytes",
@@ -163,22 +128,23 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transferBlo
     status = esp_loader_flash_start(0, usedSize, transferBlockSize);
     HANDLE_ERROR(status, "erasing target flash");
 
-    const auto mapped{reinterpret_cast<const std::byte *>(ptr)};
     int count = 0;
     for (uint32_t offset = 0; offset < usedSize; offset += transferBlockSize) {
         if ((count++) % 10 == 0) {
             ESP_LOGI(TAG, "%lu/%lu kb", offset / 1000, usedSize / 1000);
         }
         const uint32_t size{std::min(transferBlockSize, usedSize - offset)};
-        const std::byte *data = mapped + offset;
+        std::byte *data = block.data();
         if (contains(nvs, offset) || contains(otadata, offset)) {
             data = blank.data();
-        } else if (app_source != nullptr && contains(ota_0, offset)) {
-            const esp_err_t ec{esp_partition_read(app_source, offset - ota_0->address, block.data(), size)};
+        } else if (contains(ota_0, offset)) {
+            const esp_err_t ec{esp_partition_read(running_partition, offset - ota_0->address, block.data(), size)};
             HANDLE_ESP_ERROR(ec, "reading the running app");
-            data = block.data();
+        } else {
+            const esp_err_t ec{esp_flash_read(nullptr, block.data(), offset, size)};
+            HANDLE_ESP_ERROR(ec, "reading our flash");
         }
-        status = esp_loader_flash_write(const_cast<std::byte *>(data), size);
+        status = esp_loader_flash_write(data, size);
         ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", offset);
 
         HANDLE_ERROR(status, "writing target flash");
