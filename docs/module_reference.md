@@ -1209,6 +1209,10 @@ its startup script, a persisted console baud rate and the bus backup are reset t
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
 Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
 
+[Proxy](#proxy) modules are set up on the other microcontroller only once, when they are created.
+After `restart()`, `flash()` or a reboot of the other microcontroller, `is_ready` returns to `true`, but the proxies no longer exist there:
+their `is_ready` turns `false` and the main microcontroller needs a restart, e.g. `core.restart()`, to create them again.
+
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 
 | Properties         | Description                                             | Data type |
@@ -1237,6 +1241,8 @@ Note that the proxy module forwards all method calls to the remote module.
 Proxies cannot be passed as arguments to other module constructors (e.g. as end stops for a motor axis), because the actual module only exists on the remote microcontroller.
 Declare the depending module on the same microcontroller instead.
 
-| Properties | Description                                       | Data type |
-| ---------- | ------------------------------------------------- | --------- |
-| `is_ready` | Whether the remote module has booted and is ready | `bool`    |
+| Properties | Description                                                              | Data type |
+| ---------- | ------------------------------------------------------------------------ | --------- |
+| `is_ready` | Whether the remote module is set up; `false` until the expander is ready | `bool`    |
+
+`is_ready` turns `false` again when the other microcontroller restarts or the connection is lost, because the remote module is not created again (see [Expander](#expander)).
