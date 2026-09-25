@@ -5,7 +5,15 @@
 
 Variable::Variable(const Type type) : type(type) {
     if (type == string || type == identifier) {
-        this->text = std::make_unique<std::string>();
+        this->text = new std::string();
+    } else {
+        this->integer_value = 0; // clears the whole slot, so a boolean or number variable starts at false or 0.0 as well
+    }
+}
+
+Variable::~Variable() {
+    if (this->type == string || this->type == identifier) {
+        delete this->text;
     }
 }
 
