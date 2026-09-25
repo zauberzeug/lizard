@@ -194,7 +194,7 @@ void SerialBus::rebuild_offset_properties() {
     // keep reading NaN instead of freezing their last value.
     for (auto &[name, property] : this->properties) {
         if (starts_with(name, "offset_")) {
-            property->number_value = NAN;
+            property->set_number_value(NAN);
         }
     }
     const auto find_or_create = [this](const std::string &name) {
@@ -218,8 +218,8 @@ void SerialBus::apply_offset_update(const OffsetUpdate &update) {
     }
     for (const OffsetProperties &properties : this->offset_properties) {
         if (properties.peer_id == update.peer_id) {
-            properties.offset->number_value = update.valid ? update.offset_us / 1000.0 : NAN;
-            properties.accuracy->number_value = update.valid ? update.accuracy_us / 1000.0 : NAN;
+            properties.offset->set_number_value(update.valid ? update.offset_us / 1000.0 : NAN);
+            properties.accuracy->set_number_value(update.valid ? update.accuracy_us / 1000.0 : NAN);
             return;
         }
     }

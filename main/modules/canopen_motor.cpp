@@ -103,7 +103,7 @@ void CanOpenMotor::wait_for_sdo_writes(uint32_t timeout_ms) {
 
         delay(ms_per_sleep);
 
-        if (this->properties[PROP_PENDING_WRITES]->integer_value == 0) {
+        if (this->properties[PROP_PENDING_WRITES]->integer_value() == 0) {
             return;
         }
     }
@@ -115,7 +115,7 @@ void CanOpenMotor::enter_position_mode(int velocity) {
     write_od_u8(OP_MODE_U8, 0x00, OP_MODE_PROFILE_POSITION);
     send_target_velocity(velocity);
     /* Take off halt (=brake) for positioning by default */
-    this->properties[PROP_CTRL_HALT]->boolean_value = false;
+    this->properties[PROP_CTRL_HALT]->set_boolean_value(false);
     send_control_word(build_ctrl_word(false));
 
     current_op_mode = OP_MODE_PROFILE_POSITION;
@@ -123,7 +123,7 @@ void CanOpenMotor::enter_position_mode(int velocity) {
 
 void CanOpenMotor::enter_velocity_mode(int velocity) {
     /* Put in halt for velocity mode since it directly controls motion */
-    this->properties[PROP_CTRL_HALT]->boolean_value = true;
+    this->properties[PROP_CTRL_HALT]->set_boolean_value(true);
     send_control_word(build_ctrl_word(false));
     send_target_velocity(velocity);
     write_od_u8(OP_MODE_U8, 0x00, OP_MODE_PROFILE_VELOCITY);
@@ -151,7 +151,7 @@ void CanOpenMotor::subscribe_to_can() {
 }
 
 void CanOpenMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    if (!this->properties[PROP_INITIALIZED]->boolean_value) {
+    if (!this->properties[PROP_INITIALIZED]->boolean_value()) {
         throw std::runtime_error("CanOpenMotor: Not initialized!");
     }
 
@@ -166,7 +166,7 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
     } else if (method_name == "set_target_position") {
         expect(arguments, 1, integer);
         int32_t target_position = arguments[0]->evaluate_integer();
-        int32_t offset = this->properties[PROP_OFFSET]->integer_value;
+        int32_t offset = this->properties[PROP_OFFSET]->integer_value();
         send_target_position(target_position + offset);
     } else if (method_name == "commit_target_position") {
         expect(arguments, 0);
@@ -178,16 +178,16 @@ void CanOpenMotor::call(const std::string method_name, const std::vector<ConstEx
         send_target_velocity(target_velocity);
     } else if (method_name == "set_ctrl_halt") {
         expect(arguments, 1, boolean);
-        this->properties[PROP_CTRL_HALT]->boolean_value = arguments[0]->evaluate_boolean();
+        this->properties[PROP_CTRL_HALT]->set_boolean_value(arguments[0]->evaluate_boolean());
         send_control_word(build_ctrl_word(false));
     } else if (method_name == "set_ctrl_enable") {
         expect(arguments, 1, boolean);
-        this->properties[PROP_CTRL_ENA_OP]->boolean_value = arguments[0]->evaluate_boolean();
+        this->properties[PROP_CTRL_ENA_OP]->set_boolean_value(arguments[0]->evaluate_boolean());
         send_control_word(build_ctrl_word(false));
     } else if (method_name == "reset_fault") {
         expect(arguments, 0);
         /* implicitly set halt bit so we don't start moving immediately after the fault is cleared */
-        this->properties[PROP_CTRL_HALT]->boolean_value = true;
+        this->properties[PROP_CTRL_HALT]->set_boolean_value(true);
         uint16_t ctrl_word = build_ctrl_word(false);
         /* set fault reset bit */
         ctrl_word |= (1 << 7);
@@ -237,15 +237,16 @@ void CanOpenMotor::transition_operational() {
 
 bool CanOpenMotor::send_sdo_with_retry(uint32_t cob_id, const uint8_t *data) {
     const int max_attempts = 3;
+    const Variable_ptr &pending_writes = this->properties[PROP_PENDING_WRITES];
 
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         try {
-            this->properties[PROP_PENDING_WRITES]->integer_value++;
+            pending_writes->set_integer_value(pending_writes->integer_value() + 1);
             this->can->send(cob_id, data);
             wait_for_sdo_writes(100);
             return true;
         } catch (const std::exception &e) {
-            this->properties[PROP_PENDING_WRITES]->integer_value--;
+            pending_writes->set_integer_value(pending_writes->integer_value() - 1);
             if (attempt < max_attempts - 1) {
                 try {
                     this->can->reset_can_bus();
@@ -351,16 +352,16 @@ void CanOpenMotor::configure_constants() {
 void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
     uint8_t actual_state = data[0];
 
-    this->properties[PROP_HEARTBEAT]->integer_value = esp_timer_get_time();
-    this->properties[PROP_301_STATE]->integer_value = actual_state;
-    this->properties[PROP_301_STATE_BOOTING]->boolean_value = actual_state == Booting;
-    this->properties[PROP_301_STATE_PREOP]->boolean_value = actual_state == Preoperational;
-    this->properties[PROP_301_STATE_OP]->boolean_value = actual_state == Operational;
+    this->properties[PROP_HEARTBEAT]->set_integer_value(esp_timer_get_time());
+    this->properties[PROP_301_STATE]->set_integer_value(actual_state);
+    this->properties[PROP_301_STATE_BOOTING]->set_boolean_value(actual_state == Booting);
+    this->properties[PROP_301_STATE_PREOP]->set_boolean_value(actual_state == Preoperational);
+    this->properties[PROP_301_STATE_OP]->set_boolean_value(actual_state == Operational);
 
     if (actual_state == Booting) {
         /* Possible reboot, restart initialization */
         init_state = WaitingForPreoperational;
-        this->properties[PROP_INITIALIZED]->boolean_value = false;
+        this->properties[PROP_INITIALIZED]->set_boolean_value(false);
         return;
     }
 
@@ -375,7 +376,7 @@ void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
         }
     } else if (init_state == WaitingForSdoWrites) {
         if (actual_state == Preoperational) {
-            if (this->properties[PROP_PENDING_WRITES]->integer_value > 0) {
+            if (this->properties[PROP_PENDING_WRITES]->integer_value() > 0) {
                 return;
             }
             transition_operational();
@@ -386,7 +387,7 @@ void CanOpenMotor::handle_heartbeat(const uint8_t *const data) {
     } else if (init_state == WaitingForOperational) {
         if (actual_state == Operational) {
             init_state = InitDone;
-            this->properties[PROP_INITIALIZED]->boolean_value = true;
+            this->properties[PROP_INITIALIZED]->set_boolean_value(true);
         } else if (actual_state != Preoperational) {
             throw std::runtime_error("CanOpenMotor: Unexpected state waiting for operational");
         }
@@ -409,14 +410,17 @@ void CanOpenMotor::handle_sdo_reply(const uint8_t *const data) {
         }
         break;
 
-    case ExpeditedWriteSuccess:
-        assert(this->properties[PROP_PENDING_WRITES]->integer_value > 0);
-        this->properties[PROP_PENDING_WRITES]->integer_value--;
+    case ExpeditedWriteSuccess: {
+        const Variable_ptr &pending_writes = this->properties[PROP_PENDING_WRITES];
+        assert(pending_writes->integer_value() > 0);
+        pending_writes->set_integer_value(pending_writes->integer_value() - 1);
         break;
+    }
 
-    case WriteFailure:
+    case WriteFailure: {
+        const Variable_ptr &pending_writes = this->properties[PROP_PENDING_WRITES];
         /* A failure still acknowledges the write operation */
-        this->properties[PROP_PENDING_WRITES]->integer_value--;
+        pending_writes->set_integer_value(pending_writes->integer_value() - 1);
 
         switch (value) {
         case NonExistantObject:
@@ -431,6 +435,7 @@ void CanOpenMotor::handle_sdo_reply(const uint8_t *const data) {
             echo("Unknown error [%04X] attempting to write object [%02X.%01X]", value, index, sub_index);
         }
         break;
+    }
 
     default:
         echo("Unknown server command specifier %u", scs);
@@ -440,7 +445,7 @@ void CanOpenMotor::handle_sdo_reply(const uint8_t *const data) {
 void CanOpenMotor::handle_tpdo1(const uint8_t *const data) {
     uint16_t status_word = data[0] | data[1] << 8;
     int32_t actual_position = demarshal_i32(data + 2);
-    actual_position -= this->properties[PROP_OFFSET]->integer_value;
+    actual_position -= this->properties[PROP_OFFSET]->integer_value();
 
     process_status_word_generic(status_word);
 
@@ -450,26 +455,26 @@ void CanOpenMotor::handle_tpdo1(const uint8_t *const data) {
         process_status_word_pv(status_word);
     }
 
-    this->properties[PROP_POSITION]->integer_value = actual_position;
+    this->properties[PROP_POSITION]->set_integer_value(actual_position);
 }
 
 void CanOpenMotor::handle_tpdo2(const uint8_t *const data) {
     int32_t actual_velocity = demarshal_i32(data);
-    this->properties[PROP_VELOCITY]->integer_value = actual_velocity;
+    this->properties[PROP_VELOCITY]->set_integer_value(actual_velocity);
 }
 
 void CanOpenMotor::process_status_word_generic(const uint16_t status_word) {
-    this->properties[PROP_402_OP_ENA]->boolean_value = status_word >> 2 & 1;
-    this->properties[PROP_402_FAULT]->boolean_value = status_word >> 3 & 1;
-    this->properties[PROP_TARGET_REACHED]->boolean_value = status_word >> 10 & 1;
+    this->properties[PROP_402_OP_ENA]->set_boolean_value(status_word >> 2 & 1);
+    this->properties[PROP_402_FAULT]->set_boolean_value(status_word >> 3 & 1);
+    this->properties[PROP_TARGET_REACHED]->set_boolean_value(status_word >> 10 & 1);
 }
 
 void CanOpenMotor::process_status_word_pp(const uint16_t status_word) {
-    this->properties[PROP_PP_SET_POINT_ACK]->boolean_value = status_word >> 12 & 1;
+    this->properties[PROP_PP_SET_POINT_ACK]->set_boolean_value(status_word >> 12 & 1);
 }
 
 void CanOpenMotor::process_status_word_pv(const uint16_t status_word) {
-    this->properties[PROP_PV_IS_MOVING]->boolean_value = status_word >> 12 & 1;
+    this->properties[PROP_PV_IS_MOVING]->set_boolean_value(status_word >> 12 & 1);
 }
 
 void CanOpenMotor::send_control_word(uint16_t value) {
@@ -491,8 +496,8 @@ void CanOpenMotor::send_target_velocity(int32_t value) {
 }
 
 uint16_t CanOpenMotor::build_ctrl_word(bool new_set_point) {
-    uint16_t ena_op_bit = this->properties[PROP_CTRL_ENA_OP]->boolean_value ? 1 : 0;
-    uint16_t halt_bit = this->properties[PROP_CTRL_HALT]->boolean_value ? 1 : 0;
+    uint16_t ena_op_bit = this->properties[PROP_CTRL_ENA_OP]->boolean_value() ? 1 : 0;
+    uint16_t halt_bit = this->properties[PROP_CTRL_HALT]->boolean_value() ? 1 : 0;
     uint16_t new_set_point_bit = new_set_point ? 1 : 0;
 
     return build_ctrl_base_word(1, 1, 1, ena_op_bit, halt_bit) | build_ctrl_pos_prof_word(new_set_point_bit, 1, 0);
@@ -524,12 +529,12 @@ void CanOpenMotor::handle_can_msg(const uint32_t id, const int count, const uint
 }
 
 void CanOpenMotor::stop() {
-    this->properties[PROP_CTRL_HALT]->boolean_value = true;
+    this->properties[PROP_CTRL_HALT]->set_boolean_value(true);
     this->send_control_word(build_ctrl_word(false));
 }
 
 double CanOpenMotor::get_position() {
-    return static_cast<double>(this->properties[PROP_POSITION]->integer_value);
+    return static_cast<double>(this->properties[PROP_POSITION]->integer_value());
 }
 
 void CanOpenMotor::position(const double position, const double speed, const double acceleration) {
@@ -537,12 +542,12 @@ void CanOpenMotor::position(const double position, const double speed, const dou
         return;
     }
     this->enter_position_mode(static_cast<int32_t>(speed));
-    this->send_target_position(static_cast<int32_t>(position) + this->properties[PROP_OFFSET]->integer_value);
+    this->send_target_position(static_cast<int32_t>(position) + this->properties[PROP_OFFSET]->integer_value());
     send_control_word(build_ctrl_word(true));
 }
 
 double CanOpenMotor::get_speed() {
-    return static_cast<double>(this->properties[PROP_VELOCITY]->integer_value);
+    return static_cast<double>(this->properties[PROP_VELOCITY]->integer_value());
 }
 
 void CanOpenMotor::speed(const double speed, const double acceleration) {
@@ -550,12 +555,12 @@ void CanOpenMotor::speed(const double speed, const double acceleration) {
         return;
     }
     this->enter_velocity_mode(speed);
-    this->properties[PROP_CTRL_HALT]->boolean_value = false;
+    this->properties[PROP_CTRL_HALT]->set_boolean_value(false);
     send_control_word(build_ctrl_word(false));
 }
 
 void CanOpenMotor::step() {
-    if (!this->properties[PROP_INITIALIZED]->boolean_value) {
+    if (!this->properties[PROP_INITIALIZED]->boolean_value()) {
         return;
     }
 
@@ -563,12 +568,12 @@ void CanOpenMotor::step() {
 }
 
 void CanOpenMotor::do_enable() {
-    this->properties[PROP_CTRL_ENA_OP]->boolean_value = true;
+    this->properties[PROP_CTRL_ENA_OP]->set_boolean_value(true);
     send_control_word(build_ctrl_word(false));
 }
 
 void CanOpenMotor::do_disable() {
     this->stop();
-    this->properties[PROP_CTRL_ENA_OP]->boolean_value = false;
+    this->properties[PROP_CTRL_ENA_OP]->set_boolean_value(false);
     send_control_word(build_ctrl_word(false));
 }

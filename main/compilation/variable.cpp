@@ -7,7 +7,7 @@ Variable::Variable(const Type type) : type(type) {
     if (type == string || type == identifier) {
         this->text = new std::string();
     } else {
-        this->integer_value = 0; // clears the whole slot, so a boolean or number variable starts at false or 0.0 as well
+        this->integer_slot = 0; // clears the whole slot, so a boolean or number variable starts at false or 0.0 as well
     }
 }
 
@@ -17,34 +17,81 @@ Variable::~Variable() {
     }
 }
 
-const std::string &Variable::string_value() const {
-    if (this->type != string) {
-        throw std::runtime_error("variable is not a string");
+static const char *describe(const Type type) {
+    switch (type) {
+    case boolean:
+        return "a boolean";
+    case integer:
+        return "an integer";
+    case number:
+        return "a number";
+    case string:
+        return "a string";
+    case identifier:
+        return "an identifier";
+    default:
+        return "of an unknown type";
     }
+}
+
+void Variable::expect(const Type type) const {
+    if (this->type != type) {
+        throw std::runtime_error(std::string("variable is ") + describe(this->type) + ", not " + describe(type));
+    }
+}
+
+bool Variable::boolean_value() const {
+    this->expect(boolean);
+    return this->boolean_slot;
+}
+
+int64_t Variable::integer_value() const {
+    this->expect(integer);
+    return this->integer_slot;
+}
+
+double Variable::number_value() const {
+    this->expect(number);
+    return this->number_slot;
+}
+
+const std::string &Variable::string_value() const {
+    this->expect(string);
     return *this->text;
 }
 
 const std::string &Variable::identifier_value() const {
-    if (this->type != identifier) {
-        throw std::runtime_error("variable is not an identifier");
-    }
+    this->expect(identifier);
     return *this->text;
 }
 
+void Variable::set_boolean_value(const bool value) {
+    this->expect(boolean);
+    this->boolean_slot = value;
+}
+
+void Variable::set_integer_value(const int64_t value) {
+    this->expect(integer);
+    this->integer_slot = value;
+}
+
+void Variable::set_number_value(const double value) {
+    this->expect(number);
+    this->number_slot = value;
+}
+
 void Variable::set_string_value(const std::string &value) {
-    if (this->type != string) {
-        throw std::runtime_error("variable is not a string");
-    }
+    this->expect(string);
     *this->text = value;
 }
 
 void Variable::assign(const ConstExpression_ptr expression) {
     if (this->type == boolean && expression->type == boolean) {
-        this->boolean_value = expression->evaluate_boolean();
+        this->boolean_slot = expression->evaluate_boolean();
     } else if (this->type == integer && expression->type == integer) {
-        this->integer_value = expression->evaluate_integer();
+        this->integer_slot = expression->evaluate_integer();
     } else if (this->type == number && expression->is_numbery()) {
-        this->number_value = expression->evaluate_number();
+        this->number_slot = expression->evaluate_number();
     } else if (this->type == string && expression->type == string) {
         *this->text = expression->evaluate_string();
     } else if (this->type == identifier && expression->type == identifier) {
@@ -57,11 +104,11 @@ void Variable::assign(const ConstExpression_ptr expression) {
 int Variable::print_to_buffer(char *const buffer, size_t buffer_len) const {
     switch (this->type) {
     case boolean:
-        return csprintf(buffer, buffer_len, "%s", this->boolean_value ? "true" : "false");
+        return csprintf(buffer, buffer_len, "%s", this->boolean_slot ? "true" : "false");
     case integer:
-        return csprintf(buffer, buffer_len, "%lld", this->integer_value);
+        return csprintf(buffer, buffer_len, "%lld", this->integer_slot);
     case number:
-        return csprintf(buffer, buffer_len, "%f", this->number_value);
+        return csprintf(buffer, buffer_len, "%f", this->number_slot);
     case string:
         return csprintf(buffer, buffer_len, "\"%s\"", this->text->c_str());
     case identifier:
@@ -72,15 +119,15 @@ int Variable::print_to_buffer(char *const buffer, size_t buffer_len) const {
 }
 
 BooleanVariable::BooleanVariable(const bool value) : Variable(boolean) {
-    this->boolean_value = value;
+    this->boolean_slot = value;
 }
 
 IntegerVariable::IntegerVariable(const int64_t value) : Variable(integer) {
-    this->integer_value = value;
+    this->integer_slot = value;
 }
 
 NumberVariable::NumberVariable(double value) : Variable(number) {
-    this->number_value = value;
+    this->number_slot = value;
 }
 
 StringVariable::StringVariable(std::string value) : Variable(string) {

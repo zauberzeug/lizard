@@ -57,8 +57,8 @@ Expander::Expander(const std::string name,
     }
 
     this->restart();
-    const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value * 1000;
-    while (this->properties.at("is_ready")->boolean_value == false) {
+    const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value() * 1000;
+    while (this->properties.at("is_ready")->boolean_value() == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
             echo("warning: expander %s connection timed out.", this->name.c_str());
             // TODO: trigger error code
@@ -70,13 +70,13 @@ Expander::Expander(const std::string name,
 }
 
 void Expander::step() {
-    if (this->properties.at("is_ready")->boolean_value) {
+    if (this->properties.at("is_ready")->boolean_value()) {
         this->ping();
         this->handle_messages();
     } else {
         this->check_boot_progress();
     }
-    this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
+    this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
     Module::step();
 }
 
@@ -99,7 +99,7 @@ void Expander::check_boot_progress() {
         this->last_message_millis = millis();
         echo("%s: %s", this->name.c_str(), line_buffer);
         if (strcmp("Ready.", line_buffer) == 0) {
-            this->properties.at("is_ready")->boolean_value = true;
+            this->properties.at("is_ready")->set_boolean_value(true);
             echo("%s: Booting process completed successfully", this->name.c_str());
             break;
         }
@@ -107,9 +107,9 @@ void Expander::check_boot_progress() {
 }
 
 void Expander::ping() {
-    const double last_message_age = this->get_property("last_message_age")->integer_value / 1000.0;
-    const double ping_interval = this->get_property("ping_interval")->number_value;
-    const double ping_timeout = this->get_property("ping_timeout")->number_value;
+    const double last_message_age = this->get_property("last_message_age")->integer_value() / 1000.0;
+    const double ping_interval = this->get_property("ping_interval")->number_value();
+    const double ping_timeout = this->get_property("ping_timeout")->number_value();
     if (!this->ping_pending) {
         if (last_message_age >= ping_interval) {
             this->serial->write_checked_line("core.print('__PONG__')");
@@ -119,7 +119,7 @@ void Expander::ping() {
         if (last_message_age >= ping_interval + ping_timeout) {
             echo("warning: expander %s connection lost", this->name.c_str());
             // TODO: trigger error code
-            this->properties.at("is_ready")->boolean_value = false;
+            this->properties.at("is_ready")->set_boolean_value(false);
             this->ping_pending = false;
         }
     }
@@ -136,7 +136,7 @@ void Expander::restart() {
     }
     this->serial->flush();
     this->boot_start_time = millis();
-    this->properties.at("is_ready")->boolean_value = false;
+    this->properties.at("is_ready")->set_boolean_value(false);
 }
 
 void Expander::handle_messages(bool check_for_strapping_pins) {
@@ -253,7 +253,7 @@ void Expander::check_strapping_pins(const char *buffer) {
 
 void Expander::deinstall() {
     this->serial->deinstall();
-    this->properties.at("is_ready")->boolean_value = false;
+    this->properties.at("is_ready")->set_boolean_value(false);
     if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(this->boot_pin);
         gpio_reset_pin(this->enable_pin);

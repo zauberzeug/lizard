@@ -335,7 +335,7 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
         core_module->keep_alive();
     }
 
-    const bool debug = core_module->get_property("debug")->boolean_value;
+    const bool debug = core_module->get_property("debug")->boolean_value();
     if (debug) {
         echo(">> %s", line);
         tic();

@@ -32,9 +32,9 @@ Input::Input(const std::string name) : Module(name) {
 
 void Input::step() {
     const int new_level = this->get_level();
-    this->properties.at("change")->integer_value = new_level - this->properties.at("level")->integer_value;
-    this->properties.at("level")->integer_value = new_level;
-    this->properties.at("active")->boolean_value = this->properties.at("inverted")->boolean_value ? !new_level : new_level;
+    this->properties.at("change")->set_integer_value(new_level - this->properties.at("level")->integer_value());
+    this->properties.at("level")->set_integer_value(new_level);
+    this->properties.at("active")->set_boolean_value(this->properties.at("inverted")->boolean_value() ? !new_level : new_level);
     Module::step();
 }
 
@@ -66,7 +66,7 @@ GpioInput::GpioInput(const std::string name, const gpio_num_t number)
     : Input(name), number(number) {
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_INPUT);
-    this->properties.at("level")->integer_value = this->get_level();
+    this->properties.at("level")->set_integer_value(this->get_level());
 }
 
 bool GpioInput::get_level() const {
@@ -80,7 +80,7 @@ void GpioInput::set_pull_mode(const gpio_pull_mode_t mode) const {
 McpInput::McpInput(const std::string name, const Mcp23017_ptr mcp, const uint8_t number)
     : Input(name), mcp(mcp), number(number) {
     this->mcp->set_input(this->number, true);
-    this->properties.at("level")->integer_value = this->get_level();
+    this->properties.at("level")->set_integer_value(this->get_level());
 }
 
 bool McpInput::get_level() const {

@@ -172,7 +172,7 @@ Imu::Sample Imu::read_sample(const uint16_t data_select) const {
 }
 
 void Imu::step() {
-    this->requested_data_select.store(this->properties.at("data_select")->integer_value);
+    this->requested_data_select.store(this->properties.at("data_select")->integer_value());
 
     Sample sample;
     if (xQueueReceive(this->sample_queue, &sample, 0) == pdTRUE) {
@@ -196,49 +196,49 @@ void Imu::step() {
 
 void Imu::publish(const Sample &sample) {
     if (sample.data_select & 0x0001) {
-        this->properties.at("cal_sys")->integer_value = sample.calibration.sys;
-        this->properties.at("cal_gyr")->integer_value = sample.calibration.gyro;
-        this->properties.at("cal_acc")->integer_value = sample.calibration.accel;
-        this->properties.at("cal_mag")->integer_value = sample.calibration.mag;
+        this->properties.at("cal_sys")->set_integer_value(sample.calibration.sys);
+        this->properties.at("cal_gyr")->set_integer_value(sample.calibration.gyro);
+        this->properties.at("cal_acc")->set_integer_value(sample.calibration.accel);
+        this->properties.at("cal_mag")->set_integer_value(sample.calibration.mag);
     }
     if (sample.data_select & 0x0002) {
-        this->properties.at("acc_x")->number_value = sample.accelerometer.x;
-        this->properties.at("acc_y")->number_value = sample.accelerometer.y;
-        this->properties.at("acc_z")->number_value = sample.accelerometer.z;
+        this->properties.at("acc_x")->set_number_value(sample.accelerometer.x);
+        this->properties.at("acc_y")->set_number_value(sample.accelerometer.y);
+        this->properties.at("acc_z")->set_number_value(sample.accelerometer.z);
     }
     if (sample.data_select & 0x0004) {
-        this->properties.at("mag_x")->number_value = sample.magnetometer.x;
-        this->properties.at("mag_y")->number_value = sample.magnetometer.y;
-        this->properties.at("mag_z")->number_value = sample.magnetometer.z;
+        this->properties.at("mag_x")->set_number_value(sample.magnetometer.x);
+        this->properties.at("mag_y")->set_number_value(sample.magnetometer.y);
+        this->properties.at("mag_z")->set_number_value(sample.magnetometer.z);
     }
     if (sample.data_select & 0x0008) {
-        this->properties.at("gyr_x")->number_value = sample.gyroscope.x;
-        this->properties.at("gyr_y")->number_value = sample.gyroscope.y;
-        this->properties.at("gyr_z")->number_value = sample.gyroscope.z;
+        this->properties.at("gyr_x")->set_number_value(sample.gyroscope.x);
+        this->properties.at("gyr_y")->set_number_value(sample.gyroscope.y);
+        this->properties.at("gyr_z")->set_number_value(sample.gyroscope.z);
     }
     if (sample.data_select & 0x0010) {
-        this->properties.at("yaw")->number_value = sample.euler.x;
-        this->properties.at("roll")->number_value = sample.euler.y;
-        this->properties.at("pitch")->number_value = sample.euler.z;
+        this->properties.at("yaw")->set_number_value(sample.euler.x);
+        this->properties.at("roll")->set_number_value(sample.euler.y);
+        this->properties.at("pitch")->set_number_value(sample.euler.z);
     }
     if (sample.data_select & 0x0020) {
-        this->properties.at("quat_w")->number_value = sample.quaternion.w;
-        this->properties.at("quat_x")->number_value = sample.quaternion.x;
-        this->properties.at("quat_y")->number_value = sample.quaternion.y;
-        this->properties.at("quat_z")->number_value = sample.quaternion.z;
+        this->properties.at("quat_w")->set_number_value(sample.quaternion.w);
+        this->properties.at("quat_x")->set_number_value(sample.quaternion.x);
+        this->properties.at("quat_y")->set_number_value(sample.quaternion.y);
+        this->properties.at("quat_z")->set_number_value(sample.quaternion.z);
     }
     if (sample.data_select & 0x0040) {
-        this->properties.at("lin_x")->number_value = sample.linear_acceleration.x;
-        this->properties.at("lin_y")->number_value = sample.linear_acceleration.y;
-        this->properties.at("lin_z")->number_value = sample.linear_acceleration.z;
+        this->properties.at("lin_x")->set_number_value(sample.linear_acceleration.x);
+        this->properties.at("lin_y")->set_number_value(sample.linear_acceleration.y);
+        this->properties.at("lin_z")->set_number_value(sample.linear_acceleration.z);
     }
     if (sample.data_select & 0x0080) {
-        this->properties.at("grav_x")->number_value = sample.gravity.x;
-        this->properties.at("grav_y")->number_value = sample.gravity.y;
-        this->properties.at("grav_z")->number_value = sample.gravity.z;
+        this->properties.at("grav_x")->set_number_value(sample.gravity.x);
+        this->properties.at("grav_y")->set_number_value(sample.gravity.y);
+        this->properties.at("grav_z")->set_number_value(sample.gravity.z);
     }
     if (sample.data_select & 0x0100) {
-        this->properties.at("temp")->integer_value = sample.temperature;
+        this->properties.at("temp")->set_integer_value(sample.temperature);
     }
 }
 

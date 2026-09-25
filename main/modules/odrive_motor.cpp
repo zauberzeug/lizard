@@ -50,7 +50,7 @@ void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, cons
     if (!this->is_boot_complete) {
         return;
     }
-    if (this->properties.at("motor_error_flag")->integer_value == 1) {
+    if (this->properties.at("motor_error_flag")->integer_value() == 1) {
         this->axis_state = -1;
         this->axis_control_mode = -1;
         this->axis_input_mode = -1;
@@ -71,10 +71,11 @@ void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, cons
 void ODriveMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "zero") {
         Module::expect(arguments, 0);
-        this->properties.at("tick_offset")->number_value +=
-            this->properties.at("position")->number_value /
-            this->properties.at("m_per_tick")->number_value *
-            (this->properties.at("reversed")->boolean_value ? -1 : 1);
+        const Variable_ptr &tick_offset = this->properties.at("tick_offset");
+        const double position = this->properties.at("position")->number_value();
+        const double m_per_tick = this->properties.at("m_per_tick")->number_value();
+        const int sign = this->properties.at("reversed")->boolean_value() ? -1 : 1;
+        tick_offset->set_number_value(tick_offset->number_value() + position / m_per_tick * sign);
     } else if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
         this->power(arguments[0]->evaluate_number());
@@ -110,45 +111,42 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
     case 0x001: {
         int axis_error;
         std::memcpy(&axis_error, data, 4);
-        this->properties.at("axis_error")->integer_value = axis_error;
+        this->properties.at("axis_error")->set_integer_value(axis_error);
         const uint8_t axis_state = data[4];
         this->axis_state = axis_state;
-        this->properties.at("axis_state")->integer_value = axis_state;
+        this->properties.at("axis_state")->set_integer_value(axis_state);
         if (version == 6) {
             const uint8_t message_byte = data[5];
-            this->properties.at("motor_error_flag")->integer_value = message_byte & 0x01;
+            this->properties.at("motor_error_flag")->set_integer_value(message_byte & 0x01);
         }
         break;
     }
     case 0x009: {
+        const double tick_offset = this->properties.at("tick_offset")->number_value();
+        const double m_per_tick = this->properties.at("m_per_tick")->number_value();
+        const int sign = this->properties.at("reversed")->boolean_value() ? -1 : 1;
         float tick;
         std::memcpy(&tick, data, 4);
-        this->properties.at("position")->number_value =
-            (tick - this->properties.at("tick_offset")->number_value) *
-            (this->properties.at("reversed")->boolean_value ? -1 : 1) *
-            this->properties.at("m_per_tick")->number_value;
+        this->properties.at("position")->set_number_value((tick - tick_offset) * sign * m_per_tick);
         float ticks_per_second;
         std::memcpy(&ticks_per_second, data + 4, 4);
-        this->properties.at("speed")->number_value =
-            ticks_per_second *
-            (this->properties.at("reversed")->boolean_value ? -1 : 1) *
-            this->properties.at("m_per_tick")->number_value;
+        this->properties.at("speed")->set_number_value(ticks_per_second * sign * m_per_tick);
         break;
     }
     case 0x014: {
-        const int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
+        const int sign = this->properties.at("reversed")->boolean_value() ? -1 : 1;
         float iq_setpoint;
         std::memcpy(&iq_setpoint, data, 4);
-        this->properties.at("current_setpoint")->number_value = iq_setpoint * sign;
+        this->properties.at("current_setpoint")->set_number_value(iq_setpoint * sign);
         float iq_measured;
         std::memcpy(&iq_measured, data + 4, 4);
-        this->properties.at("current")->number_value = iq_measured * sign;
+        this->properties.at("current")->set_number_value(iq_measured * sign);
         break;
     }
     case 0x01e: {
         float temperature;
         std::memcpy(&temperature, data, 4);
-        this->properties.at("motor_temperature")->number_value = temperature;
+        this->properties.at("motor_temperature")->set_number_value(temperature);
         break;
     }
     }
@@ -160,7 +158,7 @@ void ODriveMotor::power(const float torque) {
     }
     this->set_mode(8, 1, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_TORQUE_CONTROL, INPUT_MODE_PASSTHROUGH
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-    int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
+    int sign = this->properties.at("reversed")->boolean_value() ? -1 : 1;
     const float motor_torque = sign * torque;
     std::memcpy(data, &motor_torque, 4);
     this->can->send(this->can_id + 0x00e, data); // "Set Input Torque"
@@ -173,8 +171,8 @@ void ODriveMotor::speed(const float speed) {
     this->set_mode(8, 2, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_VELOCITY_CONTROL, INPUT_MODE_PASSTHROUGH
     uint8_t data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     const float motor_speed = speed /
-                              this->properties.at("m_per_tick")->number_value /
-                              (this->properties.at("reversed")->boolean_value ? -1 : 1);
+                              this->properties.at("m_per_tick")->number_value() /
+                              (this->properties.at("reversed")->boolean_value() ? -1 : 1);
     std::memcpy(data, &motor_speed, 4);
     this->can->send(this->can_id + 0x00d, data); // "Set Input Vel"
 }
@@ -186,16 +184,16 @@ void ODriveMotor::position(const float position) {
     this->set_mode(8, 3, 1); // AXIS_STATE_CLOSED_LOOP_CONTROL, CONTROL_MODE_POSITION_CONTROL, INPUT_MODE_PASSTHROUGH
     uint8_t pos_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     const float motor_position = position /
-                                     (this->properties.at("reversed")->boolean_value ? -1 : 1) /
-                                     this->properties.at("m_per_tick")->number_value +
-                                 this->properties.at("tick_offset")->number_value;
+                                     (this->properties.at("reversed")->boolean_value() ? -1 : 1) /
+                                     this->properties.at("m_per_tick")->number_value() +
+                                 this->properties.at("tick_offset")->number_value();
     std::memcpy(pos_data, &motor_position, 4);
     this->can->send(this->can_id + 0x00c, pos_data); // "Set Input Pos"
 }
 
 void ODriveMotor::limits(const float speed, const float current) {
     uint8_t limit_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-    const float motor_speed = speed / this->properties.at("m_per_tick")->number_value;
+    const float motor_speed = speed / this->properties.at("m_per_tick")->number_value();
     std::memcpy(limit_data, &motor_speed, 4);
     std::memcpy(limit_data + 4, &current, 4);
     this->can->send(this->can_id + 0x00f, limit_data); // "Set Limits"
@@ -229,7 +227,7 @@ void ODriveMotor::stop() {
 }
 
 double ODriveMotor::get_position() {
-    return this->properties.at("position")->number_value;
+    return this->properties.at("position")->number_value();
 }
 
 void ODriveMotor::position(const double position, const double speed, const double acceleration) {
@@ -237,7 +235,7 @@ void ODriveMotor::position(const double position, const double speed, const doub
 }
 
 double ODriveMotor::get_speed() {
-    return this->properties.at("speed")->number_value;
+    return this->properties.at("speed")->number_value();
 }
 
 void ODriveMotor::speed(const double speed, const double acceleration) {

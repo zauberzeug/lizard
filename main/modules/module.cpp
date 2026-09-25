@@ -83,7 +83,7 @@ const Variable_ptr &Module::get_enabled_property() {
 }
 
 void Module::sync_enabled() {
-    const bool target = this->get_enabled_property()->boolean_value;
+    const bool target = this->get_enabled_property()->boolean_value();
     if (target != this->enabled) {
         if (target) {
             this->enable();
@@ -96,13 +96,13 @@ void Module::sync_enabled() {
 void Module::enable() {
     this->do_enable();
     this->enabled = true;
-    this->get_enabled_property()->boolean_value = true;
+    this->get_enabled_property()->set_boolean_value(true);
 }
 
 void Module::disable() {
     this->do_disable();
     this->enabled = false;
-    this->get_enabled_property()->boolean_value = false;
+    this->get_enabled_property()->set_boolean_value(false);
 }
 
 void Module::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
