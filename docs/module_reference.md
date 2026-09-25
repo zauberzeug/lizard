@@ -28,8 +28,8 @@ It is automatically created right after the boot sequence.
 | Methods                          | Description                                                         | Arguments    |
 | -------------------------------- | ------------------------------------------------------------------- | ------------ |
 | `core.restart()`                 | Restart the microcontroller                                         |              |
-| `core.version()`                 | Show lizard version                                                 |              |
-| `core.info()`                    | Show lizard version, compile time and IDF version                   |              |
+| `core.version()`                 | Show project name and version                                       |              |
+| `core.info()`                    | Show project name, version, compile time and IDF version            |              |
 | `core.print(...)`                | Print arbitrary arguments to the command line                       | arbitrary    |
 | `core.output(format)`            | Define the output format                                            | `str`        |
 | `core.startup_checksum()`        | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |              |
@@ -60,6 +60,9 @@ Note that the ROM bootloader and the early boot log always use 115200 regardless
 
 Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
 Simply create a Bluetooth module with a device name of your choice.
+Received lines are queued and parsed on the main loop, one step later at most.
+If the main loop is blocked for long and the queue (32 lines) overflows, further lines are dropped and a warning is printed once the main loop continues.
+Clients uploading many lines at once should therefore pace their writes or wait for a response.
 
 | Constructor                          | Description                                        | Arguments |
 | ------------------------------------ | -------------------------------------------------- | --------- |
@@ -91,10 +94,38 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------- | ---------------------------------------------- | --------------- |
 | `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
 
+| Properties                 | Description                                                                                                   | Data type |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
+| `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
+| `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
+
 | Methods                             | Description                                                                                                                                 | Arguments         |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
+| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
+
+**Time Synchronization:**
+Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle.
+The coordinator stamps its local `esp_timer` clock when it sends a POLL (T1) and when it receives the DONE response (T4), and the peer reports its own receive and send stamps (T2, T3) in the DONE response.
+Like NTP, the offset is estimated as `((T2 - T1) + (T3 - T4)) / 2`, so the peer's processing time between T2 and T3 cancels out, and the remaining unknown transport delay bounds the error of each sample.
+The coordinator publishes the estimate as the property `offset_<id>` and its bound as `offset_<id>_accuracy`.
+This is intended for timestamping sensor data (e.g. wheel odometry) received from bus peers.
+
+- Applying it: a peer timestamp `t_peer` in milliseconds maps to coordinator time as `t_peer - offset_<id>`; mind the units, since the peer's `esp_timer` stamps are in microseconds and the properties in milliseconds.
+- Sign: the offset is the peer's clock minus the coordinator's, so it is positive while the peer's `esp_timer` runs ahead; as both sides count from their own boot, a peer that booted later than the coordinator has a negative offset.
+- Accuracy: each sample's error bound is half the transport time that is not explained by the known airtime of the two frames; samples within 0.5 ms replace the estimate immediately, otherwise the best sample of every 2 s does, so the estimate keeps following crystal drift even on a busy bus.
+  Systematic asymmetries such as RS485 turnaround are not covered by the bound.
+- Validity: the properties are NaN until the first sample arrives and return to NaN whenever the estimate turns invalid, i.e. when the peer's poll times out (e.g. across a peer reboot), or when `make_coordinator()` or `enable_time_sync()` is called again, which restarts all estimates.
+  An expander's broadcast carries NaN as the literal `nan`, so a proxied offset turns NaN as well; the host firmware has to know that literal.
+- Scope: the properties exist only on the coordinator, are created once both `make_coordinator()` and `enable_time_sync()` have been called, and stay (as NaN) for IDs dropped from a later list.
+  Referencing them on a peer, before they are created, or for an ID that was never listed is an unknown-property error rather than NaN.
+  Behind an expander, the host learns them with the first broadcast after `enable_time_sync()`, so a startup script cannot reference them yet.
+  The two properties per peer also count against the coordinator's 1024-byte broadcast line, which overflows at roughly 16 peers;
+  from then on the coordinator reports `buffer too small` on every step instead of broadcasting any of its properties.
+- Convergence: the first sample after enabling or after a timeout locks the estimate, whatever its bound, within two poll rounds; while polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.
+- Compatibility: update the coordinator's firmware first, and treat `__POLL__<digits>` and `__DONE__<digits>,<digits>,<digits>` payloads as reserved for this protocol.
+  A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
@@ -302,6 +333,10 @@ The following bits are available:
 - 0x0080: gravity
 - 0x0100: temperature
 
+The IMU is read in a background task, so the properties hold the newest completed sample.
+While reading fails, an error is printed at most once per second and the properties keep their last values.
+A message is printed when reading works again.
+
 | Methods              | Description                   | Arguments |
 | -------------------- | ----------------------------- | --------- |
 | `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
@@ -354,8 +389,8 @@ The constructor expects up to seven arguments:
 - `port`: I²C port number (default: 0)
 - `sda`: SDA pin (default matches target, e.g. 21 on ESP32)
 - `scl`: SCL pin (default matches target, e.g. 22 on ESP32)
-- `int`: Interrupt pin (default: 26)
-- `rst`: Reset pin (default: 32)
+- `int`: Interrupt pin (default: 26 on ESP32, none on ESP32-S3)
+- `rst`: Reset pin (default: 32 on ESP32, none on ESP32-S3)
 - `address`: I²C address (default: 0x4A)
 - `clk`: I²C clock in Hz (default: 400000)
 
@@ -364,6 +399,7 @@ The BNO085 offers improved accuracy and better sensor fusion algorithms compared
 Unlike the BNO055 module, euler angles (`yaw`, `roll`, `pitch`) are not computed on-device —
 only quaternion output (`quat_w/x/y/z`) is provided.
 Euler conversion should be done upstream.
+The gyroscope (`gyr_x/y/z`) is reported in **rad/s** (the SH2 calibrated gyroscope report), not degrees/s as on the BNO055.
 
 | Methods              | Description                   | Arguments |
 | -------------------- | ----------------------------- | --------- |
@@ -504,10 +540,16 @@ Version 0.5.6 allows to read the motor error flag.
 | `motor.motor_error`       | Motor error flat (requires version 0.5.6) | `int`     |
 | `motor.enabled`           | Whether the motor is enabled              | `bool`    |
 | `motor.motor_temperature` | Motor temperature (°C)                    | `float`   |
+| `motor.current`           | Measured motor current Iq (A)             | `float`   |
+| `motor.current_setpoint`  | Commanded motor current Iq (A)            | `float`   |
 
 The `motor_temperature` will only update if the firmware generated from the
 [zauberzeug/ODrive](https://github.com/zauberzeug/ODrive) fork is installed on the ODrive.
 Otherwise, the `motor_temperature` property will remain at 0.
+
+The ODrive sends its current only when asked to, so `current` and `current_setpoint` stay at 0
+until the periodic message is switched on for the axis — `<axis>.config.can.iq_rate_ms` (requires version 0.5.6)
+defaults to 0 and is the interval in milliseconds.
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |
@@ -1114,8 +1156,11 @@ The expander module allows communication with another microcontroller connected 
 
 The `flash()` method requires the `boot` and `enable` pins to be defined.
 The optional `force` argument skips the default check whether certain strapping pins are set correctly.
+Flashing erases the other microcontroller's NVS:
+its startup script, a persisted console baud rate and the bus backup are reset to defaults.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
+Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 

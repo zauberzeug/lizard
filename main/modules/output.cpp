@@ -30,21 +30,19 @@ Output::Output(const std::string name) : Module(name) {
     this->properties = Output::get_defaults();
 }
 
+void Output::apply_level() {
+    this->set_level(this->target_level);
+    this->properties.at("change")->integer_value = this->target_level - this->properties.at("level")->integer_value;
+    this->properties.at("level")->integer_value = this->target_level;
+}
+
 void Output::step() {
     if (this->pulse_interval > 0) {
         this->target_level = fmod(millis() / 1000.0, this->pulse_interval) / this->pulse_interval < this->pulse_duty_cycle;
     }
 
-    this->set_level(this->target_level);
-    this->properties.at("change")->integer_value = this->target_level - this->properties.at("level")->integer_value;
-    this->properties.at("level")->integer_value = this->target_level;
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->apply_level();
+    this->sync_enabled();
     if (this->properties.at("active")->boolean_value != this->active) {
         if (this->properties.at("active")->boolean_value) {
             this->activate();
@@ -60,21 +58,21 @@ void Output::call(const std::string method_name, const std::vector<ConstExpressi
         if (this->enabled) {
             this->target_level = 1;
             this->pulse_interval = 0;
-            this->step();
+            this->apply_level();
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         if (this->enabled) {
             this->target_level = 0;
             this->pulse_interval = 0;
-            this->step();
+            this->apply_level();
         }
     } else if (method_name == "level") {
         Module::expect(arguments, 1, boolean);
         if (this->enabled) {
             this->target_level = arguments[0]->evaluate_boolean();
             this->pulse_interval = 0;
-            this->step();
+            this->apply_level();
         }
     } else if (method_name == "pulse") {
         if (arguments.size() < 1 || arguments.size() > 2) {
@@ -121,15 +119,8 @@ void McpOutput::set_level(bool level) const {
     this->mcp->set_level(this->number, level);
 }
 
-void Output::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void Output::disable() {
+void Output::do_disable() {
     this->deactivate();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 void Output::activate() {
@@ -138,7 +129,7 @@ void Output::activate() {
         this->properties.at("active")->boolean_value = true;
         this->target_level = this->properties.at("inverted")->boolean_value ? 0 : 1;
         this->pulse_interval = 0;
-        this->step();
+        this->apply_level();
     }
 }
 
@@ -148,6 +139,6 @@ void Output::deactivate() {
         this->properties.at("active")->boolean_value = false;
         this->target_level = this->properties.at("inverted")->boolean_value ? 1 : 0;
         this->pulse_interval = 0;
-        this->step();
+        this->apply_level();
     }
 }

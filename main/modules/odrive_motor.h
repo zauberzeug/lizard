@@ -17,8 +17,9 @@ private:
     uint8_t axis_state = -1;
     uint8_t axis_control_mode = -1;
     uint8_t axis_input_mode = -1;
-    bool enabled = true;
 
+    void do_enable() override;
+    void do_disable() override;
     void set_mode(const uint8_t state, const uint8_t control_mode = 0, const uint8_t input_mode = 0);
 
 public:
@@ -42,6 +43,4 @@ public:
     void position(const double position, const double speed, const double acceleration) override;
     double get_speed() override;
     void speed(const double speed, const double acceleration) override;
-    void enable() override;
-    void disable() override;
 };

@@ -28,6 +28,8 @@ const std::map<std::string, Variable_ptr> ODriveMotor::get_defaults() {
         {"axis_error", std::make_shared<IntegerVariable>()},
         {"motor_error_flag", std::make_shared<IntegerVariable>()},
         {"motor_temperature", std::make_shared<NumberVariable>()},
+        {"current", std::make_shared<NumberVariable>()},
+        {"current_setpoint", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
@@ -40,6 +42,7 @@ ODriveMotor::ODriveMotor(const std::string name, const Can_ptr can, const uint32
 void ODriveMotor::subscribe_to_can() {
     this->can->subscribe(this->can_id + 0x001, std::static_pointer_cast<Module>(this->shared_from_this()));
     this->can->subscribe(this->can_id + 0x009, std::static_pointer_cast<Module>(this->shared_from_this()));
+    this->can->subscribe(this->can_id + 0x014, std::static_pointer_cast<Module>(this->shared_from_this()));
     this->can->subscribe(this->can_id + 0x01e, std::static_pointer_cast<Module>(this->shared_from_this()));
 }
 
@@ -132,6 +135,16 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
             this->properties.at("m_per_tick")->number_value;
         break;
     }
+    case 0x014: {
+        const int sign = this->properties.at("reversed")->boolean_value ? -1 : 1;
+        float iq_setpoint;
+        std::memcpy(&iq_setpoint, data, 4);
+        this->properties.at("current_setpoint")->number_value = iq_setpoint * sign;
+        float iq_measured;
+        std::memcpy(&iq_measured, data + 4, 4);
+        this->properties.at("current")->number_value = iq_measured * sign;
+        break;
+    }
     case 0x01e: {
         float temperature;
         std::memcpy(&temperature, data, 4);
@@ -198,27 +211,17 @@ void ODriveMotor::reset_motor_error() {
 }
 
 void ODriveMotor::step() {
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 
     Module::step();
 }
 
-void ODriveMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
+void ODriveMotor::do_enable() {
     this->reset_motor_error();
 }
 
-void ODriveMotor::disable() {
+void ODriveMotor::do_disable() {
     this->stop();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 void ODriveMotor::stop() {

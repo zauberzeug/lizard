@@ -6,22 +6,38 @@
 #include <stdio.h>
 #include <string>
 
-static std::vector<EchoCallback> echo_callbacks;
+static std::vector<std::pair<int, EchoCallback>> echo_callbacks;
 
-void register_echo_callback(const EchoCallback &callback) {
-    echo_callbacks.push_back(callback);
+int register_echo_callback(const EchoCallback &callback) {
+    static int next_handle = 0;
+    echo_callbacks.emplace_back(++next_handle, callback);
+    return next_handle;
+}
+
+void unregister_echo_callback(const int handle) {
+    echo_callbacks.erase(
+        std::remove_if(echo_callbacks.begin(), echo_callbacks.end(), [handle](const auto &entry) { return entry.first == handle; }),
+        echo_callbacks.end());
 }
 
 void echo(const char *format, ...) {
-    static char buffer[1024];
+    static char buffer[CONSOLE_PAYLOAD_SIZE + 2]; // payload, newline, terminator
 
     va_list args;
     va_start(args, format);
-    const int num_chars = std::vsnprintf(buffer, sizeof(buffer) - 1, format, args);
-    int pos = std::min(num_chars, static_cast<int>(sizeof(buffer) - 2));
+    int pos = std::vsnprintf(buffer, CONSOLE_PAYLOAD_SIZE + 1, format, args);
     va_end(args);
+    if (pos < 0) {
+        return;
+    }
+    if (pos > CONSOLE_PAYLOAD_SIZE) {
+        // a truncated line would still carry a valid checksum, so report the loss instead of the line
+        pos = std::snprintf(buffer, CONSOLE_PAYLOAD_SIZE + 1, "warning: console line of %d bytes exceeds %d bytes and was dropped",
+                            pos + 5, CONSOLE_LINE_SIZE);
+    }
 
-    pos += std::sprintf(&buffer[pos], "\n");
+    buffer[pos++] = '\n';
+    buffer[pos] = '\0';
 
     uint8_t checksum = 0;
     int start = 0;
@@ -29,7 +45,7 @@ void echo(const char *format, ...) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
             printf("%s@%02x\n", &buffer[start], checksum);
-            for (const auto &callback : echo_callbacks) {
+            for (const auto &[handle, callback] : echo_callbacks) {
                 callback(&buffer[start]);
             }
             start = i + 1;

@@ -2,10 +2,11 @@
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
+#include "utils/uart_driver.h"
 #include <cstring>
 #include <stdexcept>
 
-#define RX_BUF_SIZE 2048
+#define RX_BUF_SIZE (2 * CONSOLE_LINE_SIZE) // a maximal line plus what arrives while the main loop handles it
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
 
@@ -52,12 +53,26 @@ void Serial::initialize_uart() const {
     };
     uart_param_config(uart_num, &uart_config);
     uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    uart_driver_install(uart_num, RX_BUF_SIZE, TX_BUF_SIZE, UART_PATTERN_QUEUE_SIZE, NULL, 0);
+    if (install_uart_driver_on_core1(uart_num, RX_BUF_SIZE, TX_BUF_SIZE) != ESP_OK) {
+        throw std::runtime_error("could not install the uart driver");
+    }
 }
 
 void Serial::enable_line_detection() const {
     uart_enable_pattern_det_baud_intr(this->uart_num, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(this->uart_num, UART_PATTERN_QUEUE_SIZE);
+}
+
+void Serial::claim(const std::string &user) const {
+    this->users.push_back(user);
+}
+
+void Serial::require_sole_user(const std::string &user) const {
+    for (const std::string &other : this->users) {
+        if (other != user) {
+            throw std::runtime_error("serial \"" + this->name + "\" is in use by \"" + other + "\"");
+        }
+    }
 }
 
 void Serial::deinstall() const {
@@ -97,7 +112,7 @@ void Serial::write_checked_line(const char *message, const int length) const {
         if (i >= length || message[i] == '\n') {
             csprintf(checksum_buffer, sizeof(checksum_buffer), "@%02x\n", checksum);
             uart_write_bytes(this->uart_num, &message[start], i - start);
-            uart_write_bytes(this->uart_num, checksum_buffer, 4);
+            uart_write_bytes(this->uart_num, checksum_buffer, CHECKSUM_TRAILER_LENGTH);
             start = i + 1;
             checksum = 0;
         } else {
@@ -107,10 +122,7 @@ void Serial::write_checked_line(const char *message, const int length) const {
 }
 
 int Serial::available() const {
-    if (!uart_is_driver_installed(this->uart_num)) {
-        return 0;
-    }
-    size_t available;
+    size_t available = 0;
     uart_get_buffered_data_len(this->uart_num, &available);
     return available;
 }
@@ -132,24 +144,23 @@ int Serial::read(uint32_t timeout) const {
 int Serial::read_line(char *buffer, size_t buffer_len) const {
     int pos = uart_pattern_pop_pos(this->uart_num);
     if (pos >= static_cast<int>(buffer_len)) {
-        if (this->available() < pos) {
+        if (this->available() <= pos) {
             uart_flush_input(this->uart_num);
             while (uart_pattern_pop_pos(this->uart_num) > 0)
                 ;
-            throw std::runtime_error("buffer too small, but cannot discard line. flushed serial.");
+            return LINE_FLUSHED;
         }
 
-        for (int i = 0; i < pos; i++)
+        for (int i = 0; i <= pos; i++)
             this->read();
-        throw std::runtime_error("buffer too small. discarded line.");
+        return LINE_DISCARDED;
     }
     return pos >= 0 ? uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0) : 0;
 }
 
-void Serial::clear() const {
-    while (this->available()) {
-        this->read();
-    }
+const char *Serial::read_line_error(const int result) {
+    return result == LINE_FLUSHED ? "buffer too small, but cannot discard line. flushed serial."
+                                  : "buffer too small. discarded line.";
 }
 
 std::string Serial::get_output() const {

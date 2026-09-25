@@ -9,9 +9,8 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
-#include "esp_heap_caps.h"
-#include "freertos/FreeRTOS.h"
 #include "global.h"
+#include "main.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
 #include "modules/expander.h"
@@ -21,14 +20,18 @@
 #include "rom/gpio.h"
 #include "rom/uart.h"
 #include "storage.h"
+#include "utils/boot_guard.h"
 #include "utils/bus_backup.h"
 #include "utils/interpreter_lock.h"
 #include "utils/scheduler.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
+#include "utils/uart_driver.h"
+#include <algorithm>
 #include <chrono>
 #include <functional>
+#include <math.h>
 #include <memory>
 #include <stdexcept>
 #include <stdint.h>
@@ -37,7 +40,13 @@
 #include <string>
 #include <vector>
 
-#define BUFFER_SIZE 1024
+// a host configuring the startup script sends a hundred-odd lines in one burst; at 921600 baud they arrive faster
+// than the main loop drains them, so the receive ring and the pattern queue hold a whole script
+constexpr int RX_RING_SIZE = 8192;
+constexpr int RX_PATTERN_QUEUE = 512;
+// process_uart only reads once a line end is queued; a ring no larger than a line fills before the flush guard
+// can see the overflow, the driver then disables the receive interrupts and UART0 stays deaf until a reset
+static_assert(RX_RING_SIZE > CONSOLE_LINE_SIZE, "the receive ring must hold more than one line");
 
 Core_ptr core_module;
 
@@ -70,6 +79,10 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
         return std::make_shared<BooleanExpression>(true);
     case PARSED_FALSE:
         return std::make_shared<BooleanExpression>(false);
+    case PARSED_NAN:
+        return std::make_shared<NumberExpression>(NAN);
+    case PARSED_INF:
+        return std::make_shared<NumberExpression>(INFINITY);
     case PARSED_STRING: {
         const struct parsed_string string = parsed_string_get(expression.string);
         return std::make_shared<StringExpression>(std::string(string.string, string.length));
@@ -209,6 +222,9 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 if (Global::has_module(module_name)) {
                     throw std::runtime_error("module \"" + module_name + "\" already exists");
                 }
+                if (Global::has_variable(module_name)) {
+                    throw std::runtime_error("variable \"" + module_name + "\" already exists");
+                }
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr module = Module::create(module_type, module_name, arguments, process_lizard);
@@ -217,6 +233,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_name = identifier_to_string(constructor.module_name);
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
+                if (Global::has_module(module_name)) {
+                    throw std::runtime_error("module \"" + module_name + "\" already exists");
+                }
+                if (Global::has_variable(module_name)) {
+                    throw std::runtime_error("variable \"" + module_name + "\" already exists");
+                }
                 const Module_ptr expander_module = Global::get_module(expander_name);
                 const Expander_ptr expander = std::dynamic_pointer_cast<Expander>(expander_module);
                 if (!expander) {
@@ -307,25 +329,10 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
-// owl's peak transient allocation scales with the token count of the line, so the
-// required-heap floor scales with its length (base covers a short line's fixed cost).
-static constexpr size_t PARSE_HEAP_BASE = 4096;
-static constexpr size_t PARSE_HEAP_PER_CHAR = 64;
-
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     InterpreterLock lock;
     if (trigger_keep_alive) {
         core_module->keep_alive();
-    }
-
-    // owl's generated parser can abort()/deref on a failed allocation instead of returning an error, so require both
-    // enough total heap (scaled by the line's length) and a large enough contiguous block before parsing. Other tasks
-    // may allocate between the check and the parse; the padded constants absorb that. Drop the line rather than reboot.
-    const size_t required_heap = PARSE_HEAP_BASE + PARSE_HEAP_PER_CHAR * strlen(line);
-    const size_t free_heap = xPortGetFreeHeapSize();
-    if (free_heap < required_heap || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < PARSE_HEAP_BASE) {
-        echo("error: not enough free memory to parse (%u free, %u required)", (unsigned)free_heap, (unsigned)required_heap);
-        return;
     }
 
     const bool debug = core_module->get_property("debug")->boolean_value;
@@ -380,7 +387,7 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     }
 }
 
-void process_line(const char *line, const int len) {
+void process_line(const char *line, const int len, const bool trigger_keep_alive) {
     InterpreterLock lock;
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
@@ -397,7 +404,7 @@ void process_line(const char *line, const int len) {
             Storage::save_startup();
             break;
         case '!':
-            process_lizard(line + 2);
+            process_lizard(line + 2, trigger_keep_alive);
             break;
         case '"':
             echo("%s", line + 2);
@@ -406,25 +413,79 @@ void process_line(const char *line, const int len) {
             throw std::runtime_error("unrecognized control command");
         }
     } else {
-        process_lizard(line);
+        process_lizard(line, trigger_keep_alive);
+    }
+}
+
+// drops `count` bytes from UART0, reading them through `scratch` in chunks
+static void discard_uart_input(char *scratch, const size_t scratch_size, int count) {
+    while (count > 0) {
+        const int read = uart_read_bytes(UART_NUM_0, (uint8_t *)scratch, std::min<size_t>(count, scratch_size), 0);
+        if (read <= 0) {
+            break;
+        }
+        count -= read;
+    }
+}
+
+// checks and runs one UART0 line; its errors are reported here so that the lines after it in the same read still run
+static void process_uart_line(char *line, const int len) {
+    bool checksum_ok = true;
+    const int payload_len = check(line, len, &checksum_ok);
+    if (!checksum_ok) {
+        echo("warning: Checksum mismatch while processing UART0");
+        return;
+    }
+    try {
+        process_line(line, payload_len);
+    } catch (const std::exception &e) {
+        echo("error processing uart0: %s", e.what());
     }
 }
 
 void process_uart() {
-    static char input[BUFFER_SIZE];
+    static char input[CONSOLE_LINE_SIZE];
+    static bool discarding = false; // an unterminated run exceeded a line: drop everything up to its line end
     while (true) {
         const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
+            size_t buffered = 0;
+            uart_get_buffered_data_len(UART_NUM_0, &buffered);
+            if (uart_pattern_get_pos(UART_NUM_0) >= 0) {
+                // a line end arrived after the pop, so `buffered` may contain complete lines: pop them first
+                continue;
+            }
+            // the driver updates the byte count and the pattern queue together, so all `buffered` bytes are
+            // unterminated; a flush would also drop whatever arrives from here on, including the next line end
+            if (discarding && buffered > 0) {
+                discard_uart_input(input, sizeof(input), buffered);
+            } else if (buffered > CONSOLE_LINE_SIZE) {
+                // bytes without a line end that already exceed a line can never be processed; a ring they fill up
+                // disables the receive interrupts until something reads or flushes, so drop them now
+                discard_uart_input(input, sizeof(input), buffered);
+                discarding = true;
+                echo("warning: UART0 input exceeds %d bytes without a line end and is discarded up to the next line end",
+                     CONSOLE_LINE_SIZE);
+            }
             break;
         }
-        int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        bool checksum_ok = true;
-        len = check(input, len, &checksum_ok);
-        if (!checksum_ok) {
-            echo("warning: Checksum mismatch while processing UART0");
+        if (discarding || pos + 1 > CONSOLE_LINE_SIZE) {
+            // drop the whole line: reading it into `input` would overrun the buffer
+            discard_uart_input(input, sizeof(input), pos + 1);
+            if (!discarding) {
+                echo("warning: UART0 line of %d bytes exceeds %d bytes and was discarded", pos + 1, CONSOLE_LINE_SIZE);
+            }
+            discarding = false;
             continue;
         }
-        process_line(input, len);
+        const int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+        // the driver queues only the last line end of each receive chunk, so one read can hold several lines
+        for (int start = 0; start < len;) {
+            const char *const line_end = static_cast<const char *>(memchr(input + start, '\n', len - start));
+            const int end = line_end ? line_end - input + 1 : len;
+            process_uart_line(input + start, end - start);
+            start = end;
+        }
     }
 }
 
@@ -458,10 +519,9 @@ void app_main() {
         .flags = {},
     };
     uart_param_config(UART_NUM_0, &uart_config);
-    QueueHandle_t uart_queue;
-    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
+    ESP_ERROR_CHECK(install_uart_driver_on_core1(UART_NUM_0, RX_RING_SIZE, 0));
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
-    uart_pattern_queue_reset(UART_NUM_0, 100);
+    uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
@@ -471,11 +531,21 @@ void app_main() {
         exit(1);
     }
 
+    // a storage error is not a failed startup: report it and continue with an empty script so the console stays reachable
     try {
         Storage::init();
-        process_lizard(Storage::startup.c_str());
-    } catch (const std::runtime_error &e) {
-        echo("error while loading startup script: %s", e.what());
+    } catch (const std::exception &e) {
+        echo("error while reading startup script from storage: %s", e.what());
+    }
+
+    try {
+        if (boot_guard::should_run_startup()) {
+            process_lizard(Storage::startup.c_str());
+        }
+    } catch (const std::exception &e) {
+        boot_guard::startup_failed(e.what());
+    } catch (...) {
+        boot_guard::startup_failed("unknown exception");
     }
 
     bus_backup::save_if_present();
@@ -488,9 +558,11 @@ void app_main() {
     TickType_t last_wake = xTaskGetTickCount();
 
     while (true) {
+        boot_guard::step();
+
         try {
             process_uart();
-        } catch (const std::runtime_error &e) {
+        } catch (const std::exception &e) {
             echo("error processing uart0: %s", e.what());
         }
 

@@ -7,7 +7,6 @@ class RmdPair : public Module {
 private:
     const RmdMotor_ptr rmd1;
     const RmdMotor_ptr rmd2;
-    bool enabled = true;
 
     struct TrajectoryPart {
         double t0;
@@ -26,8 +25,8 @@ private:
     void throttle(TrajectoryPart &part, double factor) const;
     TrajectoryTriple compute_trajectory(double x0, double x1, double v0, double v1) const;
     void move(double x, double y);
-    void enable();
-    void disable();
+    void do_enable() override;
+    void do_disable() override;
 
 public:
     static inline constexpr const char *TYPE = "RmdPair";

@@ -103,7 +103,7 @@ lizard/
 ├── monitor.py             # Serial monitor
 ├── serial_devices.py      # Serial device discovery shared by the host tools
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
-└── gen_parser.sh          # Regenerates parser.c from language.owl
+└── gen_parser.sh          # Regenerates parser.h from language.owl
 ```
 
 ### Key Entry Points
@@ -368,7 +368,7 @@ Always call parent implementations:
 
 ### Parser Regeneration
 
-After modifying `language.owl`, always run `./gen_parser.sh`. The `parser.c` file is **generated** – never edit it directly.
+After modifying `language.owl`, always run `./gen_parser.sh`. The `parser.h` file is **generated** – never edit it directly.
 
 ---
 

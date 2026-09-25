@@ -5,12 +5,16 @@
 #include "module.h"
 #include <memory>
 #include <string>
+#include <vector>
 
 class Serial;
 using Serial_ptr = std::shared_ptr<Serial>;
 using ConstSerial_ptr = std::shared_ptr<const Serial>;
 
 class Serial : public Module {
+private:
+    mutable std::vector<std::string> users;
+
 public:
     static inline constexpr const char *TYPE = "Serial";
 
@@ -24,17 +28,22 @@ public:
     ~Serial();
     void initialize_uart() const;
     void enable_line_detection() const;
+    void claim(const std::string &user) const;
+    void require_sole_user(const std::string &user) const;
     void deinstall() const;
     void reinitialize_after_flash() const;
     int available() const;
     bool has_buffered_lines() const;
     int read(const uint32_t timeout = 0) const;
+    static constexpr int LINE_DISCARDED = -1;
+    static constexpr int LINE_FLUSHED = -2;
+    static constexpr size_t CHECKSUM_TRAILER_LENGTH = 4; // "@xx\n" appended by write_checked_line
     int read_line(char *buffer, size_t buffer_len) const;
+    static const char *read_line_error(const int result);
     size_t write(const uint8_t byte) const;
     void write_checked_line(const char *message) const;
     void write_checked_line(const char *message, const int length) const;
     void flush() const;
-    void clear() const;
     std::string get_output() const override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();

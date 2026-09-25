@@ -135,6 +135,17 @@ static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
 
     esp_loader_error_t status;
 
+    // the target gets a blank NVS instead of a copy of ours, so it boots with an empty startup and default settings
+    const esp_partition_t *nvs = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, nullptr);
+    if (nvs == nullptr) {
+        ESP_LOGW(TAG, "No NVS partition found, the target receives a copy of our NVS");
+    } else if (nvs->address % transferBlockSize != 0 || nvs->size % transferBlockSize != 0) {
+        ESP_LOGE(TAG, "NVS partition at 0x%08lX with %lu bytes is not aligned to the block size of %lu bytes",
+                 nvs->address, nvs->size, transferBlockSize);
+        return false;
+    }
+    std::vector<std::byte> blank(transferBlockSize, std::byte{0xFF});
+
     status = esp_loader_flash_start(0, usedSize, transferBlockSize);
     HANDLE_ERROR(status, "erasing target flash");
 
@@ -147,7 +158,9 @@ static auto flash(uint32_t usedSize, uint32_t transferBlockSize) -> bool {
         if ((count++) % 10 == 0) {
             ESP_LOGI(TAG, "%lu/%lu kb", (usedSize - toSend) / 1000, usedSize / 1000);
         }
-        status = esp_loader_flash_write(const_cast<std::byte *>(bytePtr), transferBlockSize);
+        const uint32_t offset = usedSize - toSend;
+        const bool in_nvs = nvs != nullptr && offset >= nvs->address && offset < nvs->address + nvs->size;
+        status = esp_loader_flash_write(in_nvs ? blank.data() : const_cast<std::byte *>(bytePtr), transferBlockSize);
         ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", usedSize - toSend);
 
         HANDLE_ERROR(status, "writing target flash");
