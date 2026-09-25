@@ -50,7 +50,7 @@ void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, cons
     if (!this->is_boot_complete) {
         return;
     }
-    if (this->properties.at("motor_error_flag")->number_value == 1) {
+    if (this->properties.at("motor_error_flag")->integer_value == 1) {
         this->axis_state = -1;
         this->axis_control_mode = -1;
         this->axis_input_mode = -1;
