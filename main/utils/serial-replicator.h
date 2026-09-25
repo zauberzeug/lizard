@@ -13,12 +13,12 @@ namespace ZZ::Replicator {
  * runs from ota_1. Returns true on success.
  * On failure, returns false and prints a message detailing what went wrong
  * to the error log. */
-auto flashReplica(const uart_port_t uart_num,
-                  const gpio_num_t enable_pin,
-                  const gpio_num_t boot_pin,
-                  const gpio_num_t rx_pin,
-                  const gpio_num_t tx_pin,
-                  const uint32_t baud_rate,
-                  const uint32_t block_size = 0x1000) -> bool;
+auto flash_replica(const uart_port_t uart_num,
+                   const gpio_num_t enable_pin,
+                   const gpio_num_t boot_pin,
+                   const gpio_num_t rx_pin,
+                   const gpio_num_t tx_pin,
+                   const uint32_t baud_rate,
+                   const uint32_t block_size = 0x1000) -> bool;
 
 } // namespace ZZ::Replicator

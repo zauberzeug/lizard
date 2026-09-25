@@ -17,7 +17,7 @@ namespace ZZ::Replicator {
 
 static constexpr char TAG[]{"replicator"};
 
-static constexpr char const *errorStrings[]{
+static constexpr char const *ERROR_STRINGS[]{
     "SUCCESS",          /*!< Success */
     "FAIL",             /*!< Unspecified error */
     "TIMEOUT",          /*!< Timeout elapsed */
@@ -30,12 +30,12 @@ static constexpr char const *errorStrings[]{
     "INVALID_RESPONSE", /*!< Internal error */
 };
 
-#define HANDLE_ERROR(status, segment)                                           \
-    do {                                                                        \
-        if (status != ESP_LOADER_SUCCESS) {                                     \
-            ESP_LOGE(TAG, "Error while " segment ": %s", errorStrings[status]); \
-            return false;                                                       \
-        }                                                                       \
+#define HANDLE_ERROR(status, segment)                                            \
+    do {                                                                         \
+        if (status != ESP_LOADER_SUCCESS) {                                      \
+            ESP_LOGE(TAG, "Error while " segment ": %s", ERROR_STRINGS[status]); \
+            return false;                                                        \
+        }                                                                        \
     } while (false)
 
 #define HANDLE_ESP_ERROR(ec, segment)                                          \
@@ -46,13 +46,13 @@ static constexpr char const *errorStrings[]{
         }                                                                      \
     } while (false)
 
-static auto initConnection(const uart_port_t uart_num,
-                           const gpio_num_t enable_pin,
-                           const gpio_num_t boot_pin,
-                           const gpio_num_t rx_pin,
-                           const gpio_num_t tx_pin,
-                           const uint32_t baud_rate,
-                           const uint32_t block_size) -> bool {
+static auto init_connection(const uart_port_t uart_num,
+                            const gpio_num_t enable_pin,
+                            const gpio_num_t boot_pin,
+                            const gpio_num_t rx_pin,
+                            const gpio_num_t tx_pin,
+                            const uint32_t baud_rate,
+                            const uint32_t block_size) -> bool {
     loader_esp32_config_t conf{};
     conf.baud_rate = baud_rate;
     conf.uart_port = uart_num;
@@ -81,14 +81,14 @@ static auto connect() -> bool {
     return true;
 }
 
-static auto upBaudrate(uart_port_t uart_num, uint32_t base_baud_rate) -> bool {
-    const uint32_t higherRate{base_baud_rate * 8};
-    esp_loader_error_t status{esp_loader_change_baudrate(higherRate)};
+static auto up_baudrate(uart_port_t uart_num, uint32_t base_baud_rate) -> bool {
+    const uint32_t higher_rate{base_baud_rate * 8};
+    esp_loader_error_t status{esp_loader_change_baudrate(higher_rate)};
 
-    ESP_LOGD(TAG, "esp_loader_change_baudrate(%lu)", higherRate);
+    ESP_LOGD(TAG, "esp_loader_change_baudrate(%lu)", higher_rate);
     HANDLE_ERROR(status, "raising target baudrate");
 
-    esp_err_t ec{uart_set_baudrate(uart_num, higherRate)};
+    esp_err_t ec{uart_set_baudrate(uart_num, higher_rate)};
 
     HANDLE_ESP_ERROR(ec, "raising host baudrate");
 
@@ -99,7 +99,7 @@ static auto contains(const esp_partition_t *partition, const uint32_t offset) ->
     return partition != nullptr && offset >= partition->address && offset < partition->address + partition->size;
 }
 
-static auto flash(const esp_partition_t *running_partition, uint32_t transferBlockSize) -> bool {
+static auto flash(const esp_partition_t *running_partition, uint32_t transfer_block_size) -> bool {
     esp_loader_error_t status;
 
     // the target gets a blank NVS instead of a copy of ours, so it boots with an empty startup and default settings
@@ -111,29 +111,29 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transferBlo
     const esp_partition_t *otadata = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
     const esp_partition_t *ota_0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr);
     for (const esp_partition_t *partition : {nvs, otadata, ota_0}) {
-        if (partition != nullptr && (partition->address % transferBlockSize != 0 || partition->size % transferBlockSize != 0)) {
+        if (partition != nullptr && (partition->address % transfer_block_size != 0 || partition->size % transfer_block_size != 0)) {
             ESP_LOGE(TAG, "Partition %s at 0x%08lX with %lu bytes is not aligned to the block size of %lu bytes",
-                     partition->label, partition->address, partition->size, transferBlockSize);
+                     partition->label, partition->address, partition->size, transfer_block_size);
             return false;
         }
     }
-    std::vector<std::byte> blank(transferBlockSize, std::byte{0xFF});
-    std::vector<std::byte> block(transferBlockSize);
+    std::vector<std::byte> blank(transfer_block_size, std::byte{0xFF});
+    std::vector<std::byte> block(transfer_block_size);
 
     // copy up to the end of ota_0, so the target gets the whole app and not only the running partition's size from address 0
-    const uint32_t usedSize{ota_0 != nullptr ? ota_0->address + ota_0->size : running_partition->size};
-    const uint32_t blockCount{(usedSize + transferBlockSize - 1) / transferBlockSize};
-    ESP_LOGI(TAG, "Replicating [%lu] bytes in [%lu] blocks", usedSize, blockCount);
+    const uint32_t used_size{ota_0 != nullptr ? ota_0->address + ota_0->size : running_partition->size};
+    const uint32_t block_count{(used_size + transfer_block_size - 1) / transfer_block_size};
+    ESP_LOGI(TAG, "Replicating [%lu] bytes in [%lu] blocks", used_size, block_count);
 
-    status = esp_loader_flash_start(0, usedSize, transferBlockSize);
+    status = esp_loader_flash_start(0, used_size, transfer_block_size);
     HANDLE_ERROR(status, "erasing target flash");
 
     int count = 0;
-    for (uint32_t offset = 0; offset < usedSize; offset += transferBlockSize) {
+    for (uint32_t offset = 0; offset < used_size; offset += transfer_block_size) {
         if ((count++) % 10 == 0) {
-            ESP_LOGI(TAG, "%lu/%lu kb", offset / 1000, usedSize / 1000);
+            ESP_LOGI(TAG, "%lu/%lu kb", offset / 1000, used_size / 1000);
         }
-        const uint32_t size{std::min(transferBlockSize, usedSize - offset)};
+        const uint32_t size{std::min(transfer_block_size, used_size - offset)};
         std::byte *data = block.data();
         if (contains(nvs, offset) || contains(otadata, offset)) {
             data = blank.data();
@@ -166,15 +166,15 @@ public:
     }
 };
 
-auto flashReplica(const uart_port_t uart_num,
-                  const gpio_num_t enable_pin,
-                  const gpio_num_t boot_pin,
-                  const gpio_num_t rx_pin,
-                  const gpio_num_t tx_pin,
-                  const uint32_t baud_rate,
-                  const uint32_t block_size) -> bool {
+auto flash_replica(const uart_port_t uart_num,
+                   const gpio_num_t enable_pin,
+                   const gpio_num_t boot_pin,
+                   const gpio_num_t rx_pin,
+                   const gpio_num_t tx_pin,
+                   const uint32_t baud_rate,
+                   const uint32_t block_size) -> bool {
     ESP_LOGI(TAG, "Initializing pins..");
-    if (!initConnection(uart_num, enable_pin, boot_pin, rx_pin, tx_pin, baud_rate, block_size)) {
+    if (!init_connection(uart_num, enable_pin, boot_pin, rx_pin, tx_pin, baud_rate, block_size)) {
         return false;
     }
 
@@ -186,7 +186,7 @@ auto flashReplica(const uart_port_t uart_num,
     }
 
     ESP_LOGI(TAG, "Raising baudrate..");
-    if (!upBaudrate(uart_num, baud_rate)) {
+    if (!up_baudrate(uart_num, baud_rate)) {
         return false;
     }
 
