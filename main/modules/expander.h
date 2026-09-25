@@ -3,6 +3,7 @@
 #include "module.h"
 #include "serial.h"
 #include <string>
+#include <vector>
 
 class Expander;
 using Expander_ptr = std::shared_ptr<Expander>;
@@ -12,8 +13,10 @@ private:
     unsigned long int last_message_millis = 0;
     bool ping_pending = false;
     unsigned long boot_start_time;
+    std::vector<Module *> proxies;
 
     void deinstall();
+    void set_proxies_not_ready();
     void check_boot_progress();
     void ping();
     void restart();
@@ -35,6 +38,7 @@ public:
              MessageHandler message_handler);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void add_proxy(Module *proxy);
     void send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments);
     void send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression);
     void send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments);

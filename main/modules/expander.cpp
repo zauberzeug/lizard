@@ -101,6 +101,11 @@ void Expander::check_boot_progress() {
         if (strcmp("Ready.", line_buffer) == 0) {
             this->properties.at("is_ready")->set_boolean_value(true);
             echo("%s: Booting process completed successfully", this->name.c_str());
+            if (!this->proxies.empty()) {
+                // The other microcontroller boots with an empty module table; proxies are set up only once, when they are created (#117).
+                this->set_proxies_not_ready();
+                echo("%s: %d proxies were created before this boot and need a core restart", this->name.c_str(), (int)this->proxies.size());
+            }
             break;
         }
     }
@@ -120,6 +125,7 @@ void Expander::ping() {
             echo("warning: expander %s connection lost", this->name.c_str());
             // TODO: trigger error code
             this->properties.at("is_ready")->set_boolean_value(false);
+            this->set_proxies_not_ready();
             this->ping_pending = false;
         }
     }
@@ -137,6 +143,13 @@ void Expander::restart() {
     this->serial->flush();
     this->boot_start_time = millis();
     this->properties.at("is_ready")->set_boolean_value(false);
+    this->set_proxies_not_ready();
+}
+
+void Expander::set_proxies_not_ready() {
+    for (Module *proxy : this->proxies) {
+        proxy->get_property("is_ready")->set_boolean_value(false);
+    }
 }
 
 void Expander::handle_messages(bool check_for_strapping_pins) {
@@ -254,6 +267,7 @@ void Expander::check_strapping_pins(const char *buffer) {
 void Expander::deinstall() {
     this->serial->deinstall();
     this->properties.at("is_ready")->set_boolean_value(false);
+    this->set_proxies_not_ready();
     if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(this->boot_pin);
         gpio_reset_pin(this->enable_pin);
@@ -262,6 +276,10 @@ void Expander::deinstall() {
         gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
         gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
     }
+}
+
+void Expander::add_proxy(Module *proxy) {
+    this->proxies.push_back(proxy);
 }
 
 void Expander::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
