@@ -109,8 +109,10 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transfer_bl
     }
     // a blank otadata makes the target boot ota_0, which gets our running app also when that runs from ota_1
     const esp_partition_t *otadata = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
+    // the target slot receives our running app: ota_0, or the running partition itself on a layout without OTA slots
     const esp_partition_t *ota_0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr);
-    for (const esp_partition_t *partition : {nvs, otadata, ota_0}) {
+    const esp_partition_t *target = ota_0 != nullptr ? ota_0 : running_partition;
+    for (const esp_partition_t *partition : {nvs, otadata, target}) {
         if (partition != nullptr && (partition->address % transfer_block_size != 0 || partition->size % transfer_block_size != 0)) {
             ESP_LOGE(TAG, "Partition %s at 0x%08lX with %lu bytes is not aligned to the block size of %lu bytes",
                      partition->label, partition->address, partition->size, transfer_block_size);
@@ -120,25 +122,24 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transfer_bl
     std::vector<std::byte> blank(transfer_block_size, std::byte{0xFF});
     std::vector<std::byte> block(transfer_block_size);
 
-    // copy up to the end of ota_0, so the target gets the whole app and not only the running partition's size from address 0
-    const uint32_t used_size{ota_0 != nullptr ? ota_0->address + ota_0->size : running_partition->size};
+    // copy up to the end of the target slot, so the whole app arrives and not only the running partition's size from address 0
+    const uint32_t used_size{target->address + target->size};
     const uint32_t block_count{(used_size + transfer_block_size - 1) / transfer_block_size};
     ESP_LOGI(TAG, "Replicating [%lu] bytes in [%lu] blocks", used_size, block_count);
 
     status = esp_loader_flash_start(0, used_size, transfer_block_size);
     HANDLE_ERROR(status, "erasing target flash");
 
-    int count = 0;
     for (uint32_t offset = 0; offset < used_size; offset += transfer_block_size) {
-        if ((count++) % 10 == 0) {
+        if ((offset / transfer_block_size) % 10 == 0) {
             ESP_LOGI(TAG, "%lu/%lu kb", offset / 1000, used_size / 1000);
         }
         const uint32_t size{std::min(transfer_block_size, used_size - offset)};
         std::byte *data = block.data();
         if (contains(nvs, offset) || contains(otadata, offset)) {
             data = blank.data();
-        } else if (contains(ota_0, offset)) {
-            const esp_err_t ec{esp_partition_read(running_partition, offset - ota_0->address, block.data(), size)};
+        } else if (contains(target, offset)) {
+            const esp_err_t ec{esp_partition_read(running_partition, offset - target->address, block.data(), size)};
             HANDLE_ESP_ERROR(ec, "reading the running app");
         } else {
             const esp_err_t ec{esp_flash_read(nullptr, block.data(), offset, size)};
