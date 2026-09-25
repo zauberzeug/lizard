@@ -6,6 +6,7 @@ nav:
   - language.md
   - examples.md
   - module_reference.md
+  - telemetry_frames.md
   - machine_safety.md
   - tools.md
 repo_url: https://github.com/zauberzeug/lizard

@@ -15,6 +15,11 @@ using SerialBus_ptr = std::shared_ptr<SerialBus>;
 
 class SerialBus : public Module {
 public:
+    // a peer routes telemetry frames to the node that polls it (0 until the first poll)
+    uint8_t coordinator() const { return this->coordinator_id; }
+    // queue a telemetry frame body (see utils/frame.h) for the coordinator; throws when the route or queue is missing
+    void send_frame(const uint8_t *body, size_t length);
+    bool is_peer_with_coordinator() const { return this->peer_ids.empty() && this->coordinator_id != 0; }
     static inline constexpr const char *TYPE = "SerialBus";
 
     static constexpr size_t PAYLOAD_CAPACITY = 256;
@@ -125,6 +130,9 @@ private:
     uint8_t requesting_node = 0;
     int64_t poll_received_us = 0;   // T2 (peer side)
     uint32_t poll_received_seq = 0; // sequence number of the POLL being answered (peer side)
+    uint8_t coordinator_id = 0;     // last node that polled us: a peer's route towards the coordinator
+    unsigned frame_errors = 0;
+    unsigned long last_frame_error_millis = 0;
     bool ready_pending = true;
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;

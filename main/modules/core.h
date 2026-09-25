@@ -10,6 +10,21 @@ struct output_element_t {
     const unsigned int precision;
 };
 
+struct frame_field_t {
+    const ConstModule_ptr module;
+    const std::string property_name;
+    const char type; // ? b B h H i I f
+    const double scale;
+};
+
+struct frame_t {
+    uint8_t id;
+    unsigned long interval;
+    unsigned long last_millis;
+    uint8_t seq;
+    std::vector<frame_field_t> fields;
+};
+
 class Core;
 using Core_ptr = std::shared_ptr<Core>;
 
@@ -17,6 +32,9 @@ class Core : public Module {
 private:
     std::list<struct output_element_t> output_list;
     mutable bool output_overflow_reported = false;
+    std::vector<frame_t> frames;
+    void emit_frame(frame_t &frame, unsigned long now);
+    void parse_frame_fields(std::string format, std::vector<frame_field_t> &fields) const;
     unsigned long int last_message_millis = 0;
 
 public:

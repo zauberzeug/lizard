@@ -1,4 +1,5 @@
 #include "serial_bus.h"
+#include "../utils/frame.h"
 
 #include "../main.h"
 #include "../utils/format.h"
@@ -358,6 +359,7 @@ void SerialBus::process_uart() {
                 this->poll_received_us = esp_timer_get_time(); // T2
                 this->poll_received_seq = seq < 0 ? 0 : seq;
                 this->requesting_node = message.sender;
+                this->coordinator_id = message.sender;
                 continue;
             }
         }
@@ -549,6 +551,22 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         return;
     }
 
+    // telemetry frames from peers are checked and passed through to the console, never parsed
+    if (message.length > 0 && static_cast<uint8_t>(message.payload[0]) == frame::BUS_MARKER) {
+        static uint8_t body[frame::MAX_BODY];
+        const size_t body_length = frame::bus_unstuff(message.payload, message.length, body, sizeof(body));
+        if (body_length > 0 && frame::verify_body(body, body_length) && body[1] == message.sender) {
+            frame::write_console(body, body_length);
+        } else {
+            this->frame_errors++;
+            if (millis_since(this->last_frame_error_millis) > 1000) {
+                this->last_frame_error_millis = millis();
+                echo("warning: serial bus %s: %u malformed telemetry frames (last from %u)", this->name.c_str(), this->frame_errors, message.sender);
+            }
+        }
+        return;
+    }
+
     // Handle OTB frames (check prefix first to avoid function call overhead for regular messages)
     std::string_view payload_view(message.payload, message.length);
     constexpr size_t otb_prefix_len = sizeof(otb::OTB_MSG_PREFIX) - 1;
@@ -597,6 +615,21 @@ void SerialBus::enqueue_outgoing_message(const uint8_t receiver, const char *pay
     if (xQueueSend(this->outbound_queue, &message, pdMS_TO_TICKS(50)) != pdTRUE) {
         throw std::runtime_error("serial bus: could not enqueue outgoing message");
     }
+}
+
+void SerialBus::send_frame(const uint8_t *body, size_t length) {
+    if (this->is_coordinator()) {
+        throw std::runtime_error("serial bus: the coordinator writes frames to the console, not to the bus");
+    }
+    if (this->coordinator_id == 0) {
+        throw std::runtime_error("serial bus: no coordinator has polled yet");
+    }
+    static char stuffed[PAYLOAD_CAPACITY];
+    const size_t stuffed_length = frame::bus_stuff(body, length, stuffed, sizeof(stuffed));
+    if (stuffed_length == 0) {
+        throw std::runtime_error("serial bus: telemetry frame is too large for the bus");
+    }
+    this->enqueue_outgoing_message(this->coordinator_id, stuffed, stuffed_length);
 }
 
 bool SerialBus::send_outgoing_queue() {

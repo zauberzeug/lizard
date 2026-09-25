@@ -13,36 +13,101 @@ parser.add_argument('--baud', type=int, default=115200, help='Baud rate (default
 args = parser.parse_args()
 
 
-class LineReader:
-    # https://github.com/pyserial/pyserial/issues/216#issuecomment-369414522
+class StreamReader:
+    """Split the console stream into text lines and binary telemetry frames.
+
+    A frame travels as 0x00 | COBS(body) | 0x00: after a 0x00, a 0x01 opens a frame and the next 0x00 closes it;
+    anything else after a 0x00 is text again. Text lines end with a newline.
+    """
 
     def __init__(self, s: serial.Serial) -> None:
-        self.buf = bytearray()
         self.s = s
+        self.text = bytearray()
+        self.frame = bytearray()
+        self.state = 'text'
+        self.items: list[tuple[str, bytes]] = []
 
-    def readline(self) -> bytearray:
-        i = self.buf.find(b'\n')
-        if i >= 0:
-            r = self.buf[:i+1]
-            self.buf = self.buf[i+1:]
-            return r
-        while True:
-            i = max(1, min(2048, self.s.in_waiting))
-            data = self.s.read(i)
-            i = data.find(b'\n')
-            if i >= 0:
-                r = self.buf + data[:i+1]
-                self.buf[0:] = data[i+1:]
-                return r
+    def read(self) -> tuple[str, bytes]:
+        while not self.items:
+            self.feed(self.s.read(max(1, min(2048, self.s.in_waiting))))
+        return self.items.pop(0)
+
+    def feed(self, data: bytes) -> None:
+        for byte in data:
+            if self.state == 'frame':
+                if byte == 0:
+                    self.items.append(('frame', bytes(self.frame)))
+                    self.frame.clear()
+                    self.state = 'boundary'
+                else:
+                    self.frame.append(byte)
+            elif self.state == 'boundary':
+                if byte == 0:
+                    continue
+                if byte == 1:
+                    self.frame.append(byte)
+                    self.state = 'frame'
+                    continue
+                self.state = 'text'
+                self.text.clear()
+                if byte == 10:
+                    self.items.append(('text', b''))
+                else:
+                    self.text.append(byte)
+            elif byte == 0:
+                self.text.clear()
+                self.state = 'boundary'
+            elif byte == 10:
+                self.items.append(('text', bytes(self.text)))
+                self.text.clear()
             else:
-                self.buf.extend(data)
+                self.text.append(byte)
+
+
+def cobs_decode(data: bytes) -> bytes | None:
+    out = bytearray()
+    i = 0
+    while i < len(data):
+        code = data[i]
+        i += 1
+        if code == 0 or i + code - 1 > len(data):
+            return None
+        out += data[i:i + code - 1]
+        i += code - 1
+        if code < 0xff and i < len(data):
+            out.append(0)
+    return bytes(out)
+
+
+def crc16(data: bytes) -> int:
+    crc = 0xffff
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) & 0xffff if crc & 0x8000 else (crc << 1) & 0xffff
+    return crc
+
+
+def describe_frame(encoded: bytes) -> str:
+    """One line per frame: header fields and the payload as hex, or the raw bytes if it does not verify."""
+    body = cobs_decode(encoded)
+    if body is None or len(body) < 11 or body[0] != 0:
+        return f'[corrupt frame: {encoded.hex()}]'
+    src, frame_id, seq, millis, length = body[1], body[2], body[3], int.from_bytes(body[4:8], 'little'), body[8]
+    if length != len(body) - 11 or crc16(body[:-2]) != int.from_bytes(body[-2:], 'little'):
+        return f'[corrupt frame: {encoded.hex()}]'
+    return f'[frame src={src} id={frame_id} seq={seq} millis={millis} payload={body[9:-2].hex()}]'
 
 
 def receive() -> None:
-    line_reader = LineReader(port)
+    reader = StreamReader(port)
     while True:
+        kind, data = reader.read()
+        if kind == 'frame':
+            print(describe_frame(data))
+            continue
         # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
-        line = line_reader.readline().decode(errors='replace').strip('\r\n')
+        line = data.decode(errors='replace').strip('\r\n')
         if line[-3:-2] == '@':
             try:
                 check = int(line[-2:], 16)
