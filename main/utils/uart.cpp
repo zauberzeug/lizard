@@ -1,4 +1,5 @@
 #include "uart.h"
+#include <algorithm>
 #include <cstdarg>
 #include <cstdint>
 #include <stdexcept>
