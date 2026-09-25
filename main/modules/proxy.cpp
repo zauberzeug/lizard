@@ -14,7 +14,7 @@ Proxy::Proxy(const std::string name,
     this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
 
     if (this->expander->get_property("is_ready")->boolean_value) {
-        this->expander->send_proxy(name, module_type, arguments);
+        this->expander->send_proxy(name, module_type, arguments, this->properties);
         this->properties["is_ready"]->boolean_value = true;
     } else {
         echo("%s: Expander not ready", this->name.c_str());
