@@ -100,11 +100,6 @@ static auto contains(const esp_partition_t *partition, const uint32_t offset) ->
 }
 
 static auto flash(const esp_partition_t *running_partition, uint32_t transferBlockSize) -> bool {
-    const uint32_t usedSize{running_partition->size};
-    const uint32_t blockCount{(usedSize + transferBlockSize - 1) / transferBlockSize};
-
-    ESP_LOGI(TAG, "Replicating [%lu] bytes in [%lu] blocks", usedSize, blockCount);
-
     esp_loader_error_t status;
 
     // the target gets a blank NVS instead of a copy of ours, so it boots with an empty startup and default settings
@@ -124,6 +119,11 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transferBlo
     }
     std::vector<std::byte> blank(transferBlockSize, std::byte{0xFF});
     std::vector<std::byte> block(transferBlockSize);
+
+    // copy up to the end of ota_0, so the target gets the whole app and not only the running partition's size from address 0
+    const uint32_t usedSize{ota_0 != nullptr ? ota_0->address + ota_0->size : running_partition->size};
+    const uint32_t blockCount{(usedSize + transferBlockSize - 1) / transferBlockSize};
+    ESP_LOGI(TAG, "Replicating [%lu] bytes in [%lu] blocks", usedSize, blockCount);
 
     status = esp_loader_flash_start(0, usedSize, transferBlockSize);
     HANDLE_ERROR(status, "erasing target flash");

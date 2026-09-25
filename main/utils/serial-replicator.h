@@ -5,10 +5,12 @@
 
 namespace ZZ::Replicator {
 
-/* Clones the current flash image, from address 0 up to the size of the running
- * app partition, onto the target connected via UART1. The NVS partition is not
+/* Clones the current flash image, from address 0 up to the end of the ota_0
+ * partition, onto the target connected via UART1. The NVS partition is not
  * copied but written as 0xFF, so the target boots with an empty startup script
- * and default settings. Returns true on success.
+ * and default settings. The otadata partition is written as 0xFF too, so the
+ * target boots ota_0, and ota_0 receives the running app, also when this core
+ * runs from ota_1. Returns true on success.
  * On failure, returns false and prints a message detailing what went wrong
  * to the error log. */
 auto flashReplica(const uart_port_t uart_num,
