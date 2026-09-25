@@ -25,6 +25,7 @@ It is automatically created right after the boot sequence.
 | `core.heap`             | Free heap memory (bytes)                                             | `int`     |
 | `core.last_message_age` | Time since last input message was received and interpreted (ms)      | `int`     |
 | `core.frame_drops`      | Telemetry frames a serial bus peer could not hand to its coordinator | `int`     |
+| `core.frame_lines`      | Send telemetry frames as escaped lines (used on an expander)         | `bool`    |
 
 | Methods                            | Description                                                         | Arguments           |
 | ---------------------------------- | ------------------------------------------------------------------- | ------------------- |
@@ -1179,6 +1180,16 @@ Note that the expander forwards all other method calls to the remote core module
 | `ping_timeout`     | Time before timing out (s)                              | `float`   |
 | `is_ready`         | Whether the remote module has booted and is ready       | `bool`    |
 | `last_message_age` | Time since last message from other microcontroller (ms) | `int`     |
+| `frames`           | Send proxy properties as one binary frame per step      | `bool`    |
+| `frame_errors`     | Corrupt proxy frames received                           | `int`     |
+| `frame_gaps`       | Missing proxy frames (gaps in the sequence number)      | `int`     |
+
+**Proxy frames:**
+By default the remote module of every proxy broadcasts all its properties as a text line in every step of the other microcontroller.
+With `expander.frames = true` set before the proxies are created, the core instead defines one [telemetry frame](telemetry_frames.md#from-an-expander) on the other microcontroller that carries the properties of all proxies once per step and is decoded directly into the proxies.
+This takes the text parsing off the core's main loop and most of the bytes off the serial link.
+If no proxy frame arrives within one second, e.g. because the other microcontroller's firmware predates frames, the expander falls back to text broadcasts and sets `frames` back to `false`.
+`frame_errors` and `frame_gaps` count corrupt and missing proxy frames; a warning reports them at most once per second.
 
 ## Proxy
 

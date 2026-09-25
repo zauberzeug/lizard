@@ -3,6 +3,7 @@
 #include "module_helpers.h"
 #include "serial.h"
 #include "storage.h"
+#include "utils/frame.h"
 #include "utils/serial-replicator.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
@@ -30,8 +31,15 @@ const std::map<std::string, Variable_ptr> Expander::get_defaults() {
         {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
         {"is_ready", std::make_shared<BooleanVariable>(false)},
         {"last_message_age", std::make_shared<IntegerVariable>(0)},
+        {"frames", std::make_shared<BooleanVariable>(false)},
+        {"frame_errors", std::make_shared<IntegerVariable>(0)},
+        {"frame_gaps", std::make_shared<IntegerVariable>(0)},
     };
 }
+
+static constexpr uint8_t PROXY_FRAME_ID = 255;           // reserved for the proxy frame
+static constexpr unsigned long FRAME_FALLBACK_MS = 1000; // no proxy frame by then: the expander firmware has no frames
+static constexpr unsigned long FRAME_GRACE_MS = 200;     // frames in flight may still carry the previous field list
 
 Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
@@ -73,6 +81,7 @@ void Expander::step() {
     if (this->properties.at("is_ready")->boolean_value) {
         this->ping();
         this->handle_messages();
+        this->check_frames();
     } else {
         this->check_boot_progress();
     }
@@ -146,6 +155,12 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
             echo("%s: error while handling messages: %s", this->name.c_str(), Serial::read_line_error(len));
             continue;
         }
+        if (len > 0 && static_cast<uint8_t>(line_buffer[0]) == frame::BUS_MARKER) {
+            this->handle_frame(line_buffer, len);
+            this->last_message_millis = millis();
+            this->ping_pending = false;
+            continue;
+        }
         bool checksum_ok = true;
         len = check(line_buffer, len, &checksum_ok);
         if (!checksum_ok) {
@@ -166,6 +181,80 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
         } else {
             echo("%s: %s", this->name.c_str(), line_buffer);
         }
+    }
+}
+
+void Expander::handle_frame(const char *line, size_t length) {
+    while (length > 0 && (line[length - 1] == '\n' || line[length - 1] == '\r')) {
+        --length;
+    }
+    static uint8_t body[frame::MAX_BODY];
+    const size_t body_length = frame::bus_unstuff(line, length, body, sizeof(body));
+    if (body_length == 0 || !frame::verify_body(body, body_length)) {
+        this->properties.at("frame_errors")->integer_value++;
+        return;
+    }
+    if (body[2] != PROXY_FRAME_ID) {
+        frame::write_console(body, body_length); // a frame the expander defined itself goes on to the host
+        return;
+    }
+    const uint8_t seq = body[3];
+    if (this->frame_seq_valid && static_cast<uint8_t>(seq - this->frame_seq) != 1) {
+        this->properties.at("frame_gaps")->integer_value += static_cast<uint8_t>(seq - this->frame_seq - 1);
+    }
+    this->frame_seq = seq;
+    this->frame_seq_valid = true;
+    const size_t payload_length = body[frame::HEADER_SIZE - 1];
+    if (payload_length != this->frame_numeric_length + (this->frame_bit_count + 7) / 8) {
+        if (millis_since(this->frame_defined_millis) > FRAME_GRACE_MS) {
+            this->properties.at("frame_errors")->integer_value++;
+        }
+        return;
+    }
+    this->frame_seen = true;
+    const uint8_t *payload = &body[frame::HEADER_SIZE];
+    const uint8_t *bits = payload + this->frame_numeric_length;
+    size_t pos = 0;
+    size_t bit = 0;
+    for (auto const &field : this->frame_fields) {
+        if (field.type == '?') {
+            field.variable->boolean_value = (bits[bit / 8] >> (bit % 8)) & 1;
+            ++bit;
+        } else if (field.type == 'i') {
+            int32_t value;
+            memcpy(&value, &payload[pos], 4);
+            pos += 4;
+            field.variable->integer_value = value;
+        } else {
+            float value;
+            memcpy(&value, &payload[pos], 4);
+            pos += 4;
+            field.variable->number_value = value;
+        }
+    }
+}
+
+void Expander::check_frames() {
+    if (!this->frame_fields.empty() && !this->frame_seen && millis_since(this->frame_defined_millis) > FRAME_FALLBACK_MS) {
+        echo("warning: expander %s sends no proxy frames, falling back to text broadcasts", this->name.c_str());
+        for (auto const &proxy_name : this->frame_proxies) {
+            this->serial->write_checked_line((proxy_name + ".broadcast()").c_str());
+        }
+        this->frame_fields.clear();
+        this->frame_proxies.clear();
+        this->frame_numeric_length = 0;
+        this->frame_bit_count = 0;
+        this->properties.at("frames")->boolean_value = false;
+    }
+    const int64_t errors = this->properties.at("frame_errors")->integer_value;
+    const int64_t gaps = this->properties.at("frame_gaps")->integer_value;
+    if ((errors != this->reported_frame_errors || gaps != this->reported_frame_gaps) &&
+        millis_since(this->frame_warning_millis) > 1000) {
+        echo("warning: expander %s: %lld proxy frames missing, %lld corrupt", this->name.c_str(),
+             gaps - this->reported_frame_gaps, errors - this->reported_frame_errors);
+        this->reported_frame_errors = errors;
+        this->reported_frame_gaps = gaps;
+        this->frame_warning_millis = millis();
     }
 }
 
@@ -264,12 +353,57 @@ void Expander::deinstall() {
     }
 }
 
-void Expander::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
-    static char buffer[512];
+void Expander::send_proxy(const std::string module_name,
+                          const std::string module_type,
+                          const std::vector<ConstExpression_ptr> arguments,
+                          const std::map<std::string, Variable_ptr> &properties) {
+    static char buffer[1024];
     int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
+    std::string fields;
+    std::vector<proxy_frame_field_t> new_fields;
+    size_t numeric_length = this->frame_numeric_length;
+    size_t bit_count = this->frame_bit_count;
+    bool framed = this->properties.at("frames")->boolean_value;
+    for (auto const &[property_name, variable] : properties) {
+        if (!framed) {
+            break;
+        }
+        if (property_name == "is_ready") {
+            continue; // the core's view of the expander, not a property of the remote module
+        }
+        const char type = variable->type == boolean ? '?' : variable->type == integer ? 'i'
+                                                        : variable->type == number    ? 'f'
+                                                                                      : 0;
+        if (type == 0) {
+            framed = false; // e.g. a string property: this proxy keeps its text broadcast
+            break;
+        }
+        if (type == '?') {
+            ++bit_count;
+        } else {
+            numeric_length += 4;
+        }
+        fields += (fields.empty() ? "" : " ") + module_name + "." + property_name + ":" + type;
+        new_fields.push_back({variable, type});
+    }
+    framed = framed && !new_fields.empty() && numeric_length + (bit_count + 7) / 8 <= frame::MAX_PAYLOAD;
+    if (framed) {
+        if (this->frame_fields.empty()) {
+            pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "core.frame_lines = true; core.frame(%d, \"%s\", 0)",
+                            PROXY_FRAME_ID, fields.c_str());
+        } else {
+            pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "core.frame_add(%d, \"%s\")", PROXY_FRAME_ID, fields.c_str());
+        }
+        this->frame_fields.insert(this->frame_fields.end(), new_fields.begin(), new_fields.end());
+        this->frame_proxies.push_back(module_name);
+        this->frame_numeric_length = numeric_length;
+        this->frame_bit_count = bit_count;
+        this->frame_defined_millis = millis();
+    } else {
+        pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
+    }
     this->serial->write_checked_line(buffer, pos);
 }
 

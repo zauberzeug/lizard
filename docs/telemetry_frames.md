@@ -50,3 +50,13 @@ A peer remembers the node that polls it and sends its frames there instead of to
 Bus messages are text lines, so the body is byte-stuffed: marker `0x01`, then every `00 09 0a 0d 20 7d` byte becomes `0x7d` followed by the byte XOR `0x50`.
 The coordinator unstuffs the message, checks length, CRC and that `src` matches the sender, and writes the body to its console as a COBS frame.
 Frames a peer cannot hand over, e.g. before its first poll, are counted in `core.frame_drops`; malformed frames at the coordinator are counted and reported at most once per second.
+
+## From an expander
+
+With `expander.frames = true` (see [Expander](module_reference.md#expander)), the core defines frame 255 on the other microcontroller with the properties of all its proxies, in the order the proxies are created and each proxy's properties in alphabetical order.
+Booleans become `?`, integers `i` and numbers `f`.
+A proxy with a property of another type, or one that would push the payload beyond 200 bytes, keeps its text broadcast.
+The other microcontroller sends the frame once per step with `core.frame_lines = true`, i.e. as a line on its console, which is the core's serial link: marker `0x01`, the body without its leading `0x00`, the bytes `0a 0d 7d` escaped as `0x7d` followed by the byte XOR `0x50`, and `\n`.
+Zero bytes stay unescaped because the link is read as raw lines, not as C strings; the escaping decodes like the bus stuffing.
+The core checks length and CRC, counts gaps in `seq` as `frame_gaps` and failed checks as `frame_errors`, and writes the values straight into the proxies.
+Frames with another id, i.e. frames the other microcontroller defines itself, are passed through to the core's console.

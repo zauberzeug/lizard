@@ -27,6 +27,7 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
     this->properties["frame_drops"] = std::make_shared<IntegerVariable>();
+    this->properties["frame_lines"] = std::make_shared<BooleanVariable>(false);
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
 }
 
@@ -166,7 +167,13 @@ void Core::emit_frame(frame_t &frame, unsigned long now) {
         }
     }
     if (!peer_bus) {
-        frame::write(0, frame.id, frame.seq++, now, payload, pos);
+        if (this->properties.at("frame_lines")->boolean_value) {
+            // on an expander the console is the core's line based link
+            static uint8_t body[frame::MAX_BODY];
+            frame::write_console_line(body, frame::build_body(0, frame.id, frame.seq++, now, payload, pos, body));
+        } else {
+            frame::write(0, frame.id, frame.seq++, now, payload, pos);
+        }
         return;
     }
     static uint8_t body[frame::MAX_BODY];
