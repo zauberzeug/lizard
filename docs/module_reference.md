@@ -493,6 +493,9 @@ The serial module allows communicating with peripherals via the specified connec
 This module might be used by other modules that communicate with peripherals via serial.
 You can, however, unmute the serial module to have incoming messages printed to the command line instead of keeping them buffered for other modules.
 
+A UART number and its pins can be used by one serial module at a time.
+They stay reserved for that module until the core restarts, also after `Expander.disconnect()`.
+
 ## Linear motor
 
 This module controls a linear actuator via two output pins (move in, move out) and two input pins reading two limit switches (end in, end out).
@@ -1161,7 +1164,7 @@ its startup script, a persisted console baud rate and the bus backup are reset t
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
 Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
-After `disconnect()`, no other serial module can use the same UART number until the core restarts.
+After `disconnect()`, the UART and its pins stay reserved for the expander's serial module until the core restarts (see [Serial interface](#serial-interface)).
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 
