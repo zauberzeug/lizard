@@ -13,5 +13,5 @@
 ### Progress
 
 - [ ] The implementation is complete.
-- [ ] Tested on hardware (or is not necessary).
 - [ ] Documentation has been updated (or is not necessary).
+- [ ] Tested on hardware (or is not necessary).
