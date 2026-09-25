@@ -52,7 +52,8 @@ wheels.drive_command_timeout = 0.3
 
 After a non-zero `speed()` or `power()` command, the wheels stop on their own once no further drive command arrived for `drive_command_timeout` seconds.
 Only drive commands count; `enable()`, `off()` or property writes cannot keep a stale motion alive.
-The stop is sent once and logged as a warning, and the next drive command re-arms the switch, so a reconnecting sender has to issue a fresh command before the robot moves again.
+The stop is logged as a warning and held like the `locked` interlock holds, with the zero-speed setpoint refreshed about once per second, so a stop that did not reach the motors — a failing motor send, a dropped CAN frame, a restarting motor controller — is re-asserted.
+The next drive command releases the hold and re-arms the switch, so a reconnecting sender has to issue a fresh command before the robot moves again.
 The default timeout is 1 s as a defensive baseline; `0` disables the switch, e.g. on a test bench.
 
 Consequently, a host that wants to keep driving has to repeat its drive command at least once per timeout.

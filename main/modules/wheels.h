@@ -24,21 +24,21 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  * `drive_command_timeout` is a dead man's switch: after a non-zero `speed()` or `power()` the
  * wheels stop on their own once no further drive command arrived for that long. Only `speed()`
  * and `power()` count as drive commands, so `enable()`, `off()` or property writes cannot keep a
- * stale motion alive. The stop is sent once; the next drive command re-arms the switch.
+ * stale motion alive. A tripped switch holds the wheels at standstill like `locked` does (the
+ * zero-speed setpoint is refreshed at a low rate, so a stop that did not reach the motors is
+ * re-asserted); the next drive command releases the hold and re-arms the switch.
  * `drive_command_age` exposes the time since the last drive command for rules.
  */
 class Wheels : public Module {
 private:
     static constexpr unsigned int HOLD_REFRESH_CYCLES = 100; // re-send the standstill hold about once per second
 
-    bool holding = false;        // wheels are currently held at standstill by the `locked` interlock
+    bool holding = false;        // wheels are currently held at standstill (by `locked` or a tripped dead man's switch)
     unsigned int hold_cycle = 0; // `step()` cycles since the hold was last sent
 
     bool moving = false;                         // last applied drive command was non-zero and no stop followed since
+    bool stopped = false;                        // the dead man's switch tripped and no drive command released it yet
     unsigned long last_drive_command_millis = 0; // `millis()` of the last `speed()`/`power()`, applied or not
-
-    /// Record a drive command: refresh `drive_command_age` and, if it was applied, (dis)arm the dead man's switch.
-    void note_drive_command(bool applied, bool nonzero);
 
     /// Copy the shared properties (`locked`, `enabled`, `drive_command_timeout`) onto a freshly attached shadow.
     void sync_shared_properties(Module &shadow) const;
@@ -46,6 +46,13 @@ private:
 protected:
     /// Whether drive commands may be applied: true only while enabled and not locked.
     bool may_drive() const;
+
+    /// Record an incoming drive command *before* it is sent: refreshes `drive_command_age` and, if the command
+    /// is applied and non-zero, arms the dead man's switch — before the send, so a send that fails is still stopped.
+    void note_drive_command(bool applied, bool nonzero);
+    /// Record that a drive command reached the motors: releases a tripped switch's hold and, for a zero command,
+    /// disarms the switch. Drivetrains with their own stop or position commands call both to keep it consistent.
+    void note_drive_command_sent(bool nonzero);
 
     /// Write `linear_speed`/`angular_speed` from measured per-wheel speeds; call from `update_odometry()`.
     void update_speeds(double left_speed, double right_speed);

@@ -616,8 +616,10 @@ Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shado
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
+The stop is always a zero *speed*, also after `power()`, so it switches the motors from torque to velocity control.
 Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
-The stop is sent once and logged as a warning; the next drive command re-arms the switch.
+The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
 The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
 Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
 `drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
@@ -775,8 +777,10 @@ Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shado
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
+The stop is always a zero *speed*, also after `power()`, so it switches the motors from torque to velocity control.
 Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
-The stop is sent once and logged as a warning; the next drive command re-arms the switch.
+The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
 The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
 Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
 `drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
@@ -1122,7 +1126,8 @@ Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shado
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
 Only `speed()` counts as a drive command; `enable()` and property writes do not, so they cannot keep a stale motion alive.
-The stop is sent once and logged as a warning; the next drive command re-arms the switch.
+The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
 The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
 Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
 `drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.

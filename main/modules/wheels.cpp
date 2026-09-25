@@ -49,11 +49,23 @@ void Wheels::step() {
     const unsigned long drive_command_age = millis_since(this->last_drive_command_millis);
     this->properties.at("drive_command_age")->integer_value = drive_command_age;
 
-    // Lock interlock: hold the wheels at standstill while enabled but locked, so the hold
-    // engages even when no drive command arrives — e.g. the rule that set locked ran because
-    // the host went silent. The hold is sent once on the rising edge of locked and refreshed
-    // at a low rate to re-assert it after a motor reboot without flooding the bus.
-    const bool should_hold = this->properties.at("enabled")->boolean_value && !this->may_drive();
+    // Dead man's switch: a non-zero drive command that is not refreshed in time trips the switch,
+    // whether the sender lost its connection or simply stopped sending. A tripped switch holds the
+    // wheels at standstill below, so a stop that does not reach the motors (a failing motor send,
+    // a dropped CAN frame, a motor reboot) is re-asserted; the next drive command releases it.
+    const double timeout = this->properties.at("drive_command_timeout")->number_value;
+    if (this->moving && timeout > 0.0 && drive_command_age > timeout * 1000.0) {
+        this->moving = false;
+        this->stopped = true;
+        echo("warning: wheels %s stopped: no drive command for %lu ms", this->name.c_str(), drive_command_age);
+    }
+
+    // Standstill hold: hold the wheels while enabled but locked or stopped by the dead man's
+    // switch, so the hold engages even when no drive command arrives — e.g. the rule that set
+    // locked ran because the host went silent. The hold is sent once on its rising edge and
+    // refreshed at a low rate to re-assert it after a lost send or a motor reboot without
+    // flooding the bus.
+    const bool should_hold = this->properties.at("enabled")->boolean_value && (!this->may_drive() || this->stopped);
     if (!should_hold) {
         this->holding = false;
     } else if (this->holding) {
@@ -68,24 +80,19 @@ void Wheels::step() {
         this->do_wheel_speeds(0.0, 0.0);
     }
 
-    // Dead man's switch: a non-zero drive command that is not refreshed in time stops the wheels,
-    // whether the sender lost its connection or simply stopped sending. The stop is sent once
-    // (a failing motor send is reported by the main loop); the next drive command re-arms it.
-    const double timeout = this->properties.at("drive_command_timeout")->number_value;
-    if (this->moving && timeout > 0.0 && drive_command_age > timeout * 1000.0) {
-        this->moving = false;
-        echo("warning: wheels %s stopped: no drive command for %lu ms", this->name.c_str(), drive_command_age);
-        this->do_wheel_speeds(0.0, 0.0);
-    }
-
     Module::step();
 }
 
 void Wheels::note_drive_command(bool applied, bool nonzero) {
     this->last_drive_command_millis = millis();
-    if (applied) {
-        this->moving = nonzero;
+    if (applied && nonzero) {
+        this->moving = true;
     }
+}
+
+void Wheels::note_drive_command_sent(bool nonzero) {
+    this->stopped = false;
+    this->moving = nonzero;
 }
 
 void Wheels::do_wheel_powers(double left, double right) {
@@ -101,25 +108,29 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         Module::expect(arguments, 2, numbery, numbery);
         const double linear = arguments[0]->evaluate_number();
         const double angular = arguments[1]->evaluate_number();
+        const bool nonzero = linear != 0.0 || angular != 0.0;
         const bool applied = this->may_drive();
-        this->note_drive_command(applied, linear != 0.0 || angular != 0.0);
+        this->note_drive_command(applied, nonzero);
         if (applied) {
             const double width = this->properties.at("width")->number_value;
             this->do_wheel_speeds(linear - angular * width / 2.0, linear + angular * width / 2.0);
+            this->note_drive_command_sent(nonzero);
         }
     } else if (method_name == "power") {
         Module::expect(arguments, 2, numbery, numbery);
         const double left = arguments[0]->evaluate_number();
         const double right = arguments[1]->evaluate_number();
+        const bool nonzero = left != 0.0 || right != 0.0;
         const bool applied = this->may_drive();
-        this->note_drive_command(applied, left != 0.0 || right != 0.0);
+        this->note_drive_command(applied, nonzero);
         if (applied) {
             this->do_wheel_powers(left, right);
+            this->note_drive_command_sent(nonzero);
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         this->do_off();
-        this->moving = false; // idle motors are a stop; do not re-activate them via the dead man's switch
+        this->note_drive_command_sent(false); // idle motors are a stop; the dead man's switch must not re-activate them
     } else if (method_name == "enable") {
         Module::expect(arguments, 0);
         this->enable();
@@ -178,4 +189,5 @@ void Wheels::disable() {
     Module::disable();
     // Only a completed disable is a stop; while it stays pending, the dead man's switch may still fire.
     this->moving = false;
+    this->stopped = false;
 }
