@@ -143,18 +143,18 @@ void DunkerMotor::handle_can_msg(const uint32_t id, const int count, const uint8
     if (id == 0x580 + this->node_id) {
         this->waiting_sdo_writes--;
         if (data[0] == 0x43 && data[1] == 0x10 && data[2] == 0x41 && data[3] == 0x01) {
-            this->properties["voltage_logic"]->number_value = ((data[5] << 8) | data[4]) / 1000.0;
+            this->properties["voltage_logic"]->set_number_value(((data[5] << 8) | data[4]) / 1000.0);
         }
         if (data[0] == 0x43 && data[1] == 0x11 && data[2] == 0x41 && data[3] == 0x01) {
-            this->properties["voltage_power"]->number_value = ((data[5] << 8) | data[4]) / 1000.0;
+            this->properties["voltage_power"]->set_number_value(((data[5] << 8) | data[4]) / 1000.0);
         }
     }
     if (id == 0x180 + this->node_id) {
         const int32_t motor_speed = demarshal_i32(data);
-        this->properties["speed"]->number_value = motor_speed *
-                                                  (this->properties.at("reversed")->boolean_value ? -1 : 1) *
-                                                  this->properties.at("m_per_turn")->number_value /
-                                                  60;
+        this->properties["speed"]->set_number_value(motor_speed *
+                                                    (this->properties.at("reversed")->boolean_value() ? -1 : 1) *
+                                                    this->properties.at("m_per_turn")->number_value() /
+                                                    60);
     }
 }
 
@@ -162,14 +162,14 @@ void DunkerMotor::speed(const double speed) {
     if (!this->enabled)
         return;
     const int32_t motor_speed = speed /
-                                this->properties.at("m_per_turn")->number_value /
-                                (this->properties.at("reversed")->boolean_value ? -1 : 1) *
+                                this->properties.at("m_per_turn")->number_value() /
+                                (this->properties.at("reversed")->boolean_value() ? -1 : 1) *
                                 60;
     this->sdo_write(0x4300, 1, 32, motor_speed, false);
 }
 
 double DunkerMotor::get_speed() {
-    return this->properties.at("speed")->number_value;
+    return this->properties.at("speed")->number_value();
 }
 
 void DunkerMotor::do_enable() {

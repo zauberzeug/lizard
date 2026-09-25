@@ -41,7 +41,7 @@ void RoboClawWheels::update_odometry() {
         double d_right_position = difference_wrapped_u32(right_position, this->last_right_position);
 
         unsigned long int d_micros = micros_since(this->last_micros);
-        const double m_per_tick = this->properties.at("m_per_tick")->number_value;
+        const double m_per_tick = this->properties.at("m_per_tick")->number_value();
         double left_speed = (d_left_position * m_per_tick) / d_micros * 1000000;
         double right_speed = (d_right_position * m_per_tick) / d_micros * 1000000;
         this->update_speeds(left_speed, right_speed);
@@ -54,7 +54,7 @@ void RoboClawWheels::update_odometry() {
 }
 
 void RoboClawWheels::do_wheel_speeds(double left, double right) {
-    const double m_per_tick = this->properties.at("m_per_tick")->number_value;
+    const double m_per_tick = this->properties.at("m_per_tick")->number_value();
     this->left_motor->speed(left / m_per_tick);
     this->right_motor->speed(right / m_per_tick);
 }

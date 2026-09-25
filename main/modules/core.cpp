@@ -25,9 +25,9 @@ Core::Core(const std::string name) : Module(name) {
 }
 
 void Core::step() {
-    this->properties.at("millis")->integer_value = millis();
-    this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
-    this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
+    this->properties.at("millis")->set_integer_value(millis());
+    this->properties.at("heap")->set_integer_value(xPortGetFreeHeapSize());
+    this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
     Module::step();
 }
 
@@ -234,13 +234,13 @@ std::string Core::get_output() const {
                 element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
             switch (variable->type) {
             case boolean:
-                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value ? "true" : "false");
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value() ? "true" : "false");
                 break;
             case integer:
-                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value);
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value());
                 break;
             case number:
-                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value);
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value());
                 break;
             case string:
                 pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value().c_str());

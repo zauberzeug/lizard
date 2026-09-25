@@ -163,69 +163,69 @@ void ImuBno085::step() {
         apply_mode(current_mode);
     }
 
-    const uint16_t data_select = this->properties.at("data_select")->integer_value;
+    const uint16_t data_select = this->properties.at("data_select")->integer_value();
     sh2_SensorValue_t sensor_value{};
 
     for (int i = 0; i < MAX_EVENTS_PER_STEP && bno->getSensorEvent(&sensor_value); ++i) {
         switch (sensor_value.sensorId) {
         case SH2_ACCELEROMETER:
             if (data_select & 0x0002) {
-                this->properties.at("acc_x")->number_value = sensor_value.un.accelerometer.x;
-                this->properties.at("acc_y")->number_value = sensor_value.un.accelerometer.y;
-                this->properties.at("acc_z")->number_value = sensor_value.un.accelerometer.z;
+                this->properties.at("acc_x")->set_number_value(sensor_value.un.accelerometer.x);
+                this->properties.at("acc_y")->set_number_value(sensor_value.un.accelerometer.y);
+                this->properties.at("acc_z")->set_number_value(sensor_value.un.accelerometer.z);
             }
             if (data_select & 0x0001) {
-                this->properties.at("cal_acc")->integer_value = accuracy_from_status(sensor_value.status);
+                this->properties.at("cal_acc")->set_integer_value(accuracy_from_status(sensor_value.status));
             }
             break;
         case SH2_GYROSCOPE_CALIBRATED:
             if (data_select & 0x0008) {
-                this->properties.at("gyr_x")->number_value = sensor_value.un.gyroscope.x;
-                this->properties.at("gyr_y")->number_value = sensor_value.un.gyroscope.y;
-                this->properties.at("gyr_z")->number_value = sensor_value.un.gyroscope.z;
+                this->properties.at("gyr_x")->set_number_value(sensor_value.un.gyroscope.x);
+                this->properties.at("gyr_y")->set_number_value(sensor_value.un.gyroscope.y);
+                this->properties.at("gyr_z")->set_number_value(sensor_value.un.gyroscope.z);
             }
             if (data_select & 0x0001) {
-                this->properties.at("cal_gyr")->integer_value = accuracy_from_status(sensor_value.status);
+                this->properties.at("cal_gyr")->set_integer_value(accuracy_from_status(sensor_value.status));
             }
             break;
         case SH2_MAGNETIC_FIELD_CALIBRATED:
             if (data_select & 0x0004) {
-                this->properties.at("mag_x")->number_value = sensor_value.un.magneticField.x;
-                this->properties.at("mag_y")->number_value = sensor_value.un.magneticField.y;
-                this->properties.at("mag_z")->number_value = sensor_value.un.magneticField.z;
+                this->properties.at("mag_x")->set_number_value(sensor_value.un.magneticField.x);
+                this->properties.at("mag_y")->set_number_value(sensor_value.un.magneticField.y);
+                this->properties.at("mag_z")->set_number_value(sensor_value.un.magneticField.z);
             }
             if (data_select & 0x0001) {
-                this->properties.at("cal_mag")->integer_value = accuracy_from_status(sensor_value.status);
+                this->properties.at("cal_mag")->set_integer_value(accuracy_from_status(sensor_value.status));
             }
             break;
         case SH2_GAME_ROTATION_VECTOR:
             if (data_select & 0x0010) {
-                this->properties.at("quat_w")->number_value = sensor_value.un.gameRotationVector.real;
-                this->properties.at("quat_x")->number_value = sensor_value.un.gameRotationVector.i;
-                this->properties.at("quat_y")->number_value = sensor_value.un.gameRotationVector.j;
-                this->properties.at("quat_z")->number_value = sensor_value.un.gameRotationVector.k;
+                this->properties.at("quat_w")->set_number_value(sensor_value.un.gameRotationVector.real);
+                this->properties.at("quat_x")->set_number_value(sensor_value.un.gameRotationVector.i);
+                this->properties.at("quat_y")->set_number_value(sensor_value.un.gameRotationVector.j);
+                this->properties.at("quat_z")->set_number_value(sensor_value.un.gameRotationVector.k);
             }
             if (data_select & 0x0001) {
-                this->properties.at("cal_sys")->integer_value = accuracy_from_status(sensor_value.status);
+                this->properties.at("cal_sys")->set_integer_value(accuracy_from_status(sensor_value.status));
             }
             break;
         case SH2_LINEAR_ACCELERATION:
             if (data_select & 0x0020) {
-                this->properties.at("lin_x")->number_value = sensor_value.un.linearAcceleration.x;
-                this->properties.at("lin_y")->number_value = sensor_value.un.linearAcceleration.y;
-                this->properties.at("lin_z")->number_value = sensor_value.un.linearAcceleration.z;
+                this->properties.at("lin_x")->set_number_value(sensor_value.un.linearAcceleration.x);
+                this->properties.at("lin_y")->set_number_value(sensor_value.un.linearAcceleration.y);
+                this->properties.at("lin_z")->set_number_value(sensor_value.un.linearAcceleration.z);
             }
             break;
         case SH2_GRAVITY:
             if (data_select & 0x0040) {
-                this->properties.at("grav_x")->number_value = sensor_value.un.gravity.x;
-                this->properties.at("grav_y")->number_value = sensor_value.un.gravity.y;
-                this->properties.at("grav_z")->number_value = sensor_value.un.gravity.z;
+                this->properties.at("grav_x")->set_number_value(sensor_value.un.gravity.x);
+                this->properties.at("grav_y")->set_number_value(sensor_value.un.gravity.y);
+                this->properties.at("grav_z")->set_number_value(sensor_value.un.gravity.z);
             }
             break;
         case SH2_TEMPERATURE:
             if (data_select & 0x0080) {
-                this->properties.at("temp")->integer_value = static_cast<int>(sensor_value.un.temperature.value);
+                this->properties.at("temp")->set_integer_value(static_cast<int>(sensor_value.un.temperature.value));
             }
             break;
         default:

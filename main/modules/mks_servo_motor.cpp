@@ -33,7 +33,7 @@ void MksServoMotor::subscribe_to_can() {
     this->can->subscribe(this->can_id, std::static_pointer_cast<Module>(this->shared_from_this()));
     // Send the initial configuration only after the subscription is in place,
     // so the 0x82 acknowledgement is observed and reflected in "set_mode_status".
-    this->send_working_current(this->properties.at("working_current")->integer_value);
+    this->send_working_current(this->properties.at("working_current")->integer_value());
     this->send_set_mode(MODE_SR_vFOC); // required for 0xF5/0xF6 bus motion commands
 }
 
@@ -66,7 +66,7 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
     mode = std::clamp(mode, (uint8_t)0x00, MAX_MODE);
     uint8_t data[] = {0x82, mode};
     this->send(data, 2);
-    this->properties.at("set_mode_status")->integer_value = STATUS_SET_MODE_PENDING;
+    this->properties.at("set_mode_status")->set_integer_value(STATUS_SET_MODE_PENDING);
 }
 
 void MksServoMotor::send_set_bitrate(int64_t hz) {
@@ -108,7 +108,7 @@ void MksServoMotor::send_working_current(int64_t ma) {
     uint16_t val = (uint16_t)ma;
     uint8_t data[] = {0x83, (uint8_t)(val >> 8), (uint8_t)(val & 0xFF)};
     this->send(data, 3);
-    this->properties.at("working_current")->integer_value = ma;
+    this->properties.at("working_current")->set_integer_value(ma);
 }
 
 void MksServoMotor::send_holding_current(int64_t pct) {
@@ -266,14 +266,14 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
         if (val & ((int64_t)1 << 47)) {
             val |= ~(((int64_t)1 << 48) - 1);
         }
-        this->properties.at("position")->number_value = (double)val * 360.0 / COUNTS_PER_TURN;
+        this->properties.at("position")->set_number_value((double)val * 360.0 / COUNTS_PER_TURN);
     } else if (data[0] == 0x32 && count == 4) {
         if (!this->crc_ok(data, count)) {
             return;
         }
         // Extract 16-bit big-endian signed speed (RPM) from data[1..2]
         int16_t speed = (int16_t)((data[1] << 8) | data[2]);
-        this->properties.at("speed")->integer_value = speed;
+        this->properties.at("speed")->set_integer_value(speed);
     } else if (data[0] == 0x39 && count == 6) {
         if (!this->crc_ok(data, count)) {
             return;
@@ -283,15 +283,15 @@ void MksServoMotor::handle_can_msg(const uint32_t id, const int count, const uin
                       ((int32_t)data[2] << 16) |
                       ((int32_t)data[3] << 8) |
                       (int32_t)data[4];
-        this->properties.at("position_error")->number_value = (double)val * 360.0 / POSITION_ERROR_COUNTS_PER_TURN;
+        this->properties.at("position_error")->set_number_value((double)val * 360.0 / POSITION_ERROR_COUNTS_PER_TURN);
     } else if (data[0] == 0x82 && count == 3) {
         if (!this->crc_ok(data, count)) {
             return;
         }
         if (data[1] == 0x01) {
-            this->properties.at("set_mode_status")->integer_value = STATUS_OK;
+            this->properties.at("set_mode_status")->set_integer_value(STATUS_OK);
         } else {
-            this->properties.at("set_mode_status")->integer_value = STATUS_SET_MODE_FAILED;
+            this->properties.at("set_mode_status")->set_integer_value(STATUS_SET_MODE_FAILED);
         }
     }
 }

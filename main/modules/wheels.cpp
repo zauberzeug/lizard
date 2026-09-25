@@ -33,12 +33,12 @@ Wheels::Wheels(const std::string name, const std::map<std::string, Variable_ptr>
 }
 
 void Wheels::update_speeds(double left_speed, double right_speed) {
-    this->properties.at("linear_speed")->number_value = (left_speed + right_speed) / 2;
-    this->properties.at("angular_speed")->number_value = (right_speed - left_speed) / this->properties.at("width")->number_value;
+    this->properties.at("linear_speed")->set_number_value((left_speed + right_speed) / 2);
+    this->properties.at("angular_speed")->set_number_value((right_speed - left_speed) / this->properties.at("width")->number_value());
 }
 
 bool Wheels::may_drive() const {
-    return this->properties.at("enabled")->boolean_value && !this->properties.at("locked")->boolean_value;
+    return this->properties.at("enabled")->boolean_value() && !this->properties.at("locked")->boolean_value();
 }
 
 void Wheels::step() {
@@ -47,13 +47,13 @@ void Wheels::step() {
     this->sync_enabled();
 
     const unsigned long drive_command_age = millis_since(this->last_drive_command_millis);
-    this->properties.at("drive_command_age")->integer_value = drive_command_age;
+    this->properties.at("drive_command_age")->set_integer_value(drive_command_age);
 
     // Dead man's switch: a non-zero drive command that is not refreshed in time trips the switch,
     // whether the sender lost its connection or simply stopped sending. A tripped switch holds the
     // wheels at standstill below, so a stop that does not reach the motors (a failing motor send,
     // a dropped CAN frame, a motor reboot) is re-asserted; the next drive command releases it.
-    const double timeout = this->properties.at("drive_command_timeout")->number_value;
+    const double timeout = this->properties.at("drive_command_timeout")->number_value();
     if (this->moving && timeout > 0.0 && drive_command_age > timeout * 1000.0) {
         this->moving = false;
         this->stopped = true;
@@ -65,7 +65,7 @@ void Wheels::step() {
     // locked ran because the host went silent. The hold is sent once on its rising edge and
     // refreshed at a low rate to re-assert it after a lost send or a motor reboot without
     // flooding the bus.
-    const bool should_hold = this->properties.at("enabled")->boolean_value && (!this->may_drive() || this->stopped);
+    const bool should_hold = this->properties.at("enabled")->boolean_value() && (!this->may_drive() || this->stopped);
     if (!should_hold) {
         this->holding = false;
     } else if (this->holding) {
@@ -112,7 +112,7 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         const bool applied = this->may_drive();
         this->note_drive_command(applied, nonzero);
         if (applied) {
-            const double width = this->properties.at("width")->number_value;
+            const double width = this->properties.at("width")->number_value();
             this->do_wheel_speeds(linear - angular * width / 2.0, linear + angular * width / 2.0);
             this->note_drive_command_sent(nonzero);
         }
@@ -157,10 +157,10 @@ void Wheels::sync_shared_properties(Module &shadow) const {
         const Variable_ptr target = shadow.get_property(shared);
         switch (source->type) {
         case boolean:
-            target->boolean_value = source->boolean_value;
+            target->set_boolean_value(source->boolean_value());
             break;
         case number:
-            target->number_value = source->number_value;
+            target->set_number_value(source->number_value());
             break;
         default:
             throw std::runtime_error("unexpected type of shared wheels property \"" + std::string(shared) + "\"");

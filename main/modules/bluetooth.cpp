@@ -56,8 +56,8 @@ void Bluetooth::step() {
             echo("error in bluetooth message handler: %s", e.what());
         }
     }
-    this->properties.at("connected")->boolean_value = ZZ::BleCommand::is_connected();
-    this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
+    this->properties.at("connected")->set_boolean_value(ZZ::BleCommand::is_connected());
+    this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
     Module::step();
 }
 

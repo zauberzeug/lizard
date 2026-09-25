@@ -19,13 +19,6 @@ using ConstVariable_ptr = std::shared_ptr<const Variable>;
 class Variable {
 public:
     const Type type;
-    union {
-        bool boolean_value;
-        int64_t integer_value;
-        double number_value;
-        std::string *text; // owned by the variable; only string and identifier variables use the slot this way,
-                           // and only through string_value(), identifier_value() and set_string_value()
-    };
 
     Variable(const Type type);
     ~Variable();
@@ -35,10 +28,26 @@ public:
     void assign(const ConstExpression_ptr expression);
     int print_to_buffer(char *const buffer, size_t buffer_len) const;
 
-    // the text of a string or identifier variable; throws for any other type
+    // Every getter and setter checks that the variable has that type and throws otherwise, so reading a number
+    // from an integer variable fails loudly instead of returning a stale or reinterpreted value.
+    bool boolean_value() const;
+    int64_t integer_value() const;
+    double number_value() const;
     const std::string &string_value() const;
     const std::string &identifier_value() const;
+    void set_boolean_value(const bool value);
+    void set_integer_value(const int64_t value);
+    void set_number_value(const double value);
     void set_string_value(const std::string &value);
+
+protected:
+    union {
+        bool boolean_slot;
+        int64_t integer_slot;
+        double number_slot;
+        std::string *text; // owned by the variable; only string and identifier variables use the slot this way
+    };
+    void expect(const Type type) const;
 };
 
 class BooleanVariable : public Variable {

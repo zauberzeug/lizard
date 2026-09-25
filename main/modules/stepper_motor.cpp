@@ -130,13 +130,13 @@ void StepperMotor::read_position() {
     if (d_count < -15000) {
         d_count += 30000;
     }
-    this->properties.at("position")->integer_value += d_count;
+    this->properties.at("position")->set_integer_value(this->properties.at("position")->integer_value() + (d_count));
     this->last_count = count;
 }
 
 void StepperMotor::set_state(StepperState new_state) {
     this->state = new_state;
-    this->properties.at("idle")->boolean_value = (new_state == Idle);
+    this->properties.at("idle")->set_boolean_value((new_state == Idle));
 
     gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : SPEED_OUT_IDX + this->ledc_channel, 0, 0);
     ledc_set_duty(SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : DUTY_VALUE);
@@ -154,8 +154,8 @@ void StepperMotor::step() {
 
     if (this->state != Idle && this->enabled) {
         // current state
-        int32_t position = this->properties.at("position")->integer_value;
-        int32_t speed = this->properties.at("speed")->integer_value;
+        int32_t position = this->properties.at("position")->integer_value();
+        int32_t speed = this->properties.at("speed")->integer_value();
 
         // current target speed
         int32_t target_speed = this->target_speed;
@@ -202,9 +202,9 @@ void StepperMotor::step() {
             set_state(Idle);
         }
 
-        this->properties.at("speed")->integer_value = speed;
+        this->properties.at("speed")->set_integer_value(speed);
     } else {
-        this->properties.at("speed")->integer_value = 0;
+        this->properties.at("speed")->set_integer_value(0);
     }
 
     Module::step();
@@ -249,19 +249,19 @@ void StepperMotor::stop() {
 }
 
 double StepperMotor::get_position() {
-    return static_cast<double>(this->properties.at("position")->integer_value);
+    return static_cast<double>(this->properties.at("position")->integer_value());
 }
 
 void StepperMotor::position(const double position, const double speed, const double acceleration) {
     this->target_position = static_cast<int32_t>(position);
-    bool forward = this->target_position > this->properties.at("position")->integer_value;
+    bool forward = this->target_position > this->properties.at("position")->integer_value();
     this->target_speed = static_cast<int32_t>(speed) * (forward ? 1 : -1);
     this->target_acceleration = static_cast<uint32_t>(acceleration);
     set_state(Positioning);
 }
 
 double StepperMotor::get_speed() {
-    return static_cast<double>(this->properties.at("speed")->integer_value);
+    return static_cast<double>(this->properties.at("speed")->integer_value());
 }
 
 void StepperMotor::speed(const double speed, const double acceleration) {

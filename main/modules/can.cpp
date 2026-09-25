@@ -85,15 +85,15 @@ void Can::step() {
                                                    : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
                                                    : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
                                                                                                 : "UNKNOWN");
-    this->properties.at("tx_error_counter")->integer_value = status_info.tx_error_counter;
-    this->properties.at("rx_error_counter")->integer_value = status_info.rx_error_counter;
-    this->properties.at("msgs_to_tx")->integer_value = status_info.msgs_to_tx;
-    this->properties.at("msgs_to_rx")->integer_value = status_info.msgs_to_rx;
-    this->properties.at("tx_failed_count")->integer_value = status_info.tx_failed_count;
-    this->properties.at("rx_missed_count")->integer_value = status_info.rx_missed_count;
-    this->properties.at("rx_overrun_count")->integer_value = status_info.rx_overrun_count;
-    this->properties.at("arb_lost_count")->integer_value = status_info.arb_lost_count;
-    this->properties.at("bus_error_count")->integer_value = status_info.bus_error_count;
+    this->properties.at("tx_error_counter")->set_integer_value(status_info.tx_error_counter);
+    this->properties.at("rx_error_counter")->set_integer_value(status_info.rx_error_counter);
+    this->properties.at("msgs_to_tx")->set_integer_value(status_info.msgs_to_tx);
+    this->properties.at("msgs_to_rx")->set_integer_value(status_info.msgs_to_rx);
+    this->properties.at("tx_failed_count")->set_integer_value(status_info.tx_failed_count);
+    this->properties.at("rx_missed_count")->set_integer_value(status_info.rx_missed_count);
+    this->properties.at("rx_overrun_count")->set_integer_value(status_info.rx_overrun_count);
+    this->properties.at("arb_lost_count")->set_integer_value(status_info.arb_lost_count);
+    this->properties.at("bus_error_count")->set_integer_value(status_info.bus_error_count);
 
     if (status_info.state == TWAI_STATE_BUS_OFF && this->previous_state != TWAI_STATE_BUS_OFF) {
         try {
@@ -185,15 +185,15 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
     } else if (method_name == "get_status") {
         Module::expect(arguments, 0);
         echo("state:            %s", this->properties.at("state")->string_value().c_str());
-        echo("msgs_to_tx:       %d", (int)this->properties.at("msgs_to_tx")->integer_value);
-        echo("msgs_to_rx:       %d", (int)this->properties.at("msgs_to_rx")->integer_value);
-        echo("tx_error_counter: %d", (int)this->properties.at("tx_error_counter")->integer_value);
-        echo("rx_error_counter: %d", (int)this->properties.at("rx_error_counter")->integer_value);
-        echo("tx_failed_count:  %d", (int)this->properties.at("tx_failed_count")->integer_value);
-        echo("rx_missed_count:  %d", (int)this->properties.at("rx_missed_count")->integer_value);
-        echo("rx_overrun_count: %d", (int)this->properties.at("rx_overrun_count")->integer_value);
-        echo("arb_lost_count:   %d", (int)this->properties.at("arb_lost_count")->integer_value);
-        echo("bus_error_count:  %d", (int)this->properties.at("bus_error_count")->integer_value);
+        echo("msgs_to_tx:       %d", (int)this->properties.at("msgs_to_tx")->integer_value());
+        echo("msgs_to_rx:       %d", (int)this->properties.at("msgs_to_rx")->integer_value());
+        echo("tx_error_counter: %d", (int)this->properties.at("tx_error_counter")->integer_value());
+        echo("rx_error_counter: %d", (int)this->properties.at("rx_error_counter")->integer_value());
+        echo("tx_failed_count:  %d", (int)this->properties.at("tx_failed_count")->integer_value());
+        echo("rx_missed_count:  %d", (int)this->properties.at("rx_missed_count")->integer_value());
+        echo("rx_overrun_count: %d", (int)this->properties.at("rx_overrun_count")->integer_value());
+        echo("arb_lost_count:   %d", (int)this->properties.at("arb_lost_count")->integer_value());
+        echo("bus_error_count:  %d", (int)this->properties.at("bus_error_count")->integer_value());
     } else if (method_name == "start") {
         Module::expect(arguments, 0);
         if (twai_start() != ESP_OK) {

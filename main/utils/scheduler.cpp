@@ -46,7 +46,7 @@ static void run_due_entries() {
     while (!entries.empty() && entries.top().deadline_us <= esp_timer_get_time()) {
         const Entry entry = entries.top();
         entries.pop();
-        if (core_module->get_property("debug")->boolean_value) {
+        if (core_module->get_property("debug")->boolean_value()) {
             echo("at %lld: fired %.1f ms late",
                  entry.deadline_us / 1000, (esp_timer_get_time() - entry.deadline_us) / 1000.0);
         }
