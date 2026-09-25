@@ -59,6 +59,16 @@ void RoboClawWheels::do_wheel_speeds(double left, double right) {
     this->right_motor->speed(right / m_per_tick);
 }
 
+void RoboClawWheels::do_wheel_powers(double left, double right) {
+    this->left_motor->power(left);
+    this->right_motor->power(right);
+}
+
+void RoboClawWheels::do_off() {
+    this->left_motor->power(0);
+    this->right_motor->power(0);
+}
+
 void RoboClawWheels::do_enable() {
     this->left_motor->enable();
     this->right_motor->enable();
@@ -67,20 +77,4 @@ void RoboClawWheels::do_enable() {
 void RoboClawWheels::do_disable() {
     this->left_motor->disable();
     this->right_motor->disable();
-}
-
-void RoboClawWheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    if (method_name == "power") {
-        Module::expect(arguments, 2, numbery, numbery);
-        if (this->may_drive()) {
-            this->left_motor->power(arguments[0]->evaluate_number());
-            this->right_motor->power(arguments[1]->evaluate_number());
-        }
-    } else if (method_name == "off") {
-        Module::expect(arguments, 0);
-        this->left_motor->power(0);
-        this->right_motor->power(0);
-    } else {
-        Wheels::call(method_name, arguments);
-    }
 }

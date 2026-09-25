@@ -8,9 +8,10 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
 /**
  * Shared base for differential-drive wheels modules.
  *
- * Owns the common properties (`width`, `linear_speed`, `angular_speed`, `enabled`, `locked`)
- * and the `speed`/`enable`/`disable` command flow; the enabled-sync itself comes from `Module`.
- * Concrete drivetrains provide the motor-specific parts through the protected hooks.
+ * Owns the common properties (`width`, `linear_speed`, `angular_speed`, `enabled`, `locked`,
+ * `drive_command_age`, `drive_command_timeout`) and the `speed`/`power`/`off`/`enable`/`disable`
+ * command flow; the enabled-sync itself comes from `Module`. Concrete drivetrains provide the
+ * motor-specific parts through the protected hooks.
  *
  * `locked` is a safety interlock: while `true`, drive commands are ignored and the wheels are
  * actively held at standstill (zero-speed setpoint, motors stay enabled), so a rule can block
@@ -19,6 +20,12 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  * refreshed at a low rate. While locked, `off()` does not stick — the hold re-engages within
  * about a second; only `disable()` switches the motors off durably. Driving resumes on
  * `locked = false`.
+ *
+ * `drive_command_timeout` is a dead man's switch: after a non-zero `speed()` or `power()` the
+ * wheels stop on their own once no further drive command arrived for that long. Only `speed()`
+ * and `power()` count as drive commands, so `enable()`, `off()` or property writes cannot keep a
+ * stale motion alive. The stop is sent once; the next drive command re-arms the switch.
+ * `drive_command_age` exposes the time since the last drive command for rules.
  */
 class Wheels : public Module {
 private:
@@ -27,8 +34,14 @@ private:
     bool holding = false;        // wheels are currently held at standstill by the `locked` interlock
     unsigned int hold_cycle = 0; // `step()` cycles since the hold was last sent
 
-    /// Copy the gate properties (`locked`, `enabled`) from this module onto a freshly attached shadow.
-    void sync_gate_properties(Module &shadow) const;
+    bool moving = false;                         // last applied drive command was non-zero and no stop followed since
+    unsigned long last_drive_command_millis = 0; // `millis()` of the last `speed()`/`power()`, applied or not
+
+    /// Record a drive command: refresh `drive_command_age` and, if it was applied, (dis)arm the dead man's switch.
+    void note_drive_command(bool applied, bool nonzero);
+
+    /// Copy the shared properties (`locked`, `enabled`, `drive_command_timeout`) onto a freshly attached shadow.
+    void sync_shared_properties(Module &shadow) const;
 
 protected:
     /// Whether drive commands may be applied: true only while enabled and not locked.
@@ -39,6 +52,10 @@ protected:
 
     /// Apply per-wheel target speeds (already split from linear/angular via `width`).
     virtual void do_wheel_speeds(double left, double right) = 0;
+    /// Apply per-wheel torques; the default rejects `power()` for drivetrains without torque control.
+    virtual void do_wheel_powers(double left, double right);
+    /// Switch both motors to their idle state; the default rejects `off()` for drivetrains without one.
+    virtual void do_off();
     void do_enable() override = 0;
     void do_disable() override = 0;
     /// Update `linear_speed`/`angular_speed` from the motors; called every `step()`.

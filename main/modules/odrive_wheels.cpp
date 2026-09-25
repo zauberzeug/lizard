@@ -38,6 +38,16 @@ void ODriveWheels::do_wheel_speeds(double left, double right) {
     this->right_motor->speed(right);
 }
 
+void ODriveWheels::do_wheel_powers(double left, double right) {
+    this->left_motor->power(left);
+    this->right_motor->power(right);
+}
+
+void ODriveWheels::do_off() {
+    this->left_motor->off();
+    this->right_motor->off();
+}
+
 void ODriveWheels::do_enable() {
     this->left_motor->enable();
     this->right_motor->enable();
@@ -46,20 +56,4 @@ void ODriveWheels::do_enable() {
 void ODriveWheels::do_disable() {
     this->left_motor->disable();
     this->right_motor->disable();
-}
-
-void ODriveWheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    if (method_name == "power") {
-        Module::expect(arguments, 2, numbery, numbery);
-        if (this->may_drive()) {
-            this->left_motor->power(arguments[0]->evaluate_number());
-            this->right_motor->power(arguments[1]->evaluate_number());
-        }
-    } else if (method_name == "off") {
-        Module::expect(arguments, 0);
-        this->left_motor->off();
-        this->right_motor->off();
-    } else {
-        Wheels::call(method_name, arguments);
-    }
 }

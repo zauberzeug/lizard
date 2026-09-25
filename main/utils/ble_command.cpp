@@ -431,6 +431,10 @@ int send(const std::string_view &data) {
     return ble_gattc_notify_custom(current_con, send_chr_val_handle, om);
 }
 
+bool is_connected() {
+    return current_con != BLE_HS_CONN_HANDLE_NONE;
+}
+
 void finalize() {
     if (!running) {
         return;

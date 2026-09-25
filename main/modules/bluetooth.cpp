@@ -1,5 +1,6 @@
 #include "bluetooth.h"
 #include "../storage.h"
+#include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "uart.h"
 #include <atomic>
@@ -14,7 +15,10 @@ static Module_ptr create_bluetooth(const std::string &name, const std::vector<Co
 REGISTER_MODULE(Bluetooth, &create_bluetooth)
 
 const std::map<std::string, Variable_ptr> Bluetooth::get_defaults() {
-    return {};
+    return {
+        {"connected", std::make_shared<BooleanVariable>(false)},
+        {"last_message_age", std::make_shared<IntegerVariable>(0)},
+    };
 }
 
 static constexpr size_t LINE_QUEUE_LENGTH = 32;
@@ -45,12 +49,15 @@ void Bluetooth::step() {
     char *raw;
     while (xQueueReceive(this->line_queue, &raw, 0) == pdTRUE) {
         const std::unique_ptr<char[]> line(raw);
+        this->last_message_millis = millis();
         try {
             this->message_handler(line.get(), true, false);
         } catch (const std::exception &e) {
             echo("error in bluetooth message handler: %s", e.what());
         }
     }
+    this->properties.at("connected")->boolean_value = ZZ::BleCommand::is_connected();
+    this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
     Module::step();
 }
 
