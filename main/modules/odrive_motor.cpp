@@ -71,7 +71,11 @@ void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, cons
 void ODriveMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "zero") {
         Module::expect(arguments, 0);
-        this->properties.at("tick_offset")->set_number_value(this->properties.at("tick_offset")->number_value() + (this->properties.at("position")->number_value() / this->properties.at("m_per_tick")->number_value() * (this->properties.at("reversed")->boolean_value() ? -1 : 1)));
+        const Variable_ptr &tick_offset = this->properties.at("tick_offset");
+        const double position = this->properties.at("position")->number_value();
+        const double m_per_tick = this->properties.at("m_per_tick")->number_value();
+        const int sign = this->properties.at("reversed")->boolean_value() ? -1 : 1;
+        tick_offset->set_number_value(tick_offset->number_value() + position / m_per_tick * sign);
     } else if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
         this->power(arguments[0]->evaluate_number());
@@ -118,15 +122,15 @@ void ODriveMotor::handle_can_msg(const uint32_t id, const int count, const uint8
         break;
     }
     case 0x009: {
+        const double tick_offset = this->properties.at("tick_offset")->number_value();
+        const double m_per_tick = this->properties.at("m_per_tick")->number_value();
+        const int sign = this->properties.at("reversed")->boolean_value() ? -1 : 1;
         float tick;
         std::memcpy(&tick, data, 4);
-        this->properties.at("position")->set_number_value((tick - this->properties.at("tick_offset")->number_value()) * (this->properties.at("reversed")->boolean_value() ? -1 : 1) * this->properties.at("m_per_tick")->number_value());
+        this->properties.at("position")->set_number_value((tick - tick_offset) * sign * m_per_tick);
         float ticks_per_second;
         std::memcpy(&ticks_per_second, data + 4, 4);
-        this->properties.at("speed")->set_number_value(
-            ticks_per_second *
-            (this->properties.at("reversed")->boolean_value() ? -1 : 1) *
-            this->properties.at("m_per_tick")->number_value());
+        this->properties.at("speed")->set_number_value(ticks_per_second * sign * m_per_tick);
         break;
     }
     case 0x014: {

@@ -277,12 +277,14 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
         std::memcpy(&position, data + 6, 2);
         int32_t encoder_position = position;
         if (this->has_last_encoder_position) {
-            this->properties.at("position")->set_number_value(this->properties.at("position")->number_value() + (encoder_position - this->last_encoder_position));
-            if (encoder_position - this->last_encoder_position > this->encoder_range / 2) {
-                this->properties.at("position")->set_number_value(this->properties.at("position")->number_value() - (this->encoder_range));
+            const int32_t delta = encoder_position - this->last_encoder_position;
+            const Variable_ptr &position_property = this->properties.at("position");
+            position_property->set_number_value(position_property->number_value() + delta);
+            if (delta > this->encoder_range / 2) {
+                position_property->set_number_value(position_property->number_value() - this->encoder_range);
             }
-            if (encoder_position - this->last_encoder_position < -this->encoder_range / 2) {
-                this->properties.at("position")->set_number_value(this->properties.at("position")->number_value() + (this->encoder_range));
+            if (delta < -this->encoder_range / 2) {
+                position_property->set_number_value(position_property->number_value() + this->encoder_range);
             }
             this->last_encoder_position = encoder_position;
         }

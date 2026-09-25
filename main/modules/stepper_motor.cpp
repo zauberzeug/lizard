@@ -130,7 +130,8 @@ void StepperMotor::read_position() {
     if (d_count < -15000) {
         d_count += 30000;
     }
-    this->properties.at("position")->set_integer_value(this->properties.at("position")->integer_value() + (d_count));
+    const Variable_ptr &position = this->properties.at("position");
+    position->set_integer_value(position->integer_value() + d_count);
     this->last_count = count;
 }
 

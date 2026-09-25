@@ -17,14 +17,26 @@ Variable::~Variable() {
     }
 }
 
+static const char *describe(const Type type) {
+    switch (type) {
+    case boolean:
+        return "a boolean";
+    case integer:
+        return "an integer";
+    case number:
+        return "a number";
+    case string:
+        return "a string";
+    case identifier:
+        return "an identifier";
+    default:
+        return "of an unknown type";
+    }
+}
+
 void Variable::expect(const Type type) const {
     if (this->type != type) {
-        throw std::runtime_error(std::string("variable is not ") + (type == boolean      ? "a boolean"
-                                                                    : type == integer    ? "an integer"
-                                                                    : type == number     ? "a number"
-                                                                    : type == string     ? "a string"
-                                                                    : type == identifier ? "an identifier"
-                                                                                         : "of that type"));
+        throw std::runtime_error(std::string("variable is ") + describe(this->type) + ", not " + describe(type));
     }
 }
 

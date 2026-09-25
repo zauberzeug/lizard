@@ -12,10 +12,11 @@ class Variable;
 using Variable_ptr = std::shared_ptr<Variable>;
 using ConstVariable_ptr = std::shared_ptr<const Variable>;
 
-// A variable holds exactly one value of its type. The value shares one 8-byte slot, so writing a field of another
-// type overwrites the value instead of landing in a separate, never-read field; string and identifier variables
-// keep their text on the heap behind the same slot. Every property of every module is a Variable, so the slot
-// keeps each of them at 16 bytes instead of the 72 that separate fields for all five types took.
+// A variable holds exactly one value of its type. The value shares one 8-byte slot; string and identifier
+// variables keep their text on the heap behind the same slot. The slot is reached only through the typed
+// accessors below, which throw on a type mismatch instead of reinterpreting the bytes. Every property of every
+// module is a Variable, so the slot keeps each of them at 16 bytes instead of the 72 that separate fields for
+// all five types took.
 class Variable {
 public:
     const Type type;

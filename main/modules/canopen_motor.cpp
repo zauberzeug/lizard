@@ -237,15 +237,16 @@ void CanOpenMotor::transition_operational() {
 
 bool CanOpenMotor::send_sdo_with_retry(uint32_t cob_id, const uint8_t *data) {
     const int max_attempts = 3;
+    const Variable_ptr &pending_writes = this->properties[PROP_PENDING_WRITES];
 
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         try {
-            this->properties[PROP_PENDING_WRITES]->set_integer_value(this->properties[PROP_PENDING_WRITES]->integer_value() + 1);
+            pending_writes->set_integer_value(pending_writes->integer_value() + 1);
             this->can->send(cob_id, data);
             wait_for_sdo_writes(100);
             return true;
         } catch (const std::exception &e) {
-            this->properties[PROP_PENDING_WRITES]->set_integer_value(this->properties[PROP_PENDING_WRITES]->integer_value() - 1);
+            pending_writes->set_integer_value(pending_writes->integer_value() - 1);
             if (attempt < max_attempts - 1) {
                 try {
                     this->can->reset_can_bus();
@@ -409,14 +410,17 @@ void CanOpenMotor::handle_sdo_reply(const uint8_t *const data) {
         }
         break;
 
-    case ExpeditedWriteSuccess:
-        assert(this->properties[PROP_PENDING_WRITES]->integer_value() > 0);
-        this->properties[PROP_PENDING_WRITES]->set_integer_value(this->properties[PROP_PENDING_WRITES]->integer_value() - 1);
+    case ExpeditedWriteSuccess: {
+        const Variable_ptr &pending_writes = this->properties[PROP_PENDING_WRITES];
+        assert(pending_writes->integer_value() > 0);
+        pending_writes->set_integer_value(pending_writes->integer_value() - 1);
         break;
+    }
 
-    case WriteFailure:
+    case WriteFailure: {
+        const Variable_ptr &pending_writes = this->properties[PROP_PENDING_WRITES];
         /* A failure still acknowledges the write operation */
-        this->properties[PROP_PENDING_WRITES]->set_integer_value(this->properties[PROP_PENDING_WRITES]->integer_value() - 1);
+        pending_writes->set_integer_value(pending_writes->integer_value() - 1);
 
         switch (value) {
         case NonExistantObject:
@@ -431,6 +435,7 @@ void CanOpenMotor::handle_sdo_reply(const uint8_t *const data) {
             echo("Unknown error [%04X] attempting to write object [%02X.%01X]", value, index, sub_index);
         }
         break;
+    }
 
     default:
         echo("Unknown server command specifier %u", scs);
