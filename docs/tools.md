@@ -70,17 +70,17 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 `otb_update.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB (Over The Bus) protocol.
 
 ```bash
-./otb_update.py build/lizard.bin [--port <port>] --target <peer_id> [--bus <name>] [--expander <name>]
+./otb_update.py build/lizard.bin [--device <path>] --target <peer_id> [--bus <name>] [--expander <name>]
 ```
 
-| Argument     | Description                                             |
-| ------------ | ------------------------------------------------------- |
-| `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`)   |
-| `--port`     | Serial port (default: auto-detected, asks if ambiguous) |
-| `--baud`     | Baudrate (default: `115200`)                            |
-| `--target`   | Bus ID of the target node (required)                    |
-| `--bus`      | Name of the SerialBus module (default: `bus`)           |
-| `--expander` | Expander name when coordinator is behind an expander    |
+| Argument     | Description                                                    |
+| ------------ | -------------------------------------------------------------- |
+| `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`)          |
+| `--device`   | Serial device path (default: auto-detected, asks if ambiguous) |
+| `--baud`     | Baudrate (default: `115200`)                                   |
+| `--target`   | Bus ID of the target node (required)                           |
+| `--bus`      | Name of the SerialBus module (default: `bus`)                  |
+| `--expander` | Expander name when coordinator is behind an expander           |
 
 **Expander chains:**
 
