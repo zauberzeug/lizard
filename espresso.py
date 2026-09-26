@@ -98,7 +98,7 @@ class Config:
     so they cannot drift from their inputs.
     """
     chip: str = 'esp32'
-    device: Optional[str] = None  # an explicit --device; otherwise .port detects one on first read
+    device_option: Optional[str] = None  # an explicit --device; otherwise .device detects one on first read
     baud: Optional[int] = None  # an explicit --baud; each command falls back to its own default
     nand: bool = False
     swap: bool = False
@@ -131,13 +131,13 @@ class Config:
         return self.en_pin if self.swap else self.g0_pin
 
     @property
-    def port(self) -> str:
+    def device(self) -> str:
         """The serial device, detected on first read.
 
         Lazy so that a pin-only command (enable, disable, reset, release_pins) never resolves
-        one -- and hence never asks which of several adapters to use for a port it won't open.
+        one -- and hence never asks which of several adapters to use for one it won't open.
         """
-        return self.device or resolve_device()
+        return self.device_option or resolve_device()
 
     @property
     def stub_args(self) -> Tuple[str, ...]:
@@ -434,7 +434,7 @@ def erase(config: Config) -> None:
                 config,
                 'esptool.py',
                 '--chip', config.chip,
-                '--port', config.port,
+                '--port', config.device,
                 '--baud', config.flash_baud,
                 *config.stub_args,
                 '--before', 'default_reset',
@@ -452,7 +452,7 @@ def reset_partition(config: Config) -> None:
         config,
         'esptool.py',
         '--chip', config.chip,
-        '--port', config.port,
+        '--port', config.device,
         '--baud', config.flash_baud,
         *config.stub_args,
         'erase_region',
@@ -472,7 +472,7 @@ def flash(config: Config) -> None:
                 config,
                 'esptool.py',
                 '--chip', config.chip,
-                '--port', config.port,
+                '--port', config.device,
                 '--baud', config.flash_baud,
                 *config.stub_args,
                 '--before', 'default_reset',
@@ -499,7 +499,7 @@ def coredump(config: Config) -> None:
     deferred so the flash path does not depend on esp_coredump being installed.
     """
     print_bold('Reading core dump...')
-    print(f'  port={config.port} chip={config.chip} baud={config.coredump_baud} elf={config.elf}')
+    print(f'  device={config.device} chip={config.chip} baud={config.coredump_baud} elf={config.elf}')
     if config.dry_run:
         return
     try:
@@ -507,7 +507,7 @@ def coredump(config: Config) -> None:
     except ImportError as error:
         raise RuntimeError('Module esp_coredump is required for the coredump command, but it is not installed. '
                            'Install it on the machine reading the dump (e.g. "pip install esp-coredump").') from error
-    dump = CoreDump(chip=config.chip, port=config.port, baud=config.coredump_baud, prog=config.elf)
+    dump = CoreDump(chip=config.chip, port=config.device, baud=config.coredump_baud, prog=config.elf)
     if config.debug:
         dump.dbg_corefile()
     else:
@@ -599,7 +599,7 @@ def main(argv: List[str]) -> None:
 
     config = Config(
         chip=args.chip or DEFAULT.chip,
-        device=args.device,
+        device_option=args.device,
         baud=args.baud,
         nand=args.nand,
         swap=args.swap,
