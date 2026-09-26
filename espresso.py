@@ -188,7 +188,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default=None,
                         help=f'ESP chip type (default: {DEFAULT.chip})')
     parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
-    parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
+    parser.add_argument('-d', '--dry-run', action='store_true',
+                        help='Print the commands instead of running them (still resolves the serial device)')
     parser.add_argument('--device', nargs='?', default=None,
                         help='Serial device path (default: auto-detected, asks if ambiguous)')
     parser.add_argument('--baud', type=int, default=None,
