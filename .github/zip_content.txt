@@ -5,8 +5,8 @@ build/lizard.bin
 configure.py
 espresso.py
 monitor.py
+serial_devices.py
 upload_ssh.py
 README.md
 requirements.txt
-requirements-macos.txt
 LICENSE

@@ -9,6 +9,8 @@ from pathlib import Path
 
 import serial
 
+from serial_devices import resolve_device
+
 CHUNK_SIZE = 165  # must match BUS_OTB_CHUNK_SIZE in main/utils/otb.h (the chunk line has to fit the bus payload)
 WINDOW = 8  # must match BUS_OTB_WINDOW in main/utils/otb.h
 ACK_TIMEOUT = 2.0  # resend the window when no ack arrives for this long
@@ -16,7 +18,7 @@ STALL_TIMEOUT = 15.0  # give up when the target makes no progress for this long 
 
 parser = argparse.ArgumentParser(description='Push firmware via SerialBus OTB')
 parser.add_argument('firmware', help='Path to firmware binary')
-parser.add_argument('--port', default='/dev/ttyUSB0', help='Serial port')
+parser.add_argument('--device', default=None, help='Serial device path (default: auto-detected, asks if ambiguous)')
 parser.add_argument('--baud', type=int, default=115200, help='Baudrate')
 parser.add_argument('--target', type=int, required=True, help='Bus ID of target node')
 parser.add_argument('--bus', default='bus', help='SerialBus module name')
@@ -31,9 +33,11 @@ file_size = firmware.stat().st_size
 number_of_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
 
 try:
-    dev = serial.Serial(args.port, args.baud, timeout=0.5)
-except serial.SerialException as e:
-    sys.exit(f'Serial error: {e}')
+    device = resolve_device(args.device)
+    print(f'Connecting to {device} at {args.baud} baud')
+    dev = serial.Serial(device, args.baud, timeout=0.5)
+except (RuntimeError, serial.SerialException) as e:
+    sys.exit(f'Error: {e}')
 
 
 class OtbError(Exception):
