@@ -428,13 +428,14 @@ def _reset(config: Config) -> None:
 def erase(config: Config) -> None:
     """Erase the microcontroller."""
     print_bold('Erasing the microcontroller...')
+    device = config.device
     with _pin_config(config):
         with _flash_mode(config):
             success = run(
                 config,
                 'esptool.py',
                 '--chip', config.chip,
-                '--port', config.device,
+                '--port', device,
                 '--baud', config.flash_baud,
                 *config.stub_args,
                 '--before', 'default_reset',
@@ -466,13 +467,14 @@ def reset_partition(config: Config) -> None:
 def flash(config: Config) -> None:
     """Flash the microcontroller."""
     print_bold('Flashing...')
+    device = config.device
     with _pin_config(config):
         with _flash_mode(config):
             success = run(
                 config,
                 'esptool.py',
                 '--chip', config.chip,
-                '--port', config.device,
+                '--port', device,
                 '--baud', config.flash_baud,
                 *config.stub_args,
                 '--before', 'default_reset',
