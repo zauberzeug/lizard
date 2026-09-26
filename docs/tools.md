@@ -47,8 +47,9 @@ Use the serial monitor to read the current output and interactively send [Lizard
 ```
 
 Without a device path the monitor detects the serial device itself:
-on a Robot Brain that is the Jetson's UART to the microcontroller, on a development host the attached USB-UART bridge.
-If multiple bridges are attached, it lists them and asks which one to use.
+on a Robot Brain the Jetson's UART to the microcontroller comes first and any attached USB-UART bridges are listed as well,
+on a development host it is the attached USB-UART bridge.
+If several devices are found, it lists them and asks which one to use.
 Pass the device path explicitly when running non-interactively.
 Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see [Robot Brain](#robot-brain)).
 

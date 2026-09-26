@@ -1,8 +1,8 @@
 """Serial device discovery shared by the Lizard host tools.
 
 A Jetson Robot Brain reaches the microcontroller over a fixed platform UART that no
-enumeration can see, so it has to be derived from the L4T version; a development host uses a
-USB-UART bridge whose device node matches one of a few well-known patterns.
+enumeration can see, so it has to be derived from the L4T version; a USB-UART bridge, attached to
+a Jetson or to a development host, has a device node matching one of a few well-known patterns.
 """
 import functools
 import glob
@@ -33,8 +33,8 @@ PATTERNS = [
 def jetson_uart() -> Optional[str]:
     """Return the Jetson's UART to the microcontroller, or None when not running on a Jetson.
 
-    An unreadable L4T version raises instead of falling back to the USB patterns, which on a
-    Jetson match no microcontroller and would hide the real cause behind a missing-device error.
+    An unreadable L4T version raises instead of falling through to the USB patterns, which
+    would hide the real cause behind a missing-device error.
     """
     if not IS_JETSON:
         return None
@@ -48,11 +48,12 @@ def jetson_uart() -> Optional[str]:
 
 
 def find_devices() -> List[str]:
-    """Return the serial devices that could be a microcontroller."""
+    """Return the serial devices that could be a microcontroller, the Jetson's UART first."""
     uart = jetson_uart()
-    if uart is not None:
-        return [uart]
-    return sorted(path for pattern in PATTERNS for path in glob.glob(pattern))
+    usb = sorted(path for pattern in PATTERNS for path in glob.glob(pattern))
+    if uart is not None and Path(uart).exists():
+        return [uart] + usb
+    return usb
 
 
 @functools.lru_cache(maxsize=None)  # so a command reading the device twice asks at most once
