@@ -11,6 +11,7 @@ class Expander : public Module {
 private:
     unsigned long int last_message_millis = 0;
     bool ping_pending = false;
+    bool disconnected = false; // no serial driver to poll between disconnect() and flash()
     unsigned long boot_start_time;
 
     void deinstall();

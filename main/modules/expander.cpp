@@ -73,7 +73,7 @@ void Expander::step() {
     if (this->properties.at("is_ready")->boolean_value()) {
         this->ping();
         this->handle_messages();
-    } else {
+    } else if (!this->disconnected) {
         this->check_boot_progress();
     }
     this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
@@ -181,6 +181,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         Module::expect(arguments, 0);
         this->serial->require_sole_user(this->name);
         deinstall();
+        this->disconnected = true;
     } else if (method_name == "flash") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
@@ -215,6 +216,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
                                                     this->serial->baud_rate);
         delay(100);
         this->serial->reinitialize_after_flash();
+        this->disconnected = false;
         if (!success) {
             throw std::runtime_error("could not flash expander \"" + this->name + "\"");
         } else {
