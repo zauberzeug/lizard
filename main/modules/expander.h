@@ -16,6 +16,8 @@ private:
     std::vector<Module *> proxies;
 
     void deinstall();
+    void handle_ready();
+    void set_not_ready();
     void set_proxies_not_ready();
     void check_boot_progress();
     void ping();

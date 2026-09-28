@@ -616,7 +616,7 @@ Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shado
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
-The stop is always a zero *speed*, also after `power()`, so it switches the motors from torque to velocity control.
+The stop is always a zero _speed_, also after `power()`, so it switches the motors from torque to velocity control.
 Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
 The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
 The next drive command releases the hold and re-arms the switch.
@@ -777,7 +777,7 @@ Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shado
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
-The stop is always a zero *speed*, also after `power()`, so it switches the motors from torque to velocity control.
+The stop is always a zero _speed_, also after `power()`, so it switches the motors from torque to velocity control.
 Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
 The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
 The next drive command releases the hold and re-arms the switch.
@@ -1210,7 +1210,7 @@ The `disconnect()` method might be useful to access the other microcontroller on
 Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
 
 [Proxy](#proxy) modules are set up on the other microcontroller only once, when they are created.
-After `restart()`, `flash()` or a reboot of the other microcontroller, `is_ready` returns to `true`, but the proxies no longer exist there:
+After `restart()`, `flash()` or a reboot of the other microcontroller (recognized by its `Ready.` line), `is_ready` returns to `true`, but the proxies no longer exist there:
 their `is_ready` turns `false` and the main microcontroller needs a restart, e.g. `core.restart()`, to create them again.
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
@@ -1241,8 +1241,9 @@ Note that the proxy module forwards all method calls to the remote module.
 Proxies cannot be passed as arguments to other module constructors (e.g. as end stops for a motor axis), because the actual module only exists on the remote microcontroller.
 Declare the depending module on the same microcontroller instead.
 
-| Properties | Description                                                              | Data type |
-| ---------- | ------------------------------------------------------------------------ | --------- |
-| `is_ready` | Whether the remote module is set up; `false` until the expander is ready | `bool`    |
+| Properties | Description                                                    | Data type |
+| ---------- | -------------------------------------------------------------- | --------- |
+| `is_ready` | Whether the definition was sent in the expander's current boot | `bool`    |
 
-`is_ready` turns `false` again when the other microcontroller restarts or the connection is lost, because the remote module is not created again (see [Expander](#expander)).
+`is_ready` turns `false` again when the other microcontroller restarts or the connection is lost,
+because the main microcontroller cannot tell whether the remote module still exists (see [Expander](#expander)).

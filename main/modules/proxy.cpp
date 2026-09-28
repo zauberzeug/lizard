@@ -12,7 +12,6 @@ Proxy::Proxy(const std::string name,
     : Module(name), expander(expander) {
     this->properties = Module::get_module_defaults(module_type);
     this->properties["is_ready"] = std::make_shared<BooleanVariable>(false);
-    this->expander->add_proxy(this);
 
     if (this->expander->get_property("is_ready")->boolean_value()) {
         this->expander->send_proxy(name, module_type, arguments);
@@ -20,6 +19,7 @@ Proxy::Proxy(const std::string name,
     } else {
         echo("%s: Expander not ready", this->name.c_str());
     }
+    this->expander->add_proxy(this); // last: a throw above frees this proxy, and the expander must not keep a pointer to it
 }
 
 void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

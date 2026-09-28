@@ -99,16 +99,25 @@ void Expander::check_boot_progress() {
         this->last_message_millis = millis();
         echo("%s: %s", this->name.c_str(), line_buffer);
         if (strcmp("Ready.", line_buffer) == 0) {
-            this->properties.at("is_ready")->set_boolean_value(true);
-            echo("%s: Booting process completed successfully", this->name.c_str());
-            if (!this->proxies.empty()) {
-                // The other microcontroller boots with an empty module table; proxies are set up only once, when they are created (#117).
-                this->set_proxies_not_ready();
-                echo("%s: %d proxies were created before this boot and need a core restart", this->name.c_str(), (int)this->proxies.size());
-            }
+            this->handle_ready();
             break;
         }
     }
+}
+
+void Expander::handle_ready() {
+    this->properties.at("is_ready")->set_boolean_value(true);
+    echo("%s: Booting process completed successfully", this->name.c_str());
+    if (!this->proxies.empty()) {
+        // The other microcontroller boots with an empty module table; proxies are set up only once, when they are created (#117).
+        this->set_proxies_not_ready();
+        echo("%s: proxies created before this boot need a core restart (%d)", this->name.c_str(), (int)this->proxies.size());
+    }
+}
+
+void Expander::set_not_ready() {
+    this->properties.at("is_ready")->set_boolean_value(false);
+    this->set_proxies_not_ready();
 }
 
 void Expander::ping() {
@@ -124,8 +133,7 @@ void Expander::ping() {
         if (last_message_age >= ping_interval + ping_timeout) {
             echo("warning: expander %s connection lost", this->name.c_str());
             // TODO: trigger error code
-            this->properties.at("is_ready")->set_boolean_value(false);
-            this->set_proxies_not_ready();
+            this->set_not_ready();
             this->ping_pending = false;
         }
     }
@@ -142,8 +150,7 @@ void Expander::restart() {
     }
     this->serial->flush();
     this->boot_start_time = millis();
-    this->properties.at("is_ready")->set_boolean_value(false);
-    this->set_proxies_not_ready();
+    this->set_not_ready();
 }
 
 void Expander::set_proxies_not_ready() {
@@ -176,6 +183,11 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
             this->message_handler(&line_buffer[2], false, true);
         } else if (strcmp("\"__PONG__\"", line_buffer) == 0) {
             // No echo for pong
+        } else if (strcmp("Ready.", line_buffer) == 0) {
+            // The other microcontroller rebooted on its own (panic, watchdog, brown-out, EN button, core.restart() via run()),
+            // usually faster than the ping timeout, so the connection never counted as lost.
+            echo("%s: %s", this->name.c_str(), line_buffer);
+            this->handle_ready();
         } else {
             echo("%s: %s", this->name.c_str(), line_buffer);
         }
@@ -266,8 +278,7 @@ void Expander::check_strapping_pins(const char *buffer) {
 
 void Expander::deinstall() {
     this->serial->deinstall();
-    this->properties.at("is_ready")->set_boolean_value(false);
-    this->set_proxies_not_ready();
+    this->set_not_ready();
     if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(this->boot_pin);
         gpio_reset_pin(this->enable_pin);
