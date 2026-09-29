@@ -5,7 +5,8 @@
 
 // Binary telemetry frame. Body: 0x00 | src | id | seq | millis[4] | len | payload[len] | crc16[2]
 // (CRC-16/CCITT-FALSE over everything before it). On the console the body travels as 0x00 | COBS(body) | 0x00;
-// on the serial bus (line based, payload is a C string) as 0x01 | byte-stuffed body without the leading 0x00.
+// on the serial bus (line based, payload is a C string) as 0x01 | byte-stuffed body without the leading 0x00,
+// from an expander to its core as the same with only line ends escaped, followed by '\n'.
 namespace frame {
 
 constexpr size_t MAX_PAYLOAD = 200;
@@ -30,7 +31,11 @@ void write(uint8_t src, uint8_t id, uint8_t seq, uint32_t millis, const uint8_t 
 // bus transport: 0x01 marker plus the body (without its leading 0x00) with 0x00/0x09/0x0a/0x0d/0x20/0x7d escaped
 // as 0x7d, byte ^ 0x50; the result never contains those bytes, so it survives the bus' C-string handling and strip()
 size_t bus_stuff(const uint8_t *body, size_t length, char *output, size_t capacity);
-// inverse of bus_stuff; returns the body length (with leading 0x00 restored) or 0 on malformed input
+// expander transport: like bus_stuff, but only 0x0a/0x0d/0x7d are escaped, because the expander link reads raw lines
+size_t line_stuff(const uint8_t *body, size_t length, char *output, size_t capacity);
+// inverse of bus_stuff and line_stuff; returns the body length (with leading 0x00 restored) or 0 on malformed input
 size_t bus_unstuff(const char *input, size_t length, uint8_t *body, size_t capacity);
+// write a complete body to the console as one line: line_stuff(body) | '\n'
+void write_console_line(const uint8_t *body, size_t length);
 
 } // namespace frame

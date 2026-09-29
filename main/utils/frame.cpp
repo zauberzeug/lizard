@@ -88,11 +88,15 @@ void write(uint8_t src, uint8_t id, uint8_t seq, uint32_t millis, const uint8_t 
     write_console(body, build_body(src, id, seq, millis, payload, length, body));
 }
 
-static bool needs_escape(uint8_t byte) {
+static bool needs_bus_escape(uint8_t byte) {
     return byte == 0x00 || byte == 0x09 || byte == 0x0a || byte == 0x0d || byte == 0x20 || byte == BUS_ESCAPE;
 }
 
-size_t bus_stuff(const uint8_t *body, size_t length, char *output, size_t capacity) {
+static bool needs_line_escape(uint8_t byte) {
+    return byte == 0x0a || byte == 0x0d || byte == BUS_ESCAPE;
+}
+
+static size_t stuff(const uint8_t *body, size_t length, char *output, size_t capacity, bool (*needs_escape)(uint8_t)) {
     size_t pos = 0;
     if (capacity < 2) {
         return 0;
@@ -116,6 +120,14 @@ size_t bus_stuff(const uint8_t *body, size_t length, char *output, size_t capaci
     return pos;
 }
 
+size_t bus_stuff(const uint8_t *body, size_t length, char *output, size_t capacity) {
+    return stuff(body, length, output, capacity, needs_bus_escape);
+}
+
+size_t line_stuff(const uint8_t *body, size_t length, char *output, size_t capacity) {
+    return stuff(body, length, output, capacity, needs_line_escape);
+}
+
 size_t bus_unstuff(const char *input, size_t length, uint8_t *body, size_t capacity) {
     if (length < 1 || static_cast<uint8_t>(input[0]) != BUS_MARKER || capacity < 1) {
         return 0;
@@ -136,6 +148,22 @@ size_t bus_unstuff(const char *input, size_t length, uint8_t *body, size_t capac
         body[pos++] = byte;
     }
     return pos;
+}
+
+void write_console_line(const uint8_t *body, size_t length) {
+    static char line[2 * MAX_BODY + 2];
+    size_t total = line_stuff(body, length, line, sizeof(line) - 1);
+    if (total == 0) {
+        return;
+    }
+    line[total++] = '\n';
+    size_t sent = 0;
+    while (sent < total) { // raw bytes past the VFS, like write_console
+        const int written = uart_tx_chars(UART_NUM_0, &line[sent], total - sent);
+        if (written > 0) {
+            sent += written;
+        }
+    }
 }
 
 } // namespace frame
