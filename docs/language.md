@@ -73,6 +73,25 @@ Some module properties are meant to be written to:
 motor.reversed = true
 ```
 
+**Properties: declaration and nesting**
+
+Some modules accept property declarations, which work like variable declarations:
+
+```
+float x.level = 0.5
+```
+
+A second name after a dot declares a nested property:
+
+```
+bool arm.motor.enabled = false
+```
+
+Nested properties are read like any other property, e.g. in `when arm.motor.enabled == false then ...` or in `core.output("arm.motor.position:3")`.
+Modules that do not accept declarations report an error.
+A [proxy](module_reference.md#proxy) accepts declarations without nesting, so rules can use a property before the remote module broadcasts it:
+it adds unknown properties and sets known ones of the same type to the declared value, without sending anything to the remote module.
+
 **Routines: definition and call**
 
 Routines have a name and contain a list of actions:
