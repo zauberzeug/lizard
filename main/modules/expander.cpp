@@ -384,14 +384,12 @@ void Expander::handle_telemetry_line(const char *line, const int length) {
             return;
         }
         const Variable_ptr variable = Global::get_module(proxy_name)->get_property(layout_line.name.substr(dot + 1));
-        if (!telemetry::type_matches(*variable, layout_line.type)) {
-            return;
-        }
         std::vector<Variable *> &variables = this->telemetry_mapped[layout_line.frame_id];
         if (variables.size() <= layout_line.index) {
             variables.resize(layout_line.index + 1, nullptr);
         }
-        variables[layout_line.index] = variable.get();
+        // a property of another type keeps its value; the rest of the frame is still mapped
+        variables[layout_line.index] = telemetry::type_matches(*variable, layout_line.type) ? variable.get() : nullptr;
         this->telemetry_slots[layout_line.frame_id] =
             telemetry::map_frame(this->telemetry_layout.frames[layout_line.frame_id], variables);
         return;

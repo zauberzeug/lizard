@@ -241,7 +241,10 @@ bool Layout::set(const LayoutLine &line) {
     std::vector<char> &types = this->frames[line.frame_id];
     // with the field count known, a frame stays incomplete until every one of its lines arrived, also the last
     const size_t size = line.count > 0 ? line.count : std::max(types.size(), line.index + 1);
-    if (types.size() != size) {
+    if (line.count > 0 && types.size() != size) {
+        types.assign(size, 0); // another field count: the frame was defined anew, its old types are void
+        changed = true;
+    } else if (types.size() != size) {
         types.resize(size, 0);
         changed = true;
     }

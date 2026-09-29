@@ -88,6 +88,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->telemetry_mismatch = this->properties.at("telemetry_mismatch");
     this->telemetry_gaps = this->properties.at("telemetry_gaps");
     this->telemetry_duplicates = this->properties.at("telemetry_duplicates");
+    this->frame_overwrites_property = this->properties.at("frame_overwrites");
+    this->frame_drops_property = this->properties.at("frame_drops");
     this->serial->enable_line_detection();
 
     // everything that can throw comes before the task exists: an exception from a constructor unwinds without running
@@ -159,8 +161,8 @@ void SerialBus::step() {
     }
 
     // the communication task counts in atomics, the properties belong to the main task
-    this->properties.at("frame_overwrites")->set_integer_value(this->frame_overwrites.load());
-    this->properties.at("frame_drops")->set_integer_value(this->frame_drops.load());
+    this->frame_overwrites_property->set_integer_value(this->frame_overwrites.load());
+    this->frame_drops_property->set_integer_value(this->frame_drops.load());
 
     Module::step();
 }
@@ -844,17 +846,8 @@ void SerialBus::request_telemetry_orders(BusTelemetry *listener) {
     }
 }
 
-void SerialBus::renew_telemetry(const uint8_t peer_id) {
-    const auto last = this->telemetry_round_millis.find(peer_id);
-    if (last != this->telemetry_round_millis.end() && millis_since(last->second) < 5000) {
-        return;
-    }
-    this->start_telemetry_round(peer_id);
-}
-
 void SerialBus::start_telemetry_round(const uint8_t peer_id) {
     // a clear first, so that a peer that kept running does not stream the frames of an outdated startup
-    this->telemetry_round_millis[peer_id] = millis();
     this->peer_layouts[peer_id].clear();
     for (auto it = this->last_seq.begin(); it != this->last_seq.end();) {
         it = (it->first >> 8) == peer_id ? this->last_seq.erase(it) : std::next(it); // new frames count from anew

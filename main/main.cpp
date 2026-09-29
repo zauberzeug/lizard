@@ -411,6 +411,28 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     }
 }
 
+// Whether `text` ends inside a string literal, i.e. has an odd number of quotes outside comments.
+static bool has_open_string(const std::string &text) {
+    bool open = false;
+    for (size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (open) {
+            if (c == '\\') {
+                ++i; // an escaped character
+            } else if (c == '"') {
+                open = false;
+            }
+        } else if (c == '"') {
+            open = true;
+        } else if (c == '#') {
+            while (i < text.size() && text[i] != '\n') {
+                ++i; // a comment runs to the end of its line
+            }
+        }
+    }
+    return open;
+}
+
 // Goes through the startup script statement by statement, straight from NVS, so that neither the script nor one parse
 // tree for all of it has to fit into the heap. A statement ends where owl stops asking for more input, so rules and
 // routines may still span lines. Error positions refer to the whole script, as with the former single parse.
@@ -425,12 +447,20 @@ static bool walk_startup(const bool run) {
         if (!ok) {
             return;
         }
-        if (statement.empty()) {
+        const bool continued = !statement.empty();
+        if (!continued) {
             statement_offset = offset;
         }
         statement += line;
         statement += '\n';
         offset += line.size() + 1;
+        // an open block or string ends only in a line with "end" or a quote, so other lines need no new parse
+        if (continued && line.find("end") == std::string::npos && line.find('"') == std::string::npos) {
+            return;
+        }
+        if (has_open_string(statement)) {
+            return; // a string that continues on the next line
+        }
         auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
         struct source_range range;
         if (tree && owl_tree_get_error(tree.get(), &range) == ERROR_MORE_INPUT_NEEDED) {
@@ -456,12 +486,21 @@ static bool walk_startup(const bool run) {
     return ok;
 }
 
-// Like the former single parse of the whole script: a syntax error anywhere means that nothing runs.
+// Like the former single parse of the whole script: a syntax error anywhere means that nothing runs, and a script that
+// cannot be read from storage is reported and skipped. A statement that fails to parse while running (only a lack of
+// heap can cause that after the check pass) aborts the startup through the boot guard, so that no half of it runs.
 static void run_startup() {
     InterpreterLock lock;
     core_module->keep_alive();
-    if (walk_startup(false)) {
-        walk_startup(true);
+    bool valid = false;
+    try {
+        valid = walk_startup(false);
+    } catch (const std::exception &e) {
+        echo("error while reading startup script from storage: %s", e.what());
+        return;
+    }
+    if (valid && !walk_startup(true)) {
+        throw std::runtime_error("a statement of the startup script could not be parsed while running");
     }
 }
 

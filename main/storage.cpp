@@ -27,13 +27,15 @@ void write(const std::string &ns, const std::string &key, const std::string &val
     if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
         throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
     }
+    // the value only starts the message: a whole chunk would make it too long to be printed at all
+    const std::string shown = value.size() > 40 ? value.substr(0, 40) + "..." : value;
     if ((err = nvs_set_str(handle, key.c_str(), value.c_str())) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(err)) + ")");
+        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + shown + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     if ((err = nvs_commit(handle)) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(err)) + ")");
+        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + shown + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     nvs_close(handle);
 }
@@ -175,11 +177,15 @@ void Storage::read_startup_lines(const std::function<void(const std::string &lin
 
 std::uint16_t Storage::startup_checksum() {
     std::uint16_t checksum = 0;
-    Storage::read_startup([&checksum](const std::string &piece) {
-        for (const char c : piece) {
-            checksum += static_cast<std::uint8_t>(c);
-        }
-    });
+    try {
+        Storage::read_startup([&checksum](const std::string &piece) {
+            for (const char c : piece) {
+                checksum += static_cast<std::uint8_t>(c);
+            }
+        });
+    } catch (const std::runtime_error &e) {
+        echo("warning: %s, the checksum covers only what could be read", e.what());
+    }
     return checksum;
 }
 
@@ -189,7 +195,13 @@ void Storage::begin_edit(const bool keep_current) {
     }
     std::vector<std::string> pieces;
     if (keep_current) {
-        Storage::read_startup([&pieces](const std::string &piece) { pieces.push_back(piece); });
+        try {
+            Storage::read_startup([&pieces](const std::string &piece) { pieces.push_back(piece); });
+        } catch (const std::runtime_error &e) {
+            // as before, when an unreadable script left the RAM copy empty: the edit starts from nothing
+            echo("warning: %s, editing an empty startup script", e.what());
+            pieces.clear();
+        }
     }
     Storage::edit_pieces.swap(pieces);
     Storage::editing = true;
@@ -217,8 +229,19 @@ void Storage::append_to_edit(const char *text, size_t length) {
 
 void Storage::append_to_startup(const std::string &line) {
     Storage::begin_edit(true);
-    Storage::append_to_edit(line.data(), line.size());
-    Storage::append_to_edit("\n", 1);
+    // all or nothing: a line that does not fit into the heap leaves the script as it was
+    const size_t pieces = Storage::edit_pieces.size();
+    const size_t last_size = pieces ? Storage::edit_pieces.back().size() : 0;
+    try {
+        Storage::append_to_edit(line.data(), line.size());
+        Storage::append_to_edit("\n", 1);
+    } catch (...) {
+        Storage::edit_pieces.resize(pieces);
+        if (pieces) {
+            Storage::edit_pieces.back().resize(last_size);
+        }
+        throw;
+    }
 }
 
 void Storage::remove_from_startup(const std::string &prefix) {
@@ -245,11 +268,15 @@ void Storage::remove_from_startup(const std::string &prefix) {
 }
 
 void Storage::print_startup(const std::string &prefix) {
-    Storage::read_startup_lines([&prefix](const std::string &line) {
-        if (starts_with(line, prefix)) {
-            echo("%s", line.c_str());
-        }
-    });
+    try {
+        Storage::read_startup_lines([&prefix](const std::string &line) {
+            if (starts_with(line, prefix)) {
+                echo("%s", line.c_str());
+            }
+        });
+    } catch (const std::runtime_error &e) {
+        echo("warning: %s", e.what());
+    }
 }
 
 void Storage::save_startup() {

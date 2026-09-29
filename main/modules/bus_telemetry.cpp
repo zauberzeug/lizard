@@ -57,7 +57,9 @@ void BusTelemetry::step() {
         const unsigned long renew_ms = std::max<unsigned long>(RENEW_MIN_MS, 10 * this->interval);
         const unsigned long quiet = this->frame_seen ? millis_since(this->last_frame_millis) : millis_since(this->orders_millis);
         if (quiet > renew_ms && millis_since(this->orders_millis) > renew_ms) {
-            this->bus->renew_telemetry(this->peer_id);
+            // the same order again: a peer that still has the frame only announces its layout again, one that lost it
+            // defines it anew; other modules' frames of the same peer stay untouched
+            this->send_orders();
         }
     }
     this->age->set_integer_value(this->frame_seen ? millis_since(this->last_frame_millis) : millis());
@@ -130,10 +132,11 @@ void BusTelemetry::reset_layout() {
 
 void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const telemetry::Layout &layout) {
     if (this->declares(line.name)) {
-        Variable *const variable = this->properties.at(line.name).get();
+        Variable *variable = this->properties.at(line.name).get();
         if (!telemetry::type_matches(*variable, line.type)) {
+            // the mirror keeps its value, the rest of the frame is still mapped
             echo("warning: %s: node %u sends \"%s\" as type %c", this->name.c_str(), this->peer_id, line.name.c_str(), line.type);
-            return;
+            variable = nullptr;
         }
         std::vector<Variable *> &variables = this->mapped[line.frame_id];
         if (variables.size() <= line.index) {
@@ -153,8 +156,8 @@ void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const t
 
 bool BusTelemetry::handle_frame(const uint8_t frame_id, const uint8_t seq, const uint32_t peer_millis, const uint8_t *payload) {
     const auto it = this->slots.find(frame_id);
-    if (it == this->slots.end()) {
-        return false;
+    if (it == this->slots.end() || it->second.empty()) {
+        return false; // not ours, or its layout is not complete yet
     }
     telemetry::apply(it->second, payload);
     this->frame_seen = true;

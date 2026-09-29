@@ -35,7 +35,11 @@ Core::Core(const std::string name) : Module(name) {
 void Core::step() {
     this->properties.at("millis")->set_integer_value(millis());
     this->properties.at("heap")->set_integer_value(xPortGetFreeHeapSize());
-    this->properties.at("heap_largest")->set_integer_value(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    static unsigned steps = 0;
+    if (steps++ % 50 == 0) {
+        // walks every free block with interrupts masked, so twice a second, not every step
+        this->properties.at("heap_largest")->set_integer_value(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    }
     this->properties.at("heap_min")->set_integer_value(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
     this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
     Module::step();
@@ -342,6 +346,9 @@ void Core::define_telemetry(const std::vector<ConstExpression_ptr> &arguments) {
     }
     if (fields.empty()) {
         throw std::runtime_error("telemetry needs at least one field");
+    }
+    if (fields.size() > 256) {
+        throw std::runtime_error("too many fields for one telemetry frame (at most 256)");
     }
     if (telemetry::payload_size(fields) > telemetry::MAX_PAYLOAD) {
         throw std::runtime_error("too many fields for one telemetry frame (" + std::to_string(telemetry::payload_size(fields)) +
