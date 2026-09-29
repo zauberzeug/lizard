@@ -9,8 +9,8 @@
 
 // Telemetry frames: a frame is the state of a list of fields from one step, sent as the text line "~<base64(body)>".
 // body = id | seq | millis[4] | payload | crc16[2]; the payload holds the numeric fields in definition order
-// (little-endian) and then the bools as bits. A layout line "__LAYOUT__v1 <frame>.<index> <name>:<type>" per field
-// tells readers how to decode it. Types: f float32, i int32, ? bit, e float16 (experimental).
+// (little-endian) and then the bools as bits. A layout line "__LAYOUT__v1 <frame>.<index>/<count> <name>:<type>" per
+// field tells readers how to decode it; <count> lets them notice a lost last line. Types: f float32, i int32, ? bit.
 class Module;
 
 namespace telemetry {
@@ -32,13 +32,11 @@ struct Field {
     char type;
 };
 
-char type_for(const ConstVariable_ptr &variable, bool compact);
+char type_for(const ConstVariable_ptr &variable);
 size_t field_size(char type);
 size_t payload_size(const std::vector<Field> &fields);
 
 uint16_t crc16(const uint8_t *data, size_t length);
-uint16_t float_to_half(float value);
-float half_to_float(uint16_t half);
 
 // the fields' current values, numeric ones first, then the bools as bits; returns the payload length
 size_t pack(const std::vector<Field> &fields, uint8_t *payload, size_t capacity);
@@ -48,22 +46,13 @@ size_t encode_line(const uint8_t *body, size_t length, char *line, size_t capaci
 // a "~<base64>" line (without "@xx") with a valid CRC; returns the body length, 0 if it is not a frame
 size_t decode_line(const char *line, size_t length, uint8_t *body, size_t capacity);
 
-// the same through mbedtls' constant-time base64 and a bitwise CRC (for comparison)
-size_t mbedtls_encode_line(const uint8_t *body, size_t length, char *line, size_t capacity);
-size_t mbedtls_decode_line(const char *line, size_t length, uint8_t *body, size_t capacity);
-uint16_t bitwise_crc16(const uint8_t *data, size_t length);
-
-// #290's encodings, for comparison: COBS for the console, byte stuffing for bus (00 09 0a 0d 20 7d) and expander lines (0a 0d 7d)
-size_t cobs_encode(const uint8_t *input, size_t length, uint8_t *output);
-size_t stuff(const uint8_t *body, size_t length, char *output, size_t capacity, bool line_only);
-size_t unstuff(const char *input, size_t length, uint8_t *body, size_t capacity);
-
-int format_layout(char *buffer, size_t capacity, uint8_t frame_id, size_t index, const std::string &name, char type);
+int format_layout(char *buffer, size_t capacity, uint8_t frame_id, size_t index, size_t count, const std::string &name, char type);
 
 struct LayoutLine {
     int version;
     uint8_t frame_id;
     size_t index;
+    size_t count; // number of fields in the frame, 0 if the line does not say
     std::string name;
     char type;
 };

@@ -15,8 +15,6 @@
 #include "modules/core.h"
 #include "modules/expander.h"
 #include "modules/module.h"
-#include "esp_heap_caps.h"
-#include "esp_timer.h"
 #include "nvs_flash.h"
 #include "proxy.h"
 #include "rom/gpio.h"
@@ -347,6 +345,44 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
+// Reports a parse error of `text`; `offset` is where `text` starts in a longer script, so positions refer to that script.
+static bool check_parse(owl_tree *tree, const char *text, const size_t offset) {
+    if (!tree) {
+        echo("error: allocation failure while parsing");
+        return false;
+    }
+    struct source_range range;
+    switch (owl_tree_get_error(tree, &range)) {
+    case ERROR_NONE:
+        return true;
+    case ERROR_INVALID_FILE:
+        echo("error: invalid file");
+        break;
+    case ERROR_INVALID_OPTIONS:
+        echo("error: invalid options");
+        break;
+    case ERROR_INVALID_TOKEN:
+        echo("error: invalid token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
+             std::string(text, range.start, range.end - range.start).c_str());
+        break;
+    case ERROR_UNEXPECTED_TOKEN:
+        echo("error: unexpected token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
+             std::string(text, range.start, range.end - range.start).c_str());
+        break;
+    case ERROR_MORE_INPUT_NEEDED:
+        echo("error: more input needed at range %zu %zu", offset + range.start, offset + range.end);
+        break;
+    case ERROR_ALLOCATION_FAILURE:
+        echo("error: allocation failure while parsing");
+        break;
+    default:
+        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
+        echo("error: unknown parse error");
+        break;
+    }
+    return false;
+}
+
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     InterpreterLock lock;
     if (trigger_keep_alive) {
@@ -358,52 +394,74 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
         echo(">> %s", line);
         tic();
     }
-    const size_t free_before_parse = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(line), owl_tree_destroy);
-    core_module->record_parse(static_cast<int64_t>(free_before_parse) - static_cast<int64_t>(heap_caps_get_free_size(MALLOC_CAP_8BIT)));
     if (debug) {
         toc("Tree creation");
     }
-    if (!tree) {
-        echo("error: allocation failure while parsing");
+    if (!check_parse(tree.get(), line, 0)) {
         return;
     }
-    struct source_range range;
-    switch (owl_tree_get_error(tree.get(), &range)) {
-    case ERROR_INVALID_FILE:
-        echo("error: invalid file");
-        break;
-    case ERROR_INVALID_OPTIONS:
-        echo("error: invalid options");
-        break;
-    case ERROR_INVALID_TOKEN:
-        echo("error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(line, range.start, range.end - range.start).c_str());
-        break;
-    case ERROR_UNEXPECTED_TOKEN:
-        echo("error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(line, range.start, range.end - range.start).c_str());
-        break;
-    case ERROR_MORE_INPUT_NEEDED:
-        echo("error: more input needed at range %zu %zu", range.start, range.end);
-        break;
-    case ERROR_ALLOCATION_FAILURE:
-        echo("error: allocation failure while parsing");
-        break;
-    case ERROR_NONE:
-        if (debug) {
-            owl_tree_print(tree.get());
-            tic();
+    if (debug) {
+        owl_tree_print(tree.get());
+        tic();
+    }
+    process_tree(tree.get(), from_expander);
+    if (debug) {
+        toc("Tree traversal");
+    }
+}
+
+// Goes through the startup script statement by statement, straight from NVS, so that neither the script nor one parse
+// tree for all of it has to fit into the heap. A statement ends where owl stops asking for more input, so rules and
+// routines may still span lines. Error positions refer to the whole script, as with the former single parse.
+// Returns false after reporting the first syntax error; with `run`, each statement runs right after its parse and an
+// exception aborts the rest.
+static bool walk_startup(const bool run) {
+    std::string statement;
+    size_t statement_offset = 0;
+    size_t offset = 0;
+    bool ok = true;
+    Storage::read_startup_lines([&](const std::string &line) {
+        if (!ok) {
+            return;
         }
-        process_tree(tree.get(), from_expander);
-        if (debug) {
-            toc("Tree traversal");
+        if (statement.empty()) {
+            statement_offset = offset;
         }
-        break;
-    default:
-        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
-        echo("error: unknown parse error");
-        break;
+        statement += line;
+        statement += '\n';
+        offset += line.size() + 1;
+        auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
+        struct source_range range;
+        if (tree && owl_tree_get_error(tree.get(), &range) == ERROR_MORE_INPUT_NEEDED) {
+            return; // a rule or routine continues on the next line
+        }
+        if (!check_parse(tree.get(), statement.c_str(), statement_offset)) {
+            ok = false;
+            return;
+        }
+        if (run) {
+            process_tree(tree.get(), false);
+        }
+        statement.clear();
+    });
+    if (ok && !statement.empty()) {
+        // the script ends inside a statement
+        auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
+        ok = check_parse(tree.get(), statement.c_str(), statement_offset);
+        if (ok && run) {
+            process_tree(tree.get(), false);
+        }
+    }
+    return ok;
+}
+
+// Like the former single parse of the whole script: a syntax error anywhere means that nothing runs.
+static void run_startup() {
+    InterpreterLock lock;
+    core_module->keep_alive();
+    if (walk_startup(false)) {
+        walk_startup(true);
     }
 }
 
@@ -412,7 +470,7 @@ void process_line(const char *line, const int len, const bool trigger_keep_alive
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
         case '+':
-            Storage::append_to_startup(line + 2);
+            Storage::append_to_startup(std::string(line + 2));
             break;
         case '-':
             Storage::remove_from_startup(line + 2);
@@ -560,7 +618,7 @@ void app_main() {
 
     try {
         if (boot_guard::should_run_startup()) {
-            process_lizard(Storage::startup.c_str());
+            run_startup();
         }
     } catch (const std::exception &e) {
         boot_guard::startup_failed(e.what());
@@ -586,14 +644,12 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
-        const int64_t modules_start = esp_timer_get_time();
         for (auto const &[module_name, module] : Global::modules) {
             if (module != core_module) {
                 run_step(module);
             }
         }
         run_step(core_module);
-        const int64_t rules_start = esp_timer_get_time();
 
         for (auto const &rule : Global::rules) {
             InterpreterLock lock;
@@ -615,8 +671,6 @@ void app_main() {
                 echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
             }
         }
-
-        core_module->record_step_timing(rules_start - modules_start, esp_timer_get_time() - rules_start);
 
         // telemetry frames carry the state at the end of the step, after modules, rules and routines
         {

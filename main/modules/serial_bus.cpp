@@ -7,7 +7,6 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "bus_telemetry.h"
-#include "core.h"
 #include "module_helpers.h"
 #include "serial.h"
 #include <esp_timer.h>
@@ -40,8 +39,6 @@ static constexpr size_t DONE_STAMP_FIELDS = 3; // T3, T3-T2, sequence number of 
 static constexpr int64_t SYNC_ACCEPT_ACCURACY_US = 500;
 static constexpr unsigned long SYNC_WINDOW_MS = 2000;
 
-extern Core_ptr core_module;
-
 SerialBus *SerialBus::executing_bus = nullptr;
 uint8_t SerialBus::executing_sender = 0;
 
@@ -70,23 +67,15 @@ REGISTER_MODULE(SerialBus, &create_serial_bus)
 
 const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
     return {
-        // telemetry experiment: peer-side mode and counters of both sides
-        {"frame_mode", std::make_shared<IntegerVariable>(0)},
-        {"polls", std::make_shared<IntegerVariable>(0)},
+        // telemetry counters: peer side (frames replaced in their mailbox slot or dropped) and coordinator side
         {"frame_overwrites", std::make_shared<IntegerVariable>(0)},
         {"frame_drops", std::make_shared<IntegerVariable>(0)},
-        {"poll_lock_us_max", std::make_shared<IntegerVariable>(0)},
-        {"layout_wait_us_max", std::make_shared<IntegerVariable>(0)},
         {"telemetry_frames", std::make_shared<IntegerVariable>(0)},
         {"telemetry_errors", std::make_shared<IntegerVariable>(0)},
         {"telemetry_unclaimed", std::make_shared<IntegerVariable>(0)},
         {"telemetry_mismatch", std::make_shared<IntegerVariable>(0)},
         {"telemetry_gaps", std::make_shared<IntegerVariable>(0)},
         {"telemetry_duplicates", std::make_shared<IntegerVariable>(0)},
-        {"telemetry_rx_us_max", std::make_shared<IntegerVariable>(0)},
-        {"telemetry_rx_us_total", std::make_shared<IntegerVariable>(0)},
-        {"text_rx_count", std::make_shared<IntegerVariable>(0)}, // "!" control lines from peers, e.g. "!!" pushes
-        {"text_rx_us_total", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -99,10 +88,6 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->telemetry_mismatch = this->properties.at("telemetry_mismatch");
     this->telemetry_gaps = this->properties.at("telemetry_gaps");
     this->telemetry_duplicates = this->properties.at("telemetry_duplicates");
-    this->telemetry_rx_us_total = this->properties.at("telemetry_rx_us_total");
-    this->telemetry_rx_us_max = this->properties.at("telemetry_rx_us_max");
-    this->text_rx_count = this->properties.at("text_rx_count");
-    this->text_rx_us_total = this->properties.at("text_rx_us_total");
     this->serial->enable_line_detection();
 
     // everything that can throw comes before the task exists: an exception from a constructor unwinds without running
@@ -174,12 +159,8 @@ void SerialBus::step() {
     }
 
     // the communication task counts in atomics, the properties belong to the main task
-    this->frame_mode_value = static_cast<int>(this->properties.at("frame_mode")->integer_value());
-    this->properties.at("polls")->set_integer_value(this->polls_received.load());
     this->properties.at("frame_overwrites")->set_integer_value(this->frame_overwrites.load());
     this->properties.at("frame_drops")->set_integer_value(this->frame_drops.load());
-    this->properties.at("poll_lock_us_max")->set_integer_value(this->poll_lock_us_max.load());
-    this->properties.at("layout_wait_us_max")->set_integer_value(this->layout_wait_us_max);
 
     Module::step();
 }
@@ -315,11 +296,7 @@ void SerialBus::communication_loop(void *param) {
                         bus->ready_pending = false;
                     }
                     bus->send_outgoing_queue();
-                    if (bus->frame_mode_value >= 2 && core_module) {
-                        core_module->build_frames_for_poll(bus, bus->requesting_node, bus->frame_mode_value == 2);
-                    } else {
-                        bus->send_frame_slots(bus->requesting_node);
-                    }
+                    bus->send_frame_slots(bus->requesting_node);
                     char done[sizeof(DONE_CMD) + DONE_STAMP_FIELDS * (MAX_STAMP_DIGITS + 1)];
                     int done_len = std::snprintf(done, sizeof(done), "%s", DONE_CMD);
                     if (bus->time_sync_enabled) {
@@ -420,7 +397,6 @@ void SerialBus::process_uart() {
                 this->poll_received_seq = seq < 0 ? 0 : seq;
                 this->requesting_node = message.sender;
                 this->coordinator_id = message.sender;
-                this->polls_received++;
                 continue;
             }
         }
@@ -652,13 +628,8 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
 
     // process control commands starting with "!" silently
     if (message.payload[0] == '!') {
-        const int64_t start = esp_timer_get_time();
-        {
-            ExecutingCommand executing(this, message.sender);
-            process_line(message.payload, message.length, false);
-        }
-        this->count(this->text_rx_count);
-        this->count(this->text_rx_us_total, esp_timer_get_time() - start);
+        ExecutingCommand executing(this, message.sender);
+        process_line(message.payload, message.length, false);
         return;
     }
 
@@ -833,38 +804,11 @@ void SerialBus::send_frame_slots(const uint8_t requester) {
     }
 }
 
-bool SerialBus::try_send_frame(const uint8_t destination, const char *line, const size_t length) {
-    if (length >= PAYLOAD_CAPACITY) {
-        this->frame_drops++;
-        return false;
-    }
-    OutgoingMessage message{destination, length, {}};
-    memcpy(message.payload, line, length);
-    message.payload[length] = '\0';
-    if (xQueueSend(this->outbound_queue, &message, 0) != pdTRUE) {
-        this->frame_drops++;
-        return false;
-    }
-    return true;
-}
-
-void SerialBus::send_frame_now(const uint8_t destination, const char *line, const size_t length) const {
-    this->send_message(destination, line, length);
-}
-
 void SerialBus::send_layout(const uint8_t destination, const char *line, const size_t length) {
-    const int64_t start = esp_timer_get_time();
     try {
         this->enqueue_outgoing_message(destination, line, length);
     } catch (const std::runtime_error &e) {
         this->frame_drops++;
-    }
-    this->layout_wait_us_max = std::max(this->layout_wait_us_max, esp_timer_get_time() - start);
-}
-
-void SerialBus::record_poll_lock_wait(const int64_t us) {
-    int64_t previous = this->poll_lock_us_max.load();
-    while (us > previous && !this->poll_lock_us_max.compare_exchange_weak(previous, us)) {
     }
 }
 
@@ -922,7 +866,6 @@ void SerialBus::count(const Variable_ptr &counter, const int64_t increment) {
 }
 
 void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
-    const int64_t start = esp_timer_get_time();
     static uint8_t body[telemetry::MAX_BODY + 3];
     const size_t length = telemetry::decode_line(message.payload, message.length, body, sizeof(body));
     if (length == 0) {
@@ -966,11 +909,6 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
     }
     if (!claimed) {
         this->count(this->telemetry_unclaimed);
-    }
-    const int64_t elapsed = esp_timer_get_time() - start;
-    this->count(this->telemetry_rx_us_total, elapsed);
-    if (elapsed > this->telemetry_rx_us_max->integer_value()) {
-        this->telemetry_rx_us_max->set_integer_value(elapsed);
     }
 }
 

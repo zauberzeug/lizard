@@ -22,8 +22,7 @@ struct TelemetryFrame {
     uint8_t destination;    // the node that ordered it, 0 for the node's own frame
     unsigned long last_millis = 0;
     uint8_t seq = 0;
-    bool stored = false;          // a bus slot holds a frame of this id
-    uint32_t last_poll_count = 0; // frame mode 1: the poll that triggered the last frame
+    bool stored = false; // a bus slot holds a frame of this id
 };
 
 class Core;
@@ -35,6 +34,7 @@ private:
     mutable bool output_overflow_reported = false;
     unsigned long int last_message_millis = 0;
 
+    Variable_ptr telemetry_info_rate; // resolved once: a lookup by this name would allocate a temporary string every step
     std::vector<TelemetryFrame> telemetry_frames;
     std::deque<std::pair<uint8_t, size_t>> pending_layout; // frame id and field index still to announce
     void define_telemetry(const std::vector<ConstExpression_ptr> &arguments);
@@ -53,12 +53,6 @@ public:
     void set(std::string property_name, double value);
     std::string get_output() const override;
     void keep_alive();
-    // experiment: microseconds the last step spent in module steps and in rules plus routines
-    void record_step_timing(int64_t modules_us, int64_t rules_us);
-    void record_parse(int64_t bytes);
     // builds the frames that are due; runs at the end of every main loop iteration
     void emit_telemetry();
-    // frame modes 2 and 3: the bus communication task builds the frames due for `requester` while answering its poll,
-    // with the interpreter lock (2) or without it (3, to show the race)
-    void build_frames_for_poll(SerialBus *bus, uint8_t requester, bool locked = true);
 };

@@ -3,7 +3,6 @@
 #include "../global.h"
 #include "../storage.h"
 #include "../utils/bus_backup.h"
-#include "../utils/interpreter_lock.h"
 #include "../utils/scheduler.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
@@ -11,7 +10,6 @@
 #include "driver/gpio.h"
 #include "esp_ota_ops.h"
 #include "esp_heap_caps.h"
-#include "esp_timer.h"
 #include "serial_bus.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -28,30 +26,10 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
-    // experiment knobs and measurements
-    this->properties["telemetry_compact"] = std::make_shared<BooleanVariable>(false); // new frames send numbers as float16
-    this->properties["telemetry_info_rate"] = std::make_shared<IntegerVariable>(0);   // layout lines per step, 0: all at once
-    this->properties["telemetry_us"] = std::make_shared<IntegerVariable>(0);
-    this->properties["telemetry_us_max"] = std::make_shared<IntegerVariable>(0);
-    this->properties["modules_us"] = std::make_shared<IntegerVariable>(0);
-    this->properties["heap_largest"] = std::make_shared<IntegerVariable>(0); // largest free block, what a parse needs
-    this->properties["heap_min"] = std::make_shared<IntegerVariable>(0);     // lowest free heap since boot
-    this->properties["parse_bytes"] = std::make_shared<IntegerVariable>(0);  // heap the last parse tree took
-    this->properties["parse_bytes_max"] = std::make_shared<IntegerVariable>(0);
-    this->properties["rules_us"] = std::make_shared<IntegerVariable>(0);
-}
-
-void Core::record_parse(const int64_t bytes) {
-    this->properties.at("parse_bytes")->set_integer_value(bytes);
-    const Variable_ptr maximum = this->properties.at("parse_bytes_max");
-    if (bytes > maximum->integer_value()) {
-        maximum->set_integer_value(bytes);
-    }
-}
-
-void Core::record_step_timing(const int64_t modules_us, const int64_t rules_us) {
-    this->properties.at("modules_us")->set_integer_value(modules_us);
-    this->properties.at("rules_us")->set_integer_value(rules_us);
+    this->properties["heap_largest"] = std::make_shared<IntegerVariable>();         // largest free block, what the next allocation can get
+    this->properties["heap_min"] = std::make_shared<IntegerVariable>();             // lowest free heap since boot
+    this->properties["telemetry_info_rate"] = std::make_shared<IntegerVariable>(4); // layout lines per step, 0: all at once
+    this->telemetry_info_rate = this->properties.at("telemetry_info_rate");
 }
 
 void Core::step() {
@@ -110,11 +88,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
         this->output_on = true;
     } else if (method_name == "startup_checksum") {
-        uint16_t checksum = 0;
-        for (char const &c : Storage::startup) {
-            checksum += static_cast<uint8_t>(c);
-        }
-        echo("checksum: %04x", checksum);
+        echo("checksum: %04x", Storage::startup_checksum());
     } else if (method_name == "get_pin_status") {
         Module::expect(arguments, 1, integer);
         const int gpio_num = arguments[0]->evaluate_integer();
@@ -265,105 +239,6 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "clear_telemetry") {
         Module::expect(arguments, 0);
         this->clear_telemetry();
-    } else if (method_name == "telemetry_selftest") {
-        // telemetry_selftest(floats): microseconds per frame for each stage, averaged over 200 rounds
-        Module::expect(arguments, 1, integer);
-        const int64_t count = std::max<int64_t>(1, std::min<int64_t>(45, arguments[0]->evaluate_integer()));
-        std::vector<telemetry::Field> fields;
-        std::vector<char> types;
-        std::vector<Variable_ptr> targets;
-        std::vector<Variable *> variables;
-        static const std::string key = "x";
-        for (int64_t i = 0; i < count; ++i) {
-            fields.push_back({std::make_shared<NumberVariable>(1.5 * i - 7.25), nullptr, &key, 'f'});
-            types.push_back('f');
-            targets.push_back(std::make_shared<NumberVariable>());
-            variables.push_back(targets.back().get());
-        }
-        const std::vector<telemetry::Slot> slots = telemetry::map_frame(types, variables);
-        static uint8_t payload[telemetry::MAX_PAYLOAD];
-        static uint8_t body[telemetry::MAX_BODY];
-        static uint8_t decoded[telemetry::MAX_BODY + 3];
-        static char line[telemetry::MAX_LINE];
-        const int rounds = 200;
-        size_t payload_length = 0, body_length = 0, line_length = 0, ok = 0;
-        uint16_t crc = 0;
-        int64_t t[10];
-        t[0] = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            payload_length = telemetry::pack(fields, payload, sizeof(payload));
-        }
-        t[1] = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            body_length = telemetry::build_body(1, r, 1234, payload, payload_length, body);
-        }
-        t[2] = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            line_length = telemetry::encode_line(body, body_length, line, sizeof(line));
-        }
-        t[3] = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            ok += telemetry::decode_line(line, line_length, decoded, sizeof(decoded)) ? 1 : 0;
-        }
-        t[4] = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            telemetry::apply(slots, &decoded[telemetry::HEADER_SIZE]);
-        }
-        t[5] = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            crc ^= telemetry::crc16(body, body_length - telemetry::CRC_SIZE);
-        }
-        t[6] = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            crc ^= telemetry::bitwise_crc16(body, body_length - telemetry::CRC_SIZE);
-        }
-        t[7] = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            line_length = telemetry::mbedtls_encode_line(body, body_length, line, sizeof(line));
-        }
-        t[8] = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            ok += telemetry::mbedtls_decode_line(line, line_length, decoded, sizeof(decoded)) ? 1 : 0;
-        }
-        t[9] = esp_timer_get_time();
-        const auto us = [&](int i) { return (t[i + 1] - t[i]) / double(rounds); };
-        echo("telemetry selftest: %d floats, body %u B, line %u B, ok %u/%d; us per frame: pack %.1f, body+crc %.1f, "
-             "encode %.1f, decode+crc %.1f, apply %.1f; crc table %.1f, crc bitwise %.1f; mbedtls encode %.1f, "
-             "mbedtls decode+bitwise crc %.1f (%04x)",
-             static_cast<int>(count), static_cast<unsigned>(body_length), static_cast<unsigned>(line_length),
-             static_cast<unsigned>(ok), 2 * rounds, us(0), us(1), us(2), us(3), us(4), us(5), us(6), us(7), us(8), crc);
-        // #290's encodings on the same body, and a body of zeros (a robot standing still) for the byte counts
-        static uint8_t cobs[telemetry::MAX_BODY + telemetry::MAX_BODY / 254 + 3];
-        static char stuffed[2 * telemetry::MAX_BODY + 2];
-        size_t cobs_length = 0, bus_length = 0, line_stuffed_length = 0, unstuffed = 0;
-        const int64_t c0 = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            cobs_length = telemetry::cobs_encode(body, body_length, cobs);
-        }
-        const int64_t c1 = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            bus_length = telemetry::stuff(body, body_length, stuffed, sizeof(stuffed), false);
-        }
-        const int64_t c2 = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            unstuffed = telemetry::unstuff(stuffed, bus_length, decoded, sizeof(decoded));
-        }
-        const int64_t c3 = esp_timer_get_time();
-        line_stuffed_length = telemetry::stuff(body, body_length, stuffed, sizeof(stuffed), true);
-        static uint8_t zeros[telemetry::MAX_BODY];
-        memset(zeros, 0, sizeof(zeros));
-        const size_t zero_body = std::min(body_length, sizeof(zeros));
-        const size_t zero_cobs = telemetry::cobs_encode(zeros, zero_body, cobs);
-        const size_t zero_bus = telemetry::stuff(zeros, zero_body, stuffed, sizeof(stuffed), false);
-        const size_t zero_line = telemetry::stuff(zeros, zero_body, stuffed, sizeof(stuffed), true);
-        const size_t zero_b64 = telemetry::encode_line(zeros, zero_body, line, sizeof(line));
-        echo("telemetry selftest #290: body %u B -> COBS %u B (+2 delimiters), bus-stuffed %u B, line-stuffed %u B, "
-             "base64 %u B; zeros: COBS %u, bus %u, line %u, base64 %u; us per frame: cobs encode %.1f, bus stuff %.1f, "
-             "unstuff %.1f (%u)",
-             static_cast<unsigned>(body_length), static_cast<unsigned>(cobs_length), static_cast<unsigned>(bus_length),
-             static_cast<unsigned>(line_stuffed_length), static_cast<unsigned>(line_length), static_cast<unsigned>(zero_cobs),
-             static_cast<unsigned>(zero_bus), static_cast<unsigned>(zero_line), static_cast<unsigned>(zero_b64),
-             (c1 - c0) / double(rounds), (c2 - c1) / double(rounds), (c3 - c2) / double(rounds), static_cast<unsigned>(unstuffed));
     } else {
         Module::call(method_name, arguments);
     }
@@ -441,7 +316,6 @@ void Core::define_telemetry(const std::vector<ConstExpression_ptr> &arguments) {
     // telemetry(ref, ...[, interval_ms]): one call is one frame, references are resolved once, here
     std::vector<telemetry::Field> fields;
     unsigned long interval = 0;
-    const bool compact = this->properties.at("telemetry_compact")->boolean_value();
     for (size_t i = 0; i < arguments.size(); ++i) {
         const ConstExpression_ptr &argument = arguments[i];
         ConstVariable_ptr variable;
@@ -464,7 +338,7 @@ void Core::define_telemetry(const std::vector<ConstExpression_ptr> &arguments) {
         if (!field_source(argument, module, key)) {
             throw std::runtime_error("telemetry argument " + std::to_string(i) + " has no name");
         }
-        fields.push_back({variable, module, key, telemetry::type_for(variable, compact)});
+        fields.push_back({variable, module, key, telemetry::type_for(variable)});
     }
     if (fields.empty()) {
         throw std::runtime_error("telemetry needs at least one field");
@@ -554,7 +428,7 @@ void Core::send_layout(const TelemetryFrame &frame, const size_t index) {
     char line[SerialBus::PAYLOAD_CAPACITY];
     const telemetry::Field &field = frame.fields[index];
     const std::string name = field_name(field);
-    const int length = telemetry::format_layout(line, sizeof(line), frame.id, index, name, field.type);
+    const int length = telemetry::format_layout(line, sizeof(line), frame.id, index, frame.fields.size(), name, field.type);
     if (length <= 0 || length >= static_cast<int>(sizeof(line))) {
         echo("warning: layout line of telemetry field \"%s\" is too long", name.c_str());
         return;
@@ -569,7 +443,7 @@ void Core::send_layout(const TelemetryFrame &frame, const size_t index) {
 }
 
 void Core::announce(const TelemetryFrame &frame) {
-    const int64_t rate = this->properties.at("telemetry_info_rate")->integer_value();
+    const int64_t rate = this->telemetry_info_rate->integer_value();
     for (size_t index = 0; index < frame.fields.size(); ++index) {
         if (rate > 0) {
             this->pending_layout.push_back({frame.id, index});
@@ -588,7 +462,6 @@ size_t Core::encode_frame(TelemetryFrame &frame, const unsigned long now, char *
 }
 
 void Core::emit_telemetry() {
-    const int64_t start = esp_timer_get_time();
     const unsigned long now = millis();
     static char line[telemetry::MAX_LINE];
     SerialBus *const polled = this->telemetry_frames.empty() ? nullptr : this->polled_bus();
@@ -606,39 +479,18 @@ void Core::emit_telemetry() {
             ++frame.seq;
             continue;
         }
-        switch (bus->frame_mode()) {
-        case 0: {
-            // mailbox: the newest state waits for the poll; seq counts frames that left, so gaps stay losses
-            const bool pending = frame.stored && bus->frame_pending(frame.id);
-            if (frame.stored && !pending) {
-                ++frame.seq;
-            }
-            frame.last_millis = now;
-            const size_t length = this->encode_frame(frame, now, line, sizeof(line));
-            if (length && bus->store_frame(frame.id, destination, line, length, pending)) {
-                frame.stored = true;
-            }
-            break;
+        // mailbox: the newest state waits for the poll; seq counts frames that left, so gaps stay losses
+        const bool pending = frame.stored && bus->frame_pending(frame.id);
+        if (frame.stored && !pending) {
+            ++frame.seq;
         }
-        case 1: {
-            // poll-triggered: one frame per poll into the send queue, it leaves with the next poll
-            const uint32_t polls = bus->poll_count();
-            if (polls == frame.last_poll_count) {
-                break;
-            }
-            frame.last_poll_count = polls;
-            frame.last_millis = now;
-            const size_t length = this->encode_frame(frame, now, line, sizeof(line));
-            if (length && bus->try_send_frame(destination, line, length)) {
-                ++frame.seq;
-            }
-            break;
-        }
-        default:
-            break; // modes 2 and 3: the communication task builds it while answering the poll
+        frame.last_millis = now;
+        const size_t length = this->encode_frame(frame, now, line, sizeof(line));
+        if (length && bus->store_frame(frame.id, destination, line, length, pending)) {
+            frame.stored = true;
         }
     }
-    const int64_t rate = this->properties.at("telemetry_info_rate")->integer_value();
+    const int64_t rate = this->telemetry_info_rate->integer_value();
     for (int64_t i = 0; i < rate && !this->pending_layout.empty(); ++i) {
         const auto [id, index] = this->pending_layout.front();
         this->pending_layout.pop_front();
@@ -646,40 +498,6 @@ void Core::emit_telemetry() {
                                      [id = id](const TelemetryFrame &frame) { return frame.id == id; });
         if (it != this->telemetry_frames.end()) {
             this->send_layout(*it, index);
-        }
-    }
-    const int64_t elapsed = esp_timer_get_time() - start;
-    this->properties.at("telemetry_us")->set_integer_value(elapsed);
-    const Variable_ptr maximum = this->properties.at("telemetry_us_max");
-    if (elapsed > maximum->integer_value()) {
-        maximum->set_integer_value(elapsed);
-    }
-}
-
-void Core::build_frames_for_poll(SerialBus *bus, const uint8_t requester, const bool locked) {
-    const int64_t wait_start = esp_timer_get_time();
-    std::unique_ptr<InterpreterLock> lock; // the main task interprets between these reads
-    if (locked) {
-        lock = std::make_unique<InterpreterLock>();
-    }
-    bus->record_poll_lock_wait(esp_timer_get_time() - wait_start);
-    const unsigned long now = millis();
-    static char line[telemetry::MAX_LINE];
-    SerialBus *const polled = this->polled_bus();
-    for (auto &frame : this->telemetry_frames) {
-        SerialBus *frame_bus = nullptr;
-        uint8_t destination = 0;
-        if (!this->route(frame, polled, frame_bus, destination) || frame_bus != bus || destination != requester) {
-            continue;
-        }
-        if (frame.interval > 0 && now - frame.last_millis < frame.interval) {
-            continue;
-        }
-        frame.last_millis = now;
-        const size_t length = this->encode_frame(frame, now, line, sizeof(line));
-        if (length) {
-            bus->send_frame_now(requester, line, length);
-            ++frame.seq;
         }
     }
 }

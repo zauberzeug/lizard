@@ -39,16 +39,11 @@ public:
     static uint8_t executing_sender;
     // peer side: the node that polls us (0 until the first poll)
     uint8_t coordinator() const { return this->coordinator_id.load(); }
-    // how a peer hands frames to the poll: 0 mailbox slot, 1 send queue once per poll, 2 built by the communication task
-    int frame_mode() const { return this->frame_mode_value.load(); }
+    // mailbox: the main task leaves the newest frame per id in a slot, the communication task sends it with the next poll
     bool frame_pending(uint8_t frame_id);
     bool store_frame(uint8_t frame_id, uint8_t destination, const char *line, size_t length, bool overwrite);
     void release_frame(uint8_t frame_id);
-    uint32_t poll_count() const { return this->polls_received.load(); }
-    bool try_send_frame(uint8_t destination, const char *line, size_t length);
-    void send_frame_now(uint8_t destination, const char *line, size_t length) const; // communication task only
     void send_layout(uint8_t destination, const char *line, size_t length);
-    void record_poll_lock_wait(int64_t us);
     // coordinator side
     void send_to(uint8_t receiver, const std::string &payload);
     void add_telemetry_listener(BusTelemetry *listener);
@@ -169,12 +164,8 @@ private:
     std::atomic<FrameSlot *> frame_slots{nullptr}; // allocated by the main task on first use
     portMUX_TYPE frame_slot_lock = portMUX_INITIALIZER_UNLOCKED;
     std::atomic<uint8_t> coordinator_id{0};
-    std::atomic<uint32_t> polls_received{0};
-    std::atomic<int> frame_mode_value{0};
-    std::atomic<int64_t> poll_lock_us_max{0};
     std::atomic<unsigned> frame_overwrites{0};
     std::atomic<unsigned> frame_drops{0};
-    int64_t layout_wait_us_max = 0;
     void send_frame_slots(uint8_t requester); // communication task
 
     // --- telemetry, coordinator side (main task) ---------------------------
@@ -188,7 +179,7 @@ private:
     void handle_telemetry_layout(const IncomingMessage &message);
     // counters resolved once: a lookup by a long name would allocate a temporary string for every frame
     Variable_ptr telemetry_frames, telemetry_errors, telemetry_unclaimed, telemetry_mismatch, telemetry_gaps,
-        telemetry_duplicates, telemetry_rx_us_total, telemetry_rx_us_max, text_rx_count, text_rx_us_total;
+        telemetry_duplicates;
     static void count(const Variable_ptr &counter, int64_t increment = 1);
 
     static void communication_loop(void *param);

@@ -18,7 +18,8 @@ static Module_ptr create_bus_telemetry(const std::string &name, const std::vecto
     if (peer_id <= 0 || peer_id >= 255) {
         throw std::runtime_error("node ID must be between 0 and 255");
     }
-    const int64_t interval = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 0;
+    // 100 ms unless asked for otherwise: every step of four peers would take most of a 460800 bus
+    const int64_t interval = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 100;
     if (interval < 0) {
         throw std::runtime_error("interval must not be negative");
     }

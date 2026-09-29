@@ -1,5 +1,5 @@
 #include "telemetry.h"
-#include "mbedtls/base64.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -9,14 +9,14 @@
 
 namespace telemetry {
 
-char type_for(const ConstVariable_ptr &variable, const bool compact) {
+char type_for(const ConstVariable_ptr &variable) {
     switch (variable->type) {
     case boolean:
         return '?';
     case integer:
         return 'i';
     case number:
-        return compact ? 'e' : 'f';
+        return 'f';
     default:
         throw std::runtime_error("telemetry fields must be bool, int or float");
     }
@@ -27,8 +27,6 @@ size_t field_size(const char type) {
     case 'f':
     case 'i':
         return 4;
-    case 'e':
-        return 2;
     default:
         return 0; // bits are counted separately
     }
@@ -44,18 +42,7 @@ size_t payload_size(const std::vector<Field> &fields) {
     return bytes + (bits + 7) / 8;
 }
 
-// CRC-16/CCITT-FALSE
-uint16_t bitwise_crc16(const uint8_t *data, const size_t length) {
-    uint16_t crc = 0xffff;
-    for (size_t i = 0; i < length; ++i) {
-        crc ^= static_cast<uint16_t>(data[i]) << 8;
-        for (int bit = 0; bit < 8; ++bit) {
-            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
-        }
-    }
-    return crc;
-}
-
+// CRC-16/CCITT-FALSE, table-driven: a bitwise loop costs 109 instead of 16 us for a 128-byte body on an ESP32
 struct CrcTable {
     uint16_t values[256];
     constexpr CrcTable() : values() {
@@ -93,63 +80,6 @@ struct DecodeTable {
 };
 static constexpr DecodeTable DECODE_TABLE;
 
-uint16_t float_to_half(const float value) {
-    uint32_t f;
-    memcpy(&f, &value, 4);
-    const uint32_t sign = (f >> 16) & 0x8000;
-    const int32_t exponent = static_cast<int32_t>((f >> 23) & 0xff) - 127 + 15;
-    uint32_t mantissa = f & 0x7fffff;
-    if (((f >> 23) & 0xff) == 0xff) { // inf or nan
-        return sign | 0x7c00 | (mantissa ? 0x200 : 0);
-    }
-    if (exponent >= 0x1f) {
-        return sign | 0x7c00; // overflow to inf
-    }
-    if (exponent <= 0) {
-        if (exponent < -10) {
-            return sign; // underflow to zero
-        }
-        mantissa |= 0x800000;
-        const int shift = 14 - exponent;
-        uint32_t half = mantissa >> shift;
-        if ((mantissa >> (shift - 1)) & 1) {
-            ++half; // round half up
-        }
-        return sign | half;
-    }
-    uint32_t half = sign | (exponent << 10) | (mantissa >> 13);
-    if (mantissa & 0x1000) {
-        ++half; // round half up, may carry into the exponent
-    }
-    return half;
-}
-
-float half_to_float(const uint16_t half) {
-    const uint32_t sign = static_cast<uint32_t>(half & 0x8000) << 16;
-    const uint32_t exponent = (half >> 10) & 0x1f;
-    uint32_t mantissa = half & 0x3ff;
-    uint32_t f;
-    if (exponent == 0) {
-        if (mantissa == 0) {
-            f = sign;
-        } else {
-            int e = -1;
-            do {
-                ++e;
-                mantissa <<= 1;
-            } while ((mantissa & 0x400) == 0);
-            f = sign | ((127 - 15 - e) << 23) | ((mantissa & 0x3ff) << 13);
-        }
-    } else if (exponent == 0x1f) {
-        f = sign | 0x7f800000 | (mantissa << 13);
-    } else {
-        f = sign | ((exponent - 15 + 127) << 23) | (mantissa << 13);
-    }
-    float value;
-    memcpy(&value, &f, 4);
-    return value;
-}
-
 size_t pack(const std::vector<Field> &fields, uint8_t *payload, const size_t capacity) {
     if (payload_size(fields) > capacity) {
         throw std::runtime_error("telemetry payload exceeds its buffer");
@@ -162,12 +92,6 @@ size_t pack(const std::vector<Field> &fields, uint8_t *payload, const size_t cap
             const float value = static_cast<float>(field.variable->number_value());
             memcpy(&payload[pos], &value, 4);
             pos += 4;
-            break;
-        }
-        case 'e': {
-            const uint16_t value = float_to_half(static_cast<float>(field.variable->number_value()));
-            memcpy(&payload[pos], &value, 2);
-            pos += 2;
             break;
         }
         case 'i': {
@@ -262,102 +186,10 @@ size_t decode_line(const char *line, const size_t length, uint8_t *body, const s
     return crc == crc16(body, out - CRC_SIZE) ? out : 0;
 }
 
-size_t mbedtls_encode_line(const uint8_t *body, const size_t length, char *line, const size_t capacity) {
-    if (capacity < 2) {
-        return 0;
-    }
-    line[0] = FRAME_PREFIX;
-    size_t written = 0;
-    if (mbedtls_base64_encode(reinterpret_cast<unsigned char *>(&line[1]), capacity - 1, &written, body, length) != 0) {
-        return 0;
-    }
-    return 1 + written;
-}
-
-size_t mbedtls_decode_line(const char *line, const size_t length, uint8_t *body, const size_t capacity) {
-    if (length < 2 || line[0] != FRAME_PREFIX || (length - 1) % 4 != 0) {
-        return 0;
-    }
-    size_t decoded = 0;
-    if (mbedtls_base64_decode(body, capacity, &decoded, reinterpret_cast<const unsigned char *>(&line[1]), length - 1) != 0) {
-        return 0;
-    }
-    if (decoded < HEADER_SIZE + CRC_SIZE) {
-        return 0;
-    }
-    uint16_t crc;
-    memcpy(&crc, &body[decoded - CRC_SIZE], 2);
-    return crc == bitwise_crc16(body, decoded - CRC_SIZE) ? decoded : 0;
-}
-
-size_t cobs_encode(const uint8_t *input, const size_t length, uint8_t *output) {
-    size_t read = 0, write = 1, code_pos = 0;
-    uint8_t code = 1;
-    while (read < length) {
-        if (input[read] == 0) {
-            output[code_pos] = code;
-            code_pos = write++;
-            code = 1;
-        } else {
-            output[write++] = input[read];
-            if (++code == 0xff) {
-                output[code_pos] = code;
-                code_pos = write++;
-                code = 1;
-            }
-        }
-        ++read;
-    }
-    output[code_pos] = code;
-    return write;
-}
-
-static bool needs_escape(const uint8_t byte, const bool line_only) {
-    return byte == 0x0a || byte == 0x0d || byte == 0x7d || (!line_only && (byte == 0x00 || byte == 0x09 || byte == 0x20));
-}
-
-size_t stuff(const uint8_t *body, const size_t length, char *output, const size_t capacity, const bool line_only) {
-    size_t pos = 0;
-    output[pos++] = 0x01;
-    for (size_t i = 0; i < length; ++i) {
-        if (pos + 2 >= capacity) {
-            return 0;
-        }
-        if (needs_escape(body[i], line_only)) {
-            output[pos++] = 0x7d;
-            output[pos++] = body[i] ^ 0x50;
-        } else {
-            output[pos++] = body[i];
-        }
-    }
-    output[pos] = '\0';
-    return pos;
-}
-
-size_t unstuff(const char *input, const size_t length, uint8_t *body, const size_t capacity) {
-    if (length < 1 || static_cast<uint8_t>(input[0]) != 0x01) {
-        return 0;
-    }
-    size_t pos = 0;
-    for (size_t i = 1; i < length; ++i) {
-        uint8_t byte = input[i];
-        if (byte == 0x7d) {
-            if (++i >= length) {
-                return 0;
-            }
-            byte = input[i] ^ 0x50;
-        }
-        if (pos >= capacity) {
-            return 0;
-        }
-        body[pos++] = byte;
-    }
-    return pos;
-}
-
-int format_layout(char *buffer, const size_t capacity, const uint8_t frame_id, const size_t index, const std::string &name, const char type) {
-    return std::snprintf(buffer, capacity, "%sv%d %u.%u %s:%c", LAYOUT_PREFIX, FORMAT_VERSION, frame_id,
-                         static_cast<unsigned>(index), name.c_str(), type);
+int format_layout(char *buffer, const size_t capacity, const uint8_t frame_id, const size_t index, const size_t count,
+                  const std::string &name, const char type) {
+    return std::snprintf(buffer, capacity, "%sv%d %u.%u/%u %s:%c", LAYOUT_PREFIX, FORMAT_VERSION, frame_id,
+                         static_cast<unsigned>(index), static_cast<unsigned>(count), name.c_str(), type);
 }
 
 bool parse_layout(const char *line, const size_t length, LayoutLine &layout) {
@@ -376,7 +208,17 @@ bool parse_layout(const char *line, const size_t length, LayoutLine &layout) {
         return false;
     }
     const long index = strtol(end + 1, &end, 10);
-    if (*end != ' ' || index < 0 || index > 255) {
+    if (index < 0 || index > 255) {
+        return false;
+    }
+    long count = 0; // the frame's number of fields; lines without it come from the first version of this format
+    if (*end == '/') {
+        count = strtol(end + 1, &end, 10);
+        if (count <= index || count > 256) {
+            return false;
+        }
+    }
+    if (*end != ' ') {
         return false;
     }
     const std::string field(end + 1);
@@ -387,17 +229,20 @@ bool parse_layout(const char *line, const size_t length, LayoutLine &layout) {
     layout.version = static_cast<int>(version);
     layout.frame_id = static_cast<uint8_t>(frame_id);
     layout.index = static_cast<size_t>(index);
+    layout.count = static_cast<size_t>(count);
     layout.name = field.substr(0, colon);
     layout.type = field[colon + 1];
-    return layout.type == 'f' || layout.type == 'i' || layout.type == '?' || layout.type == 'e';
+    return layout.type == 'f' || layout.type == 'i' || layout.type == '?';
 }
 
 bool Layout::set(const LayoutLine &line) {
     bool changed = line.version != this->version;
     this->version = line.version;
     std::vector<char> &types = this->frames[line.frame_id];
-    if (types.size() <= line.index) {
-        types.resize(line.index + 1, 0);
+    // with the field count known, a frame stays incomplete until every one of its lines arrived, also the last
+    const size_t size = line.count > 0 ? line.count : std::max(types.size(), line.index + 1);
+    if (types.size() != size) {
+        types.resize(size, 0);
         changed = true;
     }
     if (types[line.index] != line.type) {
@@ -431,7 +276,6 @@ int Layout::expected_payload(const uint8_t frame_id) const {
 bool type_matches(const Variable &variable, const char type) {
     switch (type) {
     case 'f':
-    case 'e':
         return variable.type == number;
     case 'i':
         return variable.type == integer;
@@ -477,12 +321,6 @@ void apply(const std::vector<Slot> &slots, const uint8_t *payload) {
             float value;
             memcpy(&value, &payload[slot.offset], 4);
             slot.variable->set_number_value(value);
-            break;
-        }
-        case 'e': {
-            uint16_t value;
-            memcpy(&value, &payload[slot.offset], 2);
-            slot.variable->set_number_value(half_to_float(value));
             break;
         }
         case 'i': {

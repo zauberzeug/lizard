@@ -7,7 +7,6 @@
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
-#include "esp_timer.h"
 #include "global.h"
 #include <algorithm>
 #include <cstring>
@@ -32,14 +31,12 @@ const std::map<std::string, Variable_ptr> Expander::get_defaults() {
         {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
         {"is_ready", std::make_shared<BooleanVariable>(false)},
         {"last_message_age", std::make_shared<IntegerVariable>(0)},
-        // telemetry experiment: -1 text broadcasts, otherwise the frame interval in ms (0: every expander step)
+        // -1: proxies broadcast their properties as text; otherwise they come as frames, every this many ms (0: every step)
         {"telemetry_interval", std::make_shared<IntegerVariable>(-1)},
         {"telemetry_frames", std::make_shared<IntegerVariable>(0)},
         {"telemetry_errors", std::make_shared<IntegerVariable>(0)},
         {"telemetry_gaps", std::make_shared<IntegerVariable>(0)},
         {"telemetry_mismatch", std::make_shared<IntegerVariable>(0)},
-        {"telemetry_rx_us_max", std::make_shared<IntegerVariable>(0)},
-        {"telemetry_rx_us_total", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -61,8 +58,6 @@ Expander::Expander(const std::string name,
     this->telemetry_errors = this->properties.at("telemetry_errors");
     this->telemetry_gaps = this->properties.at("telemetry_gaps");
     this->telemetry_mismatch = this->properties.at("telemetry_mismatch");
-    this->telemetry_rx_us_total = this->properties.at("telemetry_rx_us_total");
-    this->telemetry_rx_us_max = this->properties.at("telemetry_rx_us_max");
 
     this->serial->claim(name);
     this->serial->enable_line_detection();
@@ -318,7 +313,7 @@ void Expander::send_telemetry_orders() {
             if (property_name == "is_ready" || (variable->type != boolean && variable->type != integer && variable->type != number)) {
                 continue;
             }
-            const size_t size = telemetry::field_size(telemetry::type_for(variable, false));
+            const size_t size = telemetry::field_size(telemetry::type_for(variable));
             const bool is_bit = variable->type == boolean;
             const size_t payload = bytes + size + (bits + (is_bit ? 1 : 0) + 7) / 8;
             if (!line.empty() && (payload > telemetry::MAX_PAYLOAD || line.size() > 1800)) {
@@ -392,7 +387,6 @@ void Expander::handle_telemetry_line(const char *line, const int length) {
             telemetry::map_frame(this->telemetry_layout.frames[layout_line.frame_id], variables);
         return;
     }
-    const int64_t start = esp_timer_get_time();
     static uint8_t body[telemetry::MAX_BODY + 3];
     const size_t body_length = telemetry::decode_line(line, length, body, sizeof(body));
     if (body_length == 0) {
@@ -417,11 +411,6 @@ void Expander::handle_telemetry_line(const char *line, const int length) {
         return;
     }
     telemetry::apply(slots->second, &body[telemetry::HEADER_SIZE]);
-    const int64_t elapsed = esp_timer_get_time() - start;
-    this->count(this->telemetry_rx_us_total, elapsed);
-    if (elapsed > this->telemetry_rx_us_max->integer_value()) {
-        this->telemetry_rx_us_max->set_integer_value(elapsed);
-    }
 }
 
 void Expander::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
