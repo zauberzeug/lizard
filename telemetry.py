@@ -186,7 +186,9 @@ class Decoder:
         self._set_version(sender, version)
         frame, index, name, type_ = int(match.group(1)), int(match.group(2)), match.group(4), match.group(5)
         layout = self.layouts.setdefault((sender, frame), {})
-        redefined = layout.get(index) not in (None, (name, type_))
+        # a new or repeated definition sends its layout from index 0 and may start seq at 0 again, e.g. after
+        # core.clear_telemetry() and the same core.telemetry(...)
+        redefined = index == 0 or layout.get(index) not in (None, (name, type_))
         if count is not None:
             if self.counts.get((sender, frame)) != count:  # another count: the frame was defined anew
                 layout.clear()
