@@ -29,6 +29,7 @@
 #include "utils/uart.h"
 #include "utils/uart_driver.h"
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <functional>
 #include <math.h>
@@ -395,26 +396,34 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     }
 }
 
-// Whether `text` ends inside a string literal, i.e. has an odd number of quotes outside comments.
-static bool has_open_string(const std::string &text) {
-    bool open = false;
-    for (size_t i = 0; i < text.size(); ++i) {
-        const char c = text[i];
-        if (open) {
+// The quote of a string literal that is still open after `line` (0: none), given the one open before it.
+static char string_state_after(const std::string &line, char quote) {
+    for (size_t i = 0; i < line.size(); ++i) {
+        const char c = line[i];
+        if (quote) {
             if (c == '\\') {
                 ++i; // an escaped character
-            } else if (c == '"') {
-                open = false;
+            } else if (c == quote) {
+                quote = 0;
             }
-        } else if (c == '"') {
-            open = true;
+        } else if (c == '"' || c == '\'') {
+            quote = c;
         } else if (c == '#') {
-            while (i < text.size() && text[i] != '\n') {
-                ++i; // a comment runs to the end of its line
-            }
+            break; // a comment runs to the end of its line
         }
     }
-    return open;
+    return quote;
+}
+
+// Whether `line` holds the word "end", which can close a rule, routine or schedule.
+static bool has_end_word(const std::string &line) {
+    const auto is_word = [](const char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (size_t i = line.find("end"); i != std::string::npos; i = line.find("end", i + 1)) {
+        if ((i == 0 || !is_word(line[i - 1])) && (i + 3 >= line.size() || !is_word(line[i + 3]))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Goes through the startup script statement by statement, straight from NVS, so that neither the script nor one parse
@@ -426,6 +435,7 @@ static bool walk_startup(const bool run) {
     std::string statement;
     size_t statement_offset = 0;
     size_t offset = 0;
+    char quote = 0; // of a string literal that is open at the end of `statement`
     bool ok = true;
     Storage::read_startup_lines([&](const std::string &line) {
         if (!ok) {
@@ -438,12 +448,14 @@ static bool walk_startup(const bool run) {
         statement += line;
         statement += '\n';
         offset += line.size() + 1;
-        // an open block or string ends only in a line with "end" or a quote, so other lines need no new parse
-        if (continued && line.find("end") == std::string::npos && line.find('"') == std::string::npos) {
-            return;
-        }
-        if (has_open_string(statement)) {
+        const bool string_was_open = quote != 0;
+        quote = string_state_after(line, quote);
+        if (quote) {
             return; // a string that continues on the next line
+        }
+        // an open block ends only with "end" and an open string with its quote, so other lines need no new parse
+        if (continued && !string_was_open && !has_end_word(line)) {
+            return;
         }
         auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
         struct source_range range;
