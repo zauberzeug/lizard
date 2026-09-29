@@ -26,6 +26,7 @@ private:
     std::vector<std::pair<std::string, std::string>> telemetry_proxies; // name and module type
     bool telemetry_order_pending = false;
     bool telemetry_layout_seen = false;
+    bool telemetry_version_reported = false;
     unsigned long telemetry_order_millis = 0;
     telemetry::Layout telemetry_layout;
     std::map<uint8_t, std::vector<Variable *>> telemetry_mapped; // per frame: the proxy variable of each field index

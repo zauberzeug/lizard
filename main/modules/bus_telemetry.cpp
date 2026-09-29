@@ -7,6 +7,7 @@
 
 static constexpr size_t MAX_ORDER_LENGTH = 250; // a bus payload holds 255 characters
 static constexpr size_t MAX_ORDER_REFERENCES = 40;
+static constexpr unsigned long RENEW_MIN_MS = 5000; // no frame for this long (or 10 intervals): order everything again
 
 static Module_ptr create_bus_telemetry(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     if (arguments.size() != 2 && arguments.size() != 3) {
@@ -16,7 +17,7 @@ static Module_ptr create_bus_telemetry(const std::string &name, const std::vecto
     const SerialBus_ptr bus = get_module_argument<SerialBus>(arguments[0]);
     const int64_t peer_id = arguments[1]->evaluate_integer();
     if (peer_id <= 0 || peer_id >= 255) {
-        throw std::runtime_error("node ID must be between 0 and 255");
+        throw std::runtime_error("node ID must be between 1 and 254");
     }
     // 100 ms unless asked for otherwise: every step of four peers would take most of a 460800 bus
     const int64_t interval = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 100;
@@ -51,6 +52,13 @@ BusTelemetry::~BusTelemetry() {
 void BusTelemetry::step() {
     if (!this->orders_sent && !this->declared.empty()) {
         this->bus->request_telemetry_orders(this); // after the startup, i.e. once all declarations are known
+    } else if (this->orders_sent) {
+        // a lost order or layout line, or a peer that forgot its orders: order again, at most every renew period
+        const unsigned long renew_ms = std::max<unsigned long>(RENEW_MIN_MS, 10 * this->interval);
+        const unsigned long quiet = this->frame_seen ? millis_since(this->last_frame_millis) : millis_since(this->orders_millis);
+        if (quiet > renew_ms && millis_since(this->orders_millis) > renew_ms) {
+            this->bus->renew_telemetry(this->peer_id);
+        }
     }
     this->age->set_integer_value(this->frame_seen ? millis_since(this->last_frame_millis) : millis());
     Module::step();
@@ -112,6 +120,7 @@ void BusTelemetry::send_order(const std::vector<const std::string *> &names) {
 void BusTelemetry::send_orders() {
     this->send_order(this->declared);
     this->orders_sent = true;
+    this->orders_millis = millis();
 }
 
 void BusTelemetry::reset_layout() {
@@ -120,19 +129,22 @@ void BusTelemetry::reset_layout() {
 }
 
 void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const telemetry::Layout &layout) {
-    if (!this->declares(line.name)) {
-        return;
+    if (this->declares(line.name)) {
+        Variable *const variable = this->properties.at(line.name).get();
+        if (!telemetry::type_matches(*variable, line.type)) {
+            echo("warning: %s: node %u sends \"%s\" as type %c", this->name.c_str(), this->peer_id, line.name.c_str(), line.type);
+            return;
+        }
+        std::vector<Variable *> &variables = this->mapped[line.frame_id];
+        if (variables.size() <= line.index) {
+            variables.resize(line.index + 1, nullptr);
+        }
+        variables[line.index] = variable;
+    } else if (!this->mapped.count(line.frame_id)) {
+        return; // a frame without any of our mirrors
     }
-    Variable *const variable = this->properties.at(line.name).get();
-    if (!telemetry::type_matches(*variable, line.type)) {
-        echo("warning: %s: node %u sends \"%s\" as type %c", this->name.c_str(), this->peer_id, line.name.c_str(), line.type);
-        return;
-    }
-    std::vector<Variable *> &variables = this->mapped[line.frame_id];
-    if (variables.size() <= line.index) {
-        variables.resize(line.index + 1, nullptr);
-    }
-    variables[line.index] = variable;
+    // every line of a frame we mirror completes its layout a little more, also lines of fields we do not mirror
+    const std::vector<Variable *> &variables = this->mapped[line.frame_id];
     const auto types = layout.frames.find(line.frame_id);
     if (types != layout.frames.end()) {
         this->slots[line.frame_id] = telemetry::map_frame(types->second, variables);

@@ -49,6 +49,7 @@ public:
     void add_telemetry_listener(BusTelemetry *listener);
     void remove_telemetry_listener(BusTelemetry *listener);
     void request_telemetry_orders(BusTelemetry *listener);
+    void renew_telemetry(uint8_t peer_id); // clear and order again, at most once per renew period and peer
     const BusTelemetry *declaring_listener(uint8_t peer_id, const std::string &name) const;
 
 private:
@@ -172,7 +173,9 @@ private:
     std::map<uint8_t, telemetry::Layout> peer_layouts;
     std::map<uint16_t, uint8_t> last_seq; // sender << 8 | frame id
     std::vector<BusTelemetry *> telemetry_listeners;
-    std::set<uint8_t> telemetry_rounds; // peers that got their clear and orders since our boot
+    std::set<uint8_t> telemetry_rounds;                      // peers that got their clear and orders since our boot
+    std::map<uint8_t, unsigned long> telemetry_round_millis; // when each peer's last round started
+    std::map<uint8_t, unsigned long> layout_request_millis;  // when each peer was last asked for its layout lines
     unsigned long last_telemetry_warning_millis = 0;
     void start_telemetry_round(uint8_t peer_id);
     void handle_telemetry_frame(const IncomingMessage &message);

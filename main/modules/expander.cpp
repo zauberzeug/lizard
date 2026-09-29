@@ -338,6 +338,7 @@ void Expander::send_telemetry_orders() {
     this->telemetry_layout.clear();
     this->telemetry_mapped.clear();
     this->telemetry_slots.clear();
+    this->telemetry_last_seq.clear(); // the new frames count from anew
     this->telemetry_layout_seen = false;
     this->telemetry_order_millis = millis();
     this->telemetry_order_pending = false;
@@ -361,8 +362,16 @@ void Expander::check_telemetry() {
 void Expander::handle_telemetry_line(const char *line, const int length) {
     if (line[0] != telemetry::FRAME_PREFIX) {
         telemetry::LayoutLine layout_line;
-        if (!telemetry::parse_layout(line, length, layout_line) || layout_line.version != telemetry::FORMAT_VERSION) {
+        if (!telemetry::parse_layout(line, length, layout_line)) {
             this->count(this->telemetry_errors);
+            return;
+        }
+        if (layout_line.version != telemetry::FORMAT_VERSION) {
+            if (!this->telemetry_version_reported) {
+                echo("warning: expander %s sends telemetry format v%d, this node reads v%d", this->name.c_str(), layout_line.version,
+                     telemetry::FORMAT_VERSION);
+                this->telemetry_version_reported = true;
+            }
             return;
         }
         this->telemetry_layout_seen = true;

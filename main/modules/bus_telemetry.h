@@ -15,6 +15,7 @@ private:
     std::map<uint8_t, std::vector<Variable *>> mapped; // per frame: the mirror of each field index, nullptr if none
     std::map<uint8_t, std::vector<telemetry::Slot>> slots;
     bool orders_sent = false;
+    unsigned long orders_millis = 0;
     bool frame_seen = false;
     unsigned long last_frame_millis = 0;
     Variable_ptr age;

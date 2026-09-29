@@ -22,7 +22,8 @@ struct TelemetryFrame {
     uint8_t destination;    // the node that ordered it, 0 for the node's own frame
     unsigned long last_millis = 0;
     uint8_t seq = 0;
-    bool stored = false; // a bus slot holds a frame of this id
+    bool stored = false;         // a bus slot holds a frame of this id
+    uint16_t layout_pending = 0; // layout lines still to send; the frame waits for them, so readers never see it first
 };
 
 class Core;
@@ -42,7 +43,7 @@ private:
     SerialBus *polled_bus() const;
     bool route(const TelemetryFrame &frame, SerialBus *polled, SerialBus *&bus, uint8_t &destination) const;
     void send_layout(const TelemetryFrame &frame, size_t index);
-    void announce(const TelemetryFrame &frame);
+    void announce(TelemetryFrame &frame, bool first = false);
     size_t encode_frame(TelemetryFrame &frame, unsigned long now, char *line, size_t capacity);
 
 public:

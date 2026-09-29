@@ -844,9 +844,21 @@ void SerialBus::request_telemetry_orders(BusTelemetry *listener) {
     }
 }
 
+void SerialBus::renew_telemetry(const uint8_t peer_id) {
+    const auto last = this->telemetry_round_millis.find(peer_id);
+    if (last != this->telemetry_round_millis.end() && millis_since(last->second) < 5000) {
+        return;
+    }
+    this->start_telemetry_round(peer_id);
+}
+
 void SerialBus::start_telemetry_round(const uint8_t peer_id) {
     // a clear first, so that a peer that kept running does not stream the frames of an outdated startup
+    this->telemetry_round_millis[peer_id] = millis();
     this->peer_layouts[peer_id].clear();
+    for (auto it = this->last_seq.begin(); it != this->last_seq.end();) {
+        it = (it->first >> 8) == peer_id ? this->last_seq.erase(it) : std::next(it); // new frames count from anew
+    }
     for (BusTelemetry *const listener : this->telemetry_listeners) {
         if (listener->peer_id == peer_id) {
             listener->reset_layout();
@@ -909,6 +921,14 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
     }
     if (!claimed) {
         this->count(this->telemetry_unclaimed);
+        // a frame whose layout is incomplete lost a layout line on the way: ask the peer for its layout again
+        const bool listened = std::any_of(this->telemetry_listeners.begin(), this->telemetry_listeners.end(),
+                                          [&](const BusTelemetry *listener) { return listener->peer_id == message.sender; });
+        const auto last = this->layout_request_millis.find(message.sender);
+        if (expected < 0 && listened && (last == this->layout_request_millis.end() || millis_since(last->second) > 2000)) {
+            this->layout_request_millis[message.sender] = millis();
+            this->send_to(message.sender, "core.telemetry_info()");
+        }
     }
 }
 

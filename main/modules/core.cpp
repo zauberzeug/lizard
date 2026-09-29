@@ -233,7 +233,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
     } else if (method_name == "telemetry_info") {
         Module::expect(arguments, 0);
-        for (auto const &frame : this->telemetry_frames) {
+        for (auto &frame : this->telemetry_frames) {
             this->announce(frame);
         }
     } else if (method_name == "clear_telemetry") {
@@ -351,7 +351,7 @@ void Core::define_telemetry(const std::vector<ConstExpression_ptr> &arguments) {
     const uint8_t destination = bus ? SerialBus::executing_sender : 0;
 
     // the same fields and interval for the same requester: no new frame, but announce it again
-    for (auto const &frame : this->telemetry_frames) {
+    for (auto &frame : this->telemetry_frames) {
         if (frame.bus == bus && frame.destination == destination && frame.interval == interval &&
             frame.fields.size() == fields.size() &&
             std::equal(frame.fields.begin(), frame.fields.end(), fields.begin(), [](const telemetry::Field &a, const telemetry::Field &b) {
@@ -376,24 +376,31 @@ void Core::define_telemetry(const std::vector<ConstExpression_ptr> &arguments) {
     frame.destination = destination;
     frame.last_millis = millis() - interval; // first frame in this step
     this->telemetry_frames.push_back(std::move(frame));
-    this->announce(this->telemetry_frames.back());
+    this->announce(this->telemetry_frames.back(), true);
 }
 
 void Core::clear_telemetry() {
     // frames of the requester go: a bus node's orders over the bus, the console's own frames from the console
     SerialBus *const bus = SerialBus::executing_bus;
     const uint8_t destination = bus ? SerialBus::executing_sender : 0;
+    SerialBus *const polled = this->polled_bus();
+    std::vector<uint8_t> cleared;
     for (auto const &frame : this->telemetry_frames) {
-        if (frame.bus == bus && frame.destination == destination && bus) {
-            bus->release_frame(frame.id);
+        if (frame.bus == bus && frame.destination == destination) {
+            cleared.push_back(frame.id);
+            SerialBus *const slot_bus = frame.bus ? frame.bus : polled; // the node's own frames sit in the polled bus
+            if (frame.stored && slot_bus) {
+                slot_bus->release_frame(frame.id);
+            }
         }
     }
+    const auto is_cleared = [&](const uint8_t id) { return std::find(cleared.begin(), cleared.end(), id) != cleared.end(); };
     this->telemetry_frames.erase(std::remove_if(this->telemetry_frames.begin(), this->telemetry_frames.end(),
-                                                [&](const TelemetryFrame &frame) {
-                                                    return frame.bus == bus && frame.destination == destination;
-                                                }),
+                                                [&](const TelemetryFrame &frame) { return is_cleared(frame.id); }),
                                  this->telemetry_frames.end());
-    this->pending_layout.clear();
+    this->pending_layout.erase(std::remove_if(this->pending_layout.begin(), this->pending_layout.end(),
+                                              [&](const std::pair<uint8_t, size_t> &entry) { return is_cleared(entry.first); }),
+                               this->pending_layout.end());
 }
 
 SerialBus *Core::polled_bus() const {
@@ -442,11 +449,14 @@ void Core::send_layout(const TelemetryFrame &frame, const size_t index) {
     }
 }
 
-void Core::announce(const TelemetryFrame &frame) {
+void Core::announce(TelemetryFrame &frame, const bool first) {
     const int64_t rate = this->telemetry_info_rate->integer_value();
     for (size_t index = 0; index < frame.fields.size(); ++index) {
         if (rate > 0) {
             this->pending_layout.push_back({frame.id, index});
+            if (first) {
+                ++frame.layout_pending; // only a new frame waits; announcing again must not pause the stream
+            }
         } else {
             this->send_layout(frame, index);
         }
@@ -462,11 +472,28 @@ size_t Core::encode_frame(TelemetryFrame &frame, const unsigned long now, char *
 }
 
 void Core::emit_telemetry() {
+    // layout lines first, spread over steps (a rate of 0 sends what is queued at once); a frame waits for its layout
+    const int64_t rate = this->telemetry_info_rate->integer_value();
+    for (int64_t i = 0; (rate <= 0 || i < rate) && !this->pending_layout.empty(); ++i) {
+        const auto [id, index] = this->pending_layout.front();
+        this->pending_layout.pop_front();
+        const auto it = std::find_if(this->telemetry_frames.begin(), this->telemetry_frames.end(),
+                                     [id = id](const TelemetryFrame &frame) { return frame.id == id; });
+        if (it != this->telemetry_frames.end()) {
+            this->send_layout(*it, index);
+            if (it->layout_pending > 0) {
+                --it->layout_pending;
+            }
+        }
+    }
+    if (Module::broadcast_paused) {
+        return; // core.pause_broadcasts() quiets frames as well, e.g. during an OTB update
+    }
     const unsigned long now = millis();
     static char line[telemetry::MAX_LINE];
     SerialBus *const polled = this->telemetry_frames.empty() ? nullptr : this->polled_bus();
     for (auto &frame : this->telemetry_frames) {
-        if (frame.interval > 0 && now - frame.last_millis < frame.interval) {
+        if (frame.layout_pending > 0 || (frame.interval > 0 && now - frame.last_millis < frame.interval)) {
             continue;
         }
         SerialBus *bus = nullptr;
@@ -488,16 +515,6 @@ void Core::emit_telemetry() {
         const size_t length = this->encode_frame(frame, now, line, sizeof(line));
         if (length && bus->store_frame(frame.id, destination, line, length, pending)) {
             frame.stored = true;
-        }
-    }
-    const int64_t rate = this->telemetry_info_rate->integer_value();
-    for (int64_t i = 0; i < rate && !this->pending_layout.empty(); ++i) {
-        const auto [id, index] = this->pending_layout.front();
-        this->pending_layout.pop_front();
-        const auto it = std::find_if(this->telemetry_frames.begin(), this->telemetry_frames.end(),
-                                     [id = id](const TelemetryFrame &frame) { return frame.id == id; });
-        if (it != this->telemetry_frames.end()) {
-            this->send_layout(*it, index);
         }
     }
 }
