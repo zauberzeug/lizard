@@ -871,6 +871,9 @@ void SerialBus::count(const Variable_ptr &counter, const int64_t increment) {
 }
 
 void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
+    if (!this->telemetry_rounds.count(message.sender)) {
+        return; // frames from before our own orders, e.g. of our previous run while this one booted, count for nothing
+    }
     static uint8_t body[telemetry::MAX_BODY + 3];
     const size_t length = telemetry::decode_line(message.payload, message.length, body, sizeof(body));
     if (length == 0) {
