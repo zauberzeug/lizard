@@ -181,17 +181,13 @@ void Storage::read_startup_lines(const std::function<void(const std::string &lin
 }
 
 std::uint16_t Storage::startup_checksum() {
-    // of what is stored, not of an edit in RAM: after a failed `!.` the two differ
+    // of what is stored, not of an edit in RAM: after a failed `!.` the two differ; a read error gives no checksum at all
     std::uint16_t checksum = 0;
-    try {
-        Storage::read_stored([&checksum](const std::string &piece) {
-            for (const char c : piece) {
-                checksum += static_cast<std::uint8_t>(c);
-            }
-        });
-    } catch (const std::runtime_error &e) {
-        echo("warning: %s, the checksum covers only what could be read", e.what());
-    }
+    Storage::read_stored([&checksum](const std::string &piece) {
+        for (const char c : piece) {
+            checksum += static_cast<std::uint8_t>(c);
+        }
+    });
     return checksum;
 }
 
@@ -201,13 +197,8 @@ void Storage::begin_edit(const bool keep_current) {
     }
     std::vector<std::string> pieces;
     if (keep_current) {
-        try {
-            Storage::read_startup([&pieces](const std::string &piece) { pieces.push_back(piece); });
-        } catch (const std::runtime_error &e) {
-            // as before, when an unreadable script left the RAM copy empty: the edit starts from nothing
-            echo("warning: %s, editing an empty startup script", e.what());
-            pieces.clear();
-        }
+        // a read error ends the command: an empty edit would replace the stored script at `!.`; `!-` needs no read
+        Storage::read_stored([&pieces](const std::string &piece) { pieces.push_back(piece); });
     }
     Storage::edit_pieces.swap(pieces);
     Storage::editing = true;
