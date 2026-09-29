@@ -325,6 +325,19 @@ def test_a_new_field_count_redefines_the_frame():
     assert (frame.status, frame.values) == ('ok', {'x': 5, 'y': 6})
 
 
+def test_a_redefined_frame_counts_its_seq_from_anew():
+    decoder = Decoder()
+    feed(decoder, counted_layout_lines(1, [('a', 'f', 1.0)]))
+    feed(decoder, [encode(1, seq, 1000 + 10 * seq, [('a', 'f', 1.0)]) for seq in range(10)])
+    feed(decoder, counted_layout_lines(1, [('b', 'f', 2.0), ('c', 'f', 3.0)]))  # core.clear_telemetry(), core.telemetry(b, c)
+    feed(decoder, [encode(1, seq, 1200 + 10 * seq, [('b', 'f', 2.0), ('c', 'f', 3.0)]) for seq in range(5)])
+    feed(decoder, counted_layout_lines(1, [('x', 'i', 5), ('y', 'f', 6.0)]))  # same count, other fields
+    feed(decoder, [encode(1, seq, 1300 + 10 * seq, [('x', 'i', 5), ('y', 'f', 6.0)]) for seq in range(3)])
+    feed(decoder, counted_layout_lines(1, [('x', 'i', 5), ('y', 'f', 6.0)]))  # the same layout again: no redefinition
+    feed(decoder, [encode(1, 5, 1400, [('x', 'i', 5), ('y', 'f', 6.0)])])  # 3 and 4 are missing
+    assert decoder.stats[(None, 1)].seq_gaps == 2
+
+
 @pytest.mark.parametrize('line', ['__LAYOUT__v1 1.0/0 a:f', '__LAYOUT__v1 1.2/2 a:f', '__LAYOUT__v1 1.0/ a:f',
                                   '__LAYOUT__v1 1.0/257 a:f', '__LAYOUT__v1 1.0/2/3 a:f'])
 def test_malformed_field_counts_stay_text(line):

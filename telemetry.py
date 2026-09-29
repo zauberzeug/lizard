@@ -186,10 +186,15 @@ class Decoder:
         self._set_version(sender, version)
         frame, index, name, type_ = int(match.group(1)), int(match.group(2)), match.group(4), match.group(5)
         layout = self.layouts.setdefault((sender, frame), {})
+        redefined = layout.get(index) not in (None, (name, type_))
         if count is not None:
             if self.counts.get((sender, frame)) != count:  # another count: the frame was defined anew
                 layout.clear()
+                redefined = True
             self.counts[(sender, frame)] = count
+        stats = self.stats.get((sender, frame))
+        if redefined and stats is not None:  # a new definition starts its sequence numbers anew
+            stats.last_seq = stats.last_millis = None
         layout[index] = (name, type_)
         return Layout(sender, version, frame, index, name, type_, line, count)
 
