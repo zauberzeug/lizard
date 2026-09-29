@@ -34,8 +34,8 @@ LinearMotor::LinearMotor(const std::string name) : Module(name) {
 }
 
 void LinearMotor::step() {
-    this->properties.at("in")->boolean_value = this->get_in();
-    this->properties.at("out")->boolean_value = this->get_out();
+    this->properties.at("in")->set_boolean_value(this->get_in());
+    this->properties.at("out")->set_boolean_value(this->get_out());
 
     this->sync_enabled();
 
@@ -89,8 +89,8 @@ GpioLinearMotor::GpioLinearMotor(const std::string name,
     gpio_set_direction(move_out, GPIO_MODE_OUTPUT);
     gpio_set_direction(end_in, GPIO_MODE_INPUT);
     gpio_set_direction(end_out, GPIO_MODE_INPUT);
-    this->properties.at("in")->boolean_value = this->get_in();
-    this->properties.at("out")->boolean_value = this->get_out();
+    this->properties.at("in")->set_boolean_value(this->get_in());
+    this->properties.at("out")->set_boolean_value(this->get_out());
 }
 
 bool GpioLinearMotor::get_in() const {
@@ -120,8 +120,8 @@ McpLinearMotor::McpLinearMotor(const std::string name,
     this->mcp->set_input(this->move_out, false);
     this->mcp->set_input(this->end_in, true);
     this->mcp->set_input(this->end_out, true);
-    this->properties.at("in")->boolean_value = this->get_in();
-    this->properties.at("out")->boolean_value = this->get_out();
+    this->properties.at("in")->set_boolean_value(this->get_in());
+    this->properties.at("out")->set_boolean_value(this->get_out());
 }
 
 bool McpLinearMotor::get_in() const {

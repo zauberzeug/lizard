@@ -32,9 +32,9 @@ Core::Core(const std::string name) : Module(name) {
 }
 
 void Core::step() {
-    this->properties.at("millis")->integer_value = millis();
-    this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
-    this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
+    this->properties.at("millis")->set_integer_value(millis());
+    this->properties.at("heap")->set_integer_value(xPortGetFreeHeapSize());
+    this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
     Module::step();
     const unsigned long now = millis();
     for (auto &frame : this->frames) {
@@ -83,13 +83,13 @@ void Core::emit_frame(frame_t &frame, unsigned long now) {
         double value = 0;
         switch (variable->type) {
         case boolean:
-            value = variable->boolean_value ? 1 : 0;
+            value = variable->boolean_value() ? 1 : 0;
             break;
         case integer:
-            value = static_cast<double>(variable->integer_value);
+            value = static_cast<double>(variable->integer_value());
             break;
         case number:
-            value = variable->number_value;
+            value = variable->number_value();
             break;
         default:
             throw std::runtime_error("unsupported frame field type");
@@ -181,7 +181,8 @@ void Core::emit_frame(frame_t &frame, unsigned long now) {
     try {
         peer_bus->send_frame(body, body_length);
     } catch (const std::runtime_error &e) {
-        this->properties.at("frame_drops")->integer_value++;
+        const Variable_ptr frame_drops = this->properties.at("frame_drops");
+        frame_drops->set_integer_value(frame_drops->integer_value() + 1);
     }
 }
 
@@ -413,16 +414,16 @@ std::string Core::get_output() const {
                 element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
             switch (variable->type) {
             case boolean:
-                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value ? "true" : "false");
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value() ? "true" : "false");
                 break;
             case integer:
-                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value);
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value());
                 break;
             case number:
-                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value);
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value());
                 break;
             case string:
-                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value.c_str());
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value().c_str());
                 break;
             default:
                 throw std::runtime_error("invalid type");

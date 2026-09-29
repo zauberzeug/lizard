@@ -31,7 +31,7 @@ void RoboClaw::step() {
     if (millis_since(this->last_temp_reading) > 1000) {
         uint16_t temp;
         this->ReadTemp(temp);
-        this->properties["temperature"]->number_value = temp / 10.0;
+        this->properties["temperature"]->set_number_value(temp / 10.0);
         this->last_temp_reading = millis();
     }
     Module::step();

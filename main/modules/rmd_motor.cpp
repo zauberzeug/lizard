@@ -59,7 +59,7 @@ bool RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const 
 }
 
 void RmdMotor::step() {
-    this->properties.at("can_age")->number_value = millis_since(this->last_msg_millis) / 1e3;
+    this->properties.at("can_age")->set_number_value(millis_since(this->last_msg_millis) / 1e3);
 
     if (!this->has_last_encoder_position) {
         this->send(0x92, 0, 0, 0, 0, 0, 0, 0);
@@ -123,7 +123,7 @@ bool RmdMotor::off() {
 }
 
 bool RmdMotor::hold() {
-    return this->position(this->properties.at("position")->number_value);
+    return this->position(this->properties.at("position")->number_value());
 }
 
 bool RmdMotor::clear_errors() {
@@ -214,7 +214,7 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
     case 0x60: {
         int32_t encoder = 0;
         std::memcpy(&encoder, data + 4, 4);
-        this->properties.at("position")->number_value = encoder / 16384.0 * 360.0 / this->ratio; // 16384 = 2^14
+        this->properties.at("position")->set_number_value(encoder / 16384.0 * 360.0 / this->ratio); // 16384 = 2^14
         break;
     }
     case 0x30: {
@@ -255,7 +255,7 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
     case 0x92: {
         int32_t position = 0;
         std::memcpy(&position, data + 4, 4);
-        this->properties.at("position")->number_value = 0.01 * position;
+        this->properties.at("position")->set_number_value(0.01 * position);
         this->last_encoder_position = modulo_encoder_range(0.01 * position, this->encoder_range);
         this->has_last_encoder_position = true;
         break;
@@ -263,26 +263,28 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
     case 0x9c: {
         int8_t temperature = 0;
         std::memcpy(&temperature, data + 1, 1);
-        this->properties.at("temperature")->number_value = temperature;
+        this->properties.at("temperature")->set_number_value(temperature);
 
         int16_t torque = 0;
         std::memcpy(&torque, data + 2, 2);
-        this->properties.at("torque")->number_value = 0.01 * torque;
+        this->properties.at("torque")->set_number_value(0.01 * torque);
 
         int16_t speed = 0;
         std::memcpy(&speed, data + 4, 2);
-        this->properties.at("speed")->number_value = speed;
+        this->properties.at("speed")->set_number_value(speed);
 
         int16_t position = 0;
         std::memcpy(&position, data + 6, 2);
         int32_t encoder_position = position;
         if (this->has_last_encoder_position) {
-            this->properties.at("position")->number_value += encoder_position - this->last_encoder_position;
-            if (encoder_position - this->last_encoder_position > this->encoder_range / 2) {
-                this->properties.at("position")->number_value -= this->encoder_range;
+            const int32_t delta = encoder_position - this->last_encoder_position;
+            const Variable_ptr &position_property = this->properties.at("position");
+            position_property->set_number_value(position_property->number_value() + delta);
+            if (delta > this->encoder_range / 2) {
+                position_property->set_number_value(position_property->number_value() - this->encoder_range);
             }
-            if (encoder_position - this->last_encoder_position < -this->encoder_range / 2) {
-                this->properties.at("position")->number_value += this->encoder_range;
+            if (delta < -this->encoder_range / 2) {
+                position_property->set_number_value(position_property->number_value() + this->encoder_range);
             }
             this->last_encoder_position = encoder_position;
         }
@@ -294,11 +296,11 @@ void RmdMotor::handle_can_msg(const uint32_t id, const int count, const uint8_t 
 }
 
 double RmdMotor::get_position() const {
-    return this->properties.at("position")->number_value;
+    return this->properties.at("position")->number_value();
 }
 
 double RmdMotor::get_speed() const {
-    return this->properties.at("speed")->number_value;
+    return this->properties.at("speed")->number_value();
 }
 
 bool RmdMotor::set_acceleration(const uint8_t index, const uint32_t acceleration) {

@@ -79,37 +79,37 @@ VariableExpression::VariableExpression(const ConstVariable_ptr variable)
 
 bool VariableExpression::evaluate_boolean() const {
     if (this->type == boolean)
-        return this->variable->boolean_value;
+        return this->variable->boolean_value();
     throw std::runtime_error("variable is not a boolean");
 }
 
 int64_t VariableExpression::evaluate_integer() const {
     if (this->type == integer)
-        return this->variable->integer_value;
+        return this->variable->integer_value();
     if (this->type == boolean)
-        return this->variable->boolean_value ? 1 : 0;
+        return this->variable->boolean_value() ? 1 : 0;
     throw std::runtime_error("variable cannot evaluate to an integer");
 }
 
 double VariableExpression::evaluate_number() const {
     if (this->type == number)
-        return this->variable->number_value;
+        return this->variable->number_value();
     if (this->type == integer)
-        return this->variable->integer_value;
+        return this->variable->integer_value();
     if (this->type == boolean)
-        return this->variable->boolean_value ? 1.0 : 0.0;
+        return this->variable->boolean_value() ? 1.0 : 0.0;
     throw std::runtime_error("variable cannot evaluate to a number");
 }
 
 std::string VariableExpression::evaluate_string() const {
     if (this->type == string)
-        return this->variable->string_value;
+        return this->variable->string_value();
     throw std::runtime_error("variable is not a string");
 }
 
 std::string VariableExpression::evaluate_identifier() const {
     if (this->type == identifier)
-        return this->variable->identifier_value;
+        return this->variable->identifier_value();
     throw std::runtime_error("variable is not an identifier");
 }
 
@@ -119,37 +119,37 @@ PropertyExpression::PropertyExpression(const ConstModule_ptr module, const std::
 
 bool PropertyExpression::evaluate_boolean() const {
     if (this->type == boolean)
-        return this->module->get_property(this->property_name)->boolean_value;
+        return this->module->get_property(this->property_name)->boolean_value();
     throw std::runtime_error("property is not a boolean");
 }
 
 int64_t PropertyExpression::evaluate_integer() const {
     if (this->type == integer)
-        return this->module->get_property(this->property_name)->integer_value;
+        return this->module->get_property(this->property_name)->integer_value();
     if (this->type == boolean)
-        return this->module->get_property(this->property_name)->boolean_value ? 1 : 0;
+        return this->module->get_property(this->property_name)->boolean_value() ? 1 : 0;
     throw std::runtime_error("property cannot evaluate to an integer");
 }
 
 double PropertyExpression::evaluate_number() const {
     if (this->type == number)
-        return this->module->get_property(this->property_name)->number_value;
+        return this->module->get_property(this->property_name)->number_value();
     if (this->type == integer)
-        return this->module->get_property(this->property_name)->integer_value;
+        return this->module->get_property(this->property_name)->integer_value();
     if (this->type == boolean)
-        return this->module->get_property(this->property_name)->boolean_value ? 1.0 : 0.0;
+        return this->module->get_property(this->property_name)->boolean_value() ? 1.0 : 0.0;
     throw std::runtime_error("property cannot evaluate to a number");
 }
 
 std::string PropertyExpression::evaluate_string() const {
     if (this->type == string)
-        return this->module->get_property(this->property_name)->string_value;
+        return this->module->get_property(this->property_name)->string_value();
     throw std::runtime_error("property is not a string");
 }
 
 std::string PropertyExpression::evaluate_identifier() const {
     if (this->type == identifier)
-        return this->module->get_property(this->property_name)->identifier_value;
+        return this->module->get_property(this->property_name)->identifier_value();
     throw std::runtime_error("property is not an identifier");
 }
 

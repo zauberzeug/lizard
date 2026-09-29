@@ -37,7 +37,7 @@ void RoboClawMotor::step() {
     if (!valid) {
         throw std::runtime_error("could not read motor position");
     }
-    this->properties["position"]->integer_value = position;
+    this->properties["position"]->set_integer_value(position);
     Module::step();
 }
 
@@ -65,7 +65,7 @@ void RoboClawMotor::call(const std::string method_name, const std::vector<ConstE
 }
 
 int64_t RoboClawMotor::get_position() const {
-    return this->properties.at("position")->integer_value;
+    return this->properties.at("position")->integer_value();
 }
 
 void RoboClawMotor::power(double value) {
