@@ -56,22 +56,23 @@ void BusTelemetry::step() {
         // a lost order or layout line, or a peer that forgot its orders: order again, at most every renew period
         const unsigned long renew_ms = std::max<unsigned long>(RENEW_MIN_MS, 10 * this->interval);
         const unsigned long quiet = this->frame_seen ? millis_since(this->last_frame_millis) : millis_since(this->orders_millis);
-        if (millis_since(this->orders_millis) > renew_ms) {
-            if (quiet > renew_ms) {
-                // the same order again: a peer that still has the frame only announces its layout again, one that lost
-                // it defines it anew; other modules' frames of the same peer stay untouched
-                this->send_orders();
-            } else {
-                // frames arrive, but a lost or rejected order line left some mirrors without any
-                std::vector<const std::string *> missing;
-                for (const std::string *name : this->declared) {
-                    if (std::find(this->announced.begin(), this->announced.end(), name) == this->announced.end()) {
-                        missing.push_back(name);
-                    }
+        if (quiet > renew_ms && millis_since(this->orders_millis) > renew_ms) {
+            // the same order again: a peer that still has the frame only announces its layout again, one that lost it
+            // (e.g. rebooted with a lost Ready.) defines it anew; the old mapping goes, so that a line lost now shows
+            // as a missing name; other modules' frames of the same peer stay untouched
+            this->reset_layout();
+            this->send_orders();
+        } else if (millis_since(this->orders_millis) > renew_ms && millis_since(this->checked_millis) > renew_ms) {
+            // frames arrive, but a lost or rejected order line left some mirrors without any
+            this->checked_millis = millis();
+            std::vector<const std::string *> missing;
+            for (const std::string *name : this->declared) {
+                if (std::find(this->announced.begin(), this->announced.end(), name) == this->announced.end()) {
+                    missing.push_back(name);
                 }
-                if (!missing.empty()) {
-                    this->send_order(missing);
-                }
+            }
+            if (!missing.empty()) {
+                this->send_order(missing);
                 this->orders_millis = millis();
             }
         }
@@ -145,8 +146,28 @@ void BusTelemetry::reset_layout() {
     this->announced.clear();
 }
 
+void BusTelemetry::forget_frame(const uint8_t frame_id) {
+    // its mirrors count as not announced any more, so that the next check orders them again
+    for (Variable *const variable : this->mapped[frame_id]) {
+        for (auto it = this->announced.begin(); variable && it != this->announced.end();) {
+            it = this->properties.at(**it).get() == variable ? this->announced.erase(it) : std::next(it);
+        }
+    }
+    this->mapped.erase(frame_id);
+    this->slots.erase(frame_id);
+}
+
 void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const telemetry::Layout &layout) {
     const auto key = std::find_if(this->declared.begin(), this->declared.end(), [&](const std::string *name) { return *name == line.name; });
+    if (key == this->declared.end()) {
+        const auto frame = this->mapped.find(line.frame_id);
+        if (frame != this->mapped.end() && line.index < frame->second.size() && frame->second[line.index]) {
+            // another field where one of our mirrors was: the peer gave the frame id to other fields (e.g. after a
+            // reboot whose Ready. got lost), so nothing of our old mapping of it is safe, also if a line of it got lost
+            this->forget_frame(line.frame_id);
+            return;
+        }
+    }
     Variable *variable = nullptr;
     if (key != this->declared.end()) {
         if (std::find(this->announced.begin(), this->announced.end(), *key) == this->announced.end()) {
