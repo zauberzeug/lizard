@@ -333,8 +333,10 @@ def test_a_redefined_frame_counts_its_seq_from_anew():
     feed(decoder, [encode(1, seq, 1200 + 10 * seq, [('b', 'f', 2.0), ('c', 'f', 3.0)]) for seq in range(5)])
     feed(decoder, counted_layout_lines(1, [('x', 'i', 5), ('y', 'f', 6.0)]))  # same count, other fields
     feed(decoder, [encode(1, seq, 1300 + 10 * seq, [('x', 'i', 5), ('y', 'f', 6.0)]) for seq in range(3)])
-    feed(decoder, counted_layout_lines(1, [('x', 'i', 5), ('y', 'f', 6.0)]))  # the same layout again: no redefinition
     feed(decoder, [encode(1, 5, 1400, [('x', 'i', 5), ('y', 'f', 6.0)])])  # 3 and 4 are missing
+    assert decoder.stats[(None, 1)].seq_gaps == 2
+    feed(decoder, counted_layout_lines(1, [('x', 'i', 5), ('y', 'f', 6.0)]))  # core.clear_telemetry(), the same core.telemetry
+    feed(decoder, [encode(1, 0, 1500, [('x', 'i', 5), ('y', 'f', 6.0)])])  # seq starts at 0 again
     assert decoder.stats[(None, 1)].seq_gaps == 2
 
 

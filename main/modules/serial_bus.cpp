@@ -762,8 +762,16 @@ bool SerialBus::store_frame(const uint8_t frame_id, const uint8_t destination, c
         this->frame_drops++;
         if (millis_since(this->last_slot_warning_millis) > 10000) {
             this->last_slot_warning_millis = millis();
-            echo("warning: serial bus %s has no free slot for telemetry frame %u (at most %u frames)", this->name.c_str(), frame_id,
-                 static_cast<unsigned>(MAX_FRAME_SLOTS));
+            char warning[PAYLOAD_CAPACITY];
+            const int length = std::snprintf(warning, sizeof(warning), "%swarning: serial bus %s has no free slot for telemetry frame %u (at most %u frames)",
+                                             ECHO_CMD, this->name.c_str(), frame_id, static_cast<unsigned>(MAX_FRAME_SLOTS));
+            echo("%s", warning + sizeof(ECHO_CMD) - 1);
+            if (this->coordinator_id && length > 0 && length < static_cast<int>(sizeof(warning))) {
+                try {
+                    this->enqueue_outgoing_message(this->coordinator_id, warning, length, 0); // the coordinator prints it as bus[n]
+                } catch (const std::runtime_error &) {
+                }
+            }
         }
         return false;
     }

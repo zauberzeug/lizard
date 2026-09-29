@@ -10,6 +10,7 @@ private:
     // The startup script lives in NVS and is only held in RAM while it is edited (from the first `!+` or `!-` to `!.`),
     // in pieces of at most one NVS chunk, so that neither booting nor editing needs one large block of heap.
     static bool editing;
+    static bool save_failed; // the last `!.` failed and the edit did not change since
     static std::vector<std::string> edit_pieces;
 
     static void read_stored(const std::function<void(const std::string &piece)> &piece);
@@ -24,7 +25,7 @@ public:
     static void read_startup(const std::function<void(const std::string &piece)> &piece);
     // Calls `line` with every line of the startup script, without its '\n'.
     static void read_startup_lines(const std::function<void(const std::string &line)> &line);
-    // The byte sum of the stored script, as it will boot; an unsaved edit does not count.
+    // The byte sum of the edit while there is one, else of the stored script.
     static std::uint16_t startup_checksum();
 
     static void append_to_startup(const std::string &line);

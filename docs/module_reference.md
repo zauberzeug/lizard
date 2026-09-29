@@ -35,7 +35,7 @@ It is automatically created right after the boot sequence.
 | `core.info()`                           | Show project name, version, compile time and IDF version            |                                |
 | `core.print(...)`                       | Print arbitrary arguments to the command line                       | arbitrary                      |
 | `core.output(format)`                   | Define the output format                                            | `str`                          |
-| `core.startup_checksum()`               | Show 16-bit checksum of the saved startup script (sum of its bytes) |                                |
+| `core.startup_checksum()`               | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |                                |
 | `core.get_pin_status(pin)`              | Print the status of the chosen pin                                  | `int`                          |
 | `core.set_pin_level(pin, value)`        | Turns the pin into an output and sets its level                     | `int`, `int`                   |
 | `core.get_pin_strapping(pin)`           | Print value of the pin from the strapping register                  | `int`                          |

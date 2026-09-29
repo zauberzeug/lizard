@@ -17,6 +17,7 @@ private:
     std::vector<const std::string *> announced; // declared names that a layout line brought since the orders
     bool orders_sent = false;
     unsigned long orders_millis = 0;
+    unsigned long checked_millis = 0; // last check for declared names that no layout line brought
     bool frame_seen = false;
     unsigned long last_frame_millis = 0;
     Variable_ptr age;
@@ -24,6 +25,7 @@ private:
     Variable_ptr frames;
 
     void send_order(const std::vector<const std::string *> &names);
+    void forget_frame(uint8_t frame_id);
 
 public:
     static inline constexpr const char *TYPE = "BusTelemetry";
