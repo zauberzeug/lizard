@@ -30,12 +30,12 @@ Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_p
     I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     this->properties = Mcp23017::get_defaults();
 
-    this->set_inputs(this->properties.at("inputs")->integer_value);
-    this->set_pullups(this->properties.at("pullups")->integer_value);
+    this->set_inputs(this->properties.at("inputs")->integer_value());
+    this->set_pullups(this->properties.at("pullups")->integer_value());
 }
 
 void Mcp23017::step() {
-    this->properties.at("levels")->integer_value = this->read_pins();
+    this->properties.at("levels")->set_integer_value(this->read_pins());
     Module::step();
 }
 
@@ -43,17 +43,17 @@ void Mcp23017::call(const std::string method_name, const std::vector<ConstExpres
     if (method_name == "levels") {
         Module::expect(arguments, 1, integer);
         const uint16_t value = arguments[0]->evaluate_integer();
-        this->properties.at("levels")->integer_value = value;
+        this->properties.at("levels")->set_integer_value(value);
         this->write_pins(value);
     } else if (method_name == "pullups") {
         Module::expect(arguments, 1, integer);
         const uint16_t value = arguments[0]->evaluate_integer();
-        this->properties.at("pullups")->integer_value = value;
+        this->properties.at("pullups")->set_integer_value(value);
         this->set_pullups(value);
     } else if (method_name == "inputs") {
         Module::expect(arguments, 1, integer);
         const uint16_t value = arguments[0]->evaluate_integer();
-        this->properties.at("inputs")->integer_value = value;
+        this->properties.at("inputs")->set_integer_value(value);
         this->set_inputs(value);
     } else {
         Module::call(method_name, arguments);
@@ -121,38 +121,38 @@ void Mcp23017::set_pullups(uint16_t pullups) const {
 }
 
 bool Mcp23017::get_level(const uint8_t number) const {
-    return this->properties.at("levels")->integer_value & (1 << number);
+    return this->properties.at("levels")->integer_value() & (1 << number);
 }
 
 void Mcp23017::set_level(const uint8_t number, const bool value) const {
-    uint16_t levels = this->properties.at("levels")->integer_value;
+    uint16_t levels = this->properties.at("levels")->integer_value();
     if (value) {
         levels |= 1 << number;
     } else {
         levels &= ~(1 << number);
     }
-    this->properties.at("levels")->integer_value = levels;
+    this->properties.at("levels")->set_integer_value(levels);
     this->write_pins(levels);
 }
 
 void Mcp23017::set_input(const uint8_t number, const bool value) const {
-    uint16_t inputs = this->properties.at("inputs")->integer_value;
+    uint16_t inputs = this->properties.at("inputs")->integer_value();
     if (value) {
         inputs |= 1 << number;
     } else {
         inputs &= ~(1 << number);
     }
-    this->properties.at("inputs")->integer_value = inputs;
+    this->properties.at("inputs")->set_integer_value(inputs);
     this->set_inputs(inputs);
 }
 
 void Mcp23017::set_pullup(const uint8_t number, const bool value) const {
-    uint16_t pullups = this->properties.at("pullups")->integer_value;
+    uint16_t pullups = this->properties.at("pullups")->integer_value();
     if (value) {
         pullups |= 1 << number;
     } else {
         pullups &= ~(1 << number);
     }
-    this->properties.at("pullups")->integer_value = pullups;
+    this->properties.at("pullups")->set_integer_value(pullups);
     this->set_pullups(pullups);
 }

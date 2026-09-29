@@ -27,8 +27,8 @@ RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor
 }
 
 RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {
-    const double v_max = std::abs(this->properties.at("v_max")->number_value);
-    const double a_max = std::abs(this->properties.at("a_max")->number_value);
+    const double v_max = std::abs(this->properties.at("v_max")->number_value());
+    const double a_max = std::abs(this->properties.at("a_max")->number_value());
     v0 = std::min(std::max(v0, -v_max), v_max);
     v1 = std::min(std::max(v1, -v_max), v_max);
 

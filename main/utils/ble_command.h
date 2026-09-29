@@ -18,6 +18,8 @@ using CommandCallback = std::function<void(std::unique_ptr<char[]> line)>;
 
 void init(const std::string_view &device_name, CommandCallback on_command);
 int send(const std::string_view &data);
+// Whether a central is currently connected (regardless of pairing state).
+bool is_connected();
 void finalize();
 void deactivate_pin();
 void reset_bonds();

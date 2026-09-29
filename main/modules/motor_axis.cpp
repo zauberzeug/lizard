@@ -37,10 +37,10 @@ bool MotorAxis::can_move(const float speed) const {
     if (!this->enabled) {
         return false;
     }
-    if (speed < 0 && this->input1->get_property("active")->boolean_value) {
+    if (speed < 0 && this->input1->get_property("active")->boolean_value()) {
         return false;
     }
-    if (speed > 0 && this->input2->get_property("active")->boolean_value) {
+    if (speed > 0 && this->input2->get_property("active")->boolean_value()) {
         return false;
     }
     return true;

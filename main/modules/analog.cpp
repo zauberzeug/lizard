@@ -99,8 +99,8 @@ void Analog::step() {
     int voltage;
     ESP_ERROR_CHECK(adc_cali_raw_to_voltage(this->adc_cali_handle, raw_value, &voltage));
 
-    this->properties.at("raw")->integer_value = raw_value;
-    this->properties.at("voltage")->number_value = voltage * 0.001;
+    this->properties.at("raw")->set_integer_value(raw_value);
+    this->properties.at("voltage")->set_number_value(voltage * 0.001);
 
     Module::step();
 }
