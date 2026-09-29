@@ -46,8 +46,10 @@ size_t encode_line(const uint8_t *body, size_t length, char *line, size_t capaci
 // a "~<base64>" line (without "@xx") with a valid CRC; returns the body length, 0 if it is not a frame
 size_t decode_line(const char *line, size_t length, uint8_t *body, size_t capacity);
 
-// base64 by table instead of mbedtls' constant-time decoder (for comparison)
-size_t fast_decode_line(const char *line, size_t length, uint8_t *body, size_t capacity);
+// the same through mbedtls' constant-time base64 and a bitwise CRC (for comparison)
+size_t mbedtls_encode_line(const uint8_t *body, size_t length, char *line, size_t capacity);
+size_t mbedtls_decode_line(const char *line, size_t length, uint8_t *body, size_t capacity);
+uint16_t bitwise_crc16(const uint8_t *data, size_t length);
 
 int format_layout(char *buffer, size_t capacity, uint8_t frame_id, size_t index, const std::string &name, char type);
 

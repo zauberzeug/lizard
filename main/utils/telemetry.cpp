@@ -45,7 +45,7 @@ size_t payload_size(const std::vector<Field> &fields) {
 }
 
 // CRC-16/CCITT-FALSE
-uint16_t crc16(const uint8_t *data, const size_t length) {
+uint16_t bitwise_crc16(const uint8_t *data, const size_t length) {
     uint16_t crc = 0xffff;
     for (size_t i = 0; i < length; ++i) {
         crc ^= static_cast<uint16_t>(data[i]) << 8;
@@ -55,6 +55,43 @@ uint16_t crc16(const uint8_t *data, const size_t length) {
     }
     return crc;
 }
+
+struct CrcTable {
+    uint16_t values[256];
+    constexpr CrcTable() : values() {
+        for (int byte = 0; byte < 256; ++byte) {
+            uint16_t crc = byte << 8;
+            for (int bit = 0; bit < 8; ++bit) {
+                crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
+            }
+            values[byte] = crc;
+        }
+    }
+};
+static constexpr CrcTable CRC_TABLE;
+
+uint16_t crc16(const uint8_t *data, const size_t length) {
+    uint16_t crc = 0xffff;
+    for (size_t i = 0; i < length; ++i) {
+        crc = (crc << 8) ^ CRC_TABLE.values[(crc >> 8) ^ data[i]];
+    }
+    return crc;
+}
+
+static constexpr char BASE64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+struct DecodeTable {
+    int8_t values[256];
+    constexpr DecodeTable() : values() {
+        for (int i = 0; i < 256; ++i) {
+            values[i] = -1;
+        }
+        for (int i = 0; i < 64; ++i) {
+            values[static_cast<uint8_t>(BASE64[i])] = i;
+        }
+    }
+};
+static constexpr DecodeTable DECODE_TABLE;
 
 uint16_t float_to_half(const float value) {
     uint32_t f;
@@ -170,62 +207,37 @@ size_t build_body(const uint8_t id, const uint8_t seq, const uint32_t millis, co
 }
 
 size_t encode_line(const uint8_t *body, const size_t length, char *line, const size_t capacity) {
-    if (capacity < 2) {
+    const size_t needed = 1 + 4 * ((length + 2) / 3) + 1;
+    if (capacity < needed) {
         return 0;
     }
-    line[0] = FRAME_PREFIX;
-    size_t written = 0;
-    if (mbedtls_base64_encode(reinterpret_cast<unsigned char *>(&line[1]), capacity - 1, &written, body, length) != 0) {
-        return 0;
+    size_t pos = 0;
+    line[pos++] = FRAME_PREFIX;
+    for (size_t i = 0; i < length; i += 3) {
+        const uint32_t v = body[i] << 16 | (i + 1 < length ? body[i + 1] << 8 : 0) | (i + 2 < length ? body[i + 2] : 0);
+        line[pos++] = BASE64[v >> 18 & 0x3f];
+        line[pos++] = BASE64[v >> 12 & 0x3f];
+        line[pos++] = i + 1 < length ? BASE64[v >> 6 & 0x3f] : '=';
+        line[pos++] = i + 2 < length ? BASE64[v & 0x3f] : '=';
     }
-    return 1 + written;
+    line[pos] = '\0';
+    return pos;
 }
 
 size_t decode_line(const char *line, const size_t length, uint8_t *body, const size_t capacity) {
-    if (length < 2 || line[0] != FRAME_PREFIX || (length - 1) % 4 != 0) {
-        return 0;
-    }
-    for (size_t i = 1; i < length; ++i) {
-        const char c = line[i];
-        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=')) {
-            return 0;
-        }
-    }
-    size_t decoded = 0;
-    if (mbedtls_base64_decode(body, capacity, &decoded, reinterpret_cast<const unsigned char *>(&line[1]), length - 1) != 0) {
-        return 0;
-    }
-    if (decoded < HEADER_SIZE + CRC_SIZE) {
-        return 0;
-    }
-    uint16_t crc;
-    memcpy(&crc, &body[decoded - CRC_SIZE], 2);
-    return crc == crc16(body, decoded - CRC_SIZE) ? decoded : 0;
-}
-
-size_t fast_decode_line(const char *line, const size_t length, uint8_t *body, const size_t capacity) {
-    static int8_t table[256];
-    static bool ready = false;
-    if (!ready) {
-        memset(table, -1, sizeof(table));
-        const char *alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        for (int i = 0; i < 64; ++i) {
-            table[static_cast<uint8_t>(alphabet[i])] = i;
-        }
-        ready = true;
-    }
     if (length < 5 || line[0] != FRAME_PREFIX || (length - 1) % 4 != 0) {
         return 0;
     }
     size_t out = 0;
     for (size_t i = 1; i < length; i += 4) {
-        const int8_t a = table[static_cast<uint8_t>(line[i])];
-        const int8_t b = table[static_cast<uint8_t>(line[i + 1])];
-        const bool pad2 = line[i + 2] == '=';
-        const bool pad3 = line[i + 3] == '=';
-        const int8_t c = pad2 ? 0 : table[static_cast<uint8_t>(line[i + 2])];
-        const int8_t d = pad3 ? 0 : table[static_cast<uint8_t>(line[i + 3])];
-        if (a < 0 || b < 0 || c < 0 || d < 0 || (pad2 && !pad3) || ((pad2 || pad3) && i + 4 != length)) {
+        const bool last = i + 4 == length;
+        const bool pad2 = last && line[i + 2] == '=';
+        const bool pad3 = last && line[i + 3] == '=';
+        const int8_t a = DECODE_TABLE.values[static_cast<uint8_t>(line[i])];
+        const int8_t b = DECODE_TABLE.values[static_cast<uint8_t>(line[i + 1])];
+        const int8_t c = pad2 ? 0 : DECODE_TABLE.values[static_cast<uint8_t>(line[i + 2])];
+        const int8_t d = pad3 ? 0 : DECODE_TABLE.values[static_cast<uint8_t>(line[i + 3])];
+        if (a < 0 || b < 0 || c < 0 || d < 0 || (pad2 && !pad3)) {
             return 0;
         }
         const uint32_t v = a << 18 | b << 12 | c << 6 | d;
@@ -248,6 +260,34 @@ size_t fast_decode_line(const char *line, const size_t length, uint8_t *body, co
     uint16_t crc;
     memcpy(&crc, &body[out - CRC_SIZE], 2);
     return crc == crc16(body, out - CRC_SIZE) ? out : 0;
+}
+
+size_t mbedtls_encode_line(const uint8_t *body, const size_t length, char *line, const size_t capacity) {
+    if (capacity < 2) {
+        return 0;
+    }
+    line[0] = FRAME_PREFIX;
+    size_t written = 0;
+    if (mbedtls_base64_encode(reinterpret_cast<unsigned char *>(&line[1]), capacity - 1, &written, body, length) != 0) {
+        return 0;
+    }
+    return 1 + written;
+}
+
+size_t mbedtls_decode_line(const char *line, const size_t length, uint8_t *body, const size_t capacity) {
+    if (length < 2 || line[0] != FRAME_PREFIX || (length - 1) % 4 != 0) {
+        return 0;
+    }
+    size_t decoded = 0;
+    if (mbedtls_base64_decode(body, capacity, &decoded, reinterpret_cast<const unsigned char *>(&line[1]), length - 1) != 0) {
+        return 0;
+    }
+    if (decoded < HEADER_SIZE + CRC_SIZE) {
+        return 0;
+    }
+    uint16_t crc;
+    memcpy(&crc, &body[decoded - CRC_SIZE], 2);
+    return crc == bitwise_crc16(body, decoded - CRC_SIZE) ? decoded : 0;
 }
 
 int format_layout(char *buffer, const size_t capacity, const uint8_t frame_id, const size_t index, const std::string &name, const char type) {

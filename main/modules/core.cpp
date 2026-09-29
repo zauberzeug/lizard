@@ -256,42 +256,51 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         static char line[telemetry::MAX_LINE];
         const int rounds = 200;
         size_t payload_length = 0, body_length = 0, line_length = 0, ok = 0;
-        const int64_t t0 = esp_timer_get_time();
+        uint16_t crc = 0;
+        int64_t t[10];
+        t[0] = esp_timer_get_time();
         for (int r = 0; r < rounds; ++r) {
             payload_length = telemetry::pack(fields, payload, sizeof(payload));
         }
-        const int64_t t1 = esp_timer_get_time();
+        t[1] = esp_timer_get_time();
         for (int r = 0; r < rounds; ++r) {
             body_length = telemetry::build_body(1, r, 1234, payload, payload_length, body);
         }
-        const int64_t t2 = esp_timer_get_time();
+        t[2] = esp_timer_get_time();
         for (int r = 0; r < rounds; ++r) {
             line_length = telemetry::encode_line(body, body_length, line, sizeof(line));
         }
-        const int64_t t3 = esp_timer_get_time();
+        t[3] = esp_timer_get_time();
         for (int r = 0; r < rounds; ++r) {
             ok += telemetry::decode_line(line, line_length, decoded, sizeof(decoded)) ? 1 : 0;
         }
-        const int64_t t4 = esp_timer_get_time();
-        for (int r = 0; r < rounds; ++r) {
-            ok += telemetry::fast_decode_line(line, line_length, decoded, sizeof(decoded)) ? 1 : 0;
-        }
-        const int64_t t5 = esp_timer_get_time();
+        t[4] = esp_timer_get_time();
         for (int r = 0; r < rounds; ++r) {
             telemetry::apply(slots, &decoded[telemetry::HEADER_SIZE]);
         }
-        const int64_t t6 = esp_timer_get_time();
-        uint16_t crc = 0;
+        t[5] = esp_timer_get_time();
         for (int r = 0; r < rounds; ++r) {
             crc ^= telemetry::crc16(body, body_length - telemetry::CRC_SIZE);
         }
-        const int64_t t7 = esp_timer_get_time();
+        t[6] = esp_timer_get_time();
+        for (int r = 0; r < rounds; ++r) {
+            crc ^= telemetry::bitwise_crc16(body, body_length - telemetry::CRC_SIZE);
+        }
+        t[7] = esp_timer_get_time();
+        for (int r = 0; r < rounds; ++r) {
+            line_length = telemetry::mbedtls_encode_line(body, body_length, line, sizeof(line));
+        }
+        t[8] = esp_timer_get_time();
+        for (int r = 0; r < rounds; ++r) {
+            ok += telemetry::mbedtls_decode_line(line, line_length, decoded, sizeof(decoded)) ? 1 : 0;
+        }
+        t[9] = esp_timer_get_time();
+        const auto us = [&](int i) { return (t[i + 1] - t[i]) / double(rounds); };
         echo("telemetry selftest: %d floats, body %u B, line %u B, ok %u/%d; us per frame: pack %.1f, body+crc %.1f, "
-             "base64 encode %.1f, mbedtls decode+crc %.1f, table decode+crc %.1f, apply %.1f, crc alone %.1f (%04x)",
+             "encode %.1f, decode+crc %.1f, apply %.1f; crc table %.1f, crc bitwise %.1f; mbedtls encode %.1f, "
+             "mbedtls decode+bitwise crc %.1f (%04x)",
              static_cast<int>(count), static_cast<unsigned>(body_length), static_cast<unsigned>(line_length),
-             static_cast<unsigned>(ok), 2 * rounds, (t1 - t0) / double(rounds), (t2 - t1) / double(rounds),
-             (t3 - t2) / double(rounds), (t4 - t3) / double(rounds), (t5 - t4) / double(rounds),
-             (t6 - t5) / double(rounds), (t7 - t6) / double(rounds), crc);
+             static_cast<unsigned>(ok), 2 * rounds, us(0), us(1), us(2), us(3), us(4), us(5), us(6), us(7), us(8), crc);
     } else {
         Module::call(method_name, arguments);
     }
