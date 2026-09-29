@@ -3,7 +3,9 @@
 
 A frame is the console line '~' + base64(body) + '@xx' with body = frame id (u8) | seq (u8) | millis (u32) | payload |
 CRC-16/CCITT-FALSE over everything before it, all little-endian. Its layout comes as one line per field,
-'__LAYOUT__v1 <frame>.<index> <name>:<type>', with type f (float32), i (int32), ? (bool) or e (float16, experimental).
+'__LAYOUT__v1 <frame>.<index>/<count> <name>:<type>', with type f (float32), i (int32) or ? (bool); <count> is the
+number of fields in the frame, so a reader notices a lost last line (older lines without it are read too, and old logs
+may contain e for float16).
 The payload holds the numeric fields in index order, then all bools as bits in index order, least significant bit first.
 """
 from __future__ import annotations
@@ -26,7 +28,7 @@ from typing import Any, Union
 FORMAT_VERSION = 'v1'
 SIZES = {'f': 4, 'i': 4, 'e': 2}  # bools ('?') are bits after the numeric fields
 LAYOUT_LINE = re.compile(r'__LAYOUT__(v[0-9]+)(?: (.*))?')
-LAYOUT_FIELD = re.compile(r'([0-9]{1,3})\.([0-9]+) ([^\s:]+):([fie?])')
+LAYOUT_FIELD = re.compile(r'([0-9]{1,3})\.([0-9]+)(?:/([0-9]+))? ([^\s:]+):([fie?])')
 Value = Union[float, int, bool]
 
 log = logging.getLogger(__name__)
@@ -97,6 +99,7 @@ class Layout:
     name: str | None
     type: str | None
     line: str
+    count: int | None = None  # fields in the frame, None if the line does not say
 
     def __str__(self) -> str:
         return self.line
@@ -142,6 +145,7 @@ class Decoder:
         self.strict = strict  # decode a frame only if its field indices run from 0 without gaps
         self.versions: dict[Hashable, str] = {}
         self.layouts: dict[tuple[Hashable, int], dict[int, tuple[str, str]]] = {}
+        self.counts: dict[tuple[Hashable, int], int] = {}  # fields per frame, from layout lines that carry it
         self.stats: dict[tuple[Hashable, int], FrameStats] = {}
         self._warned: set[tuple[Hashable, str]] = set()
 
@@ -176,10 +180,18 @@ class Decoder:
         match = LAYOUT_FIELD.fullmatch(rest)
         if match is None or int(match.group(1)) > 255:
             return None
+        count = int(match.group(3)) if match.group(3) is not None else None
+        if count is not None and not int(match.group(2)) < count <= 256:
+            return None
         self._set_version(sender, version)
-        frame, index, name, type_ = int(match.group(1)), int(match.group(2)), match.group(3), match.group(4)
-        self.layouts.setdefault((sender, frame), {})[index] = (name, type_)
-        return Layout(sender, version, frame, index, name, type_, line)
+        frame, index, name, type_ = int(match.group(1)), int(match.group(2)), match.group(4), match.group(5)
+        layout = self.layouts.setdefault((sender, frame), {})
+        if count is not None:
+            if self.counts.get((sender, frame)) != count:  # another count: the frame was defined anew
+                layout.clear()
+            self.counts[(sender, frame)] = count
+        layout[index] = (name, type_)
+        return Layout(sender, version, frame, index, name, type_, line, count)
 
     def _set_version(self, sender: Hashable, version: str) -> None:
         if self.versions.get(sender) != version:  # layouts of another format version are meaningless
@@ -189,6 +201,8 @@ class Decoder:
     def _drop_layouts(self, sender: Hashable) -> None:
         for key in [key for key in self.layouts if key[0] == sender]:
             del self.layouts[key]
+        for key in [key for key in self.counts if key[0] == sender]:
+            del self.counts[key]
 
     def _frame(self, sender: Hashable, body: bytes) -> Frame:
         frame_id, seq, millis = struct.unpack_from('<BBI', body)
@@ -205,15 +219,18 @@ class Decoder:
                 elif (seq, millis) != (stats.last_seq, stats.last_millis):  # a repeated line is no gap
                     stats.seq_gaps += (seq - stats.last_seq - 1) % 256
             stats.last_seq, stats.last_millis = seq, millis
-            status, values, types = self._decode(self.layouts.get((sender, frame_id)), body[6:-2])
+            status, values, types = self._decode(self.layouts.get((sender, frame_id)), body[6:-2],
+                                                 self.counts.get((sender, frame_id)))
         stats.status[status] += 1
         return Frame(sender, frame_id, seq, millis, status, values, body, types)
 
-    def _decode(self, layout: dict[int, tuple[str, str]] | None,
-                payload: bytes) -> tuple[str, dict[str, Value] | None, dict[str, str]]:
+    def _decode(self, layout: dict[int, tuple[str, str]] | None, payload: bytes,
+                count: int | None = None) -> tuple[str, dict[str, Value] | None, dict[str, str]]:
         if not layout:
             return 'no_layout', None, {}
         indices = sorted(layout)
+        if count is not None and indices != list(range(count)):  # with the count, a lost last line shows too
+            return 'layout_incomplete', None, {}
         if self.strict and indices != list(range(len(indices))):
             return 'layout_incomplete', None, {}
         fields = [layout[index] for index in indices]

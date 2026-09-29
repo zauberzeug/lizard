@@ -293,6 +293,44 @@ def test_lost_layout_line_of_the_last_field_is_detected_if_it_changes_the_payloa
         assert feed(decoder, [encode(1, 0, 0, fields)])[0].status == 'layout_mismatch'
 
 
+def counted_layout_lines(frame, fields):
+    return [f'__LAYOUT__v1 {frame}.{index}/{len(fields)} {name}:{type_}' for index, (name, type_, _) in enumerate(fields)]
+
+
+def test_field_count_detects_a_lost_last_layout_line():
+    """With the field count in the layout lines the finding above is gone: the frame stays incomplete."""
+    lines = counted_layout_lines(1, LOSS_FIELDS)
+    line = encode(1, 0, 0, LOSS_FIELDS)
+    for strict in (True, False):
+        decoder = Decoder(strict=strict)
+        feed(decoder, lines[:-1])
+        assert feed(decoder, [line])[0].status == 'layout_incomplete'
+        feed(decoder, lines[-1:])
+        [frame] = feed(decoder, [line])
+        assert (frame.status, frame.values) == ('ok', {'position': 1.5, 'a': False, 'b': True, 'c': False})
+
+
+def test_counted_and_uncounted_layout_lines_are_both_read():
+    decoder = Decoder()
+    [counted, uncounted] = feed(decoder, ['__LAYOUT__v1 1.0/2 a:f', '__LAYOUT__v1 2.0 b:i'])
+    assert (counted.frame, counted.index, counted.count, counted.name) == (1, 0, 2, 'a')
+    assert (uncounted.frame, uncounted.index, uncounted.count, uncounted.name) == (2, 0, None, 'b')
+
+
+def test_a_new_field_count_redefines_the_frame():
+    decoder = Decoder()
+    feed(decoder, counted_layout_lines(1, [('a', 'f', 1.0), ('b', 'f', 2.0), ('c', 'f', 3.0)]))
+    feed(decoder, counted_layout_lines(1, [('x', 'i', 5), ('y', 'i', 6)]))
+    [frame] = feed(decoder, [encode(1, 0, 0, [('x', 'i', 5), ('y', 'i', 6)])])
+    assert (frame.status, frame.values) == ('ok', {'x': 5, 'y': 6})
+
+
+@pytest.mark.parametrize('line', ['__LAYOUT__v1 1.0/0 a:f', '__LAYOUT__v1 1.2/2 a:f', '__LAYOUT__v1 1.0/ a:f',
+                                  '__LAYOUT__v1 1.0/257 a:f', '__LAYOUT__v1 1.0/2/3 a:f'])
+def test_malformed_field_counts_stay_text(line):
+    assert isinstance(Decoder().feed(line), Text)
+
+
 def test_garbage_never_raises():
     rng = random.Random(0)
     decoder = Decoder(strict=False)
