@@ -413,6 +413,12 @@ void SerialBus::process_uart() {
             }
         }
 
+        // frames of a peer before its round (orders of our previous run, while this one boots) would only crowd the queue
+        if (message.payload[0] == telemetry::FRAME_PREFIX &&
+            !(this->telemetry_round_bits[message.sender >> 5].load() & (1u << (message.sender & 31)))) {
+            continue;
+        }
+
         this->push_incoming(message);
     }
 }
@@ -869,6 +875,7 @@ void SerialBus::start_telemetry_round(const uint8_t peer_id) {
         }
     }
     this->telemetry_rounds.insert(peer_id);
+    this->telemetry_round_bits[peer_id >> 5] |= 1u << (peer_id & 31);
 }
 
 void SerialBus::count(const Variable_ptr &counter, const int64_t increment) {

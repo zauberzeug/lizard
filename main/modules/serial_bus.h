@@ -173,6 +173,7 @@ private:
     std::map<uint16_t, uint8_t> last_seq; // sender << 8 | frame id
     std::vector<BusTelemetry *> telemetry_listeners;
     std::set<uint8_t> telemetry_rounds;                     // peers that got their clear and orders since our boot
+    std::atomic<uint32_t> telemetry_round_bits[8] = {};     // the same for the communication task, one bit per peer id
     std::map<uint8_t, unsigned long> layout_request_millis; // when each peer was last asked for its layout lines
     unsigned long last_telemetry_warning_millis = 0;
     void start_telemetry_round(uint8_t peer_id);
