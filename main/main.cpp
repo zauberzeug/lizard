@@ -15,6 +15,7 @@
 #include "modules/core.h"
 #include "modules/expander.h"
 #include "modules/module.h"
+#include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
 #include "proxy.h"
@@ -357,7 +358,9 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
         echo(">> %s", line);
         tic();
     }
+    const size_t free_before_parse = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(line), owl_tree_destroy);
+    core_module->record_parse(static_cast<int64_t>(free_before_parse) - static_cast<int64_t>(heap_caps_get_free_size(MALLOC_CAP_8BIT)));
     if (debug) {
         toc("Tree creation");
     }

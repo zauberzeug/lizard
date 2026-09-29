@@ -28,12 +28,14 @@ private:
     bool telemetry_layout_seen = false;
     unsigned long telemetry_order_millis = 0;
     telemetry::Layout telemetry_layout;
+    std::map<uint8_t, std::vector<Variable *>> telemetry_mapped; // per frame: the proxy variable of each field index
     std::map<uint8_t, std::vector<telemetry::Slot>> telemetry_slots;
+    Variable_ptr telemetry_frames, telemetry_errors, telemetry_gaps, telemetry_mismatch, telemetry_rx_us_total, telemetry_rx_us_max;
     std::map<uint8_t, uint8_t> telemetry_last_seq;
     void send_telemetry_orders();
     void check_telemetry();
     void handle_telemetry_line(const char *line, int length);
-    void count(const char *property_name, int64_t increment = 1);
+    static void count(const Variable_ptr &counter, int64_t increment = 1);
 
 public:
     static inline constexpr const char *TYPE = "Expander";

@@ -395,15 +395,13 @@ bool parse_layout(const char *line, const size_t length, LayoutLine &layout) {
 bool Layout::set(const LayoutLine &line) {
     bool changed = line.version != this->version;
     this->version = line.version;
-    std::vector<LayoutEntry> &entries = this->frames[line.frame_id];
-    if (entries.size() <= line.index) {
-        entries.resize(line.index + 1);
+    std::vector<char> &types = this->frames[line.frame_id];
+    if (types.size() <= line.index) {
+        types.resize(line.index + 1, 0);
         changed = true;
     }
-    LayoutEntry &entry = entries[line.index];
-    if (entry.name != line.name || entry.type != line.type) {
-        entry.name = line.name;
-        entry.type = line.type;
+    if (types[line.index] != line.type) {
+        types[line.index] = line.type;
         changed = true;
     }
     return changed;
@@ -420,50 +418,53 @@ int Layout::expected_payload(const uint8_t frame_id) const {
     }
     size_t bytes = 0;
     size_t bits = 0;
-    for (auto const &entry : it->second) {
-        if (entry.type == 0) {
+    for (const char type : it->second) {
+        if (type == 0) {
             return -1;
         }
-        bytes += field_size(entry.type);
-        bits += entry.type == '?' ? 1 : 0;
+        bytes += field_size(type);
+        bits += type == '?' ? 1 : 0;
     }
     return static_cast<int>(bytes + (bits + 7) / 8);
 }
 
-bool type_matches(const Variable_ptr &variable, const char type) {
+bool type_matches(const Variable &variable, const char type) {
     switch (type) {
     case 'f':
     case 'e':
-        return variable->type == number;
+        return variable.type == number;
     case 'i':
-        return variable->type == integer;
+        return variable.type == integer;
     case '?':
-        return variable->type == boolean;
+        return variable.type == boolean;
     default:
         return false;
     }
 }
 
-std::vector<Slot> map_frame(const std::vector<LayoutEntry> &entries, const std::function<Variable_ptr(const LayoutEntry &)> &resolve) {
+std::vector<Slot> map_frame(const std::vector<char> &types, const std::vector<Variable *> &variables) {
     size_t numeric = 0;
-    for (auto const &entry : entries) {
-        numeric += field_size(entry.type);
+    for (const char type : types) {
+        if (type == 0) {
+            return {};
+        }
+        numeric += field_size(type);
     }
     std::vector<Slot> slots;
     size_t offset = 0;
     size_t bit = 0;
-    for (auto const &entry : entries) {
-        const Variable_ptr variable = entry.type ? resolve(entry) : nullptr;
-        if (entry.type == '?') {
+    for (size_t index = 0; index < types.size(); ++index) {
+        Variable *const variable = index < variables.size() ? variables[index] : nullptr;
+        if (types[index] == '?') {
             if (variable) {
-                slots.push_back({variable, '?', numeric + bit / 8, static_cast<uint8_t>(1 << (bit % 8))});
+                slots.push_back({variable, '?', static_cast<uint8_t>(1 << (bit % 8)), static_cast<uint16_t>(numeric + bit / 8)});
             }
             ++bit;
         } else {
             if (variable) {
-                slots.push_back({variable, entry.type, offset, 0});
+                slots.push_back({variable, types[index], 0, static_cast<uint16_t>(offset)});
             }
-            offset += field_size(entry.type);
+            offset += field_size(types[index]);
         }
     }
     return slots;

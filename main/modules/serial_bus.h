@@ -186,7 +186,10 @@ private:
     void start_telemetry_round(uint8_t peer_id);
     void handle_telemetry_frame(const IncomingMessage &message);
     void handle_telemetry_layout(const IncomingMessage &message);
-    void count(const char *property_name, int64_t increment = 1);
+    // counters resolved once: a lookup by a long name would allocate a temporary string for every frame
+    Variable_ptr telemetry_frames, telemetry_errors, telemetry_unclaimed, telemetry_mismatch, telemetry_gaps,
+        telemetry_duplicates, telemetry_rx_us_total, telemetry_rx_us_max, text_rx_count, text_rx_us_total;
+    static void count(const Variable_ptr &counter, int64_t increment = 1);
 
     static void communication_loop(void *param);
     void adopt_config(const Config &config);

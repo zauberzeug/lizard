@@ -10,6 +10,7 @@
 #include "../utils/uart.h"
 #include "driver/gpio.h"
 #include "esp_ota_ops.h"
+#include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "serial_bus.h"
 #include "freertos/FreeRTOS.h"
@@ -33,7 +34,19 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["telemetry_us"] = std::make_shared<IntegerVariable>(0);
     this->properties["telemetry_us_max"] = std::make_shared<IntegerVariable>(0);
     this->properties["modules_us"] = std::make_shared<IntegerVariable>(0);
+    this->properties["heap_largest"] = std::make_shared<IntegerVariable>(0); // largest free block, what a parse needs
+    this->properties["heap_min"] = std::make_shared<IntegerVariable>(0);     // lowest free heap since boot
+    this->properties["parse_bytes"] = std::make_shared<IntegerVariable>(0);  // heap the last parse tree took
+    this->properties["parse_bytes_max"] = std::make_shared<IntegerVariable>(0);
     this->properties["rules_us"] = std::make_shared<IntegerVariable>(0);
+}
+
+void Core::record_parse(const int64_t bytes) {
+    this->properties.at("parse_bytes")->set_integer_value(bytes);
+    const Variable_ptr maximum = this->properties.at("parse_bytes_max");
+    if (bytes > maximum->integer_value()) {
+        maximum->set_integer_value(bytes);
+    }
 }
 
 void Core::record_step_timing(const int64_t modules_us, const int64_t rules_us) {
@@ -44,6 +57,8 @@ void Core::record_step_timing(const int64_t modules_us, const int64_t rules_us) 
 void Core::step() {
     this->properties.at("millis")->set_integer_value(millis());
     this->properties.at("heap")->set_integer_value(xPortGetFreeHeapSize());
+    this->properties.at("heap_largest")->set_integer_value(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    this->properties.at("heap_min")->set_integer_value(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
     this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
     Module::step();
 }
@@ -255,15 +270,17 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 1, integer);
         const int64_t count = std::max<int64_t>(1, std::min<int64_t>(45, arguments[0]->evaluate_integer()));
         std::vector<telemetry::Field> fields;
-        std::vector<telemetry::LayoutEntry> entries;
+        std::vector<char> types;
         std::vector<Variable_ptr> targets;
+        std::vector<Variable *> variables;
+        static const std::string key = "x";
         for (int64_t i = 0; i < count; ++i) {
-            fields.push_back({std::make_shared<NumberVariable>(1.5 * i - 7.25), "x", 'f'});
-            entries.push_back({"x" + std::to_string(i), 'f'});
+            fields.push_back({std::make_shared<NumberVariable>(1.5 * i - 7.25), nullptr, &key, 'f'});
+            types.push_back('f');
             targets.push_back(std::make_shared<NumberVariable>());
+            variables.push_back(targets.back().get());
         }
-        size_t next = 0;
-        const std::vector<telemetry::Slot> slots = telemetry::map_frame(entries, [&](const telemetry::LayoutEntry &) { return targets[next++]; });
+        const std::vector<telemetry::Slot> slots = telemetry::map_frame(types, variables);
         static uint8_t payload[telemetry::MAX_PAYLOAD];
         static uint8_t body[telemetry::MAX_BODY];
         static uint8_t decoded[telemetry::MAX_BODY + 3];
@@ -397,19 +414,27 @@ void Core::keep_alive() {
     this->last_message_millis = millis();
 }
 
-// the name a telemetry field carries in the layout: module.property or the variable's name
-static std::string field_name(const ConstExpression_ptr &argument) {
+// where the name of a telemetry field lives: the property's key in its module, or the variable's key in Global
+static bool field_source(const ConstExpression_ptr &argument, const Module *&module, const std::string *&key) {
     if (const auto property = std::dynamic_pointer_cast<const PropertyExpression>(argument)) {
-        return property->get_module()->name + "." + property->get_property_name();
+        module = property->get_module().get();
+        key = &property->get_module()->property_key(property->get_property_name());
+        return true;
     }
     if (const auto variable = std::dynamic_pointer_cast<const VariableExpression>(argument)) {
         for (auto const &[name, candidate] : Global::variables) {
             if (candidate.get() == variable->get_variable().get()) {
-                return name;
+                module = nullptr;
+                key = &name;
+                return true;
             }
         }
     }
-    return "";
+    return false;
+}
+
+static std::string field_name(const telemetry::Field &field) {
+    return field.module ? field.module->name + "." + *field.key : *field.key;
 }
 
 void Core::define_telemetry(const std::vector<ConstExpression_ptr> &arguments) {
@@ -434,7 +459,12 @@ void Core::define_telemetry(const std::vector<ConstExpression_ptr> &arguments) {
         } else {
             throw std::runtime_error("telemetry argument " + std::to_string(i) + " is neither a property nor a variable");
         }
-        fields.push_back({variable, field_name(argument), telemetry::type_for(variable, compact)});
+        const Module *module = nullptr;
+        const std::string *key = nullptr;
+        if (!field_source(argument, module, key)) {
+            throw std::runtime_error("telemetry argument " + std::to_string(i) + " has no name");
+        }
+        fields.push_back({variable, module, key, telemetry::type_for(variable, compact)});
     }
     if (fields.empty()) {
         throw std::runtime_error("telemetry needs at least one field");
@@ -523,9 +553,10 @@ void Core::send_layout(const TelemetryFrame &frame, const size_t index) {
     }
     char line[SerialBus::PAYLOAD_CAPACITY];
     const telemetry::Field &field = frame.fields[index];
-    const int length = telemetry::format_layout(line, sizeof(line), frame.id, index, field.name, field.type);
+    const std::string name = field_name(field);
+    const int length = telemetry::format_layout(line, sizeof(line), frame.id, index, name, field.type);
     if (length <= 0 || length >= static_cast<int>(sizeof(line))) {
-        echo("warning: layout line of telemetry field \"%s\" is too long", field.name.c_str());
+        echo("warning: layout line of telemetry field \"%s\" is too long", name.c_str());
         return;
     }
     SerialBus *bus = nullptr;

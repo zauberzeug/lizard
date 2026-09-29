@@ -3,7 +3,6 @@
 #include "../compilation/variable.h"
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -12,6 +11,8 @@
 // body = id | seq | millis[4] | payload | crc16[2]; the payload holds the numeric fields in definition order
 // (little-endian) and then the bools as bits. A layout line "__LAYOUT__v1 <frame>.<index> <name>:<type>" per field
 // tells readers how to decode it. Types: f float32, i int32, ? bit, e float16 (experimental).
+class Module;
+
 namespace telemetry {
 
 constexpr int FORMAT_VERSION = 1;
@@ -26,7 +27,8 @@ constexpr size_t LAYOUT_PREFIX_LENGTH = sizeof(LAYOUT_PREFIX) - 1;
 
 struct Field {
     ConstVariable_ptr variable;
-    std::string name;
+    const Module *module;   // nullptr for a global variable
+    const std::string *key; // the property's key in the module, or the variable's key in Global::variables
     char type;
 };
 
@@ -67,16 +69,12 @@ struct LayoutLine {
 };
 bool parse_layout(const char *line, size_t length, LayoutLine &layout);
 
-struct LayoutEntry {
-    std::string name;
-    char type = 0; // 0: index not known yet
-};
-
-// what a reader knows about one sender's frames
+// what a reader knows about one sender's frames: the type of each field by index (0: index not known yet); names are
+// resolved by the listeners when a layout line arrives and not kept
 class Layout {
 public:
     int version = 0;
-    std::map<uint8_t, std::vector<LayoutEntry>> frames;
+    std::map<uint8_t, std::vector<char>> frames;
 
     bool set(const LayoutLine &line); // true if something changed
     void clear();
@@ -86,16 +84,15 @@ public:
 
 // where a field's value sits in the payload and which local variable receives it
 struct Slot {
-    Variable_ptr variable;
+    Variable *variable;
     char type;
-    size_t offset;    // byte offset in the payload
-    uint8_t mask = 0; // bit within that byte for a bool
+    uint8_t mask;    // bit within the byte for a bool
+    uint16_t offset; // byte offset in the payload
 };
 
-// slots for the entries that `resolve` maps to a variable of a matching type (it returns nullptr to skip one)
-std::vector<Slot> map_frame(const std::vector<LayoutEntry> &entries,
-                            const std::function<Variable_ptr(const LayoutEntry &)> &resolve);
+// slots of one frame from its field types and the local variable per index (nullptr: not mapped); empty until complete
+std::vector<Slot> map_frame(const std::vector<char> &types, const std::vector<Variable *> &variables);
 void apply(const std::vector<Slot> &slots, const uint8_t *payload);
-bool type_matches(const Variable_ptr &variable, char type);
+bool type_matches(const Variable &variable, char type);
 
 } // namespace telemetry

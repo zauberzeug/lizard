@@ -57,6 +57,12 @@ Expander::Expander(const std::string name,
       message_handler(message_handler) {
 
     this->properties = Expander::get_defaults();
+    this->telemetry_frames = this->properties.at("telemetry_frames");
+    this->telemetry_errors = this->properties.at("telemetry_errors");
+    this->telemetry_gaps = this->properties.at("telemetry_gaps");
+    this->telemetry_mismatch = this->properties.at("telemetry_mismatch");
+    this->telemetry_rx_us_total = this->properties.at("telemetry_rx_us_total");
+    this->telemetry_rx_us_max = this->properties.at("telemetry_rx_us_max");
 
     this->serial->claim(name);
     this->serial->enable_line_detection();
@@ -296,8 +302,7 @@ void Expander::send_proxy(const std::string module_name, const std::string modul
     this->serial->write_checked_line(buffer, pos);
 }
 
-void Expander::count(const char *property_name, const int64_t increment) {
-    const Variable_ptr counter = this->properties.at(property_name);
+void Expander::count(const Variable_ptr &counter, const int64_t increment) {
     counter->set_integer_value(counter->integer_value() + increment);
 }
 
@@ -336,6 +341,7 @@ void Expander::send_telemetry_orders() {
         this->serial->write_checked_line(order.c_str(), order.size());
     }
     this->telemetry_layout.clear();
+    this->telemetry_mapped.clear();
     this->telemetry_slots.clear();
     this->telemetry_layout_seen = false;
     this->telemetry_order_millis = millis();
@@ -361,40 +367,44 @@ void Expander::handle_telemetry_line(const char *line, const int length) {
     if (line[0] != telemetry::FRAME_PREFIX) {
         telemetry::LayoutLine layout_line;
         if (!telemetry::parse_layout(line, length, layout_line) || layout_line.version != telemetry::FORMAT_VERSION) {
-            this->count("telemetry_errors");
+            this->count(this->telemetry_errors);
             return;
         }
         this->telemetry_layout_seen = true;
-        if (this->telemetry_layout.set(layout_line)) {
-            this->telemetry_slots.clear();
-            for (auto const &[frame_id, entries] : this->telemetry_layout.frames) {
-                this->telemetry_slots[frame_id] = telemetry::map_frame(entries, [this](const telemetry::LayoutEntry &entry) -> Variable_ptr {
-                    const size_t dot = entry.name.find('.');
-                    const std::string proxy_name = dot == std::string::npos ? "" : entry.name.substr(0, dot);
-                    if (std::none_of(this->telemetry_proxies.begin(), this->telemetry_proxies.end(),
-                                     [&](const auto &proxy) { return proxy.first == proxy_name; })) {
-                        return nullptr;
-                    }
-                    const Variable_ptr variable = Global::get_module(entry.name.substr(0, dot))->get_property(entry.name.substr(dot + 1));
-                    return telemetry::type_matches(variable, entry.type) ? variable : nullptr;
-                });
-            }
+        this->telemetry_layout.set(layout_line);
+        // "proxy.property": the proxy's own variable receives the field
+        const size_t dot = layout_line.name.find('.');
+        const std::string proxy_name = dot == std::string::npos ? "" : layout_line.name.substr(0, dot);
+        if (std::none_of(this->telemetry_proxies.begin(), this->telemetry_proxies.end(),
+                         [&](const auto &proxy) { return proxy.first == proxy_name; })) {
+            return;
         }
+        const Variable_ptr variable = Global::get_module(proxy_name)->get_property(layout_line.name.substr(dot + 1));
+        if (!telemetry::type_matches(*variable, layout_line.type)) {
+            return;
+        }
+        std::vector<Variable *> &variables = this->telemetry_mapped[layout_line.frame_id];
+        if (variables.size() <= layout_line.index) {
+            variables.resize(layout_line.index + 1, nullptr);
+        }
+        variables[layout_line.index] = variable.get();
+        this->telemetry_slots[layout_line.frame_id] =
+            telemetry::map_frame(this->telemetry_layout.frames[layout_line.frame_id], variables);
         return;
     }
     const int64_t start = esp_timer_get_time();
     static uint8_t body[telemetry::MAX_BODY + 3];
     const size_t body_length = telemetry::decode_line(line, length, body, sizeof(body));
     if (body_length == 0) {
-        this->count("telemetry_errors");
+        this->count(this->telemetry_errors);
         return;
     }
-    this->count("telemetry_frames");
+    this->count(this->telemetry_frames);
     const uint8_t frame_id = body[0];
     const uint8_t seq = body[1];
     const auto last = this->telemetry_last_seq.find(frame_id);
     if (last != this->telemetry_last_seq.end() && static_cast<uint8_t>(seq - last->second - 1) < 128) {
-        this->count("telemetry_gaps", static_cast<uint8_t>(seq - last->second - 1));
+        this->count(this->telemetry_gaps, static_cast<uint8_t>(seq - last->second - 1));
     }
     this->telemetry_last_seq[frame_id] = seq;
     const int expected = this->telemetry_layout.expected_payload(frame_id);
@@ -403,14 +413,14 @@ void Expander::handle_telemetry_line(const char *line, const int length) {
         return;
     }
     if (static_cast<size_t>(expected) != body_length - telemetry::HEADER_SIZE - telemetry::CRC_SIZE) {
-        this->count("telemetry_mismatch");
+        this->count(this->telemetry_mismatch);
         return;
     }
     telemetry::apply(slots->second, &body[telemetry::HEADER_SIZE]);
     const int64_t elapsed = esp_timer_get_time() - start;
-    this->count("telemetry_rx_us_total", elapsed);
-    if (elapsed > this->properties.at("telemetry_rx_us_max")->integer_value()) {
-        this->properties.at("telemetry_rx_us_max")->set_integer_value(elapsed);
+    this->count(this->telemetry_rx_us_total, elapsed);
+    if (elapsed > this->telemetry_rx_us_max->integer_value()) {
+        this->telemetry_rx_us_max->set_integer_value(elapsed);
     }
 }
 

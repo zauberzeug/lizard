@@ -11,13 +11,17 @@
 // telemetry frames and copied from each arriving frame without parsing.
 class BusTelemetry : public Module {
 private:
-    std::vector<std::string> declared; // in declaration order, as the peer names them
+    std::vector<const std::string *> declared;         // keys of the property map, in declaration order
+    std::map<uint8_t, std::vector<Variable *>> mapped; // per frame: the mirror of each field index, nullptr if none
     std::map<uint8_t, std::vector<telemetry::Slot>> slots;
     bool orders_sent = false;
     bool frame_seen = false;
     unsigned long last_frame_millis = 0;
+    Variable_ptr age;
+    Variable_ptr peer_millis;
+    Variable_ptr frames;
 
-    void send_order(const std::vector<std::string> &names);
+    void send_order(const std::vector<const std::string *> &names);
 
 public:
     static inline constexpr const char *TYPE = "BusTelemetry";
@@ -33,7 +37,8 @@ public:
     void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) override;
     bool declares(const std::string &name) const;
     void send_orders();
-    void handle_layout(const telemetry::Layout &layout);
+    void reset_layout();
+    void handle_layout_line(const telemetry::LayoutLine &line, const telemetry::Layout &layout);
     bool handle_frame(uint8_t frame_id, uint8_t seq, uint32_t peer_millis, const uint8_t *payload);
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

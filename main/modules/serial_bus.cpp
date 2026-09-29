@@ -93,6 +93,16 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
     : Module(name), serial(serial), node_id(node_id) {
     this->properties = SerialBus::get_defaults();
+    this->telemetry_frames = this->properties.at("telemetry_frames");
+    this->telemetry_errors = this->properties.at("telemetry_errors");
+    this->telemetry_unclaimed = this->properties.at("telemetry_unclaimed");
+    this->telemetry_mismatch = this->properties.at("telemetry_mismatch");
+    this->telemetry_gaps = this->properties.at("telemetry_gaps");
+    this->telemetry_duplicates = this->properties.at("telemetry_duplicates");
+    this->telemetry_rx_us_total = this->properties.at("telemetry_rx_us_total");
+    this->telemetry_rx_us_max = this->properties.at("telemetry_rx_us_max");
+    this->text_rx_count = this->properties.at("text_rx_count");
+    this->text_rx_us_total = this->properties.at("text_rx_us_total");
     this->serial->enable_line_detection();
 
     // everything that can throw comes before the task exists: an exception from a constructor unwinds without running
@@ -647,8 +657,8 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
             ExecutingCommand executing(this, message.sender);
             process_line(message.payload, message.length, false);
         }
-        this->count("text_rx_count");
-        this->count("text_rx_us_total", esp_timer_get_time() - start);
+        this->count(this->text_rx_count);
+        this->count(this->text_rx_us_total, esp_timer_get_time() - start);
         return;
     }
 
@@ -892,11 +902,10 @@ void SerialBus::request_telemetry_orders(BusTelemetry *listener) {
 
 void SerialBus::start_telemetry_round(const uint8_t peer_id) {
     // a clear first, so that a peer that kept running does not stream the frames of an outdated startup
-    telemetry::Layout &layout = this->peer_layouts[peer_id];
-    layout.clear();
+    this->peer_layouts[peer_id].clear();
     for (BusTelemetry *const listener : this->telemetry_listeners) {
         if (listener->peer_id == peer_id) {
-            listener->handle_layout(layout);
+            listener->reset_layout();
         }
     }
     this->send_to(peer_id, "core.clear_telemetry()");
@@ -908,8 +917,7 @@ void SerialBus::start_telemetry_round(const uint8_t peer_id) {
     this->telemetry_rounds.insert(peer_id);
 }
 
-void SerialBus::count(const char *property_name, const int64_t increment) {
-    const Variable_ptr counter = this->properties.at(property_name);
+void SerialBus::count(const Variable_ptr &counter, const int64_t increment) {
     counter->set_integer_value(counter->integer_value() + increment);
 }
 
@@ -918,14 +926,14 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
     static uint8_t body[telemetry::MAX_BODY + 3];
     const size_t length = telemetry::decode_line(message.payload, message.length, body, sizeof(body));
     if (length == 0) {
-        this->count("telemetry_errors");
+        this->count(this->telemetry_errors);
         if (millis_since(this->last_telemetry_warning_millis) > 1000) {
             this->last_telemetry_warning_millis = millis();
             echo("warning: serial bus %s: malformed telemetry frame from %u", this->name.c_str(), message.sender);
         }
         return;
     }
-    this->count("telemetry_frames");
+    this->count(this->telemetry_frames);
     const uint8_t frame_id = body[0];
     const uint8_t seq = body[1];
     uint32_t peer_millis;
@@ -937,9 +945,9 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
     if (last != this->last_seq.end()) {
         const uint8_t missing = static_cast<uint8_t>(seq - last->second - 1);
         if (seq == last->second) {
-            this->count("telemetry_duplicates");
+            this->count(this->telemetry_duplicates);
         } else if (missing < 128) {
-            this->count("telemetry_gaps", missing);
+            this->count(this->telemetry_gaps, missing);
         }
     }
     this->last_seq[key] = seq;
@@ -948,7 +956,7 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
     const int expected = layout == this->peer_layouts.end() ? -1 : layout->second.expected_payload(frame_id);
     bool claimed = false;
     if (expected >= 0 && static_cast<size_t>(expected) != payload_length) {
-        this->count("telemetry_mismatch");
+        this->count(this->telemetry_mismatch);
     } else if (expected >= 0) {
         for (BusTelemetry *const listener : this->telemetry_listeners) {
             if (listener->peer_id == message.sender) {
@@ -957,19 +965,19 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
         }
     }
     if (!claimed) {
-        this->count("telemetry_unclaimed");
+        this->count(this->telemetry_unclaimed);
     }
     const int64_t elapsed = esp_timer_get_time() - start;
-    this->count("telemetry_rx_us_total", elapsed);
-    if (elapsed > this->properties.at("telemetry_rx_us_max")->integer_value()) {
-        this->properties.at("telemetry_rx_us_max")->set_integer_value(elapsed);
+    this->count(this->telemetry_rx_us_total, elapsed);
+    if (elapsed > this->telemetry_rx_us_max->integer_value()) {
+        this->telemetry_rx_us_max->set_integer_value(elapsed);
     }
 }
 
 void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
     telemetry::LayoutLine line;
     if (!telemetry::parse_layout(message.payload, message.length, line)) {
-        this->count("telemetry_errors");
+        this->count(this->telemetry_errors);
         return;
     }
     if (line.version != telemetry::FORMAT_VERSION) {
@@ -981,11 +989,10 @@ void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
         return;
     }
     telemetry::Layout &layout = this->peer_layouts[message.sender];
-    if (layout.set(line)) {
-        for (BusTelemetry *const listener : this->telemetry_listeners) {
-            if (listener->peer_id == message.sender) {
-                listener->handle_layout(layout);
-            }
+    layout.set(line);
+    for (BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == message.sender) {
+            listener->handle_layout_line(line, layout);
         }
     }
 }
