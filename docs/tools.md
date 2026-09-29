@@ -44,6 +44,8 @@ Use the serial monitor to read the current output and interactively send [Lizard
 ./monitor.py [<device_path>]
 ```
 
+The monitor shows [telemetry frames](telemetry.md#host-decoding) decoded, and `telemetry.py` decodes them in recorded logs.
+
 You can also use an SSH monitor to access a microcontroller via SSH:
 
 ```bash
