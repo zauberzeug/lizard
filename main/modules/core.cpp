@@ -235,6 +235,13 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         this->keep_alive();
     } else if (method_name == "telemetry") {
         this->define_telemetry(arguments);
+    } else if (method_name == "frame" || method_name == "frame_add" || method_name == "frame_clear") {
+        // #290's frame definitions in existing startups: accepted and ignored, telemetry is ordered by the coordinator now
+        static bool reported = false;
+        if (!reported) {
+            echo("warning: core.%s is ignored in this build, use core.telemetry", method_name.c_str());
+            reported = true;
+        }
     } else if (method_name == "telemetry_info") {
         Module::expect(arguments, 0);
         for (auto const &frame : this->telemetry_frames) {
