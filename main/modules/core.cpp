@@ -167,7 +167,7 @@ void Core::emit_frame(frame_t &frame, unsigned long now) {
         }
     }
     if (!peer_bus) {
-        if (this->properties.at("frame_lines")->boolean_value) {
+        if (this->properties.at("frame_lines")->boolean_value()) {
             // on an expander the console is the core's line based link
             static uint8_t body[frame::MAX_BODY];
             frame::write_console_line(body, frame::build_body(0, frame.id, frame.seq++, now, payload, pos, body));

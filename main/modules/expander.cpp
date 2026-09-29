@@ -191,7 +191,8 @@ void Expander::handle_frame(const char *line, size_t length) {
     static uint8_t body[frame::MAX_BODY];
     const size_t body_length = frame::bus_unstuff(line, length, body, sizeof(body));
     if (body_length == 0 || !frame::verify_body(body, body_length)) {
-        this->properties.at("frame_errors")->integer_value++;
+        const Variable_ptr frame_errors = this->properties.at("frame_errors");
+        frame_errors->set_integer_value(frame_errors->integer_value() + 1);
         return;
     }
     if (body[2] != PROXY_FRAME_ID) {
@@ -200,14 +201,16 @@ void Expander::handle_frame(const char *line, size_t length) {
     }
     const uint8_t seq = body[3];
     if (this->frame_seq_valid && static_cast<uint8_t>(seq - this->frame_seq) != 1) {
-        this->properties.at("frame_gaps")->integer_value += static_cast<uint8_t>(seq - this->frame_seq - 1);
+        const Variable_ptr frame_gaps = this->properties.at("frame_gaps");
+        frame_gaps->set_integer_value(frame_gaps->integer_value() + static_cast<uint8_t>(seq - this->frame_seq - 1));
     }
     this->frame_seq = seq;
     this->frame_seq_valid = true;
     const size_t payload_length = body[frame::HEADER_SIZE - 1];
     if (payload_length != this->frame_numeric_length + (this->frame_bit_count + 7) / 8) {
         if (millis_since(this->frame_defined_millis) > FRAME_GRACE_MS) {
-            this->properties.at("frame_errors")->integer_value++;
+            const Variable_ptr frame_errors = this->properties.at("frame_errors");
+            frame_errors->set_integer_value(frame_errors->integer_value() + 1);
         }
         return;
     }
@@ -218,18 +221,18 @@ void Expander::handle_frame(const char *line, size_t length) {
     size_t bit = 0;
     for (auto const &field : this->frame_fields) {
         if (field.type == '?') {
-            field.variable->boolean_value = (bits[bit / 8] >> (bit % 8)) & 1;
+            field.variable->set_boolean_value((bits[bit / 8] >> (bit % 8)) & 1);
             ++bit;
         } else if (field.type == 'i') {
             int32_t value;
             memcpy(&value, &payload[pos], 4);
             pos += 4;
-            field.variable->integer_value = value;
+            field.variable->set_integer_value(value);
         } else {
             float value;
             memcpy(&value, &payload[pos], 4);
             pos += 4;
-            field.variable->number_value = value;
+            field.variable->set_number_value(value);
         }
     }
 }
@@ -244,10 +247,10 @@ void Expander::check_frames() {
         this->frame_proxies.clear();
         this->frame_numeric_length = 0;
         this->frame_bit_count = 0;
-        this->properties.at("frames")->boolean_value = false;
+        this->properties.at("frames")->set_boolean_value(false);
     }
-    const int64_t errors = this->properties.at("frame_errors")->integer_value;
-    const int64_t gaps = this->properties.at("frame_gaps")->integer_value;
+    const int64_t errors = this->properties.at("frame_errors")->integer_value();
+    const int64_t gaps = this->properties.at("frame_gaps")->integer_value();
     if ((errors != this->reported_frame_errors || gaps != this->reported_frame_gaps) &&
         millis_since(this->frame_warning_millis) > 1000) {
         echo("warning: expander %s: %lld proxy frames missing, %lld corrupt", this->name.c_str(),
@@ -365,7 +368,7 @@ void Expander::send_proxy(const std::string module_name,
     std::vector<proxy_frame_field_t> new_fields;
     size_t numeric_length = this->frame_numeric_length;
     size_t bit_count = this->frame_bit_count;
-    bool framed = this->properties.at("frames")->boolean_value;
+    bool framed = this->properties.at("frames")->boolean_value();
     for (auto const &[property_name, variable] : properties) {
         if (!framed) {
             break;
