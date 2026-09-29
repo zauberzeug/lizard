@@ -52,14 +52,28 @@ BusTelemetry::~BusTelemetry() {
 void BusTelemetry::step() {
     if (!this->orders_sent && !this->declared.empty()) {
         this->bus->request_telemetry_orders(this); // after the startup, i.e. once all declarations are known
-    } else if (this->orders_sent) {
+    } else if (this->orders_sent && !this->bus->reads_other_format(this->peer_id)) {
         // a lost order or layout line, or a peer that forgot its orders: order again, at most every renew period
         const unsigned long renew_ms = std::max<unsigned long>(RENEW_MIN_MS, 10 * this->interval);
         const unsigned long quiet = this->frame_seen ? millis_since(this->last_frame_millis) : millis_since(this->orders_millis);
-        if (quiet > renew_ms && millis_since(this->orders_millis) > renew_ms) {
-            // the same order again: a peer that still has the frame only announces its layout again, one that lost it
-            // defines it anew; other modules' frames of the same peer stay untouched
-            this->send_orders();
+        if (millis_since(this->orders_millis) > renew_ms) {
+            if (quiet > renew_ms) {
+                // the same order again: a peer that still has the frame only announces its layout again, one that lost
+                // it defines it anew; other modules' frames of the same peer stay untouched
+                this->send_orders();
+            } else {
+                // frames arrive, but a lost or rejected order line left some mirrors without any
+                std::vector<const std::string *> missing;
+                for (const std::string *name : this->declared) {
+                    if (std::find(this->announced.begin(), this->announced.end(), name) == this->announced.end()) {
+                        missing.push_back(name);
+                    }
+                }
+                if (!missing.empty()) {
+                    this->send_order(missing);
+                }
+                this->orders_millis = millis();
+            }
         }
     }
     this->age->set_integer_value(this->frame_seen ? millis_since(this->last_frame_millis) : millis());
@@ -128,26 +142,40 @@ void BusTelemetry::send_orders() {
 void BusTelemetry::reset_layout() {
     this->mapped.clear();
     this->slots.clear();
+    this->announced.clear();
 }
 
 void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const telemetry::Layout &layout) {
-    if (this->declares(line.name)) {
-        Variable *variable = this->properties.at(line.name).get();
+    const auto key = std::find_if(this->declared.begin(), this->declared.end(), [&](const std::string *name) { return *name == line.name; });
+    Variable *variable = nullptr;
+    if (key != this->declared.end()) {
+        if (std::find(this->announced.begin(), this->announced.end(), *key) == this->announced.end()) {
+            this->announced.push_back(*key);
+        }
+        variable = this->properties.at(line.name).get();
         if (!telemetry::type_matches(*variable, line.type)) {
             // the mirror keeps its value, the rest of the frame is still mapped
             echo("warning: %s: node %u sends \"%s\" as type %c", this->name.c_str(), this->peer_id, line.name.c_str(), line.type);
             variable = nullptr;
         }
-        std::vector<Variable *> &variables = this->mapped[line.frame_id];
-        if (variables.size() <= line.index) {
-            variables.resize(line.index + 1, nullptr);
-        }
-        variables[line.index] = variable;
     } else if (!this->mapped.count(line.frame_id)) {
         return; // a frame without any of our mirrors
     }
-    // every line of a frame we mirror completes its layout a little more, also lines of fields we do not mirror
-    const std::vector<Variable *> &variables = this->mapped[line.frame_id];
+    // every line of a frame we mirror sets its field anew: when the peer gave the frame id to other fields, the old
+    // mirrors must not stay at their indices
+    std::vector<Variable *> &variables = this->mapped[line.frame_id];
+    if (line.count > 0 && variables.size() > line.count) {
+        variables.resize(line.count);
+    }
+    if (variables.size() <= line.index) {
+        variables.resize(line.index + 1, nullptr);
+    }
+    variables[line.index] = variable;
+    if (std::none_of(variables.begin(), variables.end(), [](const Variable *v) { return v != nullptr; })) {
+        this->mapped.erase(line.frame_id);
+        this->slots.erase(line.frame_id);
+        return;
+    }
     const auto types = layout.frames.find(line.frame_id);
     if (types != layout.frames.end()) {
         this->slots[line.frame_id] = telemetry::map_frame(types->second, variables);

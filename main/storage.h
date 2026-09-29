@@ -12,6 +12,7 @@ private:
     static bool editing;
     static std::vector<std::string> edit_pieces;
 
+    static void read_stored(const std::function<void(const std::string &piece)> &piece);
     static void begin_edit(const bool keep_current);
     static void append_to_edit(const char *text, const size_t length);
     static void nvs_delete_key(const std::string &ns, const std::string &key);
@@ -23,6 +24,7 @@ public:
     static void read_startup(const std::function<void(const std::string &piece)> &piece);
     // Calls `line` with every line of the startup script, without its '\n'.
     static void read_startup_lines(const std::function<void(const std::string &line)> &line);
+    // The byte sum of the stored script, as it will boot; an unsaved edit does not count.
     static std::uint16_t startup_checksum();
 
     static void append_to_startup(const std::string &line);

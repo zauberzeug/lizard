@@ -35,7 +35,7 @@ It is automatically created right after the boot sequence.
 | `core.info()`                           | Show project name, version, compile time and IDF version            |                                |
 | `core.print(...)`                       | Print arbitrary arguments to the command line                       | arbitrary                      |
 | `core.output(format)`                   | Define the output format                                            | `str`                          |
-| `core.startup_checksum()`               | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |                                |
+| `core.startup_checksum()`               | Show 16-bit checksum of the saved startup script (sum of its bytes) |                                |
 | `core.get_pin_status(pin)`              | Print the status of the chosen pin                                  | `int`                          |
 | `core.set_pin_level(pin, value)`        | Turns the pin into an output and sets its level                     | `int`, `int`                   |
 | `core.get_pin_strapping(pin)`           | Print value of the pin from the strapping register                  | `int`                          |
@@ -117,7 +117,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
 | `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
-| `bus.telemetry_frames`     | Telemetry frames received from peers (coordinator)                                                            | `int`     |
+| `bus.telemetry_frames`     | Telemetry frames received from peers since their order round (coordinator)                                    | `int`     |
 | `bus.telemetry_errors`     | Malformed telemetry frames and layout lines received (coordinator)                                            | `int`     |
 | `bus.telemetry_unclaimed`  | Received frames that no bus telemetry module took (coordinator)                                               | `int`     |
 | `bus.telemetry_mismatch`   | Received frames whose size does not match their layout (coordinator)                                          | `int`     |

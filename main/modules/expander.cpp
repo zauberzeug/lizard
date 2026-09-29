@@ -40,7 +40,7 @@ const std::map<std::string, Variable_ptr> Expander::get_defaults() {
     };
 }
 
-static constexpr unsigned long TELEMETRY_FALLBACK_MS = 1000;   // no layout by then: the expander firmware has no frames
+static constexpr unsigned long TELEMETRY_FALLBACK_MS = 5000;   // no layout by then: the expander firmware has no frames
 static constexpr unsigned long TELEMETRY_ORDER_DELAY_MS = 200; // quiet time after the last new proxy before ordering
 
 Expander::Expander(const std::string name,
@@ -386,6 +386,7 @@ void Expander::send_telemetry_orders() {
     this->telemetry_last_seq.clear(); // the new frames count from anew
     this->telemetry_layout_seen = false;
     this->telemetry_order_millis = millis();
+    this->telemetry_layout_request_millis = millis(); // frames of the old order still arriving need no layout request
     this->telemetry_order_pending = false;
 }
 
@@ -400,6 +401,7 @@ void Expander::check_telemetry() {
     if (!this->telemetry_proxies.empty() && !this->telemetry_layout_seen &&
         millis_since(this->telemetry_order_millis) > TELEMETRY_FALLBACK_MS) {
         echo("warning: expander %s sends no telemetry layout, falling back to text broadcasts", this->name.c_str());
+        this->serial->write_checked_line("core.clear_telemetry()"); // in case the order only came late
         for (auto const &[proxy_name, proxy_type] : this->telemetry_proxies) {
             this->serial->write_checked_line((proxy_name + ".broadcast()").c_str());
         }
@@ -428,17 +430,24 @@ void Expander::handle_telemetry_line(const char *line, const int length) {
         // "proxy.property": the proxy's own variable receives the field
         const size_t dot = layout_line.name.find('.');
         const std::string proxy_name = dot == std::string::npos ? "" : layout_line.name.substr(0, dot);
-        if (std::none_of(this->telemetry_proxies.begin(), this->telemetry_proxies.end(),
-                         [&](const auto &proxy) { return proxy.first == proxy_name; })) {
-            return;
+        Variable *variable = nullptr;
+        if (std::any_of(this->telemetry_proxies.begin(), this->telemetry_proxies.end(),
+                        [&](const auto &proxy) { return proxy.first == proxy_name; })) {
+            const Variable_ptr property = Global::get_module(proxy_name)->get_property(layout_line.name.substr(dot + 1));
+            // a property of another type keeps its value; the rest of the frame is still mapped
+            variable = telemetry::type_matches(*property, layout_line.type) ? property.get() : nullptr;
+        } else if (!this->telemetry_mapped.count(layout_line.frame_id)) {
+            return; // a frame without proxy fields
         }
-        const Variable_ptr variable = Global::get_module(proxy_name)->get_property(layout_line.name.substr(dot + 1));
+        // every line of a mapped frame sets its field anew, so a frame id given to other fields keeps no old mapping
         std::vector<Variable *> &variables = this->telemetry_mapped[layout_line.frame_id];
+        if (layout_line.count > 0 && variables.size() > layout_line.count) {
+            variables.resize(layout_line.count);
+        }
         if (variables.size() <= layout_line.index) {
             variables.resize(layout_line.index + 1, nullptr);
         }
-        // a property of another type keeps its value; the rest of the frame is still mapped
-        variables[layout_line.index] = telemetry::type_matches(*variable, layout_line.type) ? variable.get() : nullptr;
+        variables[layout_line.index] = variable;
         this->telemetry_slots[layout_line.frame_id] =
             telemetry::map_frame(this->telemetry_layout.frames[layout_line.frame_id], variables);
         return;
@@ -452,21 +461,29 @@ void Expander::handle_telemetry_line(const char *line, const int length) {
     this->count(this->telemetry_frames);
     const uint8_t frame_id = body[0];
     const uint8_t seq = body[1];
-    const auto last = this->telemetry_last_seq.find(frame_id);
-    if (last != this->telemetry_last_seq.end() && static_cast<uint8_t>(seq - last->second - 1) < 128) {
-        this->count(this->telemetry_gaps, static_cast<uint8_t>(seq - last->second - 1));
-    }
-    this->telemetry_last_seq[frame_id] = seq;
     const int expected = this->telemetry_layout.expected_payload(frame_id);
-    const auto slots = this->telemetry_slots.find(frame_id);
-    if (expected < 0 || slots == this->telemetry_slots.end()) {
+    if (expected < 0) {
+        // a layout line was lost on the way: ask for the layout again, as the bus does
+        if (!this->telemetry_proxies.empty() && millis_since(this->telemetry_layout_request_millis) > 2000) {
+            this->telemetry_layout_request_millis = millis();
+            this->serial->write_checked_line("core.telemetry_info()");
+        }
         return;
     }
     if (static_cast<size_t>(expected) != body_length - telemetry::HEADER_SIZE - telemetry::CRC_SIZE) {
         this->count(this->telemetry_mismatch);
         return;
     }
-    telemetry::apply(slots->second, &body[telemetry::HEADER_SIZE]);
+    // sequence numbers only with a known layout, so frames of an old order do not start the count
+    const auto last = this->telemetry_last_seq.find(frame_id);
+    if (last != this->telemetry_last_seq.end() && static_cast<uint8_t>(seq - last->second - 1) < 128) {
+        this->count(this->telemetry_gaps, static_cast<uint8_t>(seq - last->second - 1));
+    }
+    this->telemetry_last_seq[frame_id] = seq;
+    const auto slots = this->telemetry_slots.find(frame_id);
+    if (slots != this->telemetry_slots.end()) {
+        telemetry::apply(slots->second, &body[telemetry::HEADER_SIZE]);
+    }
 }
 
 void Expander::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {

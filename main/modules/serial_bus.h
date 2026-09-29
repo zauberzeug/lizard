@@ -43,12 +43,13 @@ public:
     bool frame_pending(uint8_t frame_id);
     bool store_frame(uint8_t frame_id, uint8_t destination, const char *line, size_t length, bool overwrite);
     void release_frame(uint8_t frame_id);
-    void send_layout(uint8_t destination, const char *line, size_t length);
+    bool send_layout(uint8_t destination, const char *line, size_t length); // false: the queue is full, try again later
     // coordinator side
     void send_to(uint8_t receiver, const std::string &payload);
     void add_telemetry_listener(BusTelemetry *listener);
     void remove_telemetry_listener(BusTelemetry *listener);
     void request_telemetry_orders(BusTelemetry *listener);
+    bool reads_other_format(uint8_t peer_id) const { return this->other_format_peers.count(peer_id) > 0; }
     const BusTelemetry *declaring_listener(uint8_t peer_id, const std::string &name) const;
 
 private:
@@ -173,8 +174,11 @@ private:
     std::map<uint16_t, uint8_t> last_seq; // sender << 8 | frame id
     std::vector<BusTelemetry *> telemetry_listeners;
     std::set<uint8_t> telemetry_rounds;                     // peers that got their clear and orders since our boot
+    std::atomic<uint32_t> telemetry_round_bits[8] = {};     // the same for the communication task, one bit per peer id
     std::map<uint8_t, unsigned long> layout_request_millis; // when each peer was last asked for its layout lines
     unsigned long last_telemetry_warning_millis = 0;
+    unsigned long last_slot_warning_millis = 0;
+    std::set<uint8_t> other_format_peers; // peers whose layout lines have another format version, until their Ready.
     void start_telemetry_round(uint8_t peer_id);
     void handle_telemetry_frame(const IncomingMessage &message);
     void handle_telemetry_layout(const IncomingMessage &message);
@@ -189,7 +193,7 @@ private:
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
-    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
+    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, TickType_t wait = pdMS_TO_TICKS(50));
     bool send_outgoing_queue();
     size_t send_message(const uint8_t receiver, const char *payload, const size_t length) const;
 
