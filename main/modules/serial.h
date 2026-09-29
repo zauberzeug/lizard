@@ -14,9 +14,8 @@ using ConstSerial_ptr = std::shared_ptr<const Serial>;
 class Serial : public Module {
 private:
     mutable std::vector<std::string> users;
-    mutable std::string pending_lines; // lines after the first of a read that held several
-    mutable bool discarding = false;   // an unterminated run exceeded a line: drop everything up to its line end
-    void discard(int count) const;
+    mutable std::string pending_lines;   // lines after the first of a read that held several
+    mutable bool drop_next_line = false; // the rest of a run that was flushed for lacking a line end
 
 public:
     static inline constexpr const char *TYPE = "Serial";
