@@ -82,13 +82,13 @@ void Core::emit_frame(frame_t &frame, unsigned long now) {
         double value = 0;
         switch (variable->type) {
         case boolean:
-            value = variable->boolean_value ? 1 : 0;
+            value = variable->boolean_value() ? 1 : 0;
             break;
         case integer:
-            value = static_cast<double>(variable->integer_value);
+            value = static_cast<double>(variable->integer_value());
             break;
         case number:
-            value = variable->number_value;
+            value = variable->number_value();
             break;
         default:
             throw std::runtime_error("unsupported frame field type");
@@ -174,7 +174,8 @@ void Core::emit_frame(frame_t &frame, unsigned long now) {
     try {
         peer_bus->send_frame(body, body_length);
     } catch (const std::runtime_error &e) {
-        this->properties.at("frame_drops")->integer_value++;
+        const Variable_ptr frame_drops = this->properties.at("frame_drops");
+        frame_drops->set_integer_value(frame_drops->integer_value() + 1);
     }
 }
 
