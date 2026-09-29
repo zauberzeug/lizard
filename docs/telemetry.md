@@ -97,7 +97,7 @@ int arm.count = 0
 After the startup, and again whenever the peer reports `Ready.` after a boot, the coordinator sends the peer `core.clear_telemetry()` and orders the declared values, here with `core.telemetry(motor.position, motor.enabled, count, 100)`.
 Properties declared later, e.g. at the command line, are ordered right away.
 If a frame arrives whose layout is incomplete, e.g. because a layout line got lost, the coordinator asks the peer for its layout lines again, at most every 2 seconds.
-If no frame of a bus telemetry module arrives for 5 seconds, or 10 of its intervals if that is longer, the coordinator clears and orders again, at most every 5 seconds.
+If no frame of a bus telemetry module arrives for 5 seconds, or 10 of its intervals if that is longer, the coordinator sends its order again, at most once per such period; a peer that still has the frame only sends its layout lines again.
 If the peer cannot resolve a name, it rejects that order, and the coordinator prints the peer's error as `bus[2]: ...`.
 
 The peer keeps the newest frame of each ID and sends it with the next poll, so a poll delivers the current values and no backlog; a replaced frame does not count in the sequence numbers.
