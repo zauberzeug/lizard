@@ -64,9 +64,9 @@ The `drive_command_age` property (ms) and the Bluetooth module's `connected` and
 
 ## Expander watchdog
 
-The `expander` module provides a watchdog feature that restarts the port expander when it gets stuck and does not send messages anymore.
+The `expander` module provides a watchdog feature that detects when the port expander gets stuck and does not send messages anymore.
 After `ping_interval` seconds of no messages from the port expander, the `expander` module will instruct the expander to send a "\_\_PONG\_\_" message.
-If the expander does not answer within `ping_timeout` seconds, it will be restarted.
+If the expander does not answer within `ping_timeout` seconds, the expander and its proxies are marked as not ready (`is_ready` turns `false`).
 
 The reception of the "\_\_PONG\_\_" message is handled internally by the expander module and is not printed to the serial output.
 A similar technique can be used by the main computing unit to check if the core microcontroller is still responsive and restart it otherwise.
