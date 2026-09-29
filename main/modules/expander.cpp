@@ -252,6 +252,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             this->restart();
         }
     } else {
+        this->require_connected();
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "core.%s(", method_name.c_str());
         pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
@@ -284,7 +285,7 @@ void Expander::check_strapping_pins(const char *buffer) {
 
 void Expander::require_connected() const {
     if (this->disconnected) {
-        throw std::runtime_error("expander \"" + this->name + "\" is disconnected, use flash() to reconnect");
+        throw std::runtime_error("expander \"" + this->name + "\" is disconnected, use flash(true) to reconnect");
     }
 }
 
