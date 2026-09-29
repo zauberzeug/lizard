@@ -193,6 +193,9 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             throw std::runtime_error("expander \"" + this->name + "\" does not support flashing, pins not set");
         }
         this->serial->require_sole_user(this->name);
+        if (!force && this->disconnected) {
+            throw std::runtime_error("expander \"" + this->name + "\" is disconnected, strapping pins cannot be checked, use flash(true)");
+        }
         gpio_set_level(this->boot_pin, 0);
         if (!force) {
             char command[32];

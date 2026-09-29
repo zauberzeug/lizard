@@ -1207,8 +1207,8 @@ Flashing erases the other microcontroller's NVS:
 its startup script, a persisted console baud rate and the bus backup are reset to defaults.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
-After `disconnect()` the expander stays disconnected until `flash()` reinstalls the serial connection;
-`run()` and `restart()` fail with an error until then.
+After `disconnect()` the expander stays disconnected until `flash(true)` reinstalls the serial connection;
+`run()`, `restart()` and `flash()` without `force` fail with an error until then, because the strapping pins cannot be checked without the connection.
 Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
