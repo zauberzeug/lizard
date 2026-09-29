@@ -88,7 +88,7 @@ void Expander::step() {
         this->ping();
         this->handle_messages();
         this->check_telemetry();
-    } else {
+    } else if (!this->disconnected) {
         this->check_boot_progress();
     }
     this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
@@ -114,11 +114,25 @@ void Expander::check_boot_progress() {
         this->last_message_millis = millis();
         echo("%s: %s", this->name.c_str(), line_buffer);
         if (strcmp("Ready.", line_buffer) == 0) {
-            this->properties.at("is_ready")->set_boolean_value(true);
-            echo("%s: Booting process completed successfully", this->name.c_str());
+            this->handle_ready();
             break;
         }
     }
+}
+
+void Expander::handle_ready() {
+    this->properties.at("is_ready")->set_boolean_value(true);
+    echo("%s: Booting process completed successfully", this->name.c_str());
+    if (!this->proxies.empty()) {
+        // The other microcontroller boots with an empty module table; proxies are set up only once, when they are created (#117).
+        this->set_proxies_not_ready();
+        echo("%s: proxies created before this boot need a core restart (%d)", this->name.c_str(), (int)this->proxies.size());
+    }
+}
+
+void Expander::set_not_ready() {
+    this->properties.at("is_ready")->set_boolean_value(false);
+    this->set_proxies_not_ready();
 }
 
 void Expander::ping() {
@@ -134,7 +148,7 @@ void Expander::ping() {
         if (last_message_age >= ping_interval + ping_timeout) {
             echo("warning: expander %s connection lost", this->name.c_str());
             // TODO: trigger error code
-            this->properties.at("is_ready")->set_boolean_value(false);
+            this->set_not_ready();
             this->ping_pending = false;
         }
     }
@@ -151,7 +165,13 @@ void Expander::restart() {
     }
     this->serial->flush();
     this->boot_start_time = millis();
-    this->properties.at("is_ready")->set_boolean_value(false);
+    this->set_not_ready();
+}
+
+void Expander::set_proxies_not_ready() {
+    for (Module *proxy : this->proxies) {
+        proxy->get_property("is_ready")->set_boolean_value(false);
+    }
 }
 
 void Expander::handle_messages(bool check_for_strapping_pins) {
@@ -181,6 +201,11 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
             this->message_handler(&line_buffer[2], false, true);
         } else if (strcmp("\"__PONG__\"", line_buffer) == 0) {
             // No echo for pong
+        } else if (strcmp("Ready.", line_buffer) == 0) {
+            // The other microcontroller rebooted on its own (panic, watchdog, brown-out, EN button, core.restart() via run()),
+            // usually faster than the ping timeout, so the connection never counted as lost.
+            echo("%s: %s", this->name.c_str(), line_buffer);
+            this->handle_ready();
         } else {
             echo("%s: %s", this->name.c_str(), line_buffer);
         }
@@ -190,10 +215,12 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
 void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
+        this->require_connected();
         std::string command = arguments[0]->evaluate_string();
         this->serial->write_checked_line(command.c_str(), command.length());
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
+        this->require_connected();
         restart();
     } else if (method_name == "disconnect") {
         Module::expect(arguments, 0);
@@ -209,6 +236,9 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             throw std::runtime_error("expander \"" + this->name + "\" does not support flashing, pins not set");
         }
         this->serial->require_sole_user(this->name);
+        if (!force && this->disconnected) {
+            throw std::runtime_error("expander \"" + this->name + "\" is disconnected, strapping pins cannot be checked, use flash(true)");
+        }
         gpio_set_level(this->boot_pin, 0);
         if (!force) {
             char command[32];
@@ -233,12 +263,14 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
                                                      this->serial->baud_rate);
         delay(100);
         this->serial->reinitialize_after_flash();
+        this->disconnected = false;
         if (!success) {
             throw std::runtime_error("could not flash expander \"" + this->name + "\"");
         } else {
             this->restart();
         }
     } else {
+        this->require_connected();
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "core.%s(", method_name.c_str());
         pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
@@ -269,9 +301,16 @@ void Expander::check_strapping_pins(const char *buffer) {
     }
 }
 
+void Expander::require_connected() const {
+    if (this->disconnected) {
+        throw std::runtime_error("expander \"" + this->name + "\" is disconnected, use flash(true) to reconnect");
+    }
+}
+
 void Expander::deinstall() {
     this->serial->deinstall();
-    this->properties.at("is_ready")->set_boolean_value(false);
+    this->disconnected = true;
+    this->set_not_ready();
     if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(this->boot_pin);
         gpio_reset_pin(this->enable_pin);
@@ -280,6 +319,10 @@ void Expander::deinstall() {
         gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
         gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
     }
+}
+
+void Expander::add_proxy(Module *proxy) {
+    this->proxies.push_back(proxy);
 }
 
 void Expander::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {

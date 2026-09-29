@@ -672,7 +672,7 @@ Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shado
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
-The stop is always a zero *speed*, also after `power()`, so it switches the motors from torque to velocity control.
+The stop is always a zero _speed_, also after `power()`, so it switches the motors from torque to velocity control.
 Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
 The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
 The next drive command releases the hold and re-arms the switch.
@@ -833,7 +833,7 @@ Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shado
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
-The stop is always a zero *speed*, also after `power()`, so it switches the motors from torque to velocity control.
+The stop is always a zero _speed_, also after `power()`, so it switches the motors from torque to velocity control.
 Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
 The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
 The next drive command releases the hold and re-arms the switch.
@@ -1264,8 +1264,15 @@ its startup script, a persisted console baud rate and the bus backup are reset t
 The other microcontroller then boots the copied app from its first OTA slot.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
+After `disconnect()` the expander stays disconnected until `flash(true)` reinstalls the serial connection;
+`run()`, `restart()` and forwarded calls fail with an error until then because there is no serial connection,
+and `flash()` without `force` fails because the strapping pins cannot be checked without it.
 Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
 After `disconnect()`, the UART and its pins stay reserved for the expander's serial module until the core restarts (see [Serial interface](#serial-interface)).
+
+[Proxy](#proxy) modules are set up on the other microcontroller only once, when they are created.
+After `restart()`, `flash()` or a reboot of the other microcontroller (recognized by its `Ready.` line), `is_ready` returns to `true`, but the proxies no longer exist there:
+their `is_ready` turns `false` and the main microcontroller needs a restart, e.g. `core.restart()`, to create them again.
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 
@@ -1302,6 +1309,9 @@ Note that the proxy module forwards all method calls to the remote module.
 Proxies cannot be passed as arguments to other module constructors (e.g. as end stops for a motor axis), because the actual module only exists on the remote microcontroller.
 Declare the depending module on the same microcontroller instead.
 
-| Properties | Description                                       | Data type |
-| ---------- | ------------------------------------------------- | --------- |
-| `is_ready` | Whether the remote module has booted and is ready | `bool`    |
+| Properties | Description                                                    | Data type |
+| ---------- | -------------------------------------------------------------- | --------- |
+| `is_ready` | Whether the definition was sent in the expander's current boot | `bool`    |
+
+`is_ready` turns `false` again when the other microcontroller restarts or the connection is lost,
+because the main microcontroller cannot tell whether the remote module still exists (see [Expander](#expander)).
