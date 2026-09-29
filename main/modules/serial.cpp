@@ -3,6 +3,7 @@
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include "utils/uart_driver.h"
+#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 
@@ -103,6 +104,8 @@ void Serial::require_sole_user(const std::string &user) const {
 }
 
 void Serial::deinstall() const {
+    this->pending_lines.clear();
+    this->discarding = false;
     if (uart_is_driver_installed(this->uart_num)) {
         uart_driver_delete(this->uart_num);
     }
@@ -155,11 +158,53 @@ int Serial::available() const {
 }
 
 bool Serial::has_buffered_lines() const {
-    return uart_pattern_get_pos(this->uart_num) != -1;
+    if (!this->pending_lines.empty()) {
+        return true;
+    }
+    while (true) {
+        const int pos = uart_pattern_get_pos(this->uart_num);
+        if (pos >= 0) {
+            if (!this->discarding) {
+                return true;
+            }
+            // the rest of an overlong run, up to its line end
+            uart_pattern_pop_pos(this->uart_num);
+            this->discard(pos + 1);
+            this->discarding = false;
+            continue;
+        }
+        size_t buffered = 0;
+        uart_get_buffered_data_len(this->uart_num, &buffered);
+        if (buffered == 0) {
+            return false;
+        }
+        if (uart_pattern_get_pos(this->uart_num) >= 0) {
+            continue; // a line end arrived after the first check, so `buffered` may contain complete lines
+        }
+        if (this->discarding) {
+            this->discard(buffered);
+            return false;
+        }
+        return buffered > CONSOLE_LINE_SIZE; // read_line() drops it and reports LINE_UNTERMINATED
+    }
 }
 
 void Serial::flush() const {
+    this->pending_lines.clear();
+    this->discarding = false;
     uart_flush(this->uart_num);
+}
+
+// drops `count` bytes from the receive ring, reading them in chunks
+void Serial::discard(int count) const {
+    uint8_t scratch[128];
+    while (count > 0) {
+        const int read = uart_read_bytes(this->uart_num, scratch, std::min<int>(count, sizeof(scratch)), 0);
+        if (read <= 0) {
+            break;
+        }
+        count -= read;
+    }
 }
 
 int Serial::read(uint32_t timeout) const {
@@ -169,7 +214,30 @@ int Serial::read(uint32_t timeout) const {
 }
 
 int Serial::read_line(char *buffer, size_t buffer_len) const {
-    int pos = uart_pattern_pop_pos(this->uart_num);
+    if (!this->pending_lines.empty()) {
+        const size_t line_end = this->pending_lines.find('\n');
+        const size_t len = line_end == std::string::npos ? this->pending_lines.size() : line_end + 1;
+        if (len > buffer_len) {
+            this->pending_lines.erase(0, len);
+            return LINE_DISCARDED;
+        }
+        this->pending_lines.copy(buffer, len);
+        this->pending_lines.erase(0, len);
+        return len;
+    }
+    const int pos = uart_pattern_pop_pos(this->uart_num);
+    if (pos < 0) {
+        size_t buffered = 0;
+        uart_get_buffered_data_len(this->uart_num, &buffered);
+        if (buffered > CONSOLE_LINE_SIZE && uart_pattern_get_pos(this->uart_num) < 0) {
+            // bytes without a line end that already exceed a line can never become one; a ring they fill up
+            // disables the receive interrupts until something reads or flushes, so drop them now
+            this->discard(buffered);
+            this->discarding = true;
+            return LINE_UNTERMINATED;
+        }
+        return 0;
+    }
     if (pos >= static_cast<int>(buffer_len)) {
         if (this->available() <= pos) {
             uart_flush_input(this->uart_num);
@@ -177,17 +245,23 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
                 ;
             return LINE_FLUSHED;
         }
-
-        for (int i = 0; i <= pos; i++)
-            this->read();
+        this->discard(pos + 1);
         return LINE_DISCARDED;
     }
-    return pos >= 0 ? uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0) : 0;
+    const int len = uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0);
+    // the driver queues only the last line end of each receive chunk, so one read can hold several lines
+    const char *const line_end = len > 0 ? static_cast<const char *>(memchr(buffer, '\n', len)) : nullptr;
+    const int first_len = line_end ? line_end - buffer + 1 : len;
+    if (first_len < len) {
+        this->pending_lines.assign(buffer + first_len, len - first_len);
+    }
+    return first_len;
 }
 
 const char *Serial::read_line_error(const int result) {
-    return result == LINE_FLUSHED ? "buffer too small, but cannot discard line. flushed serial."
-                                  : "buffer too small. discarded line.";
+    return result == LINE_FLUSHED        ? "buffer too small, but cannot discard line. flushed serial."
+           : result == LINE_UNTERMINATED ? "input exceeds a line without a line end. discarded up to the next line end."
+                                         : "buffer too small. discarded line.";
 }
 
 std::string Serial::get_output() const {
