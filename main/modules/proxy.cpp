@@ -1,4 +1,5 @@
 #include "proxy.h"
+#include "../compilation/expressions.h"
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "driver/uart.h"
@@ -34,4 +35,19 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
         this->expander->send_property(this->name, property_name, expression);
     }
     Module::get_property(property_name)->assign(expression);
+}
+
+void Proxy::declare_property(const std::string &property_name, const Variable_ptr &variable) {
+    if (property_name.find('.') != std::string::npos) {
+        throw std::runtime_error("proxies do not support nested property \"" + this->name + "." + property_name + "\"");
+    }
+    const auto it = this->properties.find(property_name);
+    if (it == this->properties.end()) {
+        this->properties[property_name] = variable;
+    } else if (it->second->type == variable->type) {
+        it->second->assign(std::make_shared<VariableExpression>(variable));
+    } else {
+        throw std::runtime_error("property \"" + this->name + "." + property_name + "\" is " +
+                                 describe(it->second->type) + ", not " + describe(variable->type));
+    }
 }

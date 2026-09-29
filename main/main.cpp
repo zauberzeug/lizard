@@ -62,6 +62,27 @@ std::string identifier_to_string(const struct owl_ref ref) {
     return std::string(identifier.identifier, identifier.length);
 }
 
+std::string property_name_to_string(const struct owl_ref property_name, const struct owl_ref subproperty_name) {
+    const std::string name = identifier_to_string(property_name);
+    return subproperty_name.empty ? name : name + "." + identifier_to_string(subproperty_name);
+}
+
+Variable_ptr create_variable(const struct owl_ref ref) {
+    const struct parsed_datatype datatype = parsed_datatype_get(ref);
+    switch (datatype.type) {
+    case PARSED_BOOLEAN:
+        return std::make_shared<BooleanVariable>();
+    case PARSED_INTEGER:
+        return std::make_shared<IntegerVariable>();
+    case PARSED_NUMBER:
+        return std::make_shared<NumberVariable>();
+    case PARSED_STRING:
+        return std::make_shared<StringVariable>();
+    default:
+        throw std::runtime_error("invalid data type for declaration");
+    }
+}
+
 Expression_ptr compile_expression(const struct owl_ref ref);
 
 std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
@@ -95,7 +116,7 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
         return std::make_shared<VariableExpression>(Global::get_variable(identifier_to_string(expression.identifier)));
     case PARSED_PROPERTY:
         return std::make_shared<PropertyExpression>(Global::get_module(identifier_to_string(expression.module_name)),
-                                                    identifier_to_string(expression.property_name));
+                                                    property_name_to_string(expression.property_name, expression.subproperty_name));
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
@@ -278,28 +299,23 @@ void process_tree(owl_tree *const tree, bool from_expander) {
             variable->assign(expression);
         } else if (!statement.variable_declaration.empty) {
             const struct parsed_variable_declaration variable_declaration = parsed_variable_declaration_get(statement.variable_declaration);
-            const struct parsed_datatype datatype = parsed_datatype_get(variable_declaration.datatype);
             const std::string variable_name = identifier_to_string(variable_declaration.variable_name);
-            switch (datatype.type) {
-            case PARSED_BOOLEAN:
-                Global::add_variable(variable_name, std::make_shared<BooleanVariable>());
-                break;
-            case PARSED_INTEGER:
-                Global::add_variable(variable_name, std::make_shared<IntegerVariable>());
-                break;
-            case PARSED_NUMBER:
-                Global::add_variable(variable_name, std::make_shared<NumberVariable>());
-                break;
-            case PARSED_STRING:
-                Global::add_variable(variable_name, std::make_shared<StringVariable>());
-                break;
-            default:
-                throw std::runtime_error("invalid data type for variable declaration");
-            }
+            Global::add_variable(variable_name, create_variable(variable_declaration.datatype));
             if (!variable_declaration.expression.empty) {
                 const ConstExpression_ptr expression = compile_expression(variable_declaration.expression);
                 Global::get_variable(variable_name)->assign(expression);
             }
+        } else if (!statement.property_declaration.empty) {
+            const struct parsed_property_declaration property_declaration = parsed_property_declaration_get(statement.property_declaration);
+            const Module_ptr module = Global::get_module(identifier_to_string(property_declaration.module_name));
+            const std::string property_name =
+                property_name_to_string(property_declaration.property_name, property_declaration.subproperty_name);
+            const Variable_ptr variable = create_variable(property_declaration.datatype);
+            if (!property_declaration.expression.empty) {
+                const ConstExpression_ptr expression = compile_expression(property_declaration.expression);
+                variable->assign(expression);
+            }
+            module->declare_property(property_name, variable);
         } else if (!statement.routine_definition.empty) {
             const struct parsed_routine_definition routine_definition = parsed_routine_definition_get(statement.routine_definition);
             const std::string routine_name = identifier_to_string(routine_definition.routine_name);

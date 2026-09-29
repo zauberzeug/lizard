@@ -17,7 +17,7 @@ Variable::~Variable() {
     }
 }
 
-static const char *describe(const Type type) {
+const char *describe(const Type type) {
     switch (type) {
     case boolean:
         return "a boolean";
