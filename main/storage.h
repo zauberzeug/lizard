@@ -11,6 +11,7 @@ private:
 
 public:
     static std::string startup;
+    static bool save_failed; // the last `!.` failed and the edit did not change since
 
     static void init();
     static void append_to_startup(const std::string line);
