@@ -12,9 +12,11 @@ class Expander : public Module {
 private:
     unsigned long int last_message_millis = 0;
     bool ping_pending = false;
+    bool disconnected = false; // no serial driver between deinstall() and a successful reinitialization in flash()
     unsigned long boot_start_time;
     std::vector<Module *> proxies;
 
+    void require_connected() const;
     void deinstall();
     void handle_ready();
     void set_not_ready();

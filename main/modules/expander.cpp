@@ -73,7 +73,7 @@ void Expander::step() {
     if (this->properties.at("is_ready")->boolean_value()) {
         this->ping();
         this->handle_messages();
-    } else {
+    } else if (!this->disconnected) {
         this->check_boot_progress();
     }
     this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
@@ -197,10 +197,12 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
 void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
+        this->require_connected();
         std::string command = arguments[0]->evaluate_string();
         this->serial->write_checked_line(command.c_str(), command.length());
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
+        this->require_connected();
         restart();
     } else if (method_name == "disconnect") {
         Module::expect(arguments, 0);
@@ -216,6 +218,9 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             throw std::runtime_error("expander \"" + this->name + "\" does not support flashing, pins not set");
         }
         this->serial->require_sole_user(this->name);
+        if (!force && this->disconnected) {
+            throw std::runtime_error("expander \"" + this->name + "\" is disconnected, strapping pins cannot be checked, use flash(true)");
+        }
         gpio_set_level(this->boot_pin, 0);
         if (!force) {
             char command[32];
@@ -240,12 +245,14 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
                                                      this->serial->baud_rate);
         delay(100);
         this->serial->reinitialize_after_flash();
+        this->disconnected = false;
         if (!success) {
             throw std::runtime_error("could not flash expander \"" + this->name + "\"");
         } else {
             this->restart();
         }
     } else {
+        this->require_connected();
         static char buffer[1024];
         int pos = csprintf(buffer, sizeof(buffer), "core.%s(", method_name.c_str());
         pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
@@ -276,8 +283,15 @@ void Expander::check_strapping_pins(const char *buffer) {
     }
 }
 
+void Expander::require_connected() const {
+    if (this->disconnected) {
+        throw std::runtime_error("expander \"" + this->name + "\" is disconnected, use flash(true) to reconnect");
+    }
+}
+
 void Expander::deinstall() {
     this->serial->deinstall();
+    this->disconnected = true;
     this->set_not_ready();
     if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(this->boot_pin);

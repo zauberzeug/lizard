@@ -1211,6 +1211,9 @@ its startup script, a persisted console baud rate and the bus backup are reset t
 The other microcontroller then boots the copied app from its first OTA slot.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
+After `disconnect()` the expander stays disconnected until `flash(true)` reinstalls the serial connection;
+`run()`, `restart()` and forwarded calls fail with an error until then because there is no serial connection,
+and `flash()` without `force` fails because the strapping pins cannot be checked without it.
 Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
 After `disconnect()`, the UART and its pins stay reserved for the expander's serial module until the core restarts (see [Serial interface](#serial-interface)).
 
