@@ -85,6 +85,8 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
         {"telemetry_duplicates", std::make_shared<IntegerVariable>(0)},
         {"telemetry_rx_us_max", std::make_shared<IntegerVariable>(0)},
         {"telemetry_rx_us_total", std::make_shared<IntegerVariable>(0)},
+        {"text_rx_count", std::make_shared<IntegerVariable>(0)}, // "!" control lines from peers, e.g. "!!" pushes
+        {"text_rx_us_total", std::make_shared<IntegerVariable>(0)},
     };
 }
 
@@ -640,8 +642,13 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
 
     // process control commands starting with "!" silently
     if (message.payload[0] == '!') {
-        ExecutingCommand executing(this, message.sender);
-        process_line(message.payload, message.length, false);
+        const int64_t start = esp_timer_get_time();
+        {
+            ExecutingCommand executing(this, message.sender);
+            process_line(message.payload, message.length, false);
+        }
+        this->count("text_rx_count");
+        this->count("text_rx_us_total", esp_timer_get_time() - start);
         return;
     }
 
