@@ -7,6 +7,8 @@ import serial
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
+from telemetry import Decoder
+
 parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
 parser.add_argument('device', nargs='?', help='Serial device path (e.g., /dev/ttyUSB0)')
 parser.add_argument('--baud', type=int, default=115200, help='Baud rate (default: 115200)')
@@ -40,9 +42,11 @@ class LineReader:
 
 def receive() -> None:
     line_reader = LineReader(port)
+    decoder = Decoder()
     while True:
         # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
         line = line_reader.readline().decode(errors='replace').strip('\r\n')
+        intact = True
         if line[-3:-2] == '@':
             try:
                 check = int(line[-2:], 16)
@@ -55,7 +59,9 @@ def receive() -> None:
                     checksum ^= byte
                 if checksum != check:
                     print(f'ERROR: CHECKSUM MISMATCH ({checksum} vs. {check} for "{line}")')
-        print(line)
+                    intact = False
+        # a damaged line is never taken as layout or frame
+        print(decoder.feed(line) if intact else line)
 
 
 async def send() -> None:
