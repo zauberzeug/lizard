@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../utils/otb.h"
+#include "../utils/telemetry.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -8,10 +9,13 @@
 #include "serial.h"
 #include <atomic>
 #include <cstdint>
+#include <map>
+#include <set>
 #include <vector>
 
 class SerialBus;
 using SerialBus_ptr = std::shared_ptr<SerialBus>;
+class BusTelemetry;
 
 class SerialBus : public Module {
 public:
@@ -28,6 +32,29 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+
+    // --- telemetry frames (see utils/telemetry.h) --------------------------
+    // the bus and sender of the incoming command that is being executed, so a telemetry order knows its requester
+    static SerialBus *executing_bus;
+    static uint8_t executing_sender;
+    // peer side: the node that polls us (0 until the first poll)
+    uint8_t coordinator() const { return this->coordinator_id.load(); }
+    // how a peer hands frames to the poll: 0 mailbox slot, 1 send queue once per poll, 2 built by the communication task
+    int frame_mode() const { return this->frame_mode_value.load(); }
+    bool frame_pending(uint8_t frame_id);
+    bool store_frame(uint8_t frame_id, uint8_t destination, const char *line, size_t length, bool overwrite);
+    void release_frame(uint8_t frame_id);
+    uint32_t poll_count() const { return this->polls_received.load(); }
+    bool try_send_frame(uint8_t destination, const char *line, size_t length);
+    void send_frame_now(uint8_t destination, const char *line, size_t length) const; // communication task only
+    void send_layout(uint8_t destination, const char *line, size_t length);
+    void record_poll_lock_wait(int64_t us);
+    // coordinator side
+    void send_to(uint8_t receiver, const std::string &payload);
+    void add_telemetry_listener(BusTelemetry *listener);
+    void remove_telemetry_listener(BusTelemetry *listener);
+    void request_telemetry_orders(BusTelemetry *listener);
+    const BusTelemetry *declaring_listener(uint8_t peer_id, const std::string &name) const;
 
 private:
     struct IncomingMessage {
@@ -128,6 +155,38 @@ private:
     bool ready_pending = true;
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;
+
+    // --- telemetry, peer side ----------------------------------------------
+    struct FrameSlot {
+        uint8_t frame_id = 0;
+        uint8_t destination = 0;
+        bool used = false;
+        bool pending = false;
+        uint16_t length = 0;
+        char line[PAYLOAD_CAPACITY];
+    };
+    static constexpr size_t MAX_FRAME_SLOTS = 8;
+    std::atomic<FrameSlot *> frame_slots{nullptr}; // allocated by the main task on first use
+    portMUX_TYPE frame_slot_lock = portMUX_INITIALIZER_UNLOCKED;
+    std::atomic<uint8_t> coordinator_id{0};
+    std::atomic<uint32_t> polls_received{0};
+    std::atomic<int> frame_mode_value{0};
+    std::atomic<int64_t> poll_lock_us_max{0};
+    std::atomic<unsigned> frame_overwrites{0};
+    std::atomic<unsigned> frame_drops{0};
+    int64_t layout_wait_us_max = 0;
+    void send_frame_slots(uint8_t requester); // communication task
+
+    // --- telemetry, coordinator side (main task) ---------------------------
+    std::map<uint8_t, telemetry::Layout> peer_layouts;
+    std::map<uint16_t, uint8_t> last_seq; // sender << 8 | frame id
+    std::vector<BusTelemetry *> telemetry_listeners;
+    std::set<uint8_t> telemetry_rounds; // peers that got their clear and orders since our boot
+    unsigned long last_telemetry_warning_millis = 0;
+    void start_telemetry_round(uint8_t peer_id);
+    void handle_telemetry_frame(const IncomingMessage &message);
+    void handle_telemetry_layout(const IncomingMessage &message);
+    void count(const char *property_name, int64_t increment = 1);
 
     static void communication_loop(void *param);
     void adopt_config(const Config &config);

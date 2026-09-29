@@ -46,6 +46,7 @@ private:
 
 public:
     VariableExpression(const ConstVariable_ptr variable);
+    const ConstVariable_ptr &get_variable() const { return this->variable; }
     bool evaluate_boolean() const override;
     int64_t evaluate_integer() const override;
     double evaluate_number() const override;
@@ -60,6 +61,8 @@ private:
 
 public:
     PropertyExpression(const ConstModule_ptr module, const std::string property_name);
+    const ConstModule_ptr &get_module() const { return this->module; }
+    const std::string &get_property_name() const { return this->property_name; }
     bool evaluate_boolean() const override;
     int64_t evaluate_integer() const override;
     double evaluate_number() const override;

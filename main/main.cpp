@@ -594,6 +594,16 @@ void app_main() {
             }
         }
 
+        // telemetry frames carry the state at the end of the step, after modules, rules and routines
+        {
+            InterpreterLock lock;
+            try {
+                core_module->emit_telemetry();
+            } catch (const std::runtime_error &e) {
+                echo("error in telemetry: %s", e.what());
+            }
+        }
+
         // Sleep until the next 10 ms period boundary instead of a full vTaskDelay(10) after
         // work, so the period is max(10 ms, work) and drift-free (#213). On overrun
         // xTaskDelayUntil returns pdFALSE without blocking; floor at 1 tick so the idle task
