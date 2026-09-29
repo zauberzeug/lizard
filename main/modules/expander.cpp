@@ -40,7 +40,8 @@ const std::map<std::string, Variable_ptr> Expander::get_defaults() {
     };
 }
 
-static constexpr unsigned long TELEMETRY_FALLBACK_MS = 1000; // no layout by then: the expander firmware has no frames
+static constexpr unsigned long TELEMETRY_FALLBACK_MS = 1000;   // no layout by then: the expander firmware has no frames
+static constexpr unsigned long TELEMETRY_ORDER_DELAY_MS = 200; // quiet time after the last new proxy before ordering
 
 Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
@@ -290,6 +291,7 @@ void Expander::send_proxy(const std::string module_name, const std::string modul
         // one order for all proxies at the next step, once the startup has created them
         this->telemetry_proxies.push_back({module_name, module_type});
         this->telemetry_order_pending = true;
+        this->telemetry_proxy_millis = millis();
         pos -= 2; // no broadcast: drop the "; "
     } else {
         pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
@@ -345,7 +347,8 @@ void Expander::send_telemetry_orders() {
 }
 
 void Expander::check_telemetry() {
-    if (this->telemetry_order_pending) {
+    // proxies created one by one at the console get one order, not one per proxy
+    if (this->telemetry_order_pending && millis_since(this->telemetry_proxy_millis) > TELEMETRY_ORDER_DELAY_MS) {
         this->send_telemetry_orders();
     }
     if (!this->telemetry_proxies.empty() && !this->telemetry_layout_seen &&

@@ -28,6 +28,7 @@ private:
     bool telemetry_layout_seen = false;
     bool telemetry_version_reported = false;
     unsigned long telemetry_order_millis = 0;
+    unsigned long telemetry_proxy_millis = 0; // when the last proxy was created
     telemetry::Layout telemetry_layout;
     std::map<uint8_t, std::vector<Variable *>> telemetry_mapped; // per frame: the proxy variable of each field index
     std::map<uint8_t, std::vector<telemetry::Slot>> telemetry_slots;
