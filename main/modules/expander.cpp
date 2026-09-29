@@ -288,7 +288,7 @@ void Expander::send_proxy(const std::string module_name, const std::string modul
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
     if (this->properties.at("telemetry_interval")->integer_value() >= 0) {
-        // one order for all proxies at the next step, once the startup has created them
+        // one order for all proxies, once no new one has come for TELEMETRY_ORDER_DELAY_MS
         this->telemetry_proxies.push_back({module_name, module_type});
         this->telemetry_order_pending = true;
         this->telemetry_proxy_millis = millis();
@@ -347,9 +347,12 @@ void Expander::send_telemetry_orders() {
 }
 
 void Expander::check_telemetry() {
-    // proxies created one by one at the console get one order, not one per proxy
-    if (this->telemetry_order_pending && millis_since(this->telemetry_proxy_millis) > TELEMETRY_ORDER_DELAY_MS) {
-        this->send_telemetry_orders();
+    if (this->telemetry_order_pending) {
+        // proxies created one by one at the console get one order, not one per proxy
+        if (millis_since(this->telemetry_proxy_millis) > TELEMETRY_ORDER_DELAY_MS) {
+            this->send_telemetry_orders();
+        }
+        return; // the fallback waits for an order that was sent
     }
     if (!this->telemetry_proxies.empty() && !this->telemetry_layout_seen &&
         millis_since(this->telemetry_order_millis) > TELEMETRY_FALLBACK_MS) {
