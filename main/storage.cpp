@@ -10,9 +10,9 @@
 #include <string>
 
 #define NAMESPACE "storage"
-#define MAX_CHUNK_SIZE 0xf00
 
-static constexpr size_t CHUNK_SIZE = MAX_CHUNK_SIZE;
+// a quarter of an NVS page: such a string still fits on fragmented pages, where 0xf00 needs an almost empty one
+static constexpr size_t CHUNK_SIZE = 0x3c0;
 
 bool Storage::editing = false;
 std::vector<std::string> Storage::edit_pieces;
@@ -28,7 +28,8 @@ void write(const std::string &ns, const std::string &key, const std::string &val
         throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
     }
     // the value only starts the message: a whole chunk would make it too long to be printed at all
-    const std::string shown = value.size() > 40 ? value.substr(0, 40) + "..." : value;
+    std::string shown = value.size() > 40 ? value.substr(0, 40) + "..." : value;
+    std::replace(shown.begin(), shown.end(), '\n', ' ');
     if ((err = nvs_set_str(handle, key.c_str(), value.c_str())) != ESP_OK) {
         nvs_close(handle);
         throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + shown + " (" + std::string(esp_err_to_name(err)) + ")");
@@ -125,6 +126,10 @@ void Storage::read_startup(const std::function<void(const std::string &piece)> &
         }
         return;
     }
+    Storage::read_stored(piece);
+}
+
+void Storage::read_stored(const std::function<void(const std::string &piece)> &piece) {
     if (!exists(NAMESPACE, "num_chunks")) {
         return; // fresh or erased NVS: no startup script yet
     }
@@ -176,9 +181,10 @@ void Storage::read_startup_lines(const std::function<void(const std::string &lin
 }
 
 std::uint16_t Storage::startup_checksum() {
+    // of what is stored, not of an edit in RAM: after a failed `!.` the two differ
     std::uint16_t checksum = 0;
     try {
-        Storage::read_startup([&checksum](const std::string &piece) {
+        Storage::read_stored([&checksum](const std::string &piece) {
             for (const char c : piece) {
                 checksum += static_cast<std::uint8_t>(c);
             }
@@ -293,9 +299,25 @@ void Storage::save_startup() {
             echo("warning: could not delete old chunks before writing new ones");
         }
     }
-    write(NAMESPACE, "num_chunks", std::to_string(Storage::edit_pieces.size()));
-    for (size_t i = 0; i < Storage::edit_pieces.size(); i++) {
-        write(NAMESPACE, "chunk" + std::to_string(i), Storage::edit_pieces[i]);
+    size_t num_chunks = 0;
+    for (const std::string &piece : Storage::edit_pieces) {
+        num_chunks += (piece.size() + CHUNK_SIZE - 1) / CHUNK_SIZE; // pieces read from larger chunks of older firmware
+    }
+    try {
+        write(NAMESPACE, "num_chunks", std::to_string(num_chunks));
+        size_t chunk = 0;
+        for (const std::string &piece : Storage::edit_pieces) {
+            if (piece.size() <= CHUNK_SIZE) {
+                write(NAMESPACE, "chunk" + std::to_string(chunk++), piece);
+                continue;
+            }
+            for (size_t pos = 0; pos < piece.size(); pos += CHUNK_SIZE) {
+                write(NAMESPACE, "chunk" + std::to_string(chunk++), piece.substr(pos, CHUNK_SIZE));
+            }
+        }
+    } catch (const std::runtime_error &e) {
+        // the edit stays in RAM, so that another `!.` can store it
+        throw std::runtime_error(std::string(e.what()) + "; the stored startup script is incomplete");
     }
     std::vector<std::string>().swap(Storage::edit_pieces);
     Storage::editing = false;
