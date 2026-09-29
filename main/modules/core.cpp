@@ -32,6 +32,13 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["telemetry_info_rate"] = std::make_shared<IntegerVariable>(0);   // layout lines per step, 0: all at once
     this->properties["telemetry_us"] = std::make_shared<IntegerVariable>(0);
     this->properties["telemetry_us_max"] = std::make_shared<IntegerVariable>(0);
+    this->properties["modules_us"] = std::make_shared<IntegerVariable>(0);
+    this->properties["rules_us"] = std::make_shared<IntegerVariable>(0);
+}
+
+void Core::record_step_timing(const int64_t modules_us, const int64_t rules_us) {
+    this->properties.at("modules_us")->set_integer_value(modules_us);
+    this->properties.at("rules_us")->set_integer_value(rules_us);
 }
 
 void Core::step() {

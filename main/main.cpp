@@ -15,6 +15,7 @@
 #include "modules/core.h"
 #include "modules/expander.h"
 #include "modules/module.h"
+#include "esp_timer.h"
 #include "nvs_flash.h"
 #include "proxy.h"
 #include "rom/gpio.h"
@@ -582,12 +583,14 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
+        const int64_t modules_start = esp_timer_get_time();
         for (auto const &[module_name, module] : Global::modules) {
             if (module != core_module) {
                 run_step(module);
             }
         }
         run_step(core_module);
+        const int64_t rules_start = esp_timer_get_time();
 
         for (auto const &rule : Global::rules) {
             InterpreterLock lock;
@@ -609,6 +612,8 @@ void app_main() {
                 echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
             }
         }
+
+        core_module->record_step_timing(rules_start - modules_start, esp_timer_get_time() - rules_start);
 
         // telemetry frames carry the state at the end of the step, after modules, rules and routines
         {

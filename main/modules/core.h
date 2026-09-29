@@ -53,6 +53,8 @@ public:
     void set(std::string property_name, double value);
     std::string get_output() const override;
     void keep_alive();
+    // experiment: microseconds the last step spent in module steps and in rules plus routines
+    void record_step_timing(int64_t modules_us, int64_t rules_us);
     // builds the frames that are due; runs at the end of every main loop iteration
     void emit_telemetry();
     // frame mode 2: the bus communication task builds the frames due for `requester` while answering its poll
