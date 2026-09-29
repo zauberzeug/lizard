@@ -315,6 +315,38 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
              "mbedtls decode+bitwise crc %.1f (%04x)",
              static_cast<int>(count), static_cast<unsigned>(body_length), static_cast<unsigned>(line_length),
              static_cast<unsigned>(ok), 2 * rounds, us(0), us(1), us(2), us(3), us(4), us(5), us(6), us(7), us(8), crc);
+        // #290's encodings on the same body, and a body of zeros (a robot standing still) for the byte counts
+        static uint8_t cobs[telemetry::MAX_BODY + telemetry::MAX_BODY / 254 + 3];
+        static char stuffed[2 * telemetry::MAX_BODY + 2];
+        size_t cobs_length = 0, bus_length = 0, line_stuffed_length = 0, unstuffed = 0;
+        const int64_t c0 = esp_timer_get_time();
+        for (int r = 0; r < rounds; ++r) {
+            cobs_length = telemetry::cobs_encode(body, body_length, cobs);
+        }
+        const int64_t c1 = esp_timer_get_time();
+        for (int r = 0; r < rounds; ++r) {
+            bus_length = telemetry::stuff(body, body_length, stuffed, sizeof(stuffed), false);
+        }
+        const int64_t c2 = esp_timer_get_time();
+        for (int r = 0; r < rounds; ++r) {
+            unstuffed = telemetry::unstuff(stuffed, bus_length, decoded, sizeof(decoded));
+        }
+        const int64_t c3 = esp_timer_get_time();
+        line_stuffed_length = telemetry::stuff(body, body_length, stuffed, sizeof(stuffed), true);
+        static uint8_t zeros[telemetry::MAX_BODY];
+        memset(zeros, 0, sizeof(zeros));
+        const size_t zero_body = std::min(body_length, sizeof(zeros));
+        const size_t zero_cobs = telemetry::cobs_encode(zeros, zero_body, cobs);
+        const size_t zero_bus = telemetry::stuff(zeros, zero_body, stuffed, sizeof(stuffed), false);
+        const size_t zero_line = telemetry::stuff(zeros, zero_body, stuffed, sizeof(stuffed), true);
+        const size_t zero_b64 = telemetry::encode_line(zeros, zero_body, line, sizeof(line));
+        echo("telemetry selftest #290: body %u B -> COBS %u B (+2 delimiters), bus-stuffed %u B, line-stuffed %u B, "
+             "base64 %u B; zeros: COBS %u, bus %u, line %u, base64 %u; us per frame: cobs encode %.1f, bus stuff %.1f, "
+             "unstuff %.1f (%u)",
+             static_cast<unsigned>(body_length), static_cast<unsigned>(cobs_length), static_cast<unsigned>(bus_length),
+             static_cast<unsigned>(line_stuffed_length), static_cast<unsigned>(line_length), static_cast<unsigned>(zero_cobs),
+             static_cast<unsigned>(zero_bus), static_cast<unsigned>(zero_line), static_cast<unsigned>(zero_b64),
+             (c1 - c0) / double(rounds), (c2 - c1) / double(rounds), (c3 - c2) / double(rounds), static_cast<unsigned>(unstuffed));
     } else {
         Module::call(method_name, arguments);
     }

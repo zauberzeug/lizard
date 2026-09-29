@@ -290,6 +290,71 @@ size_t mbedtls_decode_line(const char *line, const size_t length, uint8_t *body,
     return crc == bitwise_crc16(body, decoded - CRC_SIZE) ? decoded : 0;
 }
 
+size_t cobs_encode(const uint8_t *input, const size_t length, uint8_t *output) {
+    size_t read = 0, write = 1, code_pos = 0;
+    uint8_t code = 1;
+    while (read < length) {
+        if (input[read] == 0) {
+            output[code_pos] = code;
+            code_pos = write++;
+            code = 1;
+        } else {
+            output[write++] = input[read];
+            if (++code == 0xff) {
+                output[code_pos] = code;
+                code_pos = write++;
+                code = 1;
+            }
+        }
+        ++read;
+    }
+    output[code_pos] = code;
+    return write;
+}
+
+static bool needs_escape(const uint8_t byte, const bool line_only) {
+    return byte == 0x0a || byte == 0x0d || byte == 0x7d || (!line_only && (byte == 0x00 || byte == 0x09 || byte == 0x20));
+}
+
+size_t stuff(const uint8_t *body, const size_t length, char *output, const size_t capacity, const bool line_only) {
+    size_t pos = 0;
+    output[pos++] = 0x01;
+    for (size_t i = 0; i < length; ++i) {
+        if (pos + 2 >= capacity) {
+            return 0;
+        }
+        if (needs_escape(body[i], line_only)) {
+            output[pos++] = 0x7d;
+            output[pos++] = body[i] ^ 0x50;
+        } else {
+            output[pos++] = body[i];
+        }
+    }
+    output[pos] = '\0';
+    return pos;
+}
+
+size_t unstuff(const char *input, const size_t length, uint8_t *body, const size_t capacity) {
+    if (length < 1 || static_cast<uint8_t>(input[0]) != 0x01) {
+        return 0;
+    }
+    size_t pos = 0;
+    for (size_t i = 1; i < length; ++i) {
+        uint8_t byte = input[i];
+        if (byte == 0x7d) {
+            if (++i >= length) {
+                return 0;
+            }
+            byte = input[i] ^ 0x50;
+        }
+        if (pos >= capacity) {
+            return 0;
+        }
+        body[pos++] = byte;
+    }
+    return pos;
+}
+
 int format_layout(char *buffer, const size_t capacity, const uint8_t frame_id, const size_t index, const std::string &name, const char type) {
     return std::snprintf(buffer, capacity, "%sv%d %u.%u %s:%c", LAYOUT_PREFIX, FORMAT_VERSION, frame_id,
                          static_cast<unsigned>(index), name.c_str(), type);

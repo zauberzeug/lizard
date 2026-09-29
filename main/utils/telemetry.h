@@ -51,6 +51,11 @@ size_t mbedtls_encode_line(const uint8_t *body, size_t length, char *line, size_
 size_t mbedtls_decode_line(const char *line, size_t length, uint8_t *body, size_t capacity);
 uint16_t bitwise_crc16(const uint8_t *data, size_t length);
 
+// #290's encodings, for comparison: COBS for the console, byte stuffing for bus (00 09 0a 0d 20 7d) and expander lines (0a 0d 7d)
+size_t cobs_encode(const uint8_t *input, size_t length, uint8_t *output);
+size_t stuff(const uint8_t *body, size_t length, char *output, size_t capacity, bool line_only);
+size_t unstuff(const char *input, size_t length, uint8_t *body, size_t capacity);
+
 int format_layout(char *buffer, size_t capacity, uint8_t frame_id, size_t index, const std::string &name, char type);
 
 struct LayoutLine {
