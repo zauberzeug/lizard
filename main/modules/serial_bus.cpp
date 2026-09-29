@@ -757,6 +757,11 @@ bool SerialBus::store_frame(const uint8_t frame_id, const uint8_t destination, c
         return false;
     }
     taskENTER_CRITICAL(&this->frame_slot_lock);
+    if (overwrite && slot->used && !slot->pending) {
+        // sent between the caller's check and now: this frame repeats the sent one's seq, so the next step sends it
+        taskEXIT_CRITICAL(&this->frame_slot_lock);
+        return false;
+    }
     slot->frame_id = frame_id;
     slot->destination = destination;
     slot->length = length;
