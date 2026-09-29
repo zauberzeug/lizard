@@ -172,16 +172,17 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
 void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
+        this->require_connected();
         std::string command = arguments[0]->evaluate_string();
         this->serial->write_checked_line(command.c_str(), command.length());
     } else if (method_name == "restart") {
         Module::expect(arguments, 0);
+        this->require_connected();
         restart();
     } else if (method_name == "disconnect") {
         Module::expect(arguments, 0);
         this->serial->require_sole_user(this->name);
         deinstall();
-        this->disconnected = true;
     } else if (method_name == "flash") {
         if (arguments.size() > 1) {
             throw std::runtime_error("unexpected number of arguments");
@@ -253,8 +254,15 @@ void Expander::check_strapping_pins(const char *buffer) {
     }
 }
 
+void Expander::require_connected() const {
+    if (this->disconnected) {
+        throw std::runtime_error("expander \"" + this->name + "\" is disconnected, use flash() to reconnect");
+    }
+}
+
 void Expander::deinstall() {
     this->serial->deinstall();
+    this->disconnected = true;
     this->properties.at("is_ready")->set_boolean_value(false);
     if (this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC) {
         gpio_reset_pin(this->boot_pin);
