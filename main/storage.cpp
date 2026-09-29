@@ -11,10 +11,12 @@
 
 #define NAMESPACE "storage"
 
-// a quarter of an NVS page: such a string still fits on fragmented pages, where 0xf00 needs an almost empty one
-static constexpr size_t CHUNK_SIZE = 0x3c0;
+// 959 characters and the terminator fill 30 NVS entries, so four chunks share a page of 126 entries and still fit on
+// fragmented pages, where a chunk of 0xf00 needs an almost empty one
+static constexpr size_t CHUNK_SIZE = 959;
 
 bool Storage::editing = false;
+bool Storage::save_failed = false;
 std::vector<std::string> Storage::edit_pieces;
 
 void Storage::init() {
@@ -181,9 +183,13 @@ void Storage::read_startup_lines(const std::function<void(const std::string &lin
 }
 
 std::uint16_t Storage::startup_checksum() {
-    // of what is stored, not of an edit in RAM: after a failed `!.` the two differ; a read error gives no checksum at all
+    // of the edit while there is one (a host may check it before `!.`), else of the stored script; a read error or a
+    // failed `!.` gives no checksum at all
+    if (Storage::save_failed) {
+        throw std::runtime_error("the startup script could not be saved, the stored one is incomplete");
+    }
     std::uint16_t checksum = 0;
-    Storage::read_stored([&checksum](const std::string &piece) {
+    Storage::read_startup([&checksum](const std::string &piece) {
         for (const char c : piece) {
             checksum += static_cast<std::uint8_t>(c);
         }
@@ -226,6 +232,7 @@ void Storage::append_to_edit(const char *text, size_t length) {
 
 void Storage::append_to_startup(const std::string &line) {
     Storage::begin_edit(true);
+    Storage::save_failed = false; // the edit changes: the checksum covers it again
     // all or nothing: a line that does not fit into the heap leaves the script as it was
     const size_t pieces = Storage::edit_pieces.size();
     const size_t last_size = pieces ? Storage::edit_pieces.back().size() : 0;
@@ -246,9 +253,11 @@ void Storage::remove_from_startup(const std::string &prefix) {
         // the usual start of a rewrite: every line goes, so the old script is not even read
         std::vector<std::string>().swap(Storage::edit_pieces);
         Storage::editing = true;
+        Storage::save_failed = false;
         return;
     }
     Storage::begin_edit(true);
+    Storage::save_failed = false;
     std::vector<std::string> old_pieces;
     old_pieces.swap(Storage::edit_pieces);
     const std::function<void(const std::string &line)> keep = [&prefix](const std::string &line) {
@@ -308,10 +317,12 @@ void Storage::save_startup() {
         }
     } catch (const std::runtime_error &e) {
         // the edit stays in RAM, so that another `!.` can store it
+        Storage::save_failed = true;
         throw std::runtime_error(std::string(e.what()) + "; the stored startup script is incomplete");
     }
     std::vector<std::string>().swap(Storage::edit_pieces);
     Storage::editing = false;
+    Storage::save_failed = false;
 }
 
 void Storage::set_user_pin(const std::uint32_t pin) {
