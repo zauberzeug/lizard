@@ -7,6 +7,8 @@
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
+#include "esp_timer.h"
+#include "global.h"
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
@@ -30,8 +32,18 @@ const std::map<std::string, Variable_ptr> Expander::get_defaults() {
         {"ping_timeout", std::make_shared<NumberVariable>(2.0)},
         {"is_ready", std::make_shared<BooleanVariable>(false)},
         {"last_message_age", std::make_shared<IntegerVariable>(0)},
+        // telemetry experiment: -1 text broadcasts, otherwise the frame interval in ms (0: every expander step)
+        {"telemetry_interval", std::make_shared<IntegerVariable>(-1)},
+        {"telemetry_frames", std::make_shared<IntegerVariable>(0)},
+        {"telemetry_errors", std::make_shared<IntegerVariable>(0)},
+        {"telemetry_gaps", std::make_shared<IntegerVariable>(0)},
+        {"telemetry_mismatch", std::make_shared<IntegerVariable>(0)},
+        {"telemetry_rx_us_max", std::make_shared<IntegerVariable>(0)},
+        {"telemetry_rx_us_total", std::make_shared<IntegerVariable>(0)},
     };
 }
+
+static constexpr unsigned long TELEMETRY_FALLBACK_MS = 1000; // no layout by then: the expander firmware has no frames
 
 Expander::Expander(const std::string name,
                    const ConstSerial_ptr serial,
@@ -73,6 +85,7 @@ void Expander::step() {
     if (this->properties.at("is_ready")->boolean_value()) {
         this->ping();
         this->handle_messages();
+        this->check_telemetry();
     } else {
         this->check_boot_progress();
     }
@@ -159,7 +172,10 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
         }
         this->last_message_millis = millis();
         this->ping_pending = false;
-        if (line_buffer[0] == '!' && line_buffer[1] == '!') {
+        if (line_buffer[0] == telemetry::FRAME_PREFIX ||
+            strncmp(line_buffer, telemetry::LAYOUT_PREFIX, telemetry::LAYOUT_PREFIX_LENGTH) == 0) {
+            this->handle_telemetry_line(line_buffer, len);
+        } else if (line_buffer[0] == '!' && line_buffer[1] == '!') {
             this->message_handler(&line_buffer[2], false, true);
         } else if (strcmp("\"__PONG__\"", line_buffer) == 0) {
             // No echo for pong
@@ -269,8 +285,133 @@ void Expander::send_proxy(const std::string module_name, const std::string modul
     int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
     pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "); ");
-    pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
+    if (this->properties.at("telemetry_interval")->integer_value() >= 0) {
+        // one order for all proxies at the next step, once the startup has created them
+        this->telemetry_proxies.push_back({module_name, module_type});
+        this->telemetry_order_pending = true;
+        pos -= 2; // no broadcast: drop the "; "
+    } else {
+        pos += csprintf(&buffer[pos], sizeof(buffer) - pos, "%s.broadcast()", module_name.c_str());
+    }
     this->serial->write_checked_line(buffer, pos);
+}
+
+void Expander::count(const char *property_name, const int64_t increment) {
+    const Variable_ptr counter = this->properties.at(property_name);
+    counter->set_integer_value(counter->integer_value() + increment);
+}
+
+void Expander::send_telemetry_orders() {
+    // the fields of all proxies, as few frames as the payload limit allows; the expander names them like we do
+    const int64_t interval = this->properties.at("telemetry_interval")->integer_value();
+    std::vector<std::string> lines;
+    std::string line;
+    size_t bytes = 0;
+    size_t bits = 0;
+    for (auto const &[proxy_name, proxy_type] : this->telemetry_proxies) {
+        for (auto const &[property_name, variable] : Module::get_module_defaults(proxy_type)) {
+            if (property_name == "is_ready" || (variable->type != boolean && variable->type != integer && variable->type != number)) {
+                continue;
+            }
+            const size_t size = telemetry::field_size(telemetry::type_for(variable, false));
+            const bool is_bit = variable->type == boolean;
+            const size_t payload = bytes + size + (bits + (is_bit ? 1 : 0) + 7) / 8;
+            if (!line.empty() && (payload > telemetry::MAX_PAYLOAD || line.size() > 1800)) {
+                lines.push_back(line);
+                line.clear();
+                bytes = 0;
+                bits = 0;
+            }
+            line += (line.empty() ? "core.telemetry(" : ", ") + proxy_name + "." + property_name;
+            bytes += size;
+            bits += is_bit ? 1 : 0;
+        }
+    }
+    if (!line.empty()) {
+        lines.push_back(line);
+    }
+    this->serial->write_checked_line("core.clear_telemetry()");
+    for (auto &order : lines) {
+        order += ", " + std::to_string(interval) + ")";
+        this->serial->write_checked_line(order.c_str(), order.size());
+    }
+    this->telemetry_layout.clear();
+    this->telemetry_slots.clear();
+    this->telemetry_layout_seen = false;
+    this->telemetry_order_millis = millis();
+    this->telemetry_order_pending = false;
+}
+
+void Expander::check_telemetry() {
+    if (this->telemetry_order_pending) {
+        this->send_telemetry_orders();
+    }
+    if (!this->telemetry_proxies.empty() && !this->telemetry_layout_seen &&
+        millis_since(this->telemetry_order_millis) > TELEMETRY_FALLBACK_MS) {
+        echo("warning: expander %s sends no telemetry layout, falling back to text broadcasts", this->name.c_str());
+        for (auto const &[proxy_name, proxy_type] : this->telemetry_proxies) {
+            this->serial->write_checked_line((proxy_name + ".broadcast()").c_str());
+        }
+        this->telemetry_proxies.clear();
+        this->properties.at("telemetry_interval")->set_integer_value(-1);
+    }
+}
+
+void Expander::handle_telemetry_line(const char *line, const int length) {
+    if (line[0] != telemetry::FRAME_PREFIX) {
+        telemetry::LayoutLine layout_line;
+        if (!telemetry::parse_layout(line, length, layout_line) || layout_line.version != telemetry::FORMAT_VERSION) {
+            this->count("telemetry_errors");
+            return;
+        }
+        this->telemetry_layout_seen = true;
+        if (this->telemetry_layout.set(layout_line)) {
+            this->telemetry_slots.clear();
+            for (auto const &[frame_id, entries] : this->telemetry_layout.frames) {
+                this->telemetry_slots[frame_id] = telemetry::map_frame(entries, [this](const telemetry::LayoutEntry &entry) -> Variable_ptr {
+                    const size_t dot = entry.name.find('.');
+                    const std::string proxy_name = dot == std::string::npos ? "" : entry.name.substr(0, dot);
+                    if (std::none_of(this->telemetry_proxies.begin(), this->telemetry_proxies.end(),
+                                     [&](const auto &proxy) { return proxy.first == proxy_name; })) {
+                        return nullptr;
+                    }
+                    const Variable_ptr variable = Global::get_module(entry.name.substr(0, dot))->get_property(entry.name.substr(dot + 1));
+                    return telemetry::type_matches(variable, entry.type) ? variable : nullptr;
+                });
+            }
+        }
+        return;
+    }
+    const int64_t start = esp_timer_get_time();
+    static uint8_t body[telemetry::MAX_BODY + 3];
+    const size_t body_length = telemetry::decode_line(line, length, body, sizeof(body));
+    if (body_length == 0) {
+        this->count("telemetry_errors");
+        return;
+    }
+    this->count("telemetry_frames");
+    const uint8_t frame_id = body[0];
+    const uint8_t seq = body[1];
+    const auto last = this->telemetry_last_seq.find(frame_id);
+    if (last != this->telemetry_last_seq.end() && static_cast<uint8_t>(seq - last->second - 1) < 128) {
+        this->count("telemetry_gaps", static_cast<uint8_t>(seq - last->second - 1));
+    }
+    this->telemetry_last_seq[frame_id] = seq;
+    const int expected = this->telemetry_layout.expected_payload(frame_id);
+    const auto slots = this->telemetry_slots.find(frame_id);
+    if (expected < 0 || slots == this->telemetry_slots.end()) {
+        return;
+    }
+    if (static_cast<size_t>(expected) != body_length - telemetry::HEADER_SIZE - telemetry::CRC_SIZE) {
+        this->count("telemetry_mismatch");
+        return;
+    }
+    telemetry::apply(slots->second, &body[telemetry::HEADER_SIZE]);
+    const int64_t elapsed = esp_timer_get_time() - start;
+    this->count("telemetry_rx_us_total", elapsed);
+    if (elapsed > this->properties.at("telemetry_rx_us_max")->integer_value()) {
+        this->properties.at("telemetry_rx_us_max")->set_integer_value(elapsed);
+    }
 }
 
 void Expander::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {

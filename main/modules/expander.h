@@ -1,8 +1,10 @@
 #pragma once
 
+#include "../utils/telemetry.h"
 #include "module.h"
 #include "serial.h"
 #include <string>
+#include <vector>
 
 class Expander;
 using Expander_ptr = std::shared_ptr<Expander>;
@@ -19,6 +21,19 @@ private:
     void restart();
     void handle_messages(bool check_for_strapping_pins = false);
     void check_strapping_pins(const char *buffer);
+
+    // telemetry: with telemetry_interval >= 0 the proxies' properties come as frames instead of text broadcasts
+    std::vector<std::pair<std::string, std::string>> telemetry_proxies; // name and module type
+    bool telemetry_order_pending = false;
+    bool telemetry_layout_seen = false;
+    unsigned long telemetry_order_millis = 0;
+    telemetry::Layout telemetry_layout;
+    std::map<uint8_t, std::vector<telemetry::Slot>> telemetry_slots;
+    std::map<uint8_t, uint8_t> telemetry_last_seq;
+    void send_telemetry_orders();
+    void check_telemetry();
+    void handle_telemetry_line(const char *line, int length);
+    void count(const char *property_name, int64_t increment = 1);
 
 public:
     static inline constexpr const char *TYPE = "Expander";
