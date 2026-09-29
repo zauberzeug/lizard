@@ -42,7 +42,7 @@ private:
     void clear_telemetry();
     SerialBus *polled_bus() const;
     bool route(const TelemetryFrame &frame, SerialBus *polled, SerialBus *&bus, uint8_t &destination) const;
-    void send_layout(const TelemetryFrame &frame, size_t index);
+    bool send_layout(const TelemetryFrame &frame, size_t index); // false: the bus queue is full
     void announce(TelemetryFrame &frame, bool first = false);
     size_t encode_frame(TelemetryFrame &frame, unsigned long now, char *line, size_t capacity);
 

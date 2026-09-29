@@ -98,9 +98,12 @@ After the startup, and again whenever the peer reports `Ready.` after a boot, th
 Properties declared later, e.g. at the command line, are ordered right away.
 If a frame arrives whose layout is incomplete, e.g. because a layout line got lost, the coordinator asks the peer for its layout lines again, at most every 2 seconds.
 If no frame of a bus telemetry module arrives for 5 seconds, or 10 of its intervals if that is longer, the coordinator sends its order again, at most once per such period; a peer that still has the frame only sends its layout lines again.
-If the peer cannot resolve a name, it rejects that order, and the coordinator prints the peer's error as `bus[2]: ...`.
+If frames arrive but no layout line brought some of the declared values, e.g. because an order line got lost, the coordinator orders just those again, as often.
+If the peer cannot resolve a name, it rejects that order, and the coordinator prints the peer's error as `bus[2]: ...`, again with every renewed order.
+A peer whose layout lines carry another format version is reported once; its frames are ignored and nothing is ordered again until it reports `Ready.`.
 
 The peer keeps the newest frame of each ID and sends it with the next poll, so a poll delivers the current values and no backlog; a replaced frame does not count in the sequence numbers.
+It keeps at most 8 frames per bus and warns about any further one, which it does not send.
 The coordinator copies each frame into the declared properties, which rules and `core.telemetry` use like any other property, while `arm.age` tells how old they are.
 Frames that a peer defines itself, in its startup script or at its command line, go to the coordinator once the coordinator has polled the peer, and to the command line before.
 Bus payloads that start with `~` or `__LAYOUT__` are taken as telemetry and neither printed nor interpreted as Lizard code.
@@ -119,7 +122,8 @@ The setting applies to proxies created afterwards, so it belongs right after the
 In the step after proxies are created, the expander orders the `bool`, `int` and `float` properties that the module types of its proxies have by default, except `is_ready`, as frames every `telemetry_interval` milliseconds (0: every step).
 The order starts with `core.clear_telemetry()`, which also removes frames that the other microcontroller defined itself.
 String properties and properties that a module adds at runtime, like the `offset_<id>` of a serial bus, are not ordered.
-If no layout line arrives within one second, e.g. because the other microcontroller runs a firmware without telemetry, the expander prints a warning, switches the proxies to text broadcasts and sets `telemetry_interval` to -1.
+If no layout line arrives within five seconds, e.g. because the other microcontroller runs a firmware without telemetry, the expander prints a warning, sends `core.clear_telemetry()`, switches the proxies to text broadcasts and sets `telemetry_interval` to -1.
+If a frame arrives whose layout is incomplete, the expander asks for the layout lines again, at most every 2 seconds.
 Lines from the other microcontroller that start with `~` or `__LAYOUT__` are taken as telemetry and not printed.
 
 ## Host decoding

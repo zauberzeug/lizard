@@ -14,6 +14,7 @@ private:
     std::vector<const std::string *> declared;         // keys of the property map, in declaration order
     std::map<uint8_t, std::vector<Variable *>> mapped; // per frame: the mirror of each field index, nullptr if none
     std::map<uint8_t, std::vector<telemetry::Slot>> slots;
+    std::vector<const std::string *> announced; // declared names that a layout line brought since the orders
     bool orders_sent = false;
     unsigned long orders_millis = 0;
     bool frame_seen = false;

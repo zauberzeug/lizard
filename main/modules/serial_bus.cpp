@@ -652,7 +652,7 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     this->echo_target_id = 0;
 }
 
-void SerialBus::enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length) {
+void SerialBus::enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, const TickType_t wait) {
     if (length >= PAYLOAD_CAPACITY) {
         throw std::runtime_error("serial bus: payload is too large for serial bus");
     }
@@ -662,7 +662,7 @@ void SerialBus::enqueue_outgoing_message(const uint8_t receiver, const char *pay
     OutgoingMessage message{receiver, length, {}};
     memcpy(message.payload, payload, length);
     message.payload[length] = '\0';
-    if (xQueueSend(this->outbound_queue, &message, pdMS_TO_TICKS(50)) != pdTRUE) {
+    if (xQueueSend(this->outbound_queue, &message, wait) != pdTRUE) {
         throw std::runtime_error("serial bus: could not enqueue outgoing message");
     }
 }
@@ -760,6 +760,11 @@ bool SerialBus::store_frame(const uint8_t frame_id, const uint8_t destination, c
     }
     if (!slot) {
         this->frame_drops++;
+        if (millis_since(this->last_slot_warning_millis) > 10000) {
+            this->last_slot_warning_millis = millis();
+            echo("warning: serial bus %s has no free slot for telemetry frame %u (at most %u frames)", this->name.c_str(), frame_id,
+                 static_cast<unsigned>(MAX_FRAME_SLOTS));
+        }
         return false;
     }
     taskENTER_CRITICAL(&this->frame_slot_lock);
@@ -817,11 +822,12 @@ void SerialBus::send_frame_slots(const uint8_t requester) {
     }
 }
 
-void SerialBus::send_layout(const uint8_t destination, const char *line, const size_t length) {
+bool SerialBus::send_layout(const uint8_t destination, const char *line, const size_t length) {
     try {
-        this->enqueue_outgoing_message(destination, line, length);
+        this->enqueue_outgoing_message(destination, line, length, 0); // a full queue empties at the next poll, not here
+        return true;
     } catch (const std::runtime_error &e) {
-        this->frame_drops++;
+        return false;
     }
 }
 
@@ -860,6 +866,7 @@ void SerialBus::request_telemetry_orders(BusTelemetry *listener) {
 void SerialBus::start_telemetry_round(const uint8_t peer_id) {
     // a clear first, so that a peer that kept running does not stream the frames of an outdated startup
     this->peer_layouts[peer_id].clear();
+    this->other_format_peers.erase(peer_id); // it may have been updated
     for (auto it = this->last_seq.begin(); it != this->last_seq.end();) {
         it = (it->first >> 8) == peer_id ? this->last_seq.erase(it) : std::next(it); // new frames count from anew
     }
@@ -883,8 +890,8 @@ void SerialBus::count(const Variable_ptr &counter, const int64_t increment) {
 }
 
 void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
-    if (!this->telemetry_rounds.count(message.sender)) {
-        return; // frames from before our own orders, e.g. of our previous run while this one booted, count for nothing
+    if (!this->telemetry_rounds.count(message.sender) || this->other_format_peers.count(message.sender)) {
+        return; // frames from before our own orders (e.g. of our previous run) or in a format we do not read
     }
     static uint8_t body[telemetry::MAX_BODY + 3];
     const size_t length = telemetry::decode_line(message.payload, message.length, body, sizeof(body));
@@ -903,24 +910,25 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
     memcpy(&peer_millis, &body[2], 4);
     const size_t payload_length = length - telemetry::HEADER_SIZE - telemetry::CRC_SIZE;
 
-    const uint16_t key = static_cast<uint16_t>(message.sender) << 8 | frame_id;
-    const auto last = this->last_seq.find(key);
-    if (last != this->last_seq.end()) {
-        const uint8_t missing = static_cast<uint8_t>(seq - last->second - 1);
-        if (seq == last->second) {
-            this->count(this->telemetry_duplicates);
-        } else if (missing < 128) {
-            this->count(this->telemetry_gaps, missing);
-        }
-    }
-    this->last_seq[key] = seq;
-
     const auto layout = this->peer_layouts.find(message.sender);
     const int expected = layout == this->peer_layouts.end() ? -1 : layout->second.expected_payload(frame_id);
     bool claimed = false;
     if (expected >= 0 && static_cast<size_t>(expected) != payload_length) {
         this->count(this->telemetry_mismatch);
     } else if (expected >= 0) {
+        // sequence numbers only of frames whose layout we know: a stale frame of the old orders, right after a round,
+        // would start the count with a number of another definition
+        const uint16_t key = static_cast<uint16_t>(message.sender) << 8 | frame_id;
+        const auto last = this->last_seq.find(key);
+        if (last != this->last_seq.end()) {
+            const uint8_t missing = static_cast<uint8_t>(seq - last->second - 1);
+            if (seq == last->second) {
+                this->count(this->telemetry_duplicates);
+            } else if (missing < 128) {
+                this->count(this->telemetry_gaps, missing);
+            }
+        }
+        this->last_seq[key] = seq;
         for (BusTelemetry *const listener : this->telemetry_listeners) {
             if (listener->peer_id == message.sender) {
                 claimed |= listener->handle_frame(frame_id, seq, peer_millis, &body[telemetry::HEADER_SIZE]);
@@ -947,8 +955,8 @@ void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
         return;
     }
     if (line.version != telemetry::FORMAT_VERSION) {
-        if (millis_since(this->last_telemetry_warning_millis) > 1000) {
-            this->last_telemetry_warning_millis = millis();
+        // said once; its frames are ignored and nothing is ordered again until the peer boots (it may have been updated)
+        if (this->other_format_peers.insert(message.sender).second) {
             echo("warning: serial bus %s: node %u sends telemetry format v%d, this node reads v%d",
                  this->name.c_str(), message.sender, line.version, telemetry::FORMAT_VERSION);
         }

@@ -117,7 +117,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
 | `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
-| `bus.telemetry_frames`     | Telemetry frames received from peers (coordinator)                                                            | `int`     |
+| `bus.telemetry_frames`     | Telemetry frames received from peers since their order round (coordinator)                                    | `int`     |
 | `bus.telemetry_errors`     | Malformed telemetry frames and layout lines received (coordinator)                                            | `int`     |
 | `bus.telemetry_unclaimed`  | Received frames that no bus telemetry module took (coordinator)                                               | `int`     |
 | `bus.telemetry_mismatch`   | Received frames whose size does not match their layout (coordinator)                                          | `int`     |

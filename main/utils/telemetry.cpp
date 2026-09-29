@@ -301,7 +301,10 @@ std::vector<Slot> map_frame(const std::vector<char> &types, const std::vector<Va
     size_t offset = 0;
     size_t bit = 0;
     for (size_t index = 0; index < types.size(); ++index) {
-        Variable *const variable = index < variables.size() ? variables[index] : nullptr;
+        Variable *variable = index < variables.size() ? variables[index] : nullptr;
+        if (variable && !type_matches(*variable, types[index])) {
+            variable = nullptr; // a mapping of an earlier layout: never let it throw on every frame
+        }
         if (types[index] == '?') {
             if (variable) {
                 slots.push_back({variable, '?', static_cast<uint8_t>(1 << (bit % 8)), static_cast<uint16_t>(numeric + bit / 8)});

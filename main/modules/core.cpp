@@ -435,9 +435,9 @@ bool Core::route(const TelemetryFrame &frame, SerialBus *polled, SerialBus *&bus
     return false;
 }
 
-void Core::send_layout(const TelemetryFrame &frame, const size_t index) {
+bool Core::send_layout(const TelemetryFrame &frame, const size_t index) {
     if (index >= frame.fields.size()) {
-        return;
+        return true;
     }
     char line[SerialBus::PAYLOAD_CAPACITY];
     const telemetry::Field &field = frame.fields[index];
@@ -445,27 +445,30 @@ void Core::send_layout(const TelemetryFrame &frame, const size_t index) {
     const int length = telemetry::format_layout(line, sizeof(line), frame.id, index, frame.fields.size(), name, field.type);
     if (length <= 0 || length >= static_cast<int>(sizeof(line))) {
         echo("warning: layout line of telemetry field \"%s\" is too long", name.c_str());
-        return;
+        return true;
     }
     SerialBus *bus = nullptr;
     uint8_t destination = 0;
     if (this->route(frame, this->polled_bus(), bus, destination)) {
-        bus->send_layout(destination, line, length);
-    } else {
-        echo("%s", line);
+        return bus->send_layout(destination, line, length);
     }
+    echo("%s", line);
+    return true;
 }
 
 void Core::announce(TelemetryFrame &frame, const bool first) {
     const int64_t rate = this->telemetry_info_rate->integer_value();
     for (size_t index = 0; index < frame.fields.size(); ++index) {
-        if (rate > 0) {
-            this->pending_layout.push_back({frame.id, index});
-            if (first) {
-                ++frame.layout_pending; // only a new frame waits; announcing again must not pause the stream
-            }
-        } else {
-            this->send_layout(frame, index);
+        if (rate <= 0 && this->send_layout(frame, index)) {
+            continue;
+        }
+        const std::pair<uint8_t, size_t> entry{frame.id, index};
+        if (!first && std::find(this->pending_layout.begin(), this->pending_layout.end(), entry) != this->pending_layout.end()) {
+            continue; // still queued from an earlier call
+        }
+        this->pending_layout.push_back(entry);
+        if (first) {
+            ++frame.layout_pending; // only a new frame waits; announcing again must not pause the stream
         }
     }
 }
@@ -487,7 +490,10 @@ void Core::emit_telemetry() {
         const auto it = std::find_if(this->telemetry_frames.begin(), this->telemetry_frames.end(),
                                      [id = id](const TelemetryFrame &frame) { return frame.id == id; });
         if (it != this->telemetry_frames.end()) {
-            this->send_layout(*it, index);
+            if (!this->send_layout(*it, index)) {
+                this->pending_layout.push_front({id, index}); // the bus queue is full: again in the next step
+                break;
+            }
             if (it->layout_pending > 0) {
                 --it->layout_pending;
             }
