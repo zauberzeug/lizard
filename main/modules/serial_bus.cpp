@@ -305,8 +305,8 @@ void SerialBus::communication_loop(void *param) {
                         bus->ready_pending = false;
                     }
                     bus->send_outgoing_queue();
-                    if (bus->frame_mode_value == 2 && core_module) {
-                        core_module->build_frames_for_poll(bus, bus->requesting_node);
+                    if (bus->frame_mode_value >= 2 && core_module) {
+                        core_module->build_frames_for_poll(bus, bus->requesting_node, bus->frame_mode_value == 2);
                     } else {
                         bus->send_frame_slots(bus->requesting_node);
                     }

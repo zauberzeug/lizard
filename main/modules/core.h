@@ -57,6 +57,7 @@ public:
     void record_step_timing(int64_t modules_us, int64_t rules_us);
     // builds the frames that are due; runs at the end of every main loop iteration
     void emit_telemetry();
-    // frame mode 2: the bus communication task builds the frames due for `requester` while answering its poll
-    void build_frames_for_poll(SerialBus *bus, uint8_t requester);
+    // frame modes 2 and 3: the bus communication task builds the frames due for `requester` while answering its poll,
+    // with the interpreter lock (2) or without it (3, to show the race)
+    void build_frames_for_poll(SerialBus *bus, uint8_t requester, bool locked = true);
 };

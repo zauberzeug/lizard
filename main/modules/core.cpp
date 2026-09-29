@@ -565,7 +565,7 @@ void Core::emit_telemetry() {
             break;
         }
         default:
-            break; // mode 2: the communication task builds it while answering the poll
+            break; // modes 2 and 3: the communication task builds it while answering the poll
         }
     }
     const int64_t rate = this->properties.at("telemetry_info_rate")->integer_value();
@@ -586,9 +586,12 @@ void Core::emit_telemetry() {
     }
 }
 
-void Core::build_frames_for_poll(SerialBus *bus, const uint8_t requester) {
+void Core::build_frames_for_poll(SerialBus *bus, const uint8_t requester, const bool locked) {
     const int64_t wait_start = esp_timer_get_time();
-    InterpreterLock lock; // the main task interprets between these reads
+    std::unique_ptr<InterpreterLock> lock; // the main task interprets between these reads
+    if (locked) {
+        lock = std::make_unique<InterpreterLock>();
+    }
     bus->record_poll_lock_wait(esp_timer_get_time() - wait_start);
     const unsigned long now = millis();
     static char line[telemetry::MAX_LINE];
