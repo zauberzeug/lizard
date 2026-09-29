@@ -203,6 +203,53 @@ size_t decode_line(const char *line, const size_t length, uint8_t *body, const s
     return crc == crc16(body, decoded - CRC_SIZE) ? decoded : 0;
 }
 
+size_t fast_decode_line(const char *line, const size_t length, uint8_t *body, const size_t capacity) {
+    static int8_t table[256];
+    static bool ready = false;
+    if (!ready) {
+        memset(table, -1, sizeof(table));
+        const char *alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        for (int i = 0; i < 64; ++i) {
+            table[static_cast<uint8_t>(alphabet[i])] = i;
+        }
+        ready = true;
+    }
+    if (length < 5 || line[0] != FRAME_PREFIX || (length - 1) % 4 != 0) {
+        return 0;
+    }
+    size_t out = 0;
+    for (size_t i = 1; i < length; i += 4) {
+        const int8_t a = table[static_cast<uint8_t>(line[i])];
+        const int8_t b = table[static_cast<uint8_t>(line[i + 1])];
+        const bool pad2 = line[i + 2] == '=';
+        const bool pad3 = line[i + 3] == '=';
+        const int8_t c = pad2 ? 0 : table[static_cast<uint8_t>(line[i + 2])];
+        const int8_t d = pad3 ? 0 : table[static_cast<uint8_t>(line[i + 3])];
+        if (a < 0 || b < 0 || c < 0 || d < 0 || (pad2 && !pad3) || ((pad2 || pad3) && i + 4 != length)) {
+            return 0;
+        }
+        const uint32_t v = a << 18 | b << 12 | c << 6 | d;
+        const size_t n = pad2 ? 1 : pad3 ? 2
+                                         : 3;
+        if (out + n > capacity) {
+            return 0;
+        }
+        body[out++] = v >> 16;
+        if (n > 1) {
+            body[out++] = v >> 8;
+        }
+        if (n > 2) {
+            body[out++] = v;
+        }
+    }
+    if (out < HEADER_SIZE + CRC_SIZE) {
+        return 0;
+    }
+    uint16_t crc;
+    memcpy(&crc, &body[out - CRC_SIZE], 2);
+    return crc == crc16(body, out - CRC_SIZE) ? out : 0;
+}
+
 int format_layout(char *buffer, const size_t capacity, const uint8_t frame_id, const size_t index, const std::string &name, const char type) {
     return std::snprintf(buffer, capacity, "%sv%d %u.%u %s:%c", LAYOUT_PREFIX, FORMAT_VERSION, frame_id,
                          static_cast<unsigned>(index), name.c_str(), type);
