@@ -1,8 +1,8 @@
 """Serial device discovery shared by the Lizard host tools.
 
 A Jetson Robot Brain reaches the microcontroller over a fixed platform UART that no
-enumeration can see, so it has to be derived from the L4T version; a USB-UART bridge, attached to
-a Jetson or to a development host, has a device node matching one of a few well-known patterns.
+enumeration can see, so it has to be derived from the L4T version; a USB-UART bridge on a
+development host has a device node matching one of a few well-known patterns.
 """
 import functools
 import glob
@@ -48,12 +48,16 @@ def jetson_uart() -> Optional[str]:
 
 
 def find_devices() -> List[str]:
-    """Return the serial devices that could be a microcontroller, the Jetson's UART first."""
+    """Return the serial devices that could be a microcontroller.
+
+    On a Jetson that is its UART alone when the node exists: the USB serial devices of a Robot
+    Brain are peripherals like a GNSS receiver, and listing them would turn every call into a
+    question. A microcontroller on a USB bridge attached to a Jetson needs an explicit path.
+    """
     uart = jetson_uart()
-    usb = sorted(path for pattern in PATTERNS for path in glob.glob(pattern))
     if uart is not None and Path(uart).exists():
-        return [uart] + usb
-    return usb
+        return [uart]
+    return sorted(path for pattern in PATTERNS for path in glob.glob(pattern))
 
 
 @functools.lru_cache(maxsize=None)  # so a command reading the device twice asks at most once
@@ -71,7 +75,7 @@ def resolve_device(path: Optional[str] = None) -> str:
         raise RuntimeError('No serial device found')
     if len(devices) == 1:
         return devices[0]
-    if not sys.stdin.isatty():
+    if sys.stdin is None or not sys.stdin.isatty():  # None when stdin is closed
         raise RuntimeError(cannot_ask_message(devices))
     # The whole exchange goes to stderr: a caller whose stdout is redirected (`monitor.py > log`,
     # `espresso.py -d | grep`) would otherwise wait at a prompt it cannot show.
