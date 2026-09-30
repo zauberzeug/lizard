@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../utils/otb.h"
+#include "../utils/telemetry.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -8,10 +9,13 @@
 #include "serial.h"
 #include <atomic>
 #include <cstdint>
+#include <map>
+#include <set>
 #include <vector>
 
 class SerialBus;
 using SerialBus_ptr = std::shared_ptr<SerialBus>;
+class BusTelemetry;
 
 class SerialBus : public Module {
 public:
@@ -28,6 +32,25 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+
+    // --- telemetry frames (see utils/telemetry.h) --------------------------
+    // the bus and sender of the incoming command that is being executed, so a telemetry order knows its requester
+    static SerialBus *executing_bus;
+    static uint8_t executing_sender;
+    // peer side: the node that polls us (0 until the first poll)
+    uint8_t coordinator() const { return this->coordinator_id.load(); }
+    // mailbox: the main task leaves the newest frame per id in a slot, the communication task sends it with the next poll
+    bool frame_pending(uint8_t frame_id);
+    bool store_frame(uint8_t frame_id, uint8_t destination, const char *line, size_t length, bool overwrite);
+    void release_frame(uint8_t frame_id);
+    bool send_layout(uint8_t destination, const char *line, size_t length); // false: the queue is full, try again later
+    // coordinator side
+    void send_to(uint8_t receiver, const std::string &payload);
+    void add_telemetry_listener(BusTelemetry *listener);
+    void remove_telemetry_listener(BusTelemetry *listener);
+    void request_telemetry_orders(BusTelemetry *listener);
+    bool reads_other_format(uint8_t peer_id) const { return this->other_format_peers.count(peer_id) > 0; }
+    const BusTelemetry *declaring_listener(uint8_t peer_id, const std::string &name) const;
 
 private:
     struct IncomingMessage {
@@ -129,13 +152,48 @@ private:
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;
 
+    // --- telemetry, peer side ----------------------------------------------
+    struct FrameSlot {
+        uint8_t frame_id = 0;
+        uint8_t destination = 0;
+        bool used = false;
+        bool pending = false;
+        uint16_t length = 0;
+        char line[PAYLOAD_CAPACITY];
+    };
+    static constexpr size_t MAX_FRAME_SLOTS = 8;
+    std::atomic<FrameSlot *> frame_slots{nullptr}; // allocated by the main task on first use
+    portMUX_TYPE frame_slot_lock = portMUX_INITIALIZER_UNLOCKED;
+    std::atomic<uint8_t> coordinator_id{0};
+    std::atomic<unsigned> frame_overwrites{0};
+    std::atomic<unsigned> frame_drops{0};
+    void send_frame_slots(uint8_t requester); // communication task
+
+    // --- telemetry, coordinator side (main task) ---------------------------
+    std::map<uint8_t, telemetry::Layout> peer_layouts;
+    std::map<uint16_t, uint8_t> last_seq; // sender << 8 | frame id
+    std::vector<BusTelemetry *> telemetry_listeners;
+    std::set<uint8_t> telemetry_rounds;                     // peers that got their clear and orders since our boot
+    std::atomic<uint32_t> telemetry_round_bits[8] = {};     // the same for the communication task, one bit per peer id
+    std::map<uint8_t, unsigned long> layout_request_millis; // when each peer was last asked for its layout lines
+    unsigned long last_telemetry_warning_millis = 0;
+    unsigned long last_slot_warning_millis = 0;
+    std::set<uint8_t> other_format_peers; // peers whose layout lines have another format version, until their Ready.
+    void start_telemetry_round(uint8_t peer_id);
+    void handle_telemetry_frame(const IncomingMessage &message);
+    void handle_telemetry_layout(const IncomingMessage &message);
+    // counters resolved once: a lookup by a long name would allocate a temporary string for every frame
+    Variable_ptr telemetry_frames, telemetry_errors, telemetry_unclaimed, telemetry_mismatch, telemetry_gaps,
+        telemetry_duplicates, frame_overwrites_property, frame_drops_property;
+    static void count(const Variable_ptr &counter, int64_t increment = 1);
+
     static void communication_loop(void *param);
     void adopt_config(const Config &config);
     void process_uart();
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
-    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
+    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, TickType_t wait = pdMS_TO_TICKS(50));
     bool send_outgoing_queue();
     size_t send_message(const uint8_t receiver, const char *payload, const size_t length) const;
 

@@ -148,8 +148,20 @@ Variable_ptr Module::get_property(const std::string property_name) const {
     return this->properties.at(property_name);
 }
 
+const std::string &Module::property_key(const std::string &property_name) const {
+    const auto it = this->properties.find(property_name);
+    if (it == this->properties.end()) {
+        throw std::runtime_error("unknown property \"" + property_name + "\"");
+    }
+    return it->first;
+}
+
 void Module::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
     this->get_property(property_name)->assign(expression);
+}
+
+void Module::declare_property(const std::string &property_name, const Variable_ptr &variable) {
+    throw std::runtime_error("module \"" + this->name + "\" does not accept property declarations");
 }
 
 void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *data) {

@@ -73,6 +73,10 @@ public:
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     virtual std::string get_output() const;
     Variable_ptr get_property(const std::string property_name) const;
+    /// The key string of a property, stable for the module's lifetime (telemetry fields point at it instead of copying).
+    const std::string &property_key(const std::string &property_name) const;
     virtual void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander = false);
+    /// Declare a property from Lizard code like `float arm.motor.position = 0.0`; the default implementation throws.
+    virtual void declare_property(const std::string &property_name, const Variable_ptr &variable);
     virtual void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data);
 };

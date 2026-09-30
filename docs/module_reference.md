@@ -18,30 +18,36 @@ The `broadcast` method is used internally with [port expanders](#expander).
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
 It is automatically created right after the boot sequence.
 
-| Properties              | Description                                                     | Data type |
-| ----------------------- | --------------------------------------------------------------- | --------- |
-| `core.debug`            | Whether to output debug information to the command line         | `bool`    |
-| `core.millis`           | Time since booting the microcontroller (ms)                     | `int`     |
-| `core.heap`             | Free heap memory (bytes)                                        | `int`     |
-| `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
+| Properties                 | Description                                                       | Data type |
+| -------------------------- | ----------------------------------------------------------------- | --------- |
+| `core.debug`               | Whether to output debug information to the command line           | `bool`    |
+| `core.millis`              | Time since booting the microcontroller (ms)                       | `int`     |
+| `core.heap`                | Free heap memory (bytes)                                          | `int`     |
+| `core.heap_largest`        | Largest free block of heap memory (bytes)                         | `int`     |
+| `core.heap_min`            | Lowest free heap memory since boot (bytes)                        | `int`     |
+| `core.last_message_age`    | Time since last input message was received and interpreted (ms)   | `int`     |
+| `core.telemetry_info_rate` | Telemetry layout lines sent per step (0: all at once, default: 4) | `int`     |
 
-| Methods                          | Description                                                         | Arguments    |
-| -------------------------------- | ------------------------------------------------------------------- | ------------ |
-| `core.restart()`                 | Restart the microcontroller                                         |              |
-| `core.version()`                 | Show project name and version                                       |              |
-| `core.info()`                    | Show project name, version, compile time and IDF version            |              |
-| `core.print(...)`                | Print arbitrary arguments to the command line                       | arbitrary    |
-| `core.output(format)`            | Define the output format                                            | `str`        |
-| `core.startup_checksum()`        | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |              |
-| `core.get_pin_status(pin)`       | Print the status of the chosen pin                                  | `int`        |
-| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level                     | `int`, `int` |
-| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register                  | `int`        |
-| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS                   |              |
-| `core.set_baudrate(baud)`        | Persist UART0 baud rate (applied after restart)                     | `int`        |
-| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)                             |              |
-| `core.resume_broadcasts()`       | Resume property broadcasts                                          |              |
-| `core.clear_schedule()`          | Discard all pending scheduled blocks                                |              |
-| `core.keep_alive()`              | Reset `last_message_age` without producing output                   |              |
+| Methods                                 | Description                                                         | Arguments                      |
+| --------------------------------------- | ------------------------------------------------------------------- | ------------------------------ |
+| `core.restart()`                        | Restart the microcontroller                                         |                                |
+| `core.version()`                        | Show project name and version                                       |                                |
+| `core.info()`                           | Show project name, version, compile time and IDF version            |                                |
+| `core.print(...)`                       | Print arbitrary arguments to the command line                       | arbitrary                      |
+| `core.output(format)`                   | Define the output format                                            | `str`                          |
+| `core.startup_checksum()`               | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |                                |
+| `core.get_pin_status(pin)`              | Print the status of the chosen pin                                  | `int`                          |
+| `core.set_pin_level(pin, value)`        | Turns the pin into an output and sets its level                     | `int`, `int`                   |
+| `core.get_pin_strapping(pin)`           | Print value of the pin from the strapping register                  | `int`                          |
+| `core.forget_serial_bus()`              | Remove the saved SerialBus configuration from NVS                   |                                |
+| `core.set_baudrate(baud)`               | Persist UART0 baud rate (applied after restart)                     | `int`                          |
+| `core.pause_broadcasts()`               | Pause property broadcasts (all modules)                             |                                |
+| `core.resume_broadcasts()`              | Resume property broadcasts                                          |                                |
+| `core.clear_schedule()`                 | Discard all pending scheduled blocks                                |                                |
+| `core.keep_alive()`                     | Reset `last_message_age` without producing output                   |                                |
+| `core.telemetry(fields...[, interval])` | Define a telemetry frame with the given fields                      | properties or variables, `int` |
+| `core.telemetry_info()`                 | Send the layout lines of all telemetry frames again                 |                                |
+| `core.clear_telemetry()`                | Remove the telemetry frames of the caller                           |                                |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -55,6 +61,10 @@ The console (UART0) defaults to 115200 baud.
 After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with the host tools at the new rate, e.g. `./monitor.py /dev/ttyUSB0 --baud 921600` (`monitor.py`, `configure.py` and `otb_update.py` all accept `--baud`, defaulting to 115200).
 Supported rates are 115200, 230400, 460800 and 921600.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
+
+**Telemetry:**
+`core.telemetry()` defines a frame that sends the listed properties and variables in a compact binary line at the end of every step or every `interval` milliseconds.
+See [Telemetry](telemetry.md) for the format and for frames over serial buses and expanders.
 
 ## Bluetooth
 
@@ -107,6 +117,14 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
 | `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
+| `bus.telemetry_frames`     | Telemetry frames received from peers since their order round (coordinator)                                    | `int`     |
+| `bus.telemetry_errors`     | Malformed telemetry frames and layout lines received (coordinator)                                            | `int`     |
+| `bus.telemetry_unclaimed`  | Received frames that no bus telemetry module took (coordinator)                                               | `int`     |
+| `bus.telemetry_mismatch`   | Received frames whose size does not match their layout (coordinator)                                          | `int`     |
+| `bus.telemetry_gaps`       | Frames missing according to the sequence numbers (coordinator)                                                | `int`     |
+| `bus.telemetry_duplicates` | Received frames that repeat the previous sequence number (coordinator)                                        | `int`     |
+| `bus.frame_overwrites`     | Frames replaced by a newer one before a poll sent them (peer)                                                 | `int`     |
+| `bus.frame_drops`          | Frames and layout lines that could not be queued (peer)                                                       | `int`     |
 
 | Methods                             | Description                                                                                                                                 | Arguments         |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -148,6 +166,41 @@ To remove the saved configuration, call `core.forget_serial_bus()`.
 Peers on the serial bus can be updated remotely via the coordinator.
 Use the `otb_update.py` tool to push new firmware to any peer node.
 See [OTB Update](tools.md#otb-update) for details.
+
+**Telemetry:**
+A coordinator copies [telemetry frames](telemetry.md#serial-bus) of its peers into [bus telemetry](#bus-telemetry) modules and counts them in the `telemetry_*` properties.
+A peer keeps the newest frame of up to 8 frame IDs per bus until the next poll and counts replaced and dropped frames in `frame_overwrites` and `frame_drops`.
+
+## Bus Telemetry
+
+The bus telemetry module lets a [serial bus](#serial-bus) coordinator mirror values of a peer, which the peer sends as [telemetry frames](telemetry.md#serial-bus).
+
+| Constructor                               | Description                                                 | Arguments                    |
+| ----------------------------------------- | ----------------------------------------------------------- | ---------------------------- |
+| `arm = BusTelemetry(bus, id[, interval])` | Serial bus, peer `id` and frame interval (ms, default: 100) | SerialBus module, 1–2x `int` |
+
+| Properties   | Description                                                        | Data type |
+| ------------ | ------------------------------------------------------------------ | --------- |
+| `arm.age`    | Time since the last frame, or since boot before the first one (ms) | `int`     |
+| `arm.millis` | `core.millis` of the peer when it built the last frame             | `int`     |
+| `arm.frames` | Number of frames copied into the declared properties               | `int`     |
+
+The values to mirror are declared as properties with the type they have on the peer:
+
+```
+float arm.motor.position = 0.0
+bool arm.motor.enabled = false
+int arm.count = 0
+```
+
+A name with a dot like `motor.position` refers to a property of a module on the peer, a name without like `count` to a variable of the peer.
+A declared property holds its declared value until the first frame arrives, and then the last received value.
+If the peer sends a value with another type, the coordinator prints a warning and the property keeps its value.
+Declared properties can be `bool`, `int` or `float` and cannot be named `age`, `millis` or `frames`.
+All properties of the module are read-only.
+
+The coordinator orders the declared properties with the given interval, where 0 means every step of the peer.
+Several modules for the same peer can order values at different intervals, but each property can be declared by only one of them.
 
 ## Input
 
@@ -1223,13 +1276,20 @@ their `is_ready` turns `false` and the main microcontroller needs a restart, e.g
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 
-| Properties         | Description                                             | Data type |
-| ------------------ | ------------------------------------------------------- | --------- |
-| `boot_timeout`     | Time to wait for other microcontroller to boot (s)      | `float`   |
-| `ping_interval`    | Time between pings (s)                                  | `float`   |
-| `ping_timeout`     | Time before timing out (s)                              | `float`   |
-| `is_ready`         | Whether the remote module has booted and is ready       | `bool`    |
-| `last_message_age` | Time since last message from other microcontroller (ms) | `int`     |
+| Properties           | Description                                                                      | Data type |
+| -------------------- | -------------------------------------------------------------------------------- | --------- |
+| `boot_timeout`       | Time to wait for other microcontroller to boot (s)                               | `float`   |
+| `ping_interval`      | Time between pings (s)                                                           | `float`   |
+| `ping_timeout`       | Time before timing out (s)                                                       | `float`   |
+| `is_ready`           | Whether the remote module has booted and is ready                                | `bool`    |
+| `last_message_age`   | Time since last message from other microcontroller (ms)                          | `int`     |
+| `telemetry_interval` | Interval of the proxies' telemetry frames (ms, -1: text broadcasts, default: -1) | `int`     |
+| `telemetry_frames`   | Telemetry frames received                                                        | `int`     |
+| `telemetry_errors`   | Telemetry frames and layout lines that could not be read                         | `int`     |
+| `telemetry_gaps`     | Frames missing according to the sequence numbers                                 | `int`     |
+| `telemetry_mismatch` | Received frames whose size does not match their layout                           | `int`     |
+
+With `telemetry_interval` set to 0 or more before creating proxies, the proxies get the properties of their remote modules as [telemetry frames](telemetry.md#expander) instead of text broadcasts.
 
 ## Proxy
 

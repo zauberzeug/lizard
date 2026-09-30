@@ -37,3 +37,4 @@ During a main loop Lizard repeatedly performs the following tasks:
 2. Run the step functions of each module. (The `core` module is evaluated last.)
 3. Check all rules and execute associated routines.
 4. Advance routines that are already running and waiting for certain conditions.
+5. Send the [telemetry frames](telemetry.md) that are due.
