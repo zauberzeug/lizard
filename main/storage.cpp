@@ -11,8 +11,8 @@
 
 #define NAMESPACE "storage"
 
-// 959 characters and the terminator fill 30 NVS entries, so four chunks share a page of 126 entries and still fit on
-// fragmented pages, where a chunk of 0xf00 needs an almost empty one
+// 959 characters and the terminator fill 30 NVS entries plus one header entry, so four chunks share a page of 126
+// entries and still fit on fragmented pages, where a chunk of 0xf00 needs an almost empty one
 static constexpr size_t CHUNK_SIZE = 959;
 
 bool Storage::editing = false;
@@ -266,11 +266,16 @@ void Storage::remove_from_startup(const std::string &prefix) {
             Storage::append_to_edit("\n", 1);
         }
     };
-    LineSplitter splitter(keep);
-    for (const std::string &piece : old_pieces) {
-        splitter.feed(piece);
+    try {
+        LineSplitter splitter(keep);
+        for (const std::string &piece : old_pieces) {
+            splitter.feed(piece);
+        }
+        splitter.finish();
+    } catch (...) {
+        Storage::edit_pieces.swap(old_pieces); // all or nothing, as with `!+`
+        throw;
     }
-    splitter.finish();
 }
 
 void Storage::print_startup(const std::string &prefix) {
@@ -319,6 +324,9 @@ void Storage::save_startup() {
         // the edit stays in RAM, so that another `!.` can store it
         Storage::save_failed = true;
         throw std::runtime_error(std::string(e.what()) + "; the stored startup script is incomplete");
+    } catch (...) {
+        Storage::save_failed = true;
+        throw;
     }
     std::vector<std::string>().swap(Storage::edit_pieces);
     Storage::editing = false;
