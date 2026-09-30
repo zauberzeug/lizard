@@ -338,6 +338,12 @@ def test_a_redefined_frame_counts_its_seq_from_anew():
     feed(decoder, counted_layout_lines(1, [('x', 'i', 5), ('y', 'f', 6.0)]))  # core.clear_telemetry(), the same core.telemetry
     feed(decoder, [encode(1, 0, 1500, [('x', 'i', 5), ('y', 'f', 6.0)])])  # seq starts at 0 again
     assert decoder.stats[(None, 1)].seq_gaps == 2
+    feed(decoder, counted_layout_lines(1, [('x', 'i', 5), ('y', 'f', 6.0)]))  # core.telemetry_info(): the same layout
+    feed(decoder, [encode(1, seq, 1600 + 10 * seq, [('x', 'i', 5), ('y', 'f', 6.0)]) for seq in (1, 5)])  # 2, 3, 4 lost
+    assert decoder.stats[(None, 1)].seq_gaps == 2 + 3  # a repeated layout hides no gap
+    feed(decoder, counted_layout_lines(1, [('x', 'i', 5), ('y', 'f', 6.0)]))
+    feed(decoder, [encode(1, 0, 100, [('x', 'i', 5), ('y', 'f', 6.0)])])  # a reboot with the same startup
+    assert decoder.stats[(None, 1)].millis_resets == 1
 
 
 @pytest.mark.parametrize('line', ['__LAYOUT__v1 1.0/0 a:f', '__LAYOUT__v1 1.2/2 a:f', '__LAYOUT__v1 1.0/ a:f',

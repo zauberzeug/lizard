@@ -3,6 +3,7 @@
 #include "../utils/uart.h"
 #include "module_helpers.h"
 #include <algorithm>
+#include <cstring>
 #include <stdexcept>
 
 static constexpr size_t MAX_ORDER_LENGTH = 250; // a bus payload holds 255 characters
@@ -57,24 +58,14 @@ void BusTelemetry::step() {
         const unsigned long renew_ms = std::max<unsigned long>(RENEW_MIN_MS, 10 * this->interval);
         const unsigned long quiet = this->frame_seen ? millis_since(this->last_frame_millis) : millis_since(this->orders_millis);
         if (quiet > renew_ms && millis_since(this->orders_millis) > renew_ms) {
-            // the same order again: a peer that still has the frame only announces its layout again, one that lost it
-            // (e.g. rebooted with a lost Ready.) defines it anew; the old mapping goes, so that a line lost now shows
-            // as a missing name; other modules' frames of the same peer stay untouched
-            this->reset_layout();
+            // nothing arrives: the same order again; a peer that still has the frames only announces their layout
+            // again, one that lost them (e.g. rebooted with a lost Ready.) defines them anew, and a line lost now shows
+            // as a name without layout; the mapping stays for frames that come back unchanged
+            this->announced.clear();
             this->send_orders();
         } else if (millis_since(this->orders_millis) > renew_ms && millis_since(this->checked_millis) > renew_ms) {
-            // frames arrive, but a lost or rejected order line left some mirrors without any
             this->checked_millis = millis();
-            std::vector<const std::string *> missing;
-            for (const std::string *name : this->declared) {
-                if (std::find(this->announced.begin(), this->announced.end(), name) == this->announced.end()) {
-                    missing.push_back(name);
-                }
-            }
-            if (!missing.empty()) {
-                this->send_order(missing);
-                this->orders_millis = millis();
-            }
+            this->resend_missing(renew_ms);
         }
     }
     this->age->set_integer_value(this->frame_seen ? millis_since(this->last_frame_millis) : millis());
@@ -116,25 +107,80 @@ bool BusTelemetry::declares(const std::string &name) const {
 }
 
 void BusTelemetry::send_order(const std::vector<const std::string *> &names) {
-    const std::string suffix = this->interval ? ", " + std::to_string(this->interval) + ")" : ")";
-    std::string line;
-    size_t references = 0;
+    // one line per group of names, split at the bus payload or 40 references; the groups are kept, so that a lost
+    // line goes out again unchanged, which the peer knows and answers with its layout instead of a new frame
+    const size_t suffix = this->interval ? std::to_string(this->interval).size() + 3 : 1;
+    std::vector<const std::string *> group;
+    size_t length = 0;
     for (size_t i = 0; i <= names.size(); ++i) {
-        const bool flush = i == names.size() || references == MAX_ORDER_REFERENCES ||
-                           (references && line.size() + 2 + names[i]->size() + suffix.size() > MAX_ORDER_LENGTH);
-        if (flush && references) {
-            this->bus->send_to(this->peer_id, line + suffix);
-            line.clear();
-            references = 0;
+        const bool flush = i == names.size() || group.size() == MAX_ORDER_REFERENCES ||
+                           (!group.empty() && length + 2 + names[i]->size() + suffix > MAX_ORDER_LENGTH);
+        if (flush && !group.empty()) {
+            this->bus->send_to(this->peer_id, this->order_line(group));
+            this->order_groups.push_back(group);
+            group.clear();
+            length = 0;
         }
         if (i < names.size()) {
-            line += (references ? ", " : "core.telemetry(") + *names[i];
-            ++references;
+            length += (group.empty() ? std::strlen("core.telemetry(") : 2) + names[i]->size();
+            group.push_back(names[i]);
         }
     }
 }
 
+std::string BusTelemetry::order_line(const std::vector<const std::string *> &group) const {
+    std::string line = "core.telemetry(";
+    for (size_t i = 0; i < group.size(); ++i) {
+        line += (i ? ", " : "") + *group[i];
+    }
+    return line + (this->interval ? ", " + std::to_string(this->interval) + ")" : ")");
+}
+
+const std::string *BusTelemetry::declared_name(const Variable *variable) const {
+    for (const std::string *name : this->declared) {
+        if (this->properties.at(*name).get() == variable) {
+            return name;
+        }
+    }
+    return nullptr;
+}
+
+void BusTelemetry::resend_missing(const unsigned long renew_ms) {
+    // lines whose names no layout line brought (lost or rejected) or whose frame fell silent (lost by the peer, e.g.
+    // after a reboot whose Ready. got lost, while other frames keep age fresh) go out again unchanged
+    std::vector<const std::string *> missing;
+    for (const std::string *name : this->declared) {
+        if (std::find(this->announced.begin(), this->announced.end(), name) == this->announced.end()) {
+            missing.push_back(name);
+        }
+    }
+    for (auto const &[frame_id, variables] : this->mapped) {
+        const auto last = this->frame_millis.find(frame_id);
+        if (last != this->frame_millis.end() && millis_since(last->second) <= renew_ms) {
+            continue;
+        }
+        for (const Variable *variable : variables) {
+            const std::string *name = variable ? this->declared_name(variable) : nullptr;
+            if (name) {
+                missing.push_back(name);
+            }
+        }
+    }
+    bool sent = false;
+    for (auto const &group : this->order_groups) {
+        if (std::any_of(group.begin(), group.end(),
+                        [&](const std::string *name) { return std::find(missing.begin(), missing.end(), name) != missing.end(); })) {
+            this->bus->send_to(this->peer_id, this->order_line(group));
+            sent = true;
+        }
+    }
+    if (sent) {
+        this->orders_millis = millis();
+    }
+}
+
 void BusTelemetry::send_orders() {
+    this->order_groups.clear();
     this->send_order(this->declared);
     this->orders_sent = true;
     this->orders_millis = millis();
@@ -144,6 +190,7 @@ void BusTelemetry::reset_layout() {
     this->mapped.clear();
     this->slots.clear();
     this->announced.clear();
+    this->frame_millis.clear();
 }
 
 void BusTelemetry::forget_frame(const uint8_t frame_id) {
@@ -155,6 +202,7 @@ void BusTelemetry::forget_frame(const uint8_t frame_id) {
     }
     this->mapped.erase(frame_id);
     this->slots.erase(frame_id);
+    this->frame_millis.erase(frame_id);
 }
 
 void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const telemetry::Layout &layout) {
@@ -195,8 +243,10 @@ void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const t
     if (std::none_of(variables.begin(), variables.end(), [](const Variable *v) { return v != nullptr; })) {
         this->mapped.erase(line.frame_id);
         this->slots.erase(line.frame_id);
+        this->frame_millis.erase(line.frame_id);
         return;
     }
+    this->frame_millis[line.frame_id] = millis(); // announced: it has a renew period to deliver
     const auto types = layout.frames.find(line.frame_id);
     if (types != layout.frames.end()) {
         this->slots[line.frame_id] = telemetry::map_frame(types->second, variables);
@@ -209,6 +259,7 @@ bool BusTelemetry::handle_frame(const uint8_t frame_id, const uint8_t seq, const
         return false; // not ours, or its layout is not complete yet
     }
     telemetry::apply(it->second, payload);
+    this->frame_millis[frame_id] = millis();
     this->frame_seen = true;
     this->last_frame_millis = millis();
     this->peer_millis->set_integer_value(peer_millis);

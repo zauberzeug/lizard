@@ -136,6 +136,7 @@ class FrameStats:
     status: Counter[str] = field(default_factory=Counter)
     last_seq: int | None = None
     last_millis: int | None = None
+    restart_allowed: bool = False  # the frame's layout came again from index 0: its next frame may start at seq 0
 
 
 class Decoder:
@@ -186,17 +187,17 @@ class Decoder:
         self._set_version(sender, version)
         frame, index, name, type_ = int(match.group(1)), int(match.group(2)), match.group(4), match.group(5)
         layout = self.layouts.setdefault((sender, frame), {})
-        # a new or repeated definition sends its layout from index 0 and may start seq at 0 again, e.g. after
-        # core.clear_telemetry() and the same core.telemetry(...)
-        redefined = index == 0 or layout.get(index) not in (None, (name, type_))
+        redefined = layout.get(index) not in (None, (name, type_))
         if count is not None:
             if self.counts.get((sender, frame)) != count:  # another count: the frame was defined anew
                 layout.clear()
                 redefined = True
             self.counts[(sender, frame)] = count
         stats = self.stats.get((sender, frame))
-        if redefined and stats is not None:  # a new definition starts its sequence numbers anew
+        if stats is not None and redefined:  # a new definition starts its sequence numbers anew
             stats.last_seq = stats.last_millis = None
+        elif stats is not None and index == 0:  # the same definition again, e.g. core.clear_telemetry() and the same call
+            stats.restart_allowed = True
         layout[index] = (name, type_)
         return Layout(sender, version, frame, index, name, type_, line, count)
 
@@ -223,8 +224,9 @@ class Decoder:
             if stats.last_seq is not None and stats.last_millis is not None:
                 if stats.last_millis - millis > 1000:
                     stats.millis_resets += 1
-                elif (seq, millis) != (stats.last_seq, stats.last_millis):  # a repeated line is no gap
-                    stats.seq_gaps += (seq - stats.last_seq - 1) % 256
+                elif (seq, millis) != (stats.last_seq, stats.last_millis) and not (stats.restart_allowed and seq == 0):
+                    stats.seq_gaps += (seq - stats.last_seq - 1) % 256  # a repeated line is no gap
+            stats.restart_allowed = False
             stats.last_seq, stats.last_millis = seq, millis
             status, values, types = self._decode(self.layouts.get((sender, frame_id)), body[6:-2],
                                                  self.counts.get((sender, frame_id)))
