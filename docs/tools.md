@@ -10,7 +10,7 @@ To install Lizard on your ESP32 run
 sudo ./espresso.py flash [--device <device_path>]
 ```
 
-Without `--device` the serial device is auto-detected, and you are asked which one to use if several are attached.
+Without `--device` the serial device is auto-detected, and you are asked which one to use if several are found.
 `--dry-run` prints the commands instead of running them.
 It still resolves the serial device, so it needs the adapter attached (or an explicit `--device`).
 
@@ -53,7 +53,7 @@ on a Robot Brain it is the Jetson's UART to the microcontroller, whatever else i
 on a development host it is the attached USB-UART bridge.
 If several devices are found, it lists them and asks which one to use.
 A microcontroller on a USB-UART bridge attached to a Jetson is not detected and needs its device path.
-Pass the device path explicitly when several devices may be attached and there is no terminal to answer the question.
+Pass the device path explicitly when several devices may be found and there is no terminal to answer the question.
 Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see [Robot Brain](#robot-brain)).
 
 You can also use an SSH monitor to access a microcontroller via SSH:
