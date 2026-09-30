@@ -29,6 +29,7 @@
 #include "utils/uart.h"
 #include "utils/uart_driver.h"
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <functional>
 #include <math.h>
@@ -329,6 +330,44 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
+// Reports a parse error of `text`; `offset` is where `text` starts in a longer script, so positions refer to that script.
+static bool check_parse(owl_tree *tree, const char *text, const size_t offset) {
+    if (!tree) {
+        echo("error: allocation failure while parsing");
+        return false;
+    }
+    struct source_range range;
+    switch (owl_tree_get_error(tree, &range)) {
+    case ERROR_NONE:
+        return true;
+    case ERROR_INVALID_FILE:
+        echo("error: invalid file");
+        break;
+    case ERROR_INVALID_OPTIONS:
+        echo("error: invalid options");
+        break;
+    case ERROR_INVALID_TOKEN:
+        echo("error: invalid token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
+             std::string(text, range.start, range.end - range.start).c_str());
+        break;
+    case ERROR_UNEXPECTED_TOKEN:
+        echo("error: unexpected token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
+             std::string(text, range.start, range.end - range.start).c_str());
+        break;
+    case ERROR_MORE_INPUT_NEEDED:
+        echo("error: more input needed at range %zu %zu", offset + range.start, offset + range.end);
+        break;
+    case ERROR_ALLOCATION_FAILURE:
+        echo("error: allocation failure while parsing");
+        break;
+    default:
+        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
+        echo("error: unknown parse error");
+        break;
+    }
+    return false;
+}
+
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     InterpreterLock lock;
     if (trigger_keep_alive) {
@@ -344,46 +383,120 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     if (debug) {
         toc("Tree creation");
     }
-    if (!tree) {
-        echo("error: allocation failure while parsing");
+    if (!check_parse(tree.get(), line, 0)) {
         return;
     }
-    struct source_range range;
-    switch (owl_tree_get_error(tree.get(), &range)) {
-    case ERROR_INVALID_FILE:
-        echo("error: invalid file");
-        break;
-    case ERROR_INVALID_OPTIONS:
-        echo("error: invalid options");
-        break;
-    case ERROR_INVALID_TOKEN:
-        echo("error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(line, range.start, range.end - range.start).c_str());
-        break;
-    case ERROR_UNEXPECTED_TOKEN:
-        echo("error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(line, range.start, range.end - range.start).c_str());
-        break;
-    case ERROR_MORE_INPUT_NEEDED:
-        echo("error: more input needed at range %zu %zu", range.start, range.end);
-        break;
-    case ERROR_ALLOCATION_FAILURE:
-        echo("error: allocation failure while parsing");
-        break;
-    case ERROR_NONE:
-        if (debug) {
-            owl_tree_print(tree.get());
-            tic();
+    if (debug) {
+        owl_tree_print(tree.get());
+        tic();
+    }
+    process_tree(tree.get(), from_expander);
+    if (debug) {
+        toc("Tree traversal");
+    }
+}
+
+// The quote of a string literal that is still open after `line` (0: none), given the one open before it.
+static char string_state_after(const std::string &line, char quote) {
+    for (size_t i = 0; i < line.size(); ++i) {
+        const char c = line[i];
+        if (quote) {
+            if (c == '\\') {
+                ++i; // an escaped character
+            } else if (c == quote) {
+                quote = 0;
+            }
+        } else if (c == '"' || c == '\'') {
+            quote = c;
+        } else if (c == '#') {
+            break; // a comment runs to the end of its line
         }
-        process_tree(tree.get(), from_expander);
-        if (debug) {
-            toc("Tree traversal");
+    }
+    return quote;
+}
+
+// Whether `line` holds the word "end", which can close a rule, routine or schedule.
+static bool has_end_word(const std::string &line) {
+    const auto is_word = [](const char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (size_t i = line.find("end"); i != std::string::npos; i = line.find("end", i + 1)) {
+        if ((i == 0 || !is_word(line[i - 1])) && (i + 3 >= line.size() || !is_word(line[i + 3]))) {
+            return true;
         }
-        break;
-    default:
-        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
-        echo("error: unknown parse error");
-        break;
+    }
+    return false;
+}
+
+// Goes through the startup script statement by statement, straight from NVS, so that neither the script nor one parse
+// tree for all of it has to fit into the heap. A statement ends where owl stops asking for more input, so rules and
+// routines may still span lines. Error positions refer to the whole script, as with the former single parse.
+// Returns false after reporting the first syntax error; with `run`, each statement runs right after its parse and an
+// exception aborts the rest.
+static bool walk_startup(const bool run) {
+    std::string statement;
+    size_t statement_offset = 0;
+    size_t offset = 0;
+    char quote = 0; // of a string literal that is open at the end of `statement`
+    bool ok = true;
+    Storage::read_startup_lines([&](const std::string &line) {
+        if (!ok) {
+            return;
+        }
+        const bool continued = !statement.empty();
+        if (!continued) {
+            statement_offset = offset;
+        }
+        statement += line;
+        statement += '\n';
+        offset += line.size() + 1;
+        const bool string_was_open = quote != 0;
+        quote = string_state_after(line, quote);
+        if (quote) {
+            return; // a string that continues on the next line
+        }
+        // an open block ends only with "end" and an open string with its quote, so other lines need no new parse
+        if (continued && !string_was_open && !has_end_word(line)) {
+            return;
+        }
+        auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
+        struct source_range range;
+        if (tree && owl_tree_get_error(tree.get(), &range) == ERROR_MORE_INPUT_NEEDED) {
+            return; // a rule or routine continues on the next line
+        }
+        if (!check_parse(tree.get(), statement.c_str(), statement_offset)) {
+            ok = false;
+            return;
+        }
+        if (run) {
+            process_tree(tree.get(), false);
+        }
+        statement.clear();
+    });
+    if (ok && !statement.empty()) {
+        // the script ends inside a statement
+        auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
+        ok = check_parse(tree.get(), statement.c_str(), statement_offset);
+        if (ok && run) {
+            process_tree(tree.get(), false);
+        }
+    }
+    return ok;
+}
+
+// Like the former single parse of the whole script: a syntax error anywhere means that nothing runs, and a script that
+// cannot be read from storage is reported and skipped. A statement that fails to parse while running (only a lack of
+// heap can cause that after the check pass) aborts the startup through the boot guard, so that no half of it runs.
+static void run_startup() {
+    InterpreterLock lock;
+    core_module->keep_alive();
+    bool valid = false;
+    try {
+        valid = walk_startup(false);
+    } catch (const std::exception &e) {
+        echo("error while reading startup script from storage: %s", e.what());
+        return;
+    }
+    if (valid && !walk_startup(true)) {
+        throw std::runtime_error("a statement of the startup script could not be parsed while running");
     }
 }
 
@@ -392,7 +505,7 @@ void process_line(const char *line, const int len, const bool trigger_keep_alive
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
         case '+':
-            Storage::append_to_startup(line + 2);
+            Storage::append_to_startup(std::string(line + 2));
             break;
         case '-':
             Storage::remove_from_startup(line + 2);
@@ -540,7 +653,7 @@ void app_main() {
 
     try {
         if (boot_guard::should_run_startup()) {
-            process_lizard(Storage::startup.c_str());
+            run_startup();
         }
     } catch (const std::exception &e) {
         boot_guard::startup_failed(e.what());
