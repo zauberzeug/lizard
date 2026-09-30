@@ -11,7 +11,8 @@ sudo ./espresso.py flash [--device <device_path>]
 ```
 
 Without `--device` the serial device is auto-detected, and you are asked which one to use if several are attached.
-`--dry-run` prints the commands instead of running them. It still resolves the serial device, so it needs the adapter attached (or an explicit `--device`).
+`--dry-run` prints the commands instead of running them.
+It still resolves the serial device, so it needs the adapter attached (or an explicit `--device`).
 
 Note that flashing may require root access (hence the sudo).
 The command also does not work while the serial interface is busy communicating with another process.
@@ -51,7 +52,7 @@ Without a device path the monitor detects the serial device itself:
 on a Robot Brain the Jetson's UART to the microcontroller comes first and any attached USB-UART bridges are listed as well,
 on a development host it is the attached USB-UART bridge.
 If several devices are found, it lists them and asks which one to use.
-Pass the device path explicitly when running non-interactively.
+Pass the device path explicitly when several devices may be attached and there is no terminal to answer the question.
 Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see [Robot Brain](#robot-brain)).
 
 You can also use an SSH monitor to access a microcontroller via SSH:
@@ -60,9 +61,8 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 ./monitor_ssh.sh <user@host>
 ```
 
-This copies `monitor.py` and `serial_devices.py` from this checkout to `~/lizard` on the target
-and starts the monitor there, so which device it detects does not depend on the age of the
-target's own checkout.
+This copies `monitor.py` and `serial_devices.py` from this checkout to `~/lizard` on the target and starts the monitor there,
+so which device it detects does not depend on the age of the target's own checkout.
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
