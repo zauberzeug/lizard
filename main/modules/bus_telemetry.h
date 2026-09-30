@@ -14,7 +14,9 @@ private:
     std::vector<const std::string *> declared;         // keys of the property map, in declaration order
     std::map<uint8_t, std::vector<Variable *>> mapped; // per frame: the mirror of each field index, nullptr if none
     std::map<uint8_t, std::vector<telemetry::Slot>> slots;
-    std::vector<const std::string *> announced; // declared names that a layout line brought since the orders
+    std::vector<const std::string *> announced;                 // declared names that a layout line brought since the orders
+    std::vector<std::vector<const std::string *>> order_groups; // the names of each order line, as sent
+    std::map<uint8_t, unsigned long> frame_millis;              // per mapped frame: when it last arrived or was announced
     bool orders_sent = false;
     unsigned long orders_millis = 0;
     unsigned long checked_millis = 0; // last check for declared names that no layout line brought
@@ -25,6 +27,9 @@ private:
     Variable_ptr frames;
 
     void send_order(const std::vector<const std::string *> &names);
+    std::string order_line(const std::vector<const std::string *> &group) const;
+    const std::string *declared_name(const Variable *variable) const;
+    void resend_missing(unsigned long renew_ms);
     void forget_frame(uint8_t frame_id);
 
 public:
