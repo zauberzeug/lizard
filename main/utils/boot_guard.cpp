@@ -19,6 +19,8 @@ RTC_NOINIT_ATTR static uint32_t failed_boots;
 RTC_NOINIT_ATTR static bool armed;
 RTC_NOINIT_ATTR static char reason[128];
 
+static char skip_reason[192];
+
 static const char *reset_reason_name(const esp_reset_reason_t reason) {
     switch (reason) {
     case ESP_RST_PANIC:
@@ -52,13 +54,18 @@ bool should_run_startup() {
         }
     }
     if (failed_boots >= MAX_FAILED_BOOTS) {
-        echo("error: startup skipped after %u failed boots (%s)", failed_boots, reason);
+        std::snprintf(skip_reason, sizeof(skip_reason), "startup skipped after %u failed boots (%s)", static_cast<unsigned>(failed_boots), reason);
+        echo("error: %s", skip_reason);
         failed_boots = 0;
         armed = false;
         return false;
     }
     armed = true;
     return true;
+}
+
+const char *skip_message() {
+    return skip_reason;
 }
 
 void startup_failed(const char *what) {
