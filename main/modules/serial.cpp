@@ -193,13 +193,7 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
     }
     int pos = uart_pattern_pop_pos(this->uart_num);
     if (pos >= static_cast<int>(buffer_len)) {
-        if (this->available() <= pos) {
-            uart_flush_input(this->uart_num);
-            while (uart_pattern_pop_pos(this->uart_num) > 0)
-                ;
-            return LINE_FLUSHED;
-        }
-
+        // also when the line end sits in the block the driver parked beside a full ring: reading makes room for it
         discard_uart_input(this->uart_num, pos + 1);
         return LINE_DISCARDED;
     }
@@ -217,8 +211,7 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
 }
 
 const char *Serial::read_line_error(const int result) {
-    return result == LINE_FLUSHED ? "buffer too small, but cannot discard line. flushed serial."
-                                  : "buffer too small. discarded line.";
+    return "buffer too small. discarded line.";
 }
 
 std::string Serial::get_output() const {
