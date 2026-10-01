@@ -16,3 +16,8 @@ constexpr int RX_EVENT_QUEUE_SIZE = 20;
 // on core 0 (esp_intr_alloc binds an interrupt to the calling core), lowers the receive FIFO threshold and
 // gives the driver an event queue (see RX_EVENT_QUEUE_SIZE).
 esp_err_t install_uart_driver_on_core1(uart_port_t port, int rx_buffer_size, int tx_buffer_size);
+
+// Drops `count` bytes from the receive ring by reading them in chunks. A flush would also drop whatever arrives
+// while it runs, including the next line end; reading re-enables the receive interrupts after a full ring just as
+// a flush does.
+void discard_uart_input(uart_port_t port, int count);
