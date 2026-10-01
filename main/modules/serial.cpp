@@ -160,9 +160,11 @@ bool Serial::has_buffered_lines() const {
     if (!this->pending_lines.empty() || uart_pattern_get_pos(this->uart_num) != -1) {
         return true;
     }
-    // a ring that fills without a line end stops receiving, so drop what can never become a line
-    if (this->available() > CONSOLE_LINE_SIZE && uart_pattern_get_pos(this->uart_num) == -1) {
-        uart_flush_input(this->uart_num);
+    // a ring that fills without a line end stops receiving, so drop what can never become a line; the driver
+    // updates the byte count and the pattern queue together, so without a pattern all `buffered` bytes are unterminated
+    const int buffered = this->available();
+    if (buffered > CONSOLE_LINE_SIZE && uart_pattern_get_pos(this->uart_num) == -1) {
+        discard_uart_input(this->uart_num, buffered);
         this->drop_next_line = true;
     }
     return false;
@@ -202,8 +204,7 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
             return LINE_FLUSHED;
         }
 
-        for (int i = 0; i <= pos; i++)
-            this->read();
+        discard_uart_input(this->uart_num, pos + 1);
         return LINE_DISCARDED;
     }
     if (pos < 0) {
