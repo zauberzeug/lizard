@@ -51,9 +51,10 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
 **Startup errors:**
-A failing startup script is reported once during boot, before `Ready.`, which a host connecting later never sees.
-`core.startup_error` keeps that message available afterwards, so a host can check whether the persisted configuration was applied at all.
-It names the module that could not be created, e.g. `"module \"imu\" (Imu): imu setup failed: I2CError: Check your wiring."`, and is also set by a syntax error, which drops the whole script.
+A failing startup script is reported during boot, before `Ready.`, which a host connecting later never sees.
+`core.startup_error` keeps the reason available afterwards, so a host can check whether the persisted configuration was applied at all.
+After a statement throws, the core restarts and skips the script after two failed boots; the property then holds the skip message with the reason, e.g. `"startup skipped after 2 failed boots (module \"imu\" (Imu): imu setup failed: I2CError: Check your wiring.)"`.
+It is also set by a syntax error, which drops the whole script without a restart.
 
 **UART baud rate:**
 The console (UART0) defaults to 115200 baud.

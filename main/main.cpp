@@ -341,19 +341,22 @@ struct StartupLoadScope {
     ~StartupLoadScope() { loading_startup = false; }
 };
 
+static void set_startup_error(std::string value) {
+    for (char &c : value) {
+        if (static_cast<unsigned char>(c) < ' ') {
+            c = ' '; // the offending token can be a newline, which would split the property over two lines
+        }
+    }
+    core_module->get_property("startup_error")->set_string_value(value);
+}
+
 // A rejected line is dropped instead of throwing, so these paths have to feed core.startup_error
 // themselves. The out-of-memory branches above/below deliberately don't: building a message
 // allocates, and they exist to drop the line rather than reboot.
 static void report_parse_error(const std::string &message) {
     echo("error: %s", message.c_str());
     if (loading_startup) {
-        std::string value = message;
-        for (char &c : value) {
-            if (static_cast<unsigned char>(c) < ' ') {
-                c = ' '; // the offending token can be a newline, which would split the property over two lines
-            }
-        }
-        core_module->get_property("startup_error")->set_string_value(value);
+        set_startup_error(message);
     }
 }
 
@@ -572,9 +575,10 @@ void app_main() {
         try {
             if (boot_guard::should_run_startup()) {
                 process_lizard(Storage::startup.c_str());
+            } else {
+                set_startup_error(boot_guard::skip_message());
             }
         } catch (const std::exception &e) {
-            core_module->get_property("startup_error")->set_string_value(e.what());
             boot_guard::startup_failed(e.what());
         } catch (...) {
             boot_guard::startup_failed("unknown exception");
