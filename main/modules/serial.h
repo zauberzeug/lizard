@@ -14,8 +14,7 @@ using ConstSerial_ptr = std::shared_ptr<const Serial>;
 class Serial : public Module {
 private:
     mutable std::vector<std::string> users;
-    mutable std::string pending_lines;   // lines after the first of a read that held several
-    mutable bool drop_next_line = false; // the rest of a run that was flushed for lacking a line end
+    mutable std::string pending_lines; // lines after the first of a read that held several; not visible to read() and available()
 
 public:
     static inline constexpr const char *TYPE = "Serial";
@@ -39,7 +38,6 @@ public:
     int read(const uint32_t timeout = 0) const;
     static constexpr int LINE_DISCARDED = -1;
     static constexpr int LINE_FLUSHED = -2;
-    static constexpr int LINE_UNTERMINATED = -3;
     static constexpr size_t CHECKSUM_TRAILER_LENGTH = 4; // "@xx\n" appended by write_checked_line
     int read_line(char *buffer, size_t buffer_len) const;
     static const char *read_line_error(const int result);

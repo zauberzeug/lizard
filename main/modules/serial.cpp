@@ -104,7 +104,6 @@ void Serial::require_sole_user(const std::string &user) const {
 
 void Serial::deinstall() const {
     this->pending_lines.clear();
-    this->drop_next_line = false;
     if (uart_is_driver_installed(this->uart_num)) {
         uart_driver_delete(this->uart_num);
     }
@@ -165,14 +164,12 @@ bool Serial::has_buffered_lines() const {
     const int buffered = this->available();
     if (buffered > CONSOLE_LINE_SIZE && uart_pattern_get_pos(this->uart_num) == -1) {
         discard_uart_input(this->uart_num, buffered);
-        this->drop_next_line = true;
     }
     return false;
 }
 
 void Serial::flush() const {
     this->pending_lines.clear();
-    this->drop_next_line = false;
     uart_flush(this->uart_num);
 }
 
@@ -196,7 +193,6 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
     }
     int pos = uart_pattern_pop_pos(this->uart_num);
     if (pos >= static_cast<int>(buffer_len)) {
-        this->drop_next_line = false;
         if (this->available() <= pos) {
             uart_flush_input(this->uart_num);
             while (uart_pattern_pop_pos(this->uart_num) > 0)
@@ -217,17 +213,12 @@ int Serial::read_line(char *buffer, size_t buffer_len) const {
     if (first_len < len) {
         this->pending_lines.assign(buffer + first_len, len - first_len);
     }
-    if (this->drop_next_line) {
-        this->drop_next_line = false;
-        return LINE_UNTERMINATED;
-    }
     return first_len;
 }
 
 const char *Serial::read_line_error(const int result) {
-    return result == LINE_FLUSHED        ? "buffer too small, but cannot discard line. flushed serial."
-           : result == LINE_UNTERMINATED ? "input exceeded a line without a line end. discarded up to the next line end."
-                                         : "buffer too small. discarded line.";
+    return result == LINE_FLUSHED ? "buffer too small, but cannot discard line. flushed serial."
+                                  : "buffer too small. discarded line.";
 }
 
 std::string Serial::get_output() const {
