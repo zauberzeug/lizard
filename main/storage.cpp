@@ -4,14 +4,18 @@
 #include "nvs_flash.h"
 #include "utils/string_utils.h"
 #include "utils/uart.h"
+#include <algorithm>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
 
 #define NAMESPACE "storage"
-#define MAX_CHUNK_SIZE 0xf00
+// 959 characters and the terminator fill 30 NVS entries plus one header entry, so four chunks share a page of 126
+// entries and still fit on fragmented pages, where a chunk of 0xf00 needs an almost empty one; larger ones read back too
+#define MAX_CHUNK_SIZE 959
 
 std::string Storage::startup;
+bool Storage::save_failed = false;
 
 void Storage::init() {
     nvs_flash_init();
@@ -24,13 +28,16 @@ void write(const std::string ns, const std::string key, const std::string value)
     if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
         throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
     }
+    // the value only starts the message: a whole chunk would make it too long to be printed at all
+    std::string shown = value.size() > 40 ? value.substr(0, 40) + "..." : value;
+    std::replace(shown.begin(), shown.end(), '\n', ' ');
     if ((err = nvs_set_str(handle, key.c_str(), value.c_str())) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(err)) + ")");
+        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + shown + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     if ((err = nvs_commit(handle)) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(err)) + ")");
+        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + shown + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     nvs_close(handle);
 }
@@ -145,9 +152,11 @@ std::string Storage::get() {
 
 void Storage::append_to_startup(const std::string line) {
     Storage::startup += line + '\n';
+    Storage::save_failed = false; // the edit changes: the checksum covers it again
 }
 
 void Storage::remove_from_startup(const std::string substring) {
+    Storage::save_failed = false;
     std::string new_startup = "";
     while (!Storage::startup.empty()) {
         std::string line = cut_first_word(Storage::startup, '\n');
@@ -169,7 +178,13 @@ void Storage::print_startup(const std::string substring) {
 }
 
 void Storage::save_startup() {
-    Storage::put(Storage::startup);
+    try {
+        Storage::put(Storage::startup);
+    } catch (...) {
+        Storage::save_failed = true; // the old chunks are gone already: the stored script is incomplete
+        throw;
+    }
+    Storage::save_failed = false;
 }
 
 void Storage::set_user_pin(const std::uint32_t pin) {
