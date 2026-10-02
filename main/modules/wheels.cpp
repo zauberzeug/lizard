@@ -5,6 +5,8 @@
 const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
     return {
         {"width", std::make_shared<NumberVariable>(1.0)},
+        {"max_linear_speed", std::make_shared<NumberVariable>(1.0)},
+        {"max_angular_speed", std::make_shared<NumberVariable>(1.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
@@ -103,19 +105,21 @@ void Wheels::do_off() {
     throw std::runtime_error("module \"" + this->name + "\" has no idle state");
 }
 
+void Wheels::speed(const double linear, const double angular) {
+    const bool nonzero = linear != 0.0 || angular != 0.0;
+    const bool applied = this->may_drive();
+    this->note_drive_command(applied, nonzero);
+    if (applied) {
+        const double width = this->properties.at("width")->number_value();
+        this->do_wheel_speeds(linear - angular * width / 2.0, linear + angular * width / 2.0);
+        this->note_drive_command_sent(nonzero);
+    }
+}
+
 void Wheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "speed") {
         Module::expect(arguments, 2, numbery, numbery);
-        const double linear = arguments[0]->evaluate_number();
-        const double angular = arguments[1]->evaluate_number();
-        const bool nonzero = linear != 0.0 || angular != 0.0;
-        const bool applied = this->may_drive();
-        this->note_drive_command(applied, nonzero);
-        if (applied) {
-            const double width = this->properties.at("width")->number_value();
-            this->do_wheel_speeds(linear - angular * width / 2.0, linear + angular * width / 2.0);
-            this->note_drive_command_sent(nonzero);
-        }
+        this->speed(arguments[0]->evaluate_number(), arguments[1]->evaluate_number());
     } else if (method_name == "power") {
         Module::expect(arguments, 2, numbery, numbery);
         const double left = arguments[0]->evaluate_number();
