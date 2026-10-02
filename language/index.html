@@ -768,6 +768,8 @@ end
 </tbody>
 </table>
 <p>Note that identifiers cannot be created via variable declarations, but only via constructors.</p>
+<p>Floating point numbers can also be <code>nan</code> (not a number) and <code>inf</code> (infinity), both as literals and in outputs; every comparison with <code>nan</code> is false except <code>!=</code>, which is always true, so <code>x != x</code> tests for <code>nan</code>.
+Like <code>true</code> and <code>false</code>, <code>nan</code> and <code>inf</code> are reserved words and cannot be used as variable or module names.</p>
 <p>Implicit conversion only happens from integers to floating point numbers:</p>
 <pre><code>int i = 42
 float f = i + 3.14

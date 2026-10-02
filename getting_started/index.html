@@ -592,7 +592,8 @@
 <ol>
 <li>Download and unpack the zip file of the <a href="https://github.com/zauberzeug/lizard/releases">latest release</a>.</li>
 <li>Attach an Espressif ESP32 microcontroller via serial to your computer.</li>
-<li>Run <code>sudo ./espresso.py flash --device /dev/&lt;serial device name&gt;</code> to install Lizard on the ESP32.</li>
+<li>Run <code>sudo ./espresso.py flash</code> to install Lizard on the ESP32.
+   Add <code>--device /dev/&lt;serial device name&gt;</code> to pick the adapter yourself, for example when several are attached.</li>
 </ol>
 <h2 id="try-out">Try Out<a class="headerlink" href="#try-out" title="Permanent link">&para;</a></h2>
 <p>You can launch an interactive shell with <code>./monitor.py</code> to try out configurations and watch Lizard outputs (see <a href="../tools/#serial-monitor">tools</a> for more details).
@@ -614,9 +615,15 @@ to communication via <a href="../module_reference/#can-interface">CAN</a> and co
 <h2 id="startup-script">Startup Script<a class="headerlink" href="#startup-script" title="Permanent link">&para;</a></h2>
 <p>You can create a startup script for rules which should be directly applied after boot of the microcontroller.
 Simply write the commands into a file like <code>on_startup.lizard</code> and set them with</p>
-<pre><code class="language-bash">./configure.py on_startup.lizard /dev/&lt;serial device name&gt;
+<pre><code class="language-bash">./configure.py on_startup.lizard
 </code></pre>
+<p>Add the device path (e.g. <code>./configure.py on_startup.lizard /dev/&lt;serial device name&gt;</code>)
+to pick the adapter yourself, for example when several are attached.</p>
 <p>See <a href="../tools/#configure">Tools</a> for more details.</p>
+<p>If loading the startup script fails, for example because a module cannot be created, the microcontroller prints the error and restarts to try again.
+After two failed attempts it boots without the startup script, prints <code>error: startup skipped after 2 failed boots (...)</code> with the last reason and stays reachable over the command-line interface, so the script can be fixed with <code>!-</code>, <code>!+</code> and <code>!.</code>.
+A crash or watchdog reset during the first seconds after boot counts as a failed attempt as well.
+A power cycle or a reset over the EN pin clears the counter.</p>
 
 
 

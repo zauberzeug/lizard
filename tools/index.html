@@ -823,8 +823,11 @@
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <h3 id="flash">Flash<a class="headerlink" href="#flash" title="Permanent link">&para;</a></h3>
 <p>To install Lizard on your ESP32 run</p>
-<pre><code class="language-bash">sudo ./espresso.py flash --device &lt;device_path&gt;
+<pre><code class="language-bash">sudo ./espresso.py flash [--device &lt;device_path&gt;]
 </code></pre>
+<p>Without <code>--device</code> the serial device is auto-detected, and you are asked which one to use if several are found.
+<code>--dry-run</code> prints the commands instead of running them.
+It still resolves the serial device, so it needs the adapter attached (or an explicit <code>--device</code>).</p>
 <p>Note that flashing may require root access (hence the sudo).
 The command also does not work while the serial interface is busy communicating with another process.</p>
 <p>If flashing fails on your USB-UART bridge, you can lower the baud rate with <code>--baud</code> (default: 921600).
@@ -836,7 +839,7 @@ where the microcontroller is connected to the pin header of an NVIDIA Jetson com
 This requires a Jetson Orin (L4T 35 or 36);
 for Nano/Xavier Robot Brains use release 0.12.x or earlier, which still ships <code>flash.py</code>.</p>
 <p>To flash a Robot Brain over the network from a development machine, pass <code>--host</code>.
-This rsyncs the binaries and <code>espresso.py</code> to the target and runs the command there over SSH:</p>
+This rsyncs the binaries, <code>espresso.py</code> and <code>serial_devices.py</code> to the target and runs the command there over SSH:</p>
 <pre><code class="language-bash">./espresso.py flash --host user@robot-brain[:path]
 </code></pre>
 <p><code>--host</code> works for every command (<code>flash</code>, <code>erase</code>, <code>enable</code>, <code>disable</code>, <code>reset</code>, <code>release_pins</code>, <code>coredump</code>),
@@ -846,13 +849,22 @@ so e.g. <code>./espresso.py erase --host user@robot-brain</code> performs a remo
 <p>Use the serial monitor to read the current output and interactively send <a href="../language/">Lizard commands</a> to the microcontroller.</p>
 <pre><code class="language-bash">./monitor.py [&lt;device_path&gt;]
 </code></pre>
+<p>Without a device path the monitor detects the serial device itself:
+on a Robot Brain it is the Jetson's UART to the microcontroller, whatever else is attached via USB,
+on a development host it is the attached USB-UART bridge.
+If several devices are found, it lists them and asks which one to use.
+A microcontroller on a USB-UART bridge attached to a Jetson is not detected and needs its device path.
+Pass the device path explicitly when several devices may be found and there is no terminal to answer the question.
+Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see <a href="#robot-brain">Robot Brain</a>).</p>
 <p>You can also use an SSH monitor to access a microcontroller via SSH:</p>
 <pre><code class="language-bash">./monitor_ssh.sh &lt;user@host&gt;
 </code></pre>
+<p>This copies <code>monitor.py</code> and <code>serial_devices.py</code> from this checkout to <code>~/lizard</code> on the target and starts the monitor there,
+so which device it detects does not depend on the age of the target's own checkout.</p>
 <p>Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.</p>
 <h3 id="otb-update">OTB Update<a class="headerlink" href="#otb-update" title="Permanent link">&para;</a></h3>
 <p><code>otb_update.py</code> pushes firmware to a peer over a <code>SerialBus</code> coordinator using the OTB (Over The Bus) protocol.</p>
-<pre><code class="language-bash">./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target &lt;peer_id&gt; [--bus &lt;name&gt;] [--expander &lt;name&gt;]
+<pre><code class="language-bash">./otb_update.py build/lizard.bin [--device &lt;path&gt;] --target &lt;peer_id&gt; [--bus &lt;name&gt;] [--expander &lt;name&gt;]
 </code></pre>
 <table>
 <thead>
@@ -867,8 +879,8 @@ so e.g. <code>./espresso.py erase --host user@robot-brain</code> performs a remo
 <td>Path to the firmware binary (e.g. <code>build/lizard.bin</code>)</td>
 </tr>
 <tr>
-<td><code>--port</code></td>
-<td>Serial port (default: <code>/dev/ttyUSB0</code>)</td>
+<td><code>--device</code></td>
+<td>Serial device path (default: auto-detected, asks if ambiguous)</td>
 </tr>
 <tr>
 <td><code>--baud</code></td>
@@ -893,7 +905,7 @@ so e.g. <code>./espresso.py erase --host user@robot-brain</code> performs a remo
 The script will pause broadcasts on that expander via <code>core.pause_broadcasts()</code> before the transfer
 and resume them afterwards to keep the UART link clear.</p>
 <p>Example:</p>
-<pre><code class="language-bash">./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target 1 --expander p0
+<pre><code class="language-bash">./otb_update.py build/lizard.bin --target 1 --expander p0
 </code></pre>
 <p>This flashes node 1 through expander <code>p0</code>.
 The target node will reboot with the new firmware after a successful transfer.</p>
@@ -989,15 +1001,15 @@ the host only sends the CRC field to targets that do, so older firmware can stil
 and a target still accepts chunks without the field from older hosts.</p>
 <h3 id="configure">Configure<a class="headerlink" href="#configure" title="Permanent link">&para;</a></h3>
 <p>Use the configure script to send a new startup script to the microcontroller.</p>
-<pre><code class="language-bash">./configure.py &lt;config_file&gt; &lt;device_path&gt;
+<pre><code class="language-bash">./configure.py &lt;config_file&gt; [&lt;device_path&gt;]
 </code></pre>
+<p>Without a device path the serial device is detected the same way as for the <a href="#serial-monitor">serial monitor</a>.</p>
 <p>Note that the configure script cannot communicate while the serial interface is busy communicating with another process.</p>
 <h2 id="development">Development<a class="headerlink" href="#development" title="Permanent link">&para;</a></h2>
 <h3 id="prepare-for-development">Prepare for Development<a class="headerlink" href="#prepare-for-development" title="Permanent link">&para;</a></h3>
 <p>Install Python requirements:</p>
 <pre><code class="language-python">python3 -m pip install -r requirements.txt
 </code></pre>
-<p>On macOS, use <code>requirements-macos.txt</code> instead, which omits <code>gpiod</code> (not available on macOS).</p>
 <p>Install UART drivers: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers</p>
 <p>Get all sub modules:</p>
 <pre><code class="language-bash">git submodule update --init --recursive

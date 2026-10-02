@@ -1388,6 +1388,27 @@ Clients uploading many lines at once should therefore pace their writes or wait 
 <table>
 <thead>
 <tr>
+<th>Properties</th>
+<th>Description</th>
+<th>Data type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bluetooth.connected</code></td>
+<td>Whether a device is currently connected</td>
+<td><code>bool</code></td>
+</tr>
+<tr>
+<td><code>bluetooth.last_message_age</code></td>
+<td>Time since the last line was received via Bluetooth (ms)</td>
+<td><code>int</code></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
 <th>Methods</th>
 <th>Description</th>
 <th>Arguments</th>
@@ -1432,6 +1453,9 @@ On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications wi
 <p>The Bluetooth module stores up to four devices.
 When a fifth connects, the oldest entry is removed.</p>
 <p>To force re-pairing, call <code>bluetooth.reset_bonds()</code> to clear stored bonds, then restart the ESP to apply the change.</p>
+<p>Unlike <code>core.last_message_age</code>, which any input channel resets, <code>bluetooth.last_message_age</code> only counts lines received via Bluetooth.
+Together with <code>connected</code>, it lets rules and the host tell a silent or disconnected app apart from a host that keeps talking on UART0.
+Neither property stops anything by itself; use the wheels' <code>drive_command_timeout</code> for that (see <a href="../machine_safety/#dead-mans-switch-for-wheels">Machine Safety</a>).</p>
 <h2 id="serial-bus">Serial Bus<a class="headerlink" href="#serial-bus" title="Permanent link">&para;</a></h2>
 <p>The serial bus module lets multiple ESP32s share a UART link with a coordinator that polls peers in turn.</p>
 <table>
@@ -1447,6 +1471,27 @@ When a fifth connects, the oldest entry is removed.</p>
 <td><code>bus = SerialBus(serial, id)</code></td>
 <td>Attach to a serial module with local node <code>id</code></td>
 <td><code>Serial</code>, <code>int</code></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Properties</th>
+<th>Description</th>
+<th>Data type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bus.offset_&lt;id&gt;</code></td>
+<td>Estimated clock offset of peer <code>&lt;id&gt;</code> (peer clock minus coordinator clock) in milliseconds, NaN while invalid</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>bus.offset_&lt;id&gt;_accuracy</code></td>
+<td>Error bound of <code>offset_&lt;id&gt;</code> in milliseconds (the true offset lies within <code>offset_&lt;id&gt;</code> ± this value)</td>
+<td><code>float</code></td>
 </tr>
 </tbody>
 </table>
@@ -1469,8 +1514,35 @@ When a fifth connects, the oldest entry is removed.</p>
 <td>Set the list of peer IDs, making this node the coordinator</td>
 <td><code>int</code>s</td>
 </tr>
+<tr>
+<td><code>bus.enable_time_sync()</code></td>
+<td>Enable clock offset estimation between coordinator and peers (call on all nodes)</td>
+<td></td>
+</tr>
 </tbody>
 </table>
+<p><strong>Time Synchronization:</strong>
+Calling <code>bus.enable_time_sync()</code> on the coordinator <em>and</em> all peers enables passive clock offset estimation on top of the regular poll cycle.
+The coordinator stamps its local <code>esp_timer</code> clock when it sends a POLL (T1) and when it receives the DONE response (T4), and the peer reports its own receive and send stamps (T2, T3) in the DONE response.
+Like NTP, the offset is estimated as <code>((T2 - T1) + (T3 - T4)) / 2</code>, so the peer's processing time between T2 and T3 cancels out, and the remaining unknown transport delay bounds the error of each sample.
+The coordinator publishes the estimate as the property <code>offset_&lt;id&gt;</code> and its bound as <code>offset_&lt;id&gt;_accuracy</code>.
+This is intended for timestamping sensor data (e.g. wheel odometry) received from bus peers.</p>
+<ul>
+<li>Applying it: a peer timestamp <code>t_peer</code> in milliseconds maps to coordinator time as <code>t_peer - offset_&lt;id&gt;</code>; mind the units, since the peer's <code>esp_timer</code> stamps are in microseconds and the properties in milliseconds.</li>
+<li>Sign: the offset is the peer's clock minus the coordinator's, so it is positive while the peer's <code>esp_timer</code> runs ahead; as both sides count from their own boot, a peer that booted later than the coordinator has a negative offset.</li>
+<li>Accuracy: each sample's error bound is half the transport time that is not explained by the known airtime of the two frames; samples within 0.5 ms replace the estimate immediately, otherwise the best sample of every 2 s does, so the estimate keeps following crystal drift even on a busy bus.
+  Systematic asymmetries such as RS485 turnaround are not covered by the bound.</li>
+<li>Validity: the properties are NaN until the first sample arrives and return to NaN whenever the estimate turns invalid, i.e. when the peer's poll times out (e.g. across a peer reboot), or when <code>make_coordinator()</code> or <code>enable_time_sync()</code> is called again, which restarts all estimates.
+  An expander's broadcast carries NaN as the literal <code>nan</code>, so a proxied offset turns NaN as well; the host firmware has to know that literal.</li>
+<li>Scope: the properties exist only on the coordinator, are created once both <code>make_coordinator()</code> and <code>enable_time_sync()</code> have been called, and stay (as NaN) for IDs dropped from a later list.
+  Referencing them on a peer, before they are created, or for an ID that was never listed is an unknown-property error rather than NaN.
+  Behind an expander, the host learns them with the first broadcast after <code>enable_time_sync()</code>, so a startup script cannot reference them yet.
+  The two properties per peer also count against the coordinator's 1024-byte broadcast line, which overflows at roughly 16 peers;
+  from then on the coordinator reports <code>buffer too small</code> on every step instead of broadcasting any of its properties.</li>
+<li>Convergence: the first sample after enabling or after a timeout locks the estimate, whatever its bound, within two poll rounds; while polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.</li>
+<li>Compatibility: update the coordinator's firmware first, and treat <code>__POLL__&lt;digits&gt;</code> and <code>__DONE__&lt;digits&gt;,&lt;digits&gt;,&lt;digits&gt;</code> payloads as reserved for this protocol.
+  A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.</li>
+</ul>
 <p><strong>Bus Backup:</strong>
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
 If multiple SerialBus modules exist, only the first one is backed up.
@@ -2030,6 +2102,9 @@ The following bits are available:</p>
 <li>0x0080: gravity</li>
 <li>0x0100: temperature</li>
 </ul>
+<p>The IMU is read in a background task, so the properties hold the newest completed sample.
+While reading fails, an error is printed at most once per second and the properties keep their last values.
+A message is printed when reading works again.</p>
 <table>
 <thead>
 <tr>
@@ -2451,6 +2526,8 @@ It can be used to recover the driver from a "BUS_OFF" state.</p>
 </table>
 <p>This module might be used by other modules that communicate with peripherals via serial.
 You can, however, unmute the serial module to have incoming messages printed to the command line instead of keeping them buffered for other modules.</p>
+<p>A UART number and its pins can be used by one serial module at a time.
+They stay reserved for that module until the core restarts, also after <code>Expander.disconnect()</code>.</p>
 <h2 id="linear-motor">Linear motor<a class="headerlink" href="#linear-motor" title="Permanent link">&para;</a></h2>
 <p>This module controls a linear actuator via two output pins (move in, move out) and two input pins reading two limit switches (end in, end out).</p>
 <table>
@@ -2737,6 +2814,16 @@ defaults to 0 and is the interval in milliseconds.</p>
 <td>Whether driving is blocked (safety interlock, see below)</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>wheels.drive_command_age</code></td>
+<td>Time since the last drive command (ms, see below)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>wheels.drive_command_timeout</code></td>
+<td>Stop when no drive command arrives for this long (s, 0 = off)</td>
+<td><code>float</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -2785,7 +2872,17 @@ The hold is sent when <code>locked</code> becomes <code>true</code> and refreshe
 <code>locked</code> only blocks commands: <code>disable()</code> still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While <code>locked</code> is <code>true</code>, <code>off()</code> does not stick — the hold re-engages within about a second; call <code>disable()</code> to switch the motors off durably.
 Driving resumes as soon as <code>locked</code> is <code>false</code> again.
-Writes to <code>locked</code> and <code>enabled</code> are forwarded to shadow modules, so shadowed wheels stop together with their master.</p>
+Writes to <code>locked</code>, <code>enabled</code> and <code>drive_command_timeout</code> are forwarded to shadow modules, so shadowed wheels stop together with their master.</p>
+<p>The <code>drive_command_timeout</code> property is a dead man's switch against lost or silent hosts:
+after a non-zero <code>speed()</code> or <code>power()</code> command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for <code>drive_command_timeout</code> seconds — the motors stay enabled.
+The stop is always a zero <em>speed</em>, also after <code>power()</code>, so it switches the motors from torque to velocity control.
+Only <code>speed()</code> and <code>power()</code> count as drive commands; <code>enable()</code>, <code>off()</code> and property writes do not, so they cannot keep a stale motion alive.
+The stop is logged as a warning and held like <code>locked</code> holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
+The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
+Robots driven by a remote control should use a shorter timeout, and <code>0</code> disables the switch, e.g. on a test bench.
+<code>drive_command_age</code> holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
+See <a href="../machine_safety/#dead-mans-switch-for-wheels">Machine Safety</a> for the background.</p>
 <h2 id="rmd-motor">RMD Motor<a class="headerlink" href="#rmd-motor" title="Permanent link">&para;</a></h2>
 <p>The RMD motor module controls a <a href="https://www.myactuator.com/">MyActuator</a> RMD motor via CAN.</p>
 <table>
@@ -3201,6 +3298,16 @@ It communicates with a <a href="https://www.basicmicro.com/">Basicmicro</a> Robo
 <td>Whether driving is blocked (safety interlock, see below)</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>wheels.drive_command_age</code></td>
+<td>Time since the last drive command (ms, see below)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>wheels.drive_command_timeout</code></td>
+<td>Stop when no drive command arrives for this long (s, 0 = off)</td>
+<td><code>float</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -3247,7 +3354,17 @@ The hold is sent when <code>locked</code> becomes <code>true</code> and refreshe
 <code>locked</code> only blocks commands: <code>disable()</code> still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While <code>locked</code> is <code>true</code>, <code>off()</code> does not stick — the hold re-engages within about a second; call <code>disable()</code> to switch the motors off durably.
 Driving resumes as soon as <code>locked</code> is <code>false</code> again.
-Writes to <code>locked</code> and <code>enabled</code> are forwarded to shadow modules, so shadowed wheels stop together with their master.</p>
+Writes to <code>locked</code>, <code>enabled</code> and <code>drive_command_timeout</code> are forwarded to shadow modules, so shadowed wheels stop together with their master.</p>
+<p>The <code>drive_command_timeout</code> property is a dead man's switch against lost or silent hosts:
+after a non-zero <code>speed()</code> or <code>power()</code> command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for <code>drive_command_timeout</code> seconds — the motors stay enabled.
+The stop is always a zero <em>speed</em>, also after <code>power()</code>, so it switches the motors from torque to velocity control.
+Only <code>speed()</code> and <code>power()</code> count as drive commands; <code>enable()</code>, <code>off()</code> and property writes do not, so they cannot keep a stale motion alive.
+The stop is logged as a warning and held like <code>locked</code> holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
+The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
+Robots driven by a remote control should use a shorter timeout, and <code>0</code> disables the switch, e.g. on a test bench.
+<code>drive_command_age</code> holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
+See <a href="../machine_safety/#dead-mans-switch-for-wheels">Machine Safety</a> for the background.</p>
 <h2 id="stepper-motor">Stepper Motor<a class="headerlink" href="#stepper-motor" title="Permanent link">&para;</a></h2>
 <p>The stepper motor module controls a stepper motor via "step" and "direction" pins.
 It uses the ESP LED Control API to generate pulses with sufficiently high frequencies and the Pulse Counter API to count steps.</p>
@@ -4169,6 +4286,16 @@ motor.set_ctrl_halt(true)
 <td>Whether driving is blocked (safety interlock, see below)</td>
 <td><code>bool</code></td>
 </tr>
+<tr>
+<td><code>wheels.drive_command_age</code></td>
+<td>Time since the last drive command (ms, see below)</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>wheels.drive_command_timeout</code></td>
+<td>Stop when no drive command arrives for this long (s, 0 = off)</td>
+<td><code>float</code></td>
+</tr>
 </tbody>
 </table>
 <table>
@@ -4204,7 +4331,16 @@ This lets a rule block driving while some other condition is unmet, for example 
 The hold is sent when <code>locked</code> becomes <code>true</code> and refreshed about once per second, so it re-engages even if a motor controller restarts.
 <code>locked</code> only blocks commands: <code>disable()</code> still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 Driving resumes as soon as <code>locked</code> is <code>false</code> again.
-Writes to <code>locked</code> and <code>enabled</code> are forwarded to shadow modules, so shadowed wheels stop together with their master.</p>
+Writes to <code>locked</code>, <code>enabled</code> and <code>drive_command_timeout</code> are forwarded to shadow modules, so shadowed wheels stop together with their master.</p>
+<p>The <code>drive_command_timeout</code> property is a dead man's switch against lost or silent hosts:
+after a non-zero <code>speed()</code> command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for <code>drive_command_timeout</code> seconds — the motors stay enabled.
+Only <code>speed()</code> counts as a drive command; <code>enable()</code> and property writes do not, so they cannot keep a stale motion alive.
+The stop is logged as a warning and held like <code>locked</code> holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
+The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
+Robots driven by a remote control should use a shorter timeout, and <code>0</code> disables the switch, e.g. on a test bench.
+<code>drive_command_age</code> holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
+See <a href="../machine_safety/#dead-mans-switch-for-wheels">Machine Safety</a> for the background.</p>
 <h2 id="analog-unit">Analog Unit<a class="headerlink" href="#analog-unit" title="Permanent link">&para;</a></h2>
 <p>The AnalogUnit module owns an ADC oneshot unit and is shared by one or more <code>Analog</code> or <code>TemperatureSensor</code> modules.
 This allows multiple analog channels on the same hardware unit to be used safely without conflicts.</p>
@@ -4379,8 +4515,19 @@ to compute temperature from an NTC divider and a matching reference divider.</p>
 </tbody>
 </table>
 <p>The <code>flash()</code> method requires the <code>boot</code> and <code>enable</code> pins to be defined.
-The optional <code>force</code> argument skips the default check whether certain strapping pins are set correctly.</p>
-<p>The <code>disconnect()</code> method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.</p>
+The optional <code>force</code> argument skips the default check whether certain strapping pins are set correctly.
+Flashing erases the other microcontroller's NVS:
+its startup script, a persisted console baud rate and the bus backup are reset to defaults.
+The other microcontroller then boots the copied app from its first OTA slot.</p>
+<p>The <code>disconnect()</code> method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
+After <code>disconnect()</code> the expander stays disconnected until <code>flash(true)</code> reinstalls the serial connection;
+<code>run()</code>, <code>restart()</code> and forwarded calls fail with an error until then because there is no serial connection,
+and <code>flash()</code> without <code>force</code> fails because the strapping pins cannot be checked without it.
+Both <code>disconnect()</code> and <code>flash()</code> fail if another module, e.g. a serial bus, uses the same serial module.
+After <code>disconnect()</code>, the UART and its pins stay reserved for the expander's serial module until the core restarts (see <a href="#serial-interface">Serial interface</a>).</p>
+<p><a href="#proxy">Proxy</a> modules are set up on the other microcontroller only once, when they are created.
+After <code>restart()</code>, <code>flash()</code> or a reboot of the other microcontroller (recognized by its <code>Ready.</code> line), <code>is_ready</code> returns to <code>true</code>, but the proxies no longer exist there:
+their <code>is_ready</code> turns <code>false</code> and the main microcontroller needs a restart, e.g. <code>core.restart()</code>, to create them again.</p>
 <p>Note that the expander forwards all other method calls to the remote core module, e.g. <code>expander.info()</code>.</p>
 <table>
 <thead>
@@ -4450,11 +4597,13 @@ Declare the depending module on the same microcontroller instead.</p>
 <tbody>
 <tr>
 <td><code>is_ready</code></td>
-<td>Whether the remote module has booted and is ready</td>
+<td>Whether the definition was sent in the expander's current boot</td>
 <td><code>bool</code></td>
 </tr>
 </tbody>
 </table>
+<p><code>is_ready</code> turns <code>false</code> again when the other microcontroller restarts or the connection is lost,
+because the main microcontroller cannot tell whether the remote module still exists (see <a href="#expander">Expander</a>).</p>
 
 
 
