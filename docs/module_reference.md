@@ -589,6 +589,8 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_linear_speed`      | Maximum forward speed of the robot (m/s, see below)           | `float`   |
+| `wheels.max_angular_speed`     | Maximum turning speed of the robot (rad/s, see below)         | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
@@ -627,6 +629,10 @@ The default is 1 s, so a host has to repeat its drive command at least that ofte
 Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
 `drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
 See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
+
+`max_linear_speed` and `max_angular_speed` declare the speeds the robot is built for (m/s and rad/s).
+They are declarations, not limits: `speed()` does not clamp to them, so existing configurations and hosts keep working unchanged.
+They belong in the robot's startup script next to `width`, where modules that drive the wheels with relative values scale by them, see [Joystick](#joystick).
 
 ## RMD Motor
 
@@ -751,6 +757,8 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_linear_speed`      | Maximum forward speed of the robot (m/s, see below)           | `float`   |
+| `wheels.max_angular_speed`     | Maximum turning speed of the robot (rad/s, see below)         | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.m_per_tick`            | Meters per encoder tick                                       | `float`   |
@@ -788,6 +796,10 @@ The default is 1 s, so a host has to repeat its drive command at least that ofte
 Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
 `drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
 See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
+
+`max_linear_speed` and `max_angular_speed` declare the speeds the robot is built for (m/s and rad/s).
+They are declarations, not limits: `speed()` does not clamp to them, so existing configurations and hosts keep working unchanged.
+They belong in the robot's startup script next to `width`, where modules that drive the wheels with relative values scale by them, see [Joystick](#joystick).
 
 ## Stepper Motor
 
@@ -1103,6 +1115,8 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_linear_speed`      | Maximum forward speed of the robot (m/s, see below)           | `float`   |
+| `wheels.max_angular_speed`     | Maximum turning speed of the robot (rad/s, see below)         | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |

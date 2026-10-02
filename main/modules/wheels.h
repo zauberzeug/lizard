@@ -8,10 +8,14 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
 /**
  * Shared base for differential-drive wheels modules.
  *
- * Owns the common properties (`width`, `linear_speed`, `angular_speed`, `enabled`, `locked`,
- * `drive_command_age`, `drive_command_timeout`) and the `speed`/`power`/`off`/`enable`/`disable`
- * command flow; the enabled-sync itself comes from `Module`. Concrete drivetrains provide the
- * motor-specific parts through the protected hooks.
+ * Owns the common properties (`width`, `max_linear_speed`, `max_angular_speed`, `linear_speed`,
+ * `angular_speed`, `enabled`, `locked`, `drive_command_age`, `drive_command_timeout`) and the
+ * `speed`/`power`/`off`/`enable`/`disable` command flow; the enabled-sync itself comes from
+ * `Module`. Concrete drivetrains provide the motor-specific parts through the protected hooks.
+ *
+ * `max_linear_speed` and `max_angular_speed` declare what the robot is built for. They are not
+ * enforced by `speed()` — existing hosts and configurations keep working unchanged — but let
+ * modules that drive the wheels with relative values (see `Joystick`) scale to the robot.
  *
  * `locked` is a safety interlock: while `true`, drive commands are ignored and the wheels are
  * actively held at standstill (zero-speed setpoint, motors stay enabled), so a rule can block
@@ -69,8 +73,13 @@ protected:
     virtual void update_odometry() = 0;
 
 public:
+    static inline constexpr const char *TYPE = "Wheels"; // not registered; names the base for `get_module_argument<Wheels>`
+
     Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults = Wheels::get_defaults());
     void step() override;
+    /// Drive with `linear` (m/s) and `angular` (rad/s) speed, like `wheels.speed(...)` from a script: subject to
+    /// `enabled`/`locked` and feeding the dead man's switch. For modules that drive the wheels, e.g. `Joystick`.
+    void speed(const double linear, const double angular);
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void write_property(const std::string property_name, const ConstExpression_ptr expression,
                         const bool from_expander = false) override;
