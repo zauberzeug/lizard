@@ -1187,6 +1187,7 @@ While the setpoints are non-zero, the wheels are commanded every cycle, which al
 When the ramp reaches standstill, a single zero-speed command is sent and the module falls silent, so other hosts like rosys can drive the wheels in between without the joystick interfering.
 
 `timeout` is the joystick's own dead man's switch against a lost remote control: when no `drive()` arrived for that long, the target drops to zero and the ramp brings the robot to a gentle stop.
+The default of 1 s leaves room for the jitter of a Bluetooth remote; with 0.5 s an iPhone sending every 100 ms still produced brief dropouts.
 Keep it shorter than the wheels' `drive_command_timeout`, otherwise the wheels stop hard before the ramp gets a chance.
 The remote should send `drive(0, 0)` when the stick is released; the timeout is the fallback.
 
@@ -1194,11 +1195,11 @@ The remote should send `drive(0, 0)` when the stick is released; the timeout is 
 wheels = ODriveWheels(left, right)
 wheels.max_linear_speed = 1.5
 wheels.max_angular_speed = 2.0
-wheels.drive_command_timeout = 1.0
+wheels.drive_command_timeout = 1.5
 joystick = Joystick(wheels)
 joystick.ramp = 2.0
 joystick.turn_reduction = 0.5
-joystick.timeout = 0.5
+joystick.timeout = 1.0
 ```
 
 ## Analog Unit

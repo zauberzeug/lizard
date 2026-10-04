@@ -15,7 +15,7 @@ const std::map<std::string, Variable_ptr> Joystick::get_defaults() {
     return {
         {"ramp", std::make_shared<NumberVariable>(2.0)},
         {"turn_reduction", std::make_shared<NumberVariable>(0.5)},
-        {"timeout", std::make_shared<NumberVariable>(0.5)},
+        {"timeout", std::make_shared<NumberVariable>(1.0)},
         {"forward", std::make_shared<NumberVariable>()},
         {"turn", std::make_shared<NumberVariable>()},
         {"active", std::make_shared<BooleanVariable>(false)},
