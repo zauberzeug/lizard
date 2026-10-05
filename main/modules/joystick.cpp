@@ -64,11 +64,19 @@ void Joystick::step() {
     this->properties.at("forward")->set_number_value(forward);
     this->properties.at("turn")->set_number_value(turn);
 
-    // Drive the wheels every cycle while in motion (this also feeds their dead man's switch), send
-    // the stop once when the ramp reaches standstill, then stay silent.
+    // Drive the wheels every cycle while in motion (this also feeds their dead man's switch). When the
+    // ramp reaches standstill, repeat the stop for a while: a single frame can be lost on the bus or
+    // refused by a drive (seen on Innotronic tracks, which then crept on at the last setpoint). Then
+    // stay silent.
     const bool nonzero = forward != 0.0 || turn != 0.0;
     this->properties.at("active")->set_boolean_value(nonzero);
-    if (nonzero || this->commanding) {
+    if (nonzero) {
+        this->stop_cycles_left = STOP_REPEAT_CYCLES;
+    }
+    if (nonzero || this->stop_cycles_left > 0) {
+        if (!nonzero) {
+            this->stop_cycles_left--;
+        }
         // Steering reduction: full turn rate at standstill, `turn_reduction` of it at full forward speed.
         const double turn_reduction = this->properties.at("turn_reduction")->number_value();
         const double turn_factor = 1.0 - (1.0 - turn_reduction) * std::abs(forward);
@@ -87,7 +95,6 @@ void Joystick::step() {
             }
         }
         this->wheels->speed(linear, angular);
-        this->commanding = nonzero;
     }
 
     Module::step();

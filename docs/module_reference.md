@@ -1194,7 +1194,8 @@ The module therefore scales linear and angular speed down together until the fas
 Without a declared or derivable maximum the module cannot drive and the robot stays still.
 
 While the setpoints are non-zero, the wheels are commanded every cycle, which also feeds their dead man's switch.
-When the ramp reaches standstill, a single zero-speed command is sent and the module falls silent, so other hosts like rosys can drive the wheels in between without the joystick interfering.
+When the ramp reaches standstill, the zero-speed command is repeated for about a second, because a single frame can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+Then the module falls silent, so other hosts like rosys can drive the wheels in between without the joystick interfering.
 
 `timeout` is the joystick's own dead man's switch against a lost remote control: when no `drive()` arrived for that long, the target drops to zero and the ramp brings the robot to a gentle stop.
 The default of 1 s leaves room for the jitter of a Bluetooth remote; with 0.5 s an iPhone sending every 100 ms still produced brief dropouts.
