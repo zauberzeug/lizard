@@ -15,6 +15,8 @@ class Serial : public Module {
 private:
     mutable std::vector<std::string> users;
     mutable std::string pending_lines; // lines after the first of a read that held several; not visible to read() and available()
+    // dropped by has_buffered_lines() for lack of a line end, counted since flush()
+    mutable size_t discarded_bytes = 0;
 
 public:
     static inline constexpr const char *TYPE = "Serial";
@@ -35,6 +37,7 @@ public:
     void reinitialize_after_flash() const;
     int available() const;
     bool has_buffered_lines() const;
+    size_t unterminated_bytes() const; // input that never formed a line since flush(): dropped plus still buffered
     int read(const uint32_t timeout = 0) const;
     static constexpr int LINE_DISCARDED = -1;
     static constexpr size_t CHECKSUM_TRAILER_LENGTH = 4; // "@xx\n" appended by write_checked_line

@@ -164,12 +164,19 @@ bool Serial::has_buffered_lines() const {
     const int buffered = this->available();
     if (buffered > CONSOLE_LINE_SIZE && uart_pattern_get_pos(this->uart_num) == -1) {
         discard_uart_input(this->uart_num, buffered);
+        this->discarded_bytes += buffered;
     }
     return false;
 }
 
+size_t Serial::unterminated_bytes() const {
+    const bool has_lines = this->has_buffered_lines(); // first, because it may drop an oversized run into discarded_bytes
+    return this->discarded_bytes + (has_lines ? 0 : this->available());
+}
+
 void Serial::flush() const {
     this->pending_lines.clear();
+    this->discarded_bytes = 0;
     uart_flush(this->uart_num);
 }
 
