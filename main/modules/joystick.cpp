@@ -72,9 +72,21 @@ void Joystick::step() {
         // Steering reduction: full turn rate at standstill, `turn_reduction` of it at full forward speed.
         const double turn_reduction = this->properties.at("turn_reduction")->number_value();
         const double turn_factor = 1.0 - (1.0 - turn_reduction) * std::abs(forward);
-        const double max_linear = this->wheels->get_property("max_linear_speed")->number_value();
-        const double max_angular = this->wheels->get_property("max_angular_speed")->number_value();
-        this->wheels->speed(forward * max_linear, turn * turn_factor * max_angular);
+        double linear = forward * this->wheels->max_linear_speed();
+        double angular = turn * turn_factor * this->wheels->max_angular_speed();
+        // Saturation guard: driving and turning at once asks one wheel for more than linear or angular alone.
+        // If the drivetrain's wheel limit would cut that wheel off, the robot veers instead of going where the
+        // stick points, so scale both down together and keep the direction.
+        const double wheel_limit = this->wheels->max_wheel_speed();
+        if (wheel_limit > 0.0) {
+            const double width = this->wheels->get_property("width")->number_value();
+            const double fastest_wheel = std::abs(linear) + std::abs(angular) * width / 2.0;
+            if (fastest_wheel > wheel_limit) {
+                linear *= wheel_limit / fastest_wheel;
+                angular *= wheel_limit / fastest_wheel;
+            }
+        }
+        this->wheels->speed(linear, angular);
         this->commanding = nonzero;
     }
 

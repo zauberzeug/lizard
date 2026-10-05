@@ -10,8 +10,9 @@ using Joystick_ptr = std::shared_ptr<Joystick>;
  * Drives a wheels module with relative joystick values.
  *
  * `drive(forward, turn)` takes values in -1..1. The module ramps towards them (`ramp`), reduces
- * steering at high forward speed (`turn_reduction`), scales by the wheels' `max_linear_speed` and
- * `max_angular_speed` and calls `wheels.speed(...)` every cycle while in motion. The wheels'
+ * steering at high forward speed (`turn_reduction`), scales by the wheels' maximum linear and
+ * angular speed (declared, or derived from the drivetrain's wheel limit), keeps the fastest wheel
+ * within that limit and calls `wheels.speed(...)` every cycle while in motion. The wheels'
  * `enabled`, `locked` and dead man's switch apply unchanged. When no `drive()` arrives for
  * `timeout` seconds, the target drops to zero and the ramp brings the robot to a stop. Once at
  * standstill, one zero-speed command is sent and the module falls silent, so other hosts (e.g.

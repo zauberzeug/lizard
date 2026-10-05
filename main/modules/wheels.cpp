@@ -5,8 +5,8 @@
 const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
     return {
         {"width", std::make_shared<NumberVariable>(1.0)},
-        {"max_linear_speed", std::make_shared<NumberVariable>(1.0)},
-        {"max_angular_speed", std::make_shared<NumberVariable>(1.0)},
+        {"max_linear_speed", std::make_shared<NumberVariable>(0.0)},
+        {"max_angular_speed", std::make_shared<NumberVariable>(0.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
@@ -37,6 +37,20 @@ Wheels::Wheels(const std::string name, const std::map<std::string, Variable_ptr>
 void Wheels::update_speeds(double left_speed, double right_speed) {
     this->properties.at("linear_speed")->set_number_value((left_speed + right_speed) / 2);
     this->properties.at("angular_speed")->set_number_value((right_speed - left_speed) / this->properties.at("width")->number_value());
+}
+
+double Wheels::max_linear_speed() const {
+    const double declared = this->properties.at("max_linear_speed")->number_value();
+    return declared > 0.0 ? declared : this->max_wheel_speed();
+}
+
+double Wheels::max_angular_speed() const {
+    const double declared = this->properties.at("max_angular_speed")->number_value();
+    if (declared > 0.0) {
+        return declared;
+    }
+    const double width = this->properties.at("width")->number_value();
+    return width > 0.0 ? 2.0 * this->max_wheel_speed() / width : 0.0;
 }
 
 bool Wheels::may_drive() const {
