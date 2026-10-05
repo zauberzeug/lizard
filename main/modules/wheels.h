@@ -50,9 +50,6 @@ private:
     void sync_shared_properties(Module &shadow) const;
 
 protected:
-    /// Whether drive commands may be applied: true only while enabled and not locked.
-    bool may_drive() const;
-
     /// Record an incoming drive command *before* it is sent: refreshes `drive_command_age` and, if the command
     /// is applied and non-zero, arms the dead man's switch — before the send, so a send that fails is still stopped.
     void note_drive_command(bool applied, bool nonzero);
@@ -82,6 +79,8 @@ public:
     /// Drive with `linear` (m/s) and `angular` (rad/s) speed, like `wheels.speed(...)` from a script: subject to
     /// `enabled`/`locked` and feeding the dead man's switch. For modules that drive the wheels, e.g. `Joystick`.
     void speed(const double linear, const double angular);
+    /// Whether drive commands may be applied: true only while enabled and not locked.
+    bool may_drive() const;
     /// Speed limit of a single wheel (m/s) that the drivetrain enforces itself; 0 when it has none or does not know.
     virtual double max_wheel_speed() const { return 0.0; }
     /// The `max_linear_speed` property, or the per-wheel limit when the property is 0; 0 when neither is known.

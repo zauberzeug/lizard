@@ -1,5 +1,6 @@
 #include "joystick.h"
 #include "../utils/timing.h"
+#include "../utils/uart.h"
 #include "module_helpers.h"
 #include <algorithm>
 #include <cmath>
@@ -50,11 +51,26 @@ void Joystick::step() {
         target_turn = 0.0;
     }
 
-    // Ramp: limit the change of the normalized setpoints per second; 0 applies the target directly.
+    // Without a maximum the setpoints scale to nothing; say so once instead of driving a robot that stays still.
+    const bool no_maximum = this->wheels->max_linear_speed() <= 0.0 && this->wheels->max_angular_speed() <= 0.0;
+    if (!no_maximum) {
+        this->warned_no_maximum = false;
+    } else if ((target_forward != 0.0 || target_turn != 0.0) && !this->warned_no_maximum) {
+        echo("warning: joystick %s cannot drive: wheels %s have neither max_linear_speed nor max_angular_speed",
+             this->name.c_str(), this->wheels->name.c_str());
+        this->warned_no_maximum = true;
+    }
+
+    // Ramp: limit the change of the normalized setpoints per second; 0 applies the target directly. While the
+    // wheels refuse commands (disabled or locked) the setpoints are held at zero, so the ramp does not sit at full
+    // deflection behind the interlock and jump the robot to full speed the moment it lifts.
     const double ramp = this->properties.at("ramp")->number_value();
     double forward = this->properties.at("forward")->number_value();
     double turn = this->properties.at("turn")->number_value();
-    if (ramp > 0.0) {
+    if (!this->wheels->may_drive()) {
+        forward = 0.0;
+        turn = 0.0;
+    } else if (ramp > 0.0) {
         forward = Joystick::approach(forward, target_forward, ramp * dt);
         turn = Joystick::approach(turn, target_turn, ramp * dt);
     } else {
@@ -78,7 +94,7 @@ void Joystick::step() {
             this->stop_cycles_left--;
         }
         // Steering reduction: full turn rate at standstill, `turn_reduction` of it at full forward speed.
-        const double turn_reduction = this->properties.at("turn_reduction")->number_value();
+        const double turn_reduction = std::clamp(this->properties.at("turn_reduction")->number_value(), 0.0, 1.0);
         const double turn_factor = 1.0 - (1.0 - turn_reduction) * std::abs(forward);
         double linear = forward * this->wheels->max_linear_speed();
         double angular = turn * turn_factor * this->wheels->max_angular_speed();

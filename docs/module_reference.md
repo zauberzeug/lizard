@@ -1171,14 +1171,14 @@ The wheels' `enabled`, `locked` and `drive_command_timeout` apply unchanged.
 | ----------------------------- | ---------------------- | --------------- |
 | `joystick = Joystick(wheels)` | Wheels module to drive | a wheels module |
 
-| Properties                | Description                                                                | Data type |
-| ------------------------- | -------------------------------------------------------------------------- | --------- |
-| `joystick.ramp`           | Maximum change of the relative setpoints per second (0 = no ramp)          | `float`   |
-| `joystick.turn_reduction` | Share of the turn rate left at full forward speed (0..1, 1 = no reduction) | `float`   |
-| `joystick.timeout`        | Ramp down to a stop when no `drive()` arrives for this long (s, 0 = off)   | `float`   |
-| `joystick.forward`        | Current ramped forward setpoint (-1..1)                                    | `float`   |
-| `joystick.turn`           | Current ramped turn setpoint (-1..1)                                       | `float`   |
-| `joystick.active`         | Whether the module is currently driving the wheels                         | `bool`    |
+| Properties                | Description                                                              | Data type |
+| ------------------------- | ------------------------------------------------------------------------ | --------- |
+| `joystick.ramp`           | Maximum change of the relative setpoints per second (0 = no ramp)        | `float`   |
+| `joystick.turn_reduction` | Share of the turn rate left at full forward speed (clamped to 0..1)      | `float`   |
+| `joystick.timeout`        | Ramp down to a stop when no `drive()` arrives for this long (s, 0 = off) | `float`   |
+| `joystick.forward`        | Current ramped forward setpoint (-1..1)                                  | `float`   |
+| `joystick.turn`           | Current ramped turn setpoint (-1..1)                                     | `float`   |
+| `joystick.active`         | Whether the setpoints are non-zero, i.e. the robot is in motion          | `bool`    |
 
 | Methods                         | Description                                           | Arguments        |
 | ------------------------------- | ----------------------------------------------------- | ---------------- |
@@ -1191,7 +1191,8 @@ Steering is reduced linearly with the forward setpoint: at standstill the full `
 The wheels then receive `speed(forward * max_linear_speed, turn * turn_factor * max_angular_speed)`, with the two maxima taken from the wheels' properties or, when those are 0, derived from the drivetrain's per-wheel limit.
 A drivetrain that knows its per-wheel limit also gets a saturation guard: driving and turning at once asks the outer wheel for more than either alone, and if the drivetrain cut that wheel off the robot would veer instead of going where the stick points.
 The module therefore scales linear and angular speed down together until the fastest wheel is within the limit, so the direction is kept and only the speed gives way.
-Without a declared or derivable maximum the module cannot drive and the robot stays still.
+Without a declared or derivable maximum the module cannot drive; the robot stays still and a warning is echoed once a non-zero `drive()` arrives.
+While the wheels are disabled or `locked`, the setpoints are held at zero, so the ramp starts fresh once driving is allowed again instead of jumping to the deflection the stick reached behind the interlock.
 
 While the setpoints are non-zero, the wheels are commanded every cycle, which also feeds their dead man's switch.
 When the ramp reaches standstill, the zero-speed command is repeated for about a second, because a single frame can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
