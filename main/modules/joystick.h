@@ -12,11 +12,11 @@ using Joystick_ptr = std::shared_ptr<Joystick>;
  * `drive(forward, turn)` takes values in -1..1. The module ramps towards them (`ramp`), reduces
  * steering at high forward speed (`turn_reduction`), scales by the wheels' maximum linear and
  * angular speed (declared, or derived from the drivetrain's wheel limit), keeps the fastest wheel
- * within that limit and calls `wheels.speed(...)` every cycle while in motion. The wheels'
- * `enabled`, `locked` and dead man's switch apply unchanged; while they refuse commands the
- * setpoints are held at zero, so the ramp starts fresh once driving is allowed again. When no
- * `drive()` arrives for `timeout` seconds, the target drops to zero and the ramp brings the robot
- * to a stop. At standstill the zero-speed command is repeated for a moment — a single frame can
+ * within that limit and calls `wheels.speed(...)` every cycle while in motion. A released stick
+ * (`drive(0, 0)`, or no `drive()` for `timeout` seconds) stops at once, without the ramp. The
+ * wheels' `enabled`, `locked` and dead man's switch apply unchanged; while they refuse commands
+ * the setpoints are held at zero, so the ramp starts fresh once driving is allowed again. At
+ * standstill the zero-speed command is repeated for a moment — a single frame can
  * be lost on the bus or refused by a drive, which would leave a wheel creeping at its last
  * setpoint — and then the module falls silent, so other hosts (e.g. rosys) and the wheels' own
  * dead man's switch are not disturbed.

@@ -1171,14 +1171,14 @@ The wheels' `enabled`, `locked` and `drive_command_timeout` apply unchanged.
 | ----------------------------- | ---------------------- | --------------- |
 | `joystick = Joystick(wheels)` | Wheels module to drive | a wheels module |
 
-| Properties                | Description                                                              | Data type |
-| ------------------------- | ------------------------------------------------------------------------ | --------- |
-| `joystick.ramp`           | Maximum change of the relative setpoints per second (0 = no ramp)        | `float`   |
-| `joystick.turn_reduction` | Share of the turn rate left at full forward speed (clamped to 0..1)      | `float`   |
-| `joystick.timeout`        | Ramp down to a stop when no `drive()` arrives for this long (s, 0 = off) | `float`   |
-| `joystick.forward`        | Current ramped forward setpoint (-1..1)                                  | `float`   |
-| `joystick.turn`           | Current ramped turn setpoint (-1..1)                                     | `float`   |
-| `joystick.active`         | Whether the setpoints are non-zero, i.e. the robot is in motion          | `bool`    |
+| Properties                | Description                                                         | Data type |
+| ------------------------- | ------------------------------------------------------------------- | --------- |
+| `joystick.ramp`           | Maximum change of the relative setpoints per second (0 = no ramp)   | `float`   |
+| `joystick.turn_reduction` | Share of the turn rate left at full forward speed (clamped to 0..1) | `float`   |
+| `joystick.timeout`        | Stop when no `drive()` arrives for this long (s, 0 = off)           | `float`   |
+| `joystick.forward`        | Current ramped forward setpoint (-1..1)                             | `float`   |
+| `joystick.turn`           | Current ramped turn setpoint (-1..1)                                | `float`   |
+| `joystick.active`         | Whether the setpoints are non-zero, i.e. the robot is in motion     | `bool`    |
 
 | Methods                         | Description                                           | Arguments        |
 | ------------------------------- | ----------------------------------------------------- | ---------------- |
@@ -1186,7 +1186,8 @@ The wheels' `enabled`, `locked` and `drive_command_timeout` apply unchanged.
 
 The wheels module has to live on the same microcontroller; an expander proxy is not accepted.
 
-Every cycle the module moves `forward` and `turn` towards the last `drive()` values by at most `ramp` per second (default 2, i.e. from standstill to full speed in half a second), so the robot starts and brakes gently.
+Every cycle the module moves `forward` and `turn` towards the last `drive()` values by at most `ramp` per second (default 2, i.e. from standstill to full speed in half a second), so the robot starts gently and changes speed and direction smoothly.
+Releasing the stick is the exception: a `drive(0, 0)` stops the robot at once, without the ramp, because whoever lets go of the stick wants it to stand still now.
 Steering is reduced linearly with the forward setpoint: at standstill the full `max_angular_speed` is available, at full forward speed only `turn_reduction` of it (default 0.5), so the robot does not break away in fast curves.
 The wheels then receive `speed(forward * max_linear_speed, turn * turn_factor * max_angular_speed)`, with the two maxima taken from the wheels' properties or, when those are 0, derived from the drivetrain's per-wheel limit.
 A drivetrain that knows its per-wheel limit also gets a saturation guard: driving and turning at once asks the outer wheel for more than either alone, and if the drivetrain cut that wheel off the robot would veer instead of going where the stick points.
@@ -1195,12 +1196,12 @@ Without a declared or derivable maximum the module cannot drive; the robot stays
 While the wheels are disabled or `locked`, the setpoints are held at zero, so the ramp starts fresh once driving is allowed again instead of jumping to the deflection the stick reached behind the interlock.
 
 While the setpoints are non-zero, the wheels are commanded every cycle, which also feeds their dead man's switch.
-When the ramp reaches standstill, the zero-speed command is repeated for about a second, because a single frame can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+At standstill the zero-speed command is repeated for about a second, because a single frame can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
 Then the module falls silent, so other hosts like rosys can drive the wheels in between without the joystick interfering.
 
-`timeout` is the joystick's own dead man's switch against a lost remote control: when no `drive()` arrived for that long, the target drops to zero and the ramp brings the robot to a gentle stop.
+`timeout` is the joystick's own dead man's switch against a lost remote control: when no `drive()` arrived for that long, the stick counts as released and the robot stops at once.
+It is needed because the module feeds the wheels' dead man's switch itself while in motion, so a remote that falls silent with the stick held would otherwise never be noticed.
 The default of 1 s leaves room for the jitter of a Bluetooth remote; with 0.5 s an iPhone sending every 100 ms still produced brief dropouts.
-Keep it shorter than the wheels' `drive_command_timeout`, otherwise the wheels stop hard before the ramp gets a chance.
 The remote should send `drive(0, 0)` when the stick is released; the timeout is the fallback.
 
 ```

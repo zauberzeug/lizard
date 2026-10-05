@@ -41,8 +41,7 @@ void Joystick::step() {
     const double dt = this->last_step_micros ? micros_since(this->last_step_micros) / 1e6 : 0.0;
     this->last_step_micros = micros();
 
-    // Target: the last drive() values, or zero once they went stale. The ramp then brings the robot
-    // to a gentle stop instead of the wheels' dead man's switch stopping it hard.
+    // Target: the last drive() values, or zero once they went stale (the remote fell silent).
     double target_forward = this->target_forward;
     double target_turn = this->target_turn;
     const double timeout = this->properties.at("timeout")->number_value();
@@ -61,13 +60,15 @@ void Joystick::step() {
         this->warned_no_maximum = true;
     }
 
-    // Ramp: limit the change of the normalized setpoints per second; 0 applies the target directly. While the
-    // wheels refuse commands (disabled or locked) the setpoints are held at zero, so the ramp does not sit at full
-    // deflection behind the interlock and jump the robot to full speed the moment it lifts.
+    // Ramp: limit the change of the normalized setpoints per second; 0 applies the target directly. A released
+    // stick (zero target, by drive(0, 0) or the timeout) stops at once instead of ramping down. While the wheels
+    // refuse commands (disabled or locked) the setpoints are held at zero as well, so the ramp does not sit at
+    // full deflection behind the interlock and jump the robot to full speed the moment it lifts.
     const double ramp = this->properties.at("ramp")->number_value();
     double forward = this->properties.at("forward")->number_value();
     double turn = this->properties.at("turn")->number_value();
-    if (!this->wheels->may_drive()) {
+    const bool released = target_forward == 0.0 && target_turn == 0.0;
+    if (released || !this->wheels->may_drive()) {
         forward = 0.0;
         turn = 0.0;
     } else if (ramp > 0.0) {
