@@ -87,7 +87,7 @@ void Serial::initialize_uart() const {
 }
 
 void Serial::apply_rx_full_threshold() const {
-    // An unmuted Serial prints what the ring holds as one line, so its frames must arrive in one piece.
+    // An unmuted Serial prints the ring as one line, so a frame up to the threshold must arrive in one piece.
     uart_set_rx_full_threshold(this->uart_num,
                                this->output_on ? RX_FULL_THRESHOLD_DEFAULT_BYTES : RX_FULL_THRESHOLD_BYTES);
 }
@@ -229,7 +229,8 @@ std::string Serial::get_output() const {
     static char buffer[256];
     int byte;
     int pos = 0;
-    while ((byte = this->read()) >= 0) {
+    // stop once " xx" and the terminator no longer fit; the rest stays in the ring for the next line
+    while (pos + 4 <= static_cast<int>(sizeof(buffer)) && (byte = this->read()) >= 0) {
         pos += csprintf(&buffer[pos], sizeof(buffer) - pos, pos == 0 ? "%02x" : " %02x", byte);
     }
     return buffer;
