@@ -16,6 +16,9 @@ private:
     mutable std::vector<std::string> users;
     mutable std::string pending_lines; // lines after the first of a read that held several; not visible to read() and available()
 
+    /// Set the receive FIFO threshold to what the current reader needs; call after install and after mute/unmute.
+    void apply_rx_full_threshold() const;
+
 public:
     static inline constexpr const char *TYPE = "Serial";
 

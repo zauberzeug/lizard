@@ -83,6 +83,13 @@ void Serial::initialize_uart() const {
     if (install_uart_driver_on_core1(uart_num, RX_BUF_SIZE, TX_BUF_SIZE) != ESP_OK) {
         throw std::runtime_error("could not install the uart driver");
     }
+    this->apply_rx_full_threshold();
+}
+
+void Serial::apply_rx_full_threshold() const {
+    // An unmuted Serial prints what the ring holds as one line, so its frames must arrive in one piece.
+    uart_set_rx_full_threshold(this->uart_num,
+                               this->output_on ? RX_FULL_THRESHOLD_DEFAULT_BYTES : RX_FULL_THRESHOLD_BYTES);
 }
 
 void Serial::enable_line_detection() const {
@@ -239,6 +246,9 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
     } else if (method_name == "read") {
         const std::string output = this->get_output();
         echo("%s %s", this->name.c_str(), output.c_str());
+    } else if (method_name == "mute" || method_name == "unmute") {
+        Module::call(method_name, arguments);
+        this->apply_rx_full_threshold();
     } else {
         Module::call(method_name, arguments);
     }

@@ -501,6 +501,7 @@ The serial module allows communicating with peripherals via the specified connec
 
 This module might be used by other modules that communicate with peripherals via serial.
 You can, however, unmute the serial module to have incoming messages printed to the command line instead of keeping them buffered for other modules.
+An unmuted module prints one line per batch of bytes the hardware hands over, so a sender that pauses between its messages gets one line per message, up to the 85 bytes a line can carry.
 
 A UART number and its pins can be used by one serial module at a time.
 They stay reserved for that module until the core restarts, also after `Expander.disconnect()`.
