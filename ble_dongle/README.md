@@ -47,6 +47,9 @@ The robot's name, the PIN and the baud rate are stored in the dongle's NVS, the 
 After `!dongle baud`, the host has to reopen the port at the new rate.
 It reports its state in lines like `dongle: linked to "robot"`, with a checksum like Lizard's console lines.
 
+Input that waits longer than 0.3 s for the robot is never dropped, but the dongle warns once a second, e.g. `warning: dongle: the robot is 2.1 s behind, 34692 bytes are waiting`, and reports the end of the congestion with `dongle: the robot caught up after 4.3 s`.
+This only happens when the host sends more than the robot processes, e.g. while its main loop is blocked.
+
 ## Limits
 
 - The robot's Bluetooth module serves one central at a time, so the app cannot connect while the dongle is linked.

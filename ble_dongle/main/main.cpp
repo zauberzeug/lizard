@@ -2,6 +2,7 @@
 // the host's bytes go to the robot's BLE console as they arrive, and the robot's console comes back byte for byte.
 #include "driver/uart.h"
 #include "esp_err.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -50,6 +51,8 @@ constexpr size_t MAX_COMMAND = 96;
 constexpr int MIN_FREE_MBUFS = 12;     // keep buffers for the robot's console while writing
 constexpr int32_t WINDOW_BYTES = 6144; // in flight to the robot, below its queue of 8 KB and 64 lines
 constexpr int32_t WINDOW_LINES = 48;
+constexpr int64_t CONGESTION_MS = 300; // input that waits this long for the robot is reported, never dropped
+constexpr int64_t CONGESTION_REPORT_MS = 1000;
 constexpr int32_t SCAN_MS = 10000;
 constexpr int32_t CONNECT_TIMEOUT_MS = 5000;
 constexpr uint32_t RECONNECT_MS = 500;
@@ -479,6 +482,52 @@ void host_task(void *) {
 
 // --- input from the host
 
+// a congestion lasts from the first input that waits for the robot until all of the host's input has gone out
+struct Congestion {
+    int64_t since_ms = 0; // 0: none
+    int64_t last_report_ms = 0;
+    uint32_t last_released = 0; // the robot's progress at the last report, for its processing rate
+    bool reported = false;
+};
+Congestion congestion;
+
+int64_t now_ms() {
+    return esp_timer_get_time() / 1000;
+}
+
+// warns the host once input has waited for a while and then once a second, with the delay the robot is behind
+void report_congestion(size_t waiting) {
+    const int64_t now = now_ms();
+    if (congestion.since_ms == 0) {
+        congestion.since_ms = now;
+        congestion.last_report_ms = now;
+        congestion.last_released = released_bytes;
+        return;
+    }
+    if (now - congestion.since_ms < CONGESTION_MS ||
+        (congestion.reported && now - congestion.last_report_ms < CONGESTION_REPORT_MS)) {
+        return;
+    }
+    const uint32_t released = released_bytes;
+    const double bytes_per_ms = static_cast<double>(released - congestion.last_released) / (now - congestion.last_report_ms);
+    if (bytes_per_ms > 0) {
+        say("warning: dongle: the robot is %.1f s behind, %u bytes are waiting", waiting / bytes_per_ms / 1000,
+            static_cast<unsigned>(waiting));
+    } else { // no progress reported yet, e.g. while the robot works through a long main-loop step
+        say("warning: dongle: %u bytes wait for the robot", static_cast<unsigned>(waiting));
+    }
+    congestion.reported = true;
+    congestion.last_report_ms = now;
+    congestion.last_released = released;
+}
+
+void end_congestion() {
+    if (congestion.reported) {
+        say("dongle: the robot caught up after %.1f s", (now_ms() - congestion.since_ms) / 1000.0);
+    }
+    congestion = Congestion();
+}
+
 // writes host bytes to the robot right away, waiting only while the radio is out of buffers
 // or, with flow control, while the robot has not processed enough of what is in flight
 void forward(const uint8_t *data, size_t len) {
@@ -487,6 +536,7 @@ void forward(const uint8_t *data, size_t len) {
     while (len > 0) {
         if (!linked) {
             dropped_bytes += len;
+            congestion = Congestion(); // the closed link has been reported instead
             return;
         }
         if (new_connection.exchange(false)) {
@@ -513,6 +563,9 @@ void forward(const uint8_t *data, size_t len) {
             }
             chunk = n;
             if (chunk == 0) {
+                size_t buffered = 0;
+                uart_get_buffered_data_len(UART, &buffered);
+                report_congestion(len + buffered);
                 vTaskDelay(1); // until the robot reports progress
                 continue;
             }
@@ -682,6 +735,10 @@ void uart_task(void *) {
             }
             input(buffer, read);
             buffered -= read;
+        }
+        uart_get_buffered_data_len(UART, &buffered);
+        if (congestion.since_ms != 0 && buffered == 0) {
+            end_congestion(); // everything the host sent has gone out to the robot
         }
     }
 }
