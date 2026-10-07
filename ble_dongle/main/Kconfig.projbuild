@@ -23,4 +23,8 @@ config DONGLE_CONSOLE_OUT_UUID
     string "Console output characteristic UUID"
     default "f8f511b2-1401-4e28-82f1-ad753df3b750"
 
+config DONGLE_CONSOLE_FLOW_UUID
+    string "Console flow characteristic UUID"
+    default "d1e7616c-a8ac-4ec8-9c49-3ae32a008a89"
+
 endmenu

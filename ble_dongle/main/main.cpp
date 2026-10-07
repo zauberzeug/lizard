@@ -43,11 +43,13 @@ extern "C" void ble_store_config_init(void);
 namespace {
 
 constexpr uart_port_t UART = UART_NUM_0;
-constexpr int UART_RX_BUFFER = 32768; // absorbs the host's bytes while the radio is briefly saturated
+constexpr int UART_RX_BUFFER = 65536; // holds the host's bytes while the robot or the radio cannot keep up
 constexpr int UART_TX_BUFFER = 8192;
 constexpr size_t MAX_NAME = 29;
 constexpr size_t MAX_COMMAND = 96;
-constexpr int MIN_FREE_MBUFS = 12; // keep buffers for the robot's console while writing
+constexpr int MIN_FREE_MBUFS = 12;     // keep buffers for the robot's console while writing
+constexpr int32_t WINDOW_BYTES = 6144; // in flight to the robot, below its queue of 8 KB and 64 lines
+constexpr int32_t WINDOW_LINES = 48;
 constexpr int32_t SCAN_MS = 10000;
 constexpr int32_t CONNECT_TIMEOUT_MS = 5000;
 constexpr uint32_t RECONNECT_MS = 500;
@@ -58,6 +60,7 @@ constexpr size_t PREFIX_LEN = sizeof(PREFIX) - 1;
 ble_uuid_any_t svc_uuid;
 ble_uuid_any_t console_in_uuid;
 ble_uuid_any_t console_out_uuid;
+ble_uuid_any_t console_flow_uuid;
 QueueHandle_t uart_events;
 
 // --- output to the host: the robot's bytes and own status lines, never mixed within a line
@@ -66,6 +69,7 @@ SemaphoreHandle_t uart_mutex;
 bool line_open = false;    // the robot's current line has not ended yet
 std::string held_messages; // own lines wait for the end of the robot's line
 std::atomic<uint32_t> dropped_bytes{0};
+std::atomic<uint32_t> receive_overflows{0};
 
 void write_robot(const uint8_t *data, size_t len) {
     if (len == 0) {
@@ -182,9 +186,16 @@ uint8_t own_addr_type = 0;
 uint16_t service_start = 0;
 uint16_t service_end = 0;
 uint16_t console_out_handle = 0;
+uint16_t console_flow_handle = 0;
 std::atomic<uint16_t> conn_handle{BLE_HS_CONN_HANDLE_NONE};
 std::atomic<uint16_t> console_in_handle{0};
 std::atomic<bool> linked{false};
+
+// flow control: the robot reports the input bytes and lines it has processed since the connection began
+std::atomic<bool> flow_control{false};
+std::atomic<bool> new_connection{false};
+std::atomic<uint32_t> released_bytes{0};
+std::atomic<uint32_t> released_lines{0};
 
 int on_gap_event(ble_gap_event *event, void *arg);
 
@@ -249,12 +260,29 @@ void drop_connection(uint16_t conn) {
     ble_gap_terminate(conn, BLE_ERR_REM_USER_CONN_TERM);
 }
 
-int on_subscribed(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *, void *) {
+int on_flow_subscribed(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *, void *) {
     if (error->status == 0) {
+        flow_control = true;
         linked = true;
         say("dongle: linked to \"%s\"", target);
     } else {
         drop_connection(conn);
+    }
+    return 0;
+}
+
+int on_subscribed(uint16_t conn, const ble_gatt_error *error, ble_gatt_attr *, void *) {
+    static const uint8_t enable_notifications[2] = {1, 0};
+    if (error->status != 0) {
+        drop_connection(conn);
+    } else if (console_flow_handle != 0) { // robots with flow control tell how much more they can queue
+        if (ble_gattc_write_flat(conn, console_flow_handle + 1, enable_notifications, sizeof(enable_notifications),
+                                 on_flow_subscribed, nullptr) != 0) {
+            drop_connection(conn);
+        }
+    } else {
+        linked = true;
+        say("dongle: linked to \"%s\"", target);
     }
     return 0;
 }
@@ -265,6 +293,8 @@ int on_characteristic(uint16_t conn, const ble_gatt_error *error, const ble_gatt
             console_in_handle = chr->val_handle;
         } else if (ble_uuid_cmp(&chr->uuid.u, &console_out_uuid.u) == 0) {
             console_out_handle = chr->val_handle;
+        } else if (ble_uuid_cmp(&chr->uuid.u, &console_flow_uuid.u) == 0) {
+            console_flow_handle = chr->val_handle;
         }
         return 0;
     }
@@ -349,6 +379,11 @@ int on_gap_event(ble_gap_event *event, void *) {
         conn_handle = event->connect.conn_handle;
         console_in_handle = 0;
         console_out_handle = 0;
+        console_flow_handle = 0;
+        flow_control = false;
+        released_bytes = 0;
+        released_lines = 0;
+        new_connection = true;
         service_start = 0;
         service_end = 0;
         ble_gap_set_data_len(event->connect.conn_handle, 0xFB, 0x0848);
@@ -393,6 +428,12 @@ int on_gap_event(ble_gap_event *event, void *) {
         if (event->notify_rx.attr_handle == console_out_handle) {
             for (const os_mbuf *m = event->notify_rx.om; m != nullptr; m = SLIST_NEXT(m, om_next)) {
                 write_robot(m->om_data, m->om_len);
+            }
+        } else if (event->notify_rx.attr_handle == console_flow_handle) {
+            uint8_t data[8];
+            if (os_mbuf_copydata(event->notify_rx.om, 0, sizeof(data), data) == 0) {
+                released_bytes = data[0] | data[1] << 8 | data[2] << 16 | static_cast<uint32_t>(data[3]) << 24;
+                released_lines = data[4] | data[5] << 8 | data[6] << 16 | static_cast<uint32_t>(data[7]) << 24;
             }
         }
         return 0;
@@ -439,14 +480,43 @@ void host_task(void *) {
 // --- input from the host
 
 // writes host bytes to the robot right away, waiting only while the radio is out of buffers
+// or, with flow control, while the robot has not processed enough of what is in flight
 void forward(const uint8_t *data, size_t len) {
+    static uint32_t sent_bytes = 0;
+    static uint32_t sent_lines = 0;
     while (len > 0) {
         if (!linked) {
             dropped_bytes += len;
             return;
         }
+        if (new_connection.exchange(false)) {
+            sent_bytes = 0;
+            sent_lines = 0;
+        }
         const uint16_t mtu = ble_att_mtu(conn_handle);
-        const size_t chunk = std::min<size_t>(len, mtu > 3 ? mtu - 3 : 20);
+        size_t chunk = std::min<size_t>(len, mtu > 3 ? mtu - 3 : 20);
+        uint32_t lines = 0;
+        if (flow_control) {
+            // signed, because the robot may still release lines of the previous connection
+            const int32_t bytes_in_flight = std::max<int32_t>(0, static_cast<int32_t>(sent_bytes - released_bytes));
+            const int32_t lines_in_flight = std::max<int32_t>(0, static_cast<int32_t>(sent_lines - released_lines));
+            const uint32_t free_bytes = std::max<int32_t>(0, WINDOW_BYTES - bytes_in_flight);
+            const uint32_t free_lines = std::max<int32_t>(0, WINDOW_LINES - lines_in_flight);
+            size_t n = 0;
+            for (; n < std::min<size_t>(chunk, free_bytes); n++) {
+                if (data[n] == '\n') {
+                    if (lines == free_lines) {
+                        break;
+                    }
+                    lines++;
+                }
+            }
+            chunk = n;
+            if (chunk == 0) {
+                vTaskDelay(1); // until the robot reports progress
+                continue;
+            }
+        }
         const int rc = os_msys_num_free() < MIN_FREE_MBUFS ? BLE_HS_ENOMEM
                                                            : ble_gattc_write_no_rsp_flat(conn_handle, console_in_handle, data, chunk);
         if (rc == BLE_HS_ENOMEM) {
@@ -455,6 +525,9 @@ void forward(const uint8_t *data, size_t len) {
         }
         if (rc != 0) {
             dropped_bytes += chunk;
+        } else {
+            sent_bytes += chunk;
+            sent_lines += lines;
         }
         data += chunk;
         len -= chunk;
@@ -534,8 +607,9 @@ void handle_command(char *line) {
         if (name[0] == '\0') {
             say("dongle: no robot, use !dongle link <device name> [pin]");
         } else {
-            say("dongle: %s \"%s\", %lu baud, %lu bytes dropped", linked ? "linked to" : "looking for", name,
-                static_cast<unsigned long>(config_baud), static_cast<unsigned long>(dropped_bytes.load()));
+            say("dongle: %s \"%s\"%s, %lu baud, %lu bytes dropped, %lu receive overflows", linked ? "linked to" : "looking for",
+                name, flow_control ? " with flow control" : "", static_cast<unsigned long>(config_baud),
+                static_cast<unsigned long>(dropped_bytes.load()), static_cast<unsigned long>(receive_overflows.load()));
         }
     } else {
         say("dongle: usage: !dongle [link <device name> [pin] | unlink | baud <rate>]");
@@ -597,12 +671,7 @@ void uart_task(void *) {
             continue;
         }
         if (event.type == UART_FIFO_OVF || event.type == UART_BUFFER_FULL) {
-            size_t lost = 0;
-            uart_get_buffered_data_len(UART, &lost);
-            dropped_bytes += lost;
-            uart_flush_input(UART);
-            xQueueReset(uart_events);
-            continue;
+            receive_overflows++; // only the bytes that did not fit are lost, the buffered ones are still valid
         }
         size_t buffered = 0;
         uart_get_buffered_data_len(UART, &buffered);
@@ -644,6 +713,7 @@ extern "C" void app_main() {
     ble_uuid_from_str(&svc_uuid, CONFIG_DONGLE_SVC_UUID);
     ble_uuid_from_str(&console_in_uuid, CONFIG_DONGLE_CONSOLE_IN_UUID);
     ble_uuid_from_str(&console_out_uuid, CONFIG_DONGLE_CONSOLE_OUT_UUID);
+    ble_uuid_from_str(&console_flow_uuid, CONFIG_DONGLE_CONSOLE_FLOW_UUID);
     ESP_ERROR_CHECK(nimble_port_init());
     ble_store_config_init();
     ble_hs_cfg.reset_cb = on_reset;

@@ -5,7 +5,9 @@ Everything the host writes to the dongle's serial port goes to the robot as it a
 The host talks to the dongle as if it were the robot's UART0, so RoSys, `monitor.py` and `configure.py` work unchanged.
 
 Compared to a dongle that runs Lizard with a [BLE bridge](../docs/module_reference.md#ble-bridge), it does not wait for a 10 ms main loop on the dongle.
-On a bench with two classic ESP32 the console round trip took about 31 ms, compared to 38 ms with the BLE bridge and 16 ms on the robot's own UART0.
+On a bench with two classic ESP32 the console round trip took about 31 ms at 115200 baud and 23 ms at 460800 baud, compared to 38 ms with the BLE bridge and 16 or 9 ms on the robot's own UART0.
+The dongle sends the robot only as much as its console queue can take (the robot reports its progress), and buffers up to 64 KB of the host's input meanwhile.
+So even long bursts at 460800 baud arrive completely, which a cable at that rate does not achieve.
 
 ## Robot
 
@@ -48,6 +50,6 @@ It reports its state in lines like `dongle: linked to "robot"`, with a checksum 
 ## Limits
 
 - The robot's Bluetooth module serves one central at a time, so the app cannot connect while the dongle is linked.
-- The serial port has no flow control: bytes that arrive faster than the link carries (about 50 kB/s) are lost, which cannot happen at 115200 baud.
-- At 460800 baud, the robot itself does not keep up with long bursts of lines at the full line rate, over the dongle as over a cable; regular RoSys traffic stays far below that.
+- The serial port to the host has no flow control: input that piles up beyond the 64 KB buffer because the robot cannot keep up is lost.
+- Robots with an older Lizard offer no flow control, so lines that arrive faster than they process them are dropped.
 - Bytes that arrive while the link is down are dropped; the host notices the broken lines by their checksums.
