@@ -1,6 +1,6 @@
 #pragma once
 
-#include "module.h"
+#include "console_bridge.h"
 #include <atomic>
 #include <cstdint>
 #include <string>
@@ -9,7 +9,7 @@
 class EspNowBridge;
 using EspNowBridge_ptr = std::shared_ptr<EspNowBridge>;
 
-class EspNowBridge : public Module {
+class EspNowBridge : public ConsoleBridge {
 public:
     static inline constexpr const char *TYPE = "EspNowBridge";
     static constexpr size_t MAX_NODE_NAME = 15;
@@ -30,6 +30,9 @@ public:
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 
+protected:
+    void forward(const char *line, size_t len) override;
+
 private:
     struct Peer {
         char node[MAX_NODE_NAME + 1] = "";
@@ -47,8 +50,7 @@ private:
     };
 
     const std::string node;
-    char link_target[MAX_NODE_NAME + 1] = ""; // dongle mode: node that receives every UART0 line
-    char commander[MAX_NODE_NAME + 1] = "";   // node that sent the last command; receives our console
+    char commander[MAX_NODE_NAME + 1] = ""; // node that sent the last command; receives our console
     Peer peers[MAX_PEERS];
     size_t next_peer = 0;
     Reassembly slots[REASSEMBLY_SLOTS];
@@ -56,7 +58,6 @@ private:
     unsigned long last_hello_ms = 0;
 
     void start_radio(uint8_t channel);
-    bool intercept_uart0(const char *line, int len);
     void handle_frame(const Frame &frame);
     void handle_line(const char *from, char kind, const char *line, size_t len);
     void send_line(const char *to, char kind, const char *line, size_t len);

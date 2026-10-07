@@ -27,13 +27,11 @@ static constexpr size_t TX_QUEUE_LENGTH = 24;
 static constexpr unsigned long HELLO_INTERVAL_MS = 1000;
 static const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-static EspNowBridge *active_bridge = nullptr;
 static QueueHandle_t rx_queue = nullptr;
 static QueueHandle_t tx_queue = nullptr;
 static SemaphoreHandle_t tx_done = nullptr;
 static std::atomic<uint32_t> tx_frames{0};
 static std::atomic<uint32_t> lost_frames{0};
-static bool printing_remote_echo = false; // a received console line is printed, never forwarded again
 
 static void recv_handler(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
     if (rx_queue == nullptr || len < (int)HEADER_SIZE || len > (int)EspNowBridge::MAX_FRAME) {
@@ -95,23 +93,18 @@ const std::map<std::string, Variable_ptr> EspNowBridge::get_defaults() {
 }
 
 EspNowBridge::EspNowBridge(const std::string name, const std::string node, uint8_t channel)
-    : Module(name), node(node) {
+    : ConsoleBridge(name), node(node) {
     validate_node_name(node);
-    if (active_bridge != nullptr) {
-        throw std::runtime_error("node \"" + active_bridge->node + "\" already owns the radio");
-    }
     this->properties = EspNowBridge::get_defaults();
     this->get_property("node")->set_string_value(node);
     this->start_radio(channel);
 
-    active_bridge = this;
-    register_echo_callback([](const char *line) {
-        if (printing_remote_echo || active_bridge->commander[0] == '\0') {
-            return;
+    register_echo_callback([this](const char *line) {
+        if (ConsoleBridge::printing_remote() || this->commander[0] == '\0') {
+            return; // a printed remote line is never forwarded again
         }
-        active_bridge->send_line(active_bridge->commander, 'e', line, strlen(line));
+        this->send_line(this->commander, 'e', line, strlen(line));
     });
-    set_uart0_interceptor([](const char *line, int len) { return active_bridge->intercept_uart0(line, len); });
     this->send_hello("*");
 }
 
@@ -156,16 +149,8 @@ void EspNowBridge::start_radio(uint8_t channel) {
     }
 }
 
-bool EspNowBridge::intercept_uart0(const char *line, int len) {
-    if (this->link_target[0] == '\0') {
-        return false;
-    }
-    const size_t name_len = this->name.size();
-    if ((size_t)len > name_len && strncmp(line, this->name.c_str(), name_len) == 0 && line[name_len] == '.') {
-        return false; // the dongle's own methods stay local
-    }
-    this->send_line(this->link_target, 'c', line, len);
-    return true;
+void EspNowBridge::forward(const char *line, size_t len) {
+    this->send_line(this->link_target.c_str(), 'c', line, len);
 }
 
 void EspNowBridge::send_line(const char *to, char kind, const char *line, size_t len) {
@@ -349,13 +334,11 @@ void EspNowBridge::handle_line(const char *from, char kind, const char *line, si
             echo("error: %s", e.what());
         }
     } else if (kind == 'e') {
-        printing_remote_echo = true;
-        if (this->link_target[0] != '\0' && strcmp(from, this->link_target) == 0) {
-            echo("%s", line); // transparent: the linked node's console appears as our own
+        if (this->link_target == from) {
+            print_remote(line); // transparent: the linked node's console appears as our own
         } else {
-            echo("[%s] %s", from, line);
+            print_remote(("[" + std::string(from) + "] " + line).c_str());
         }
-        printing_remote_echo = false;
     }
 }
 
@@ -366,7 +349,7 @@ void EspNowBridge::step() {
     }
     this->get_property("tx")->set_integer_value(tx_frames.load(std::memory_order_relaxed));
     this->get_property("lost")->set_integer_value(lost_frames.load(std::memory_order_relaxed));
-    if (this->link_target[0] != '\0' && this->find_peer(this->link_target) == nullptr) {
+    if (!this->link_target.empty() && this->find_peer(this->link_target.c_str()) == nullptr) {
         const unsigned long now_ms = esp_timer_get_time() / 1000;
         if (now_ms - this->last_hello_ms >= HELLO_INTERVAL_MS) {
             this->send_hello("*"); // keep looking for the linked node until it answers
@@ -388,14 +371,11 @@ void EspNowBridge::call(const std::string method_name, const std::vector<ConstEx
         if (target == this->node) {
             throw std::runtime_error("cannot link to this node itself");
         }
-        strncpy(this->link_target, target.c_str(), MAX_NODE_NAME);
-        this->link_target[MAX_NODE_NAME] = '\0';
-        this->get_property("link")->set_string_value(target);
+        this->set_link(target);
         this->send_hello("*");
     } else if (method_name == "unlink") {
         Module::expect(arguments, 0);
-        this->link_target[0] = '\0';
-        this->get_property("link")->set_string_value("");
+        this->set_link("");
     } else if (method_name == "ping") { // clients measure their round-trip delay with this
         Module::expect(arguments, 0);
         echo("%s pong", this->name.c_str());
