@@ -101,3 +101,25 @@ green.on()
 
 Every line runs on the robot and the robot's console output appears on the dongle's port.
 Only lines starting with the dongle's module name stay on the dongle, e.g. `usb.unlink()` to stop forwarding or `usb.lost` to check the radio.
+
+The same works over Bluetooth Low Energy, which copes better with crowded WLANs.
+The robot's ESP32 offers its console with the Bluetooth module:
+
+```
+!-
+!+bluetooth = Bluetooth("robot")
+!.
+core.restart()
+```
+
+The dongle links to it with a BLE bridge, pass the robot's user PIN as a second argument if it has one:
+
+```
+!-
+!+usb = BleBridge()
+!+usb.link("robot")
+!.
+core.restart()
+```
+
+The dongle prints `usb: linked to "robot"` once it has paired and reconnects by itself after a reset of either ESP32.

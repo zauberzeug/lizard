@@ -21,6 +21,20 @@ config ZZ_BLE_COM_SEND_CHR_UUID
     help
         UUID of the readable characteristic. Replies are always only sent via notifications, so do not perform reads on it.
 
+config ZZ_BLE_COM_CONSOLE_IN_CHR_UUID
+    string
+    prompt "Console input characteristic UUID"
+    default "75cdc16b-212b-4176-8bb8-4222f21cc826"
+    help
+        UUID of the writable characteristic that takes console lines as a byte stream, each line terminated by a newline.
+
+config ZZ_BLE_COM_CONSOLE_OUT_CHR_UUID
+    string
+    prompt "Console output characteristic UUID"
+    default "f8f511b2-1401-4e28-82f1-ad753df3b750"
+    help
+        UUID of the characteristic that streams every console line via notifications to an authenticated central.
+
 config ZZ_BLE_DEV_PIN
     int "Developer PIN"
     range 0 999999

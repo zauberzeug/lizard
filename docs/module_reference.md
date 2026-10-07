@@ -86,6 +86,11 @@ Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a character
 that allows writing Lizard statements like on the command line.
 On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
 
+Two more characteristics carry the console for a [BLE bridge](#ble-bridge) dongle.
+75cdc16b-212b-4176-8bb8-4222f21cc826 takes console lines as a byte stream, each terminated by a newline, and runs them like lines on UART0, including `!+` and `!.` startup editing.
+f8f511b2-1401-4e28-82f1-ad753df3b750 streams every console line via notifications.
+Both only serve an authenticated central, or every central after `bluetooth.deactivate_pin()`.
+
 The Bluetooth module stores up to four devices.
 When a fifth connects, the oldest entry is removed.
 
@@ -141,7 +146,52 @@ usb.link("robot")
 ```
 
 The radio costs about 65 KB of heap and adds roughly 10 ms to a console round trip.
-Only one bridge can exist per node.
+Only one console bridge (ESP-NOW or BLE) can exist per node.
+
+## BLE Bridge
+
+The BLE bridge makes an ESP32 a Bluetooth dongle for a robot's console.
+It connects as a BLE central to the robot's [Bluetooth](#bluetooth) module, which it finds by the advertised device name, and pairs with the robot's PIN.
+After a reset or a radio loss on either side, it reconnects by itself with the stored bond.
+BLE hops between 37 channels instead of sharing one WLAN channel, so it copes better than the [ESP-NOW bridge](#esp-now-bridge) with crowded radio environments like a trade fair.
+
+As with the ESP-NOW bridge, every line the host writes to the dongle's UART0 is forwarded to the robot, and the robot's console comes back unprefixed, so the host talks to the dongle as if it were the robot's UART0.
+Only lines starting with the dongle module's own name (e.g. `usb.unlink()`) stay on the dongle.
+Write the dongle's own startup script before linking, because `!+` and `!.` are forwarded as well.
+Lines the host sends while the link is down are dropped and counted.
+
+| Constructor            | Description                      | Arguments |
+| ---------------------- | -------------------------------- | --------- |
+| `bridge = BleBridge()` | start the radio as a BLE central |           |
+
+| Properties         | Description                                   | Data type |
+| ------------------ | --------------------------------------------- | --------- |
+| `bridge.link`      | device name of the linked robot, `""` if none | `str`     |
+| `bridge.connected` | whether the console link to the robot is up   | `bool`    |
+| `bridge.rx`        | console lines received from the robot         | `int`     |
+| `bridge.tx`        | lines forwarded to the robot                  | `int`     |
+| `bridge.lost`      | lines dropped (link down or queues full)      | `int`     |
+
+| Methods                         | Description                                           | Arguments    |
+| ------------------------------- | ----------------------------------------------------- | ------------ |
+| `bridge.link(device_name)`      | connect to the robot, pairing with the developer PIN  | `str`        |
+| `bridge.link(device_name, pin)` | same, pairing with the robot's user PIN (`set_pin()`) | `str`, `int` |
+| `bridge.unlink()`               | disconnect and stop forwarding                        |              |
+
+Robot and dongle startup scripts (see the [examples](examples.md#use-a-wireless-console-dongle) for the complete setup):
+
+```
+bluetooth = Bluetooth("robot")
+```
+
+```
+usb = BleBridge()
+usb.link("robot")
+```
+
+The robot's Bluetooth module serves one central at a time, so the app cannot connect while the dongle is linked.
+A node cannot run a BLE bridge and a Bluetooth module together.
+The bridge costs about 40 KB of heap on the dongle and about 5 KB on top of the robot's Bluetooth module once a dongle listens, and it adds roughly 25 ms to a console round trip.
 
 ## Serial Bus
 
