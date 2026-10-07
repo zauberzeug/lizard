@@ -43,7 +43,8 @@ extern "C" void ble_store_config_init(void);
 namespace {
 
 constexpr uart_port_t UART = UART_NUM_0;
-constexpr int UART_BUFFER = 8192;
+constexpr int UART_RX_BUFFER = 32768; // absorbs the host's bytes while the radio is briefly saturated
+constexpr int UART_TX_BUFFER = 8192;
 constexpr size_t MAX_NAME = 29;
 constexpr size_t MAX_COMMAND = 96;
 constexpr int MIN_FREE_MBUFS = 12; // keep buffers for the robot's console while writing
@@ -137,6 +138,7 @@ void say(const char *format, ...) {
 SemaphoreHandle_t config_mutex;
 char config_target[MAX_NAME + 1] = "";
 uint32_t config_pin = CONFIG_ZZ_BLE_DEV_PIN;
+uint32_t config_baud = CONFIG_DONGLE_BAUD_RATE;
 
 void load_config() {
     nvs_handle_t handle;
@@ -144,6 +146,7 @@ void load_config() {
         size_t len = sizeof(config_target);
         nvs_get_str(handle, "target", config_target, &len);
         nvs_get_u32(handle, "pin", &config_pin);
+        nvs_get_u32(handle, "baud", &config_baud);
         nvs_close(handle);
     }
 }
@@ -153,6 +156,7 @@ void save_config() {
     if (nvs_open("dongle", NVS_READWRITE, &handle) == ESP_OK) {
         nvs_set_str(handle, "target", config_target);
         nvs_set_u32(handle, "pin", config_pin);
+        nvs_set_u32(handle, "baud", config_baud);
         nvs_commit(handle);
         nvs_close(handle);
     }
@@ -504,6 +508,17 @@ void handle_command(char *line) {
         save_config();
         ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &request_event);
         say("dongle: linking to \"%s\"", name);
+    } else if (strncmp(args, "baud ", 5) == 0) {
+        const long baud = strtol(args + 5, nullptr, 10);
+        if (baud != 115200 && baud != 230400 && baud != 460800 && baud != 921600) {
+            say("dongle: supported baud rates are 115200, 230400, 460800 and 921600");
+            return;
+        }
+        config_baud = baud;
+        save_config();
+        say("dongle: switching to %ld baud", baud); // still at the old rate
+        uart_wait_tx_done(UART, pdMS_TO_TICKS(100));
+        uart_set_baudrate(UART, baud);
     } else if (strcmp(args, "unlink") == 0) {
         xSemaphoreTake(config_mutex, portMAX_DELAY);
         config_target[0] = '\0';
@@ -519,11 +534,11 @@ void handle_command(char *line) {
         if (name[0] == '\0') {
             say("dongle: no robot, use !dongle link <device name> [pin]");
         } else {
-            say("dongle: %s \"%s\", %lu bytes dropped", linked ? "linked to" : "looking for", name,
-                static_cast<unsigned long>(dropped_bytes.load()));
+            say("dongle: %s \"%s\", %lu baud, %lu bytes dropped", linked ? "linked to" : "looking for", name,
+                static_cast<unsigned long>(config_baud), static_cast<unsigned long>(dropped_bytes.load()));
         }
     } else {
-        say("dongle: usage: !dongle [link <device name> [pin] | unlink]");
+        say("dongle: usage: !dongle [link <device name> [pin] | unlink | baud <rate>]");
     }
 }
 
@@ -582,6 +597,9 @@ void uart_task(void *) {
             continue;
         }
         if (event.type == UART_FIFO_OVF || event.type == UART_BUFFER_FULL) {
+            size_t lost = 0;
+            uart_get_buffered_data_len(UART, &lost);
+            dropped_bytes += lost;
             uart_flush_input(UART);
             xQueueReset(uart_events);
             continue;
@@ -605,23 +623,23 @@ extern "C" void app_main() {
     uart_mutex = xSemaphoreCreateMutex();
     config_mutex = xSemaphoreCreateMutex();
 
-    uart_config_t uart_config = {};
-    uart_config.baud_rate = CONFIG_DONGLE_BAUD_RATE;
-    uart_config.data_bits = UART_DATA_8_BITS;
-    uart_config.parity = UART_PARITY_DISABLE;
-    uart_config.stop_bits = UART_STOP_BITS_1;
-    uart_config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
-    uart_config.source_clk = UART_SCLK_DEFAULT;
-    ESP_ERROR_CHECK(uart_driver_install(UART, UART_BUFFER, UART_BUFFER, 32, &uart_events, 0));
-    ESP_ERROR_CHECK(uart_param_config(UART, &uart_config));
-    uart_set_rx_timeout(UART, 2); // hand over bytes after 2 idle symbols instead of 10
-
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
     load_config();
+
+    uart_config_t uart_config = {};
+    uart_config.baud_rate = config_baud;
+    uart_config.data_bits = UART_DATA_8_BITS;
+    uart_config.parity = UART_PARITY_DISABLE;
+    uart_config.stop_bits = UART_STOP_BITS_1;
+    uart_config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
+    uart_config.source_clk = UART_SCLK_DEFAULT;
+    ESP_ERROR_CHECK(uart_driver_install(UART, UART_RX_BUFFER, UART_TX_BUFFER, 32, &uart_events, 0));
+    ESP_ERROR_CHECK(uart_param_config(UART, &uart_config));
+    uart_set_rx_timeout(UART, 2); // hand over bytes after 2 idle symbols instead of 10
 
     ble_uuid_from_str(&svc_uuid, CONFIG_DONGLE_SVC_UUID);
     ble_uuid_from_str(&console_in_uuid, CONFIG_DONGLE_CONSOLE_IN_UUID);

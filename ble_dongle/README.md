@@ -26,7 +26,7 @@ idf.py -p /dev/ttyUSB0 flash
 ```
 
 To pair with Lizard's developer PIN, build with `SDKCONFIG_DEFAULTS="sdkconfig.defaults;../sdkconfig.defaults.secret"`; otherwise pass the robot's PIN to `!dongle link`.
-The host's baud rate is fixed at build time (`CONFIG_DONGLE_BAUD_RATE`, 115200 by default).
+The serial port starts at 115200 baud (`CONFIG_DONGLE_BAUD_RATE`) until `!dongle baud` stores another rate.
 
 ## Link to a robot
 
@@ -38,13 +38,16 @@ Lines starting with `!dongle` stay on the dongle, every other byte goes to the r
 | `!dongle link robot 123456`     | same, with the robot's user PIN                                 |
 | `!dongle link "robot 2" 123456` | a device name with spaces                                       |
 | `!dongle unlink`                | stop linking                                                    |
-| `!dongle`                       | show the link and the bytes dropped so far                      |
+| `!dongle baud 460800`           | switch the serial port to 115200, 230400, 460800 or 921600 baud |
+| `!dongle`                       | show the link, the baud rate and the bytes dropped so far       |
 
-The robot's name and PIN are stored in the dongle's NVS, the bond after the first pairing, so the dongle links again by itself after every restart.
+The robot's name, the PIN and the baud rate are stored in the dongle's NVS, the bond after the first pairing, so the dongle links again by itself after every restart.
+After `!dongle baud`, the host has to reopen the port at the new rate.
 It reports its state in lines like `dongle: linked to "robot"`, with a checksum like Lizard's console lines.
 
 ## Limits
 
 - The robot's Bluetooth module serves one central at a time, so the app cannot connect while the dongle is linked.
 - The serial port has no flow control: bytes that arrive faster than the link carries (about 50 kB/s) are lost, which cannot happen at 115200 baud.
+- At 460800 baud, the robot itself does not keep up with long bursts of lines at the full line rate, over the dongle as over a cable; regular RoSys traffic stays far below that.
 - Bytes that arrive while the link is down are dropped; the host notices the broken lines by their checksums.
