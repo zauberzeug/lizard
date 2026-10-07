@@ -28,7 +28,6 @@ static constexpr size_t CONSOLE_QUEUE_LENGTH = 64;
 static constexpr size_t OUTPUT_QUEUE_LENGTH = 64;
 static constexpr size_t CONSOLE_QUEUE_BYTES = 8192; // both console directions, so that a flood cannot exhaust the heap
 static std::atomic<uint32_t> dropped_lines{0};
-static std::atomic<uint32_t> dropped_console_lines{0};
 static std::atomic<uint32_t> dropped_output_lines{0};
 
 Bluetooth::Bluetooth(const std::string name, const std::string device_name, MessageHandler message_handler)
@@ -40,12 +39,8 @@ Bluetooth::Bluetooth(const std::string name, const std::string device_name, Mess
         throw std::runtime_error("failed to create bluetooth line queue");
     }
     this->console_queue = std::make_unique<LineQueue>(CONSOLE_QUEUE_LENGTH, CONSOLE_QUEUE_BYTES);
-    ZZ::BleCommand::set_console_callback([queue = this->console_queue.get()](std::unique_ptr<char[]> line) {
-        const size_t len = strlen(line.get());
-        if (!queue->push(std::move(line), len)) {
-            dropped_console_lines.fetch_add(1, std::memory_order_relaxed);
-        }
-    });
+    ZZ::BleCommand::set_console_callback(
+        [queue = this->console_queue.get()](const char *line, size_t len) { return queue->push_copy(line, len); });
     // NOTE: This callback runs on the NimBLE host task, whose stack is far too small for the parser.
     // It only queues the line (without blocking or echoing); step() parses it on the main task.
     ZZ::BleCommand::init(device_name, [queue = this->line_queue](std::unique_ptr<char[]> line) {
@@ -100,11 +95,13 @@ void Bluetooth::step() {
             echo("error: the bluetooth console is not available: %s", e.what());
         }
     }
-    if (const uint32_t dropped = dropped_console_lines.exchange(0, std::memory_order_relaxed)) {
+    if (const uint32_t dropped = ZZ::BleCommand::take_dropped_console_lines()) {
         echo("warning: dropped %lu bluetooth console lines because the line queue was full", static_cast<unsigned long>(dropped));
     }
-    while (const std::unique_ptr<char[]> line = this->console_queue->pop()) {
+    size_t raw_len;
+    while (const std::unique_ptr<char[]> line = this->console_queue->pop(0, &raw_len)) {
         this->last_message_millis = millis();
+        ZZ::BleCommand::release_console_line(raw_len);
         bool checksum_ok = true;
         const int len = check(line.get(), strlen(line.get()), &checksum_ok);
         if (!checksum_ok) {
@@ -117,6 +114,7 @@ void Bluetooth::step() {
             echo("error processing bluetooth console: %s", e.what());
         }
     }
+    ZZ::BleCommand::send_console_flow(); // lets a flow-controlled sender refill the queue
     // a console that outputs more than the link carries drops lines in every step, so this is reported once a second
     this->dropped_output += dropped_output_lines.exchange(0, std::memory_order_relaxed);
     if (this->dropped_output > 0 && millis_since(this->last_drop_warning_millis) >= 1000) {

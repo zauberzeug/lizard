@@ -67,6 +67,7 @@ static constexpr ble_uuid128_t cmd_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM
 static constexpr ble_uuid128_t send_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_SEND_CHR_UUID);
 static constexpr ble_uuid128_t console_in_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CONSOLE_IN_CHR_UUID);
 static constexpr ble_uuid128_t console_out_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CONSOLE_OUT_CHR_UUID);
+static constexpr ble_uuid128_t console_flow_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CONSOLE_FLOW_CHR_UUID);
 
 static CommandCallback client_callback{};
 static std::array<char, MAX_DEVICE_NAME_LEN> ble_device_name{};
@@ -80,12 +81,21 @@ static std::atomic<bool> app_active{false};
 static TimerHandle_t idle_timer = nullptr;
 static const char *host_owner = nullptr;
 
-static CommandCallback console_callback{};
+static ConsoleCallback console_callback{};
+static std::atomic<uint32_t> dropped_console_lines{0};
 static uint16_t console_out_val_handle = 0;
 static std::atomic<bool> console_subscribed{false};
 static std::unique_ptr<char[]> console_rx; // console input up to its line end, allocated on first use
 static size_t console_rx_len = 0;
+static size_t console_rx_raw = 0; // bytes of the current line so far, also the discarded ones
 static bool console_rx_discarding = false;
+// processed input since the connection began, counted in bytes including each line's '\n' and in lines
+static uint16_t console_flow_val_handle = 0;
+static std::atomic<bool> console_flow_subscribed{false};
+static std::atomic<uint32_t> console_released_bytes{0};
+static std::atomic<uint32_t> console_released_lines{0};
+static uint32_t console_flow_sent_bytes = 0;
+static uint32_t console_flow_sent_lines = 0;
 
 // 16-bit Alert Notification Service UUID for app filtering
 static const ble_uuid16_t alert_uuid = BLE_UUID16_INIT(0x1811);
@@ -154,6 +164,17 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
                 .val_handle = &console_out_val_handle,
                 .cpfd = NULL,
             },
+            {
+                // Console flow: processed input bytes and lines as two little-endian 32-bit counters - notify only
+                .uuid = &console_flow_chr_uuid.u,
+                .access_cb = on_chr_access,
+                .arg = NULL,
+                .descriptors = NULL,
+                .flags = BLE_GATT_CHR_F_NOTIFY,
+                .min_key_size = 0,
+                .val_handle = &console_flow_val_handle,
+                .cpfd = NULL,
+            },
             {}},
     },
     {}};
@@ -199,6 +220,7 @@ static void receive_console(const struct os_mbuf *om) {
         for (uint16_t i = 0; i < m->om_len; i++) {
             const char c = m->om_data[i];
             if (c != '\n') {
+                console_rx_raw++;
                 if (console_rx_len + 1 < CONSOLE_LINE_SIZE) {
                     console_rx[console_rx_len++] = c;
                 } else if (!console_rx_discarding) {
@@ -207,19 +229,16 @@ static void receive_console(const struct os_mbuf *om) {
                 }
                 continue;
             }
-            size_t len = console_rx_len;
-            if (len > 0 && console_rx[len - 1] == '\r') {
-                len--;
-            }
-            if (!console_rx_discarding && console_callback) {
-                std::unique_ptr<char[]> line(new (std::nothrow) char[len + 1]);
-                if (line) {
-                    memcpy(line.get(), console_rx.get(), len);
-                    line[len] = '\0';
-                    console_callback(std::move(line));
+            // the line keeps a trailing '\r', so that its release accounts for every byte; check() strips it later
+            if (console_rx_discarding || !console_callback || !console_callback(console_rx.get(), console_rx_len)) {
+                if (!console_rx_discarding) {
+                    dropped_console_lines.fetch_add(1, std::memory_order_relaxed);
                 }
+                console_released_bytes.fetch_add(console_rx_raw + 1, std::memory_order_relaxed);
+                console_released_lines.fetch_add(1, std::memory_order_relaxed);
             }
             console_rx_len = 0;
+            console_rx_raw = 0;
             console_rx_discarding = false;
         }
     }
@@ -263,6 +282,8 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
     case BLE_GAP_EVENT_CONNECT:
         if (event->connect.status == 0) {
             current_con = event->connect.conn_handle;
+            console_released_bytes = 0;
+            console_released_lines = 0;
 
             ble_gap_set_data_len(event->connect.conn_handle, TX_DATA_LENGTH, TX_DATA_TIME);
 
@@ -303,7 +324,9 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
             authenticated = false;
             app_active = false;
             console_subscribed = false;
+            console_flow_subscribed = false;
             console_rx_len = 0;
+            console_rx_raw = 0;
             console_rx_discarding = false;
             if (idle_timer) {
                 xTimerStop(idle_timer, 0);
@@ -318,6 +341,10 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
+        if (event->subscribe.attr_handle == console_flow_val_handle) {
+            console_flow_subscribed = event->subscribe.cur_notify;
+            return 0;
+        }
         if (event->subscribe.attr_handle == console_out_val_handle) {
             console_subscribed = event->subscribe.cur_notify;
             if (event->subscribe.cur_notify && is_authorized(event->subscribe.conn_handle)) {
@@ -448,7 +475,8 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
         return 0;
     }
 
-    if (ble_uuid_cmp(ctxt->chr->uuid, &send_chr_uuid.u) == 0 || ble_uuid_cmp(ctxt->chr->uuid, &console_out_chr_uuid.u) == 0) {
+    if (ble_uuid_cmp(ctxt->chr->uuid, &send_chr_uuid.u) == 0 || ble_uuid_cmp(ctxt->chr->uuid, &console_out_chr_uuid.u) == 0 ||
+        ble_uuid_cmp(ctxt->chr->uuid, &console_flow_chr_uuid.u) == 0) {
         return 0;
     }
 
@@ -558,8 +586,43 @@ void finalize() {
     running = false;
 }
 
-void set_console_callback(CommandCallback on_console_line) {
+void set_console_callback(ConsoleCallback on_console_line) {
     console_callback = on_console_line;
+}
+
+void release_console_line(size_t len) {
+    console_released_bytes.fetch_add(len + 1, std::memory_order_relaxed);
+    console_released_lines.fetch_add(1, std::memory_order_relaxed);
+}
+
+void send_console_flow() {
+    if (!console_flow_subscribed || current_con == BLE_HS_CONN_HANDLE_NONE) {
+        return;
+    }
+    const uint32_t bytes = console_released_bytes;
+    const uint32_t lines = console_released_lines;
+    if (bytes == console_flow_sent_bytes && lines == console_flow_sent_lines) {
+        return;
+    }
+    const uint8_t data[8] = {
+        static_cast<uint8_t>(bytes),
+        static_cast<uint8_t>(bytes >> 8),
+        static_cast<uint8_t>(bytes >> 16),
+        static_cast<uint8_t>(bytes >> 24),
+        static_cast<uint8_t>(lines),
+        static_cast<uint8_t>(lines >> 8),
+        static_cast<uint8_t>(lines >> 16),
+        static_cast<uint8_t>(lines >> 24),
+    };
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(data, sizeof(data));
+    if (om && ble_gattc_notify_custom(current_con, console_flow_val_handle, om) == 0) {
+        console_flow_sent_bytes = bytes; // otherwise the next step tries again
+        console_flow_sent_lines = lines;
+    }
+}
+
+uint32_t take_dropped_console_lines() {
+    return dropped_console_lines.exchange(0, std::memory_order_relaxed);
 }
 
 bool console_ready() {

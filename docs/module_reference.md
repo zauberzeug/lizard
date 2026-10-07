@@ -86,13 +86,14 @@ Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a character
 that allows writing Lizard statements like on the command line.
 On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
 
-Two more characteristics carry the console for a [BLE bridge](#ble-bridge) dongle.
+Three more characteristics carry the console for a [BLE bridge](#ble-bridge) dongle.
 75cdc16b-212b-4176-8bb8-4222f21cc826 takes console lines as a byte stream, each terminated by a newline, and runs them like lines on UART0, including `!+` and `!.` startup editing.
 f8f511b2-1401-4e28-82f1-ad753df3b750 streams every console line via notifications.
 Both carry the lines like UART0 does: output lines end with their `@xx` checksum, and input lines may carry one, which is checked.
-Both only serve an authenticated central, or every central after `bluetooth.deactivate_pin()`.
+d1e7616c-a8ac-4ec8-9c49-3ae32a008a89 notifies how many input bytes (each line with its newline) and lines the robot has processed since the connection began, as two little-endian 32-bit counters.
+A client that keeps less than 8 KB and 64 lines of its input unprocessed never loses a line; without this flow control, lines that arrive faster than the robot processes them are dropped.
+The characteristics only serve an authenticated central, or every central after `bluetooth.deactivate_pin()`.
 A laptop can use them directly as well, e.g. with Python's `bleak`; the robot asks such a central for a connection interval of 7.5 to 15 ms.
-Lines written without response are not flow-controlled, so bursts of more than about 50 kB/s lose lines; uploads should use writes with response or pace their writes.
 
 The Bluetooth module stores up to four devices.
 When a fifth connects, the oldest entry is removed.

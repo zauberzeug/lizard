@@ -34,11 +34,14 @@ bool LineQueue::push_copy(const char *data, size_t len, const char *end) {
     return this->push(std::move(line), len + end_len);
 }
 
-std::unique_ptr<char[]> LineQueue::pop(TickType_t wait) {
+std::unique_ptr<char[]> LineQueue::pop(TickType_t wait, size_t *len) {
     Entry entry;
     if (xQueueReceive(this->queue, &entry, wait) != pdTRUE) {
         return nullptr;
     }
     this->bytes.fetch_sub(entry.len);
+    if (len != nullptr) {
+        *len = entry.len;
+    }
     return std::unique_ptr<char[]>(entry.line);
 }

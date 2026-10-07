@@ -15,8 +15,8 @@ public:
     bool push(std::unique_ptr<char[]> line, size_t len);
     // queues a copy of `len` bytes followed by `end`; false if the queue is full
     bool push_copy(const char *data, size_t len, const char *end = "");
-    // the next line or nullptr after `wait` ticks
-    std::unique_ptr<char[]> pop(TickType_t wait = 0);
+    // the next line or nullptr after `wait` ticks; `len` receives its length
+    std::unique_ptr<char[]> pop(TickType_t wait = 0, size_t *len = nullptr);
 
 private:
     struct Entry {

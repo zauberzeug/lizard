@@ -35,6 +35,13 @@ config ZZ_BLE_COM_CONSOLE_OUT_CHR_UUID
     help
         UUID of the characteristic that streams every console line via notifications to an authenticated central.
 
+config ZZ_BLE_COM_CONSOLE_FLOW_CHR_UUID
+    string
+    prompt "Console flow characteristic UUID"
+    default "d1e7616c-a8ac-4ec8-9c49-3ae32a008a89"
+    help
+        UUID of the characteristic that notifies how many console input bytes and lines the robot has processed, so that a sender can keep its writes within the robot's queue.
+
 config ZZ_BLE_DEV_PIN
     int "Developer PIN"
     range 0 999999
