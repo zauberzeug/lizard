@@ -68,27 +68,29 @@ led.on()
 ## Use a wireless console dongle
 
 Two ESP32 run the same Lizard firmware, they only differ in their startup scripts.
-The robot's ESP32 joins the ESP-NOW radio as node "robot":
+The robot's ESP32 offers its console with the Bluetooth module:
 
 ```
 !-
-!+robot = EspNowBridge("robot")
+!+bluetooth = Bluetooth("robot")
 !.
 core.restart()
 ```
 
-The second ESP32 is the dongle on the host's USB port; it joins as node "dongle" and links to the robot.
-Write its startup script before linking, because a linked dongle forwards `!+` and `!.` to the robot:
+The second ESP32 is the dongle on the host's USB port; it links to the robot with a BLE bridge.
+Pass the robot's user PIN as a second argument if it has one.
+Write the dongle's startup script before linking, because a linked dongle forwards `!+` and `!.` to the robot:
 
 ```
 !-
-!+usb = EspNowBridge("dongle")
+!+usb = BleBridge()
 !+usb.link("robot")
 !.
 core.restart()
 ```
 
 Both scripts can also be uploaded with `configure.py`, e.g. `./configure.py dongle.liz /dev/ttyUSB1`.
+The dongle prints `usb: linked to "robot"` once it has paired and reconnects by itself after a reset of either ESP32.
 From now on the host talks to the dongle's serial port as if it were the robot's UART0, e.g. with `./monitor.py /dev/ttyUSB1`, `./configure.py`, or RoSys pointed at that device:
 
 ```
@@ -100,26 +102,4 @@ green.on()
 ```
 
 Every line runs on the robot and the robot's console output appears on the dongle's port.
-Only lines starting with the dongle's module name stay on the dongle, e.g. `usb.unlink()` to stop forwarding or `usb.lost` to check the radio.
-
-The same works over Bluetooth Low Energy, which copes better with crowded WLANs.
-The robot's ESP32 offers its console with the Bluetooth module:
-
-```
-!-
-!+bluetooth = Bluetooth("robot")
-!.
-core.restart()
-```
-
-The dongle links to it with a BLE bridge, pass the robot's user PIN as a second argument if it has one:
-
-```
-!-
-!+usb = BleBridge()
-!+usb.link("robot")
-!.
-core.restart()
-```
-
-The dongle prints `usb: linked to "robot"` once it has paired and reconnects by itself after a reset of either ESP32.
+Only lines starting with the dongle's module name stay on the dongle, e.g. `usb.unlink()` to stop forwarding or `usb.lost` to check the link.

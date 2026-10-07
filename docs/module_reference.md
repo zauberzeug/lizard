@@ -102,62 +102,14 @@ Unlike `core.last_message_age`, which any input channel resets, `bluetooth.last_
 Together with `connected`, it lets rules and the host tell a silent or disconnected app apart from a host that keeps talking on UART0.
 Neither property stops anything by itself; use the wheels' `drive_command_timeout` for that (see [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels)).
 
-## ESP-NOW Bridge
-
-The ESP-NOW bridge carries the Lizard console over ESP-NOW: connectionless 802.11 frames on one fixed WLAN channel, without access point or pairing.
-Every node runs the same firmware and declares the module with a unique node name; all nodes must share the channel.
-A node that receives a command from a peer forwards its whole console output to that peer from then on, like a client on UART0.
-Without a link, remote console lines are printed as `[<node>] <line>`.
-
-A dongle is an ESP32 on the host's USB port whose bridge is linked to a robot node.
-Every line the host writes to the dongle's UART0 is forwarded to the robot, and the robot's console comes back unprefixed, so the host talks to the dongle as if it were the robot's UART0.
-Only lines starting with the dongle module's own name (e.g. `usb.unlink()`) stay on the dongle.
-Write the dongle's own startup script before linking, because `!+` and `!.` are forwarded as well.
-Lines are split into frames of at most 250 bytes and reassembled on the receiver; a lost fragment drops the line.
-Peers learn each other's address from received frames and then send acknowledged unicast frames, unknown peers are reached by broadcast.
-
-| Constructor                            | Description                            | Arguments    |
-| -------------------------------------- | -------------------------------------- | ------------ |
-| `bridge = EspNowBridge(node)`          | join the radio on channel 1            | `str`        |
-| `bridge = EspNowBridge(node, channel)` | same, with an explicit channel (1..13) | `str`, `int` |
-
-| Properties    | Description                                       | Data type |
-| ------------- | ------------------------------------------------- | --------- |
-| `bridge.node` | this node's name                                  | `str`     |
-| `bridge.link` | node that receives every UART0 line, `""` if none | `str`     |
-| `bridge.rx`   | frames received for this node                     | `int`     |
-| `bridge.tx`   | frames sent                                       | `int`     |
-| `bridge.lost` | frames the radio could not deliver                | `int`     |
-
-| Methods                     | Description                                                    | Arguments    |
-| --------------------------- | -------------------------------------------------------------- | ------------ |
-| `bridge.send(target, line)` | run `line` on node `target` (`"*"` = every other node)         | `str`, `str` |
-| `bridge.link(target)`       | forward every UART0 line to `target`, print its console as own | `str`        |
-| `bridge.unlink()`           | stop forwarding                                                |              |
-| `bridge.ping()`             | echo `<name> pong` (round-trip probe)                          |              |
-
-Robot and dongle startup scripts for a transparent console (see the [examples](examples.md#use-a-wireless-console-dongle) for the complete setup):
-
-```
-robot = EspNowBridge("robot")
-```
-
-```
-usb = EspNowBridge("dongle")
-usb.link("robot")
-```
-
-The radio costs about 65 KB of heap and adds roughly 10 ms to a console round trip.
-Only one console bridge (ESP-NOW or BLE) can exist per node.
-
 ## BLE Bridge
 
 The BLE bridge makes an ESP32 a Bluetooth dongle for a robot's console.
 It connects as a BLE central to the robot's [Bluetooth](#bluetooth) module, which it finds by the advertised device name, and pairs with the robot's PIN.
 After a reset or a radio loss on either side, it reconnects by itself with the stored bond.
-BLE hops between 37 channels instead of sharing one WLAN channel, so it copes better than the [ESP-NOW bridge](#esp-now-bridge) with crowded radio environments like a trade fair.
+BLE hops between 37 channels, which helps in crowded radio environments like a trade fair.
 
-As with the ESP-NOW bridge, every line the host writes to the dongle's UART0 is forwarded to the robot, and the robot's console comes back unprefixed, so the host talks to the dongle as if it were the robot's UART0.
+Every line the host writes to the dongle's UART0 is forwarded to the robot, and the robot's console comes back unprefixed, so the host talks to the dongle as if it were the robot's UART0.
 Only lines starting with the dongle module's own name (e.g. `usb.unlink()`) stay on the dongle.
 Write the dongle's own startup script before linking, because `!+` and `!.` are forwarded as well.
 Lines the host sends while the link is down are dropped and counted.
@@ -193,7 +145,7 @@ usb.link("robot")
 ```
 
 The robot's Bluetooth module serves one central at a time, so the app cannot connect while the dongle is linked.
-A node cannot run a BLE bridge and a Bluetooth module together.
+Only one BLE bridge can exist per node, and a node cannot run a BLE bridge and a Bluetooth module together.
 The bridge costs about 40 KB of heap on the dongle and about 5 KB on top of the robot's Bluetooth module once a dongle listens, plus up to 16 KB of queued lines under load.
 It adds roughly 25 ms to a console round trip, mostly because the robot and the dongle each handle the lines in their 10 ms main loop.
 
