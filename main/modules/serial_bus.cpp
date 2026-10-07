@@ -58,6 +58,14 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->properties = SerialBus::get_defaults();
     this->serial->enable_line_detection();
 
+    // everything that can throw comes before the task exists: an exception from a constructor unwinds without running
+    // the destructor, so a task created earlier would keep dereferencing a destroyed bus
+    this->echo_callback_handle = register_echo_callback([this](const char *line) { this->handle_echo(line); });
+    this->otb_session.bus_name = this->name.c_str();
+    this->otb_session.send_fn = [this](uint8_t receiver, const char *data, size_t len) {
+        this->enqueue_outgoing_message(receiver, data, len);
+    };
+
     this->config_queue = xQueueCreate(1, sizeof(Config));
     this->offset_queue = xQueueCreate(OFFSET_QUEUE_LENGTH, sizeof(OffsetUpdate));
     this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage));
@@ -72,16 +80,27 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
                 vQueueDelete(queue);
             }
         }
+        unregister_echo_callback(this->echo_callback_handle);
         throw std::runtime_error(queues_created ? "failed to create serial bus communication task"
                                                 : "failed to create serial bus queues");
     }
+    // claim last: a claim is never released, so it must not outlive a constructor that throws
+    this->serial->claim(name);
+}
 
-    register_echo_callback([this](const char *line) { this->handle_echo(line); });
-
-    this->otb_session.bus_name = this->name.c_str();
-    this->otb_session.send_fn = [this](uint8_t receiver, const char *data, size_t len) {
-        this->enqueue_outgoing_message(receiver, data, len);
-    };
+// only reached when a constructed bus is dropped again, e.g. because Global::add_module() throws; the task must be gone
+// before the queues and `this` are
+SerialBus::~SerialBus() {
+    unregister_echo_callback(this->echo_callback_handle);
+    this->stop_requested = true;
+    for (int i = 0; i < 100 && !this->stopped; ++i) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    // the task parks itself once it has left its loop, so this is the only delete and cannot collide with a self-delete
+    vTaskDelete(this->communication_task);
+    for (const QueueHandle_t queue : {this->config_queue, this->offset_queue, this->outbound_queue, this->inbound_queue}) {
+        vQueueDelete(queue);
+    }
 }
 
 void SerialBus::step() {
@@ -175,7 +194,7 @@ void SerialBus::rebuild_offset_properties() {
     // keep reading NaN instead of freezing their last value.
     for (auto &[name, property] : this->properties) {
         if (starts_with(name, "offset_")) {
-            property->number_value = NAN;
+            property->set_number_value(NAN);
         }
     }
     const auto find_or_create = [this](const std::string &name) {
@@ -199,16 +218,16 @@ void SerialBus::apply_offset_update(const OffsetUpdate &update) {
     }
     for (const OffsetProperties &properties : this->offset_properties) {
         if (properties.peer_id == update.peer_id) {
-            properties.offset->number_value = update.valid ? update.offset_us / 1000.0 : NAN;
-            properties.accuracy->number_value = update.valid ? update.accuracy_us / 1000.0 : NAN;
+            properties.offset->set_number_value(update.valid ? update.offset_us / 1000.0 : NAN);
+            properties.accuracy->set_number_value(update.valid ? update.accuracy_us / 1000.0 : NAN);
             return;
         }
     }
 }
 
-[[noreturn]] void SerialBus::communication_loop(void *param) {
+void SerialBus::communication_loop(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
-    while (true) {
+    while (!bus->stop_requested) {
         if (xQueueReceive(bus->config_queue, &bus->received_config, 0) == pdTRUE) {
             bus->adopt_config(bus->received_config);
         }
@@ -258,6 +277,10 @@ void SerialBus::apply_offset_update(const OffsetUpdate &update) {
             }
         }
         vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    bus->stopped = true;
+    while (true) {
+        vTaskSuspend(nullptr); // parked until the destructor deletes the task
     }
 }
 

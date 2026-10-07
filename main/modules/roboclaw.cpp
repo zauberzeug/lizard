@@ -24,13 +24,14 @@ const std::map<std::string, Variable_ptr> RoboClaw::get_defaults() {
 RoboClaw::RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address)
     : Module(name), address(address), serial(serial) {
     this->properties = RoboClaw::get_defaults();
+    this->serial->claim(name);
 }
 
 void RoboClaw::step() {
     if (millis_since(this->last_temp_reading) > 1000) {
         uint16_t temp;
         this->ReadTemp(temp);
-        this->properties["temperature"]->number_value = temp / 10.0;
+        this->properties["temperature"]->set_number_value(temp / 10.0);
         this->last_temp_reading = millis();
     }
     Module::step();

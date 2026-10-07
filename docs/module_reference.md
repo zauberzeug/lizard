@@ -68,6 +68,11 @@ Clients uploading many lines at once should therefore pace their writes or wait 
 | ------------------------------------ | -------------------------------------------------- | --------- |
 | `bluetooth = Bluetooth(device_name)` | initialize bluetooth with advertised `device_name` | `str`     |
 
+| Properties                   | Description                                              | Data type |
+| ---------------------------- | -------------------------------------------------------- | --------- |
+| `bluetooth.connected`        | Whether a device is currently connected                  | `bool`    |
+| `bluetooth.last_message_age` | Time since the last line was received via Bluetooth (ms) | `int`     |
+
 | Methods                      | Description                                             | Arguments |
 | ---------------------------- | ------------------------------------------------------- | --------- |
 | `bluetooth.send(data)`       | send `data` via notification                            | `str`     |
@@ -85,6 +90,10 @@ The Bluetooth module stores up to four devices.
 When a fifth connects, the oldest entry is removed.
 
 To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
+
+Unlike `core.last_message_age`, which any input channel resets, `bluetooth.last_message_age` only counts lines received via Bluetooth.
+Together with `connected`, it lets rules and the host tell a silent or disconnected app apart from a host that keeps talking on UART0.
+Neither property stops anything by itself; use the wheels' `drive_command_timeout` for that (see [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels)).
 
 ## ESP-NOW Bridge
 
@@ -381,6 +390,10 @@ The following bits are available:
 - 0x0080: gravity
 - 0x0100: temperature
 
+The IMU is read in a background task, so the properties hold the newest completed sample.
+While reading fails, an error is printed at most once per second and the properties keep their last values.
+A message is printed when reading works again.
+
 | Methods              | Description                   | Arguments |
 | -------------------- | ----------------------------- | --------- |
 | `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
@@ -537,6 +550,9 @@ The serial module allows communicating with peripherals via the specified connec
 This module might be used by other modules that communicate with peripherals via serial.
 You can, however, unmute the serial module to have incoming messages printed to the command line instead of keeping them buffered for other modules.
 
+A UART number and its pins can be used by one serial module at a time.
+They stay reserved for that module until the core restarts, also after `Expander.disconnect()`.
+
 ## Linear motor
 
 This module controls a linear actuator via two output pins (move in, move out) and two input pins reading two limit switches (end in, end out).
@@ -618,13 +634,15 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | ----------------------------------------------- | ------------------------ | ------------------------ |
 | `wheels = ODriveWheels(left_motor, left_motor)` | Two ODrive motor modules | two ODrive motor modules |
 
-| Properties             | Description                                              | Data type |
-| ---------------------- | -------------------------------------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)                                       | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)                                      | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)                                    | `float`   |
-| `wheels.enabled`       | Whether the wheels are enabled                           | `bool`    |
-| `wheels.locked`        | Whether driving is blocked (safety interlock, see below) | `bool`    |
+| Properties                     | Description                                                   | Data type |
+| ------------------------------ | ------------------------------------------------------------- | --------- |
+| `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
+| `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
+| `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
+| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)      | `bool`    |
+| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)             | `int`     |
+| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off) | `float`   |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -645,7 +663,18 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked` and `enabled` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+
+The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
+after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
+The stop is always a zero _speed_, also after `power()`, so it switches the motors from torque to velocity control.
+Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
+The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
+The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
+Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
+`drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
+See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
 
 ## RMD Motor
 
@@ -767,14 +796,16 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | ------------------------------------------------- | --------------------- | -------------------------- |
 | `wheels = RoboClawWheels(left_motor, left_motor)` | left and right motors | two RoboClaw motor modules |
 
-| Properties             | Description                                              | Data type |
-| ---------------------- | -------------------------------------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)                                       | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)                                      | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)                                    | `float`   |
-| `wheels.m_per_tick`    | Meters per encoder tick                                  | `float`   |
-| `wheels.enabled`       | Whether motors react to commands                         | `bool`    |
-| `wheels.locked`        | Whether driving is blocked (safety interlock, see below) | `bool`    |
+| Properties                     | Description                                                   | Data type |
+| ------------------------------ | ------------------------------------------------------------- | --------- |
+| `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
+| `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
+| `wheels.m_per_tick`            | Meters per encoder tick                                       | `float`   |
+| `wheels.enabled`               | Whether motors react to commands                              | `bool`    |
+| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)      | `bool`    |
+| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)             | `int`     |
+| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off) | `float`   |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -793,7 +824,18 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked` and `enabled` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+
+The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
+after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
+The stop is always a zero _speed_, also after `power()`, so it switches the motors from torque to velocity control.
+Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
+The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
+The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
+Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
+`drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
+See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
 
 ## Stepper Motor
 
@@ -1106,13 +1148,15 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | ------------------------------------------------ | --------------------- | ----------------------- |
 | `wheels = DunkerWheels(left_motor, right_motor)` | left and right motors | two DunkerMotor modules |
 
-| Properties             | Description                                              | Data type |
-| ---------------------- | -------------------------------------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)                                       | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)                                      | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)                                    | `float`   |
-| `wheels.enabled`       | Whether the wheels are enabled                           | `bool`    |
-| `wheels.locked`        | Whether driving is blocked (safety interlock, see below) | `bool`    |
+| Properties                     | Description                                                   | Data type |
+| ------------------------------ | ------------------------------------------------------------- | --------- |
+| `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
+| `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
+| `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
+| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)      | `bool`    |
+| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)             | `int`     |
+| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off) | `float`   |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -1128,7 +1172,17 @@ This lets a rule block driving while some other condition is unmet, for example 
 The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked` and `enabled` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+
+The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
+after a non-zero `speed()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
+Only `speed()` counts as a drive command; `enable()` and property writes do not, so they cannot keep a stale motion alive.
+The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
+The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
+Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
+`drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
+See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
 
 ## Analog Unit
 
@@ -1200,8 +1254,20 @@ The expander module allows communication with another microcontroller connected 
 
 The `flash()` method requires the `boot` and `enable` pins to be defined.
 The optional `force` argument skips the default check whether certain strapping pins are set correctly.
+Flashing erases the other microcontroller's NVS:
+its startup script, a persisted console baud rate and the bus backup are reset to defaults.
+The other microcontroller then boots the copied app from its first OTA slot.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
+After `disconnect()` the expander stays disconnected until `flash(true)` reinstalls the serial connection;
+`run()`, `restart()` and forwarded calls fail with an error until then because there is no serial connection,
+and `flash()` without `force` fails because the strapping pins cannot be checked without it.
+Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
+After `disconnect()`, the UART and its pins stay reserved for the expander's serial module until the core restarts (see [Serial interface](#serial-interface)).
+
+[Proxy](#proxy) modules are set up on the other microcontroller only once, when they are created.
+After `restart()`, `flash()` or a reboot of the other microcontroller (recognized by its `Ready.` line), `is_ready` returns to `true`, but the proxies no longer exist there:
+their `is_ready` turns `false` and the main microcontroller needs a restart, e.g. `core.restart()`, to create them again.
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 
@@ -1231,6 +1297,9 @@ Note that the proxy module forwards all method calls to the remote module.
 Proxies cannot be passed as arguments to other module constructors (e.g. as end stops for a motor axis), because the actual module only exists on the remote microcontroller.
 Declare the depending module on the same microcontroller instead.
 
-| Properties | Description                                       | Data type |
-| ---------- | ------------------------------------------------- | --------- |
-| `is_ready` | Whether the remote module has booted and is ready | `bool`    |
+| Properties | Description                                                    | Data type |
+| ---------- | -------------------------------------------------------------- | --------- |
+| `is_ready` | Whether the definition was sent in the expander's current boot | `bool`    |
+
+`is_ready` turns `false` again when the other microcontroller restarts or the connection is lost,
+because the main microcontroller cannot tell whether the remote module still exists (see [Expander](#expander)).

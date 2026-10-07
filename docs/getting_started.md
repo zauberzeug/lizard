@@ -4,7 +4,8 @@
 
 1. Download and unpack the zip file of the [latest release](https://github.com/zauberzeug/lizard/releases).
 2. Attach an Espressif ESP32 microcontroller via serial to your computer.
-3. Run `sudo ./espresso.py flash --device /dev/<serial device name>` to install Lizard on the ESP32.
+3. Run `sudo ./espresso.py flash` to install Lizard on the ESP32.
+   Add `--device /dev/<serial device name>` to pick the adapter yourself, for example when several are attached.
 
 ## Try Out
 
@@ -39,7 +40,15 @@ You can create a startup script for rules which should be directly applied after
 Simply write the commands into a file like `on_startup.lizard` and set them with
 
 ```bash
-./configure.py on_startup.lizard /dev/<serial device name>
+./configure.py on_startup.lizard
 ```
 
+Add the device path (e.g. `./configure.py on_startup.lizard /dev/<serial device name>`)
+to pick the adapter yourself, for example when several are attached.
+
 See [Tools](tools.md#configure) for more details.
+
+If loading the startup script fails, for example because a module cannot be created, the microcontroller prints the error and restarts to try again.
+After two failed attempts it boots without the startup script, prints `error: startup skipped after 2 failed boots (...)` with the last reason and stays reachable over the command-line interface, so the script can be fixed with `!-`, `!+` and `!.`.
+A crash or watchdog reset during the first seconds after boot counts as a failed attempt as well.
+A power cycle or a reset over the EN pin clears the counter.

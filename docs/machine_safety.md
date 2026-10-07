@@ -7,6 +7,8 @@ Lizard implements the following features to increase machine safety.
 Each line sent via the command-line interface can and should be followed by a checksum.
 Lizard will omit any lines with incorrect checksums.
 Any output is as well sent with a checksum.
+Lines are limited to 2048 bytes in either direction, including the checksum and the line ending.
+Lizard discards a longer input line and replaces a longer output line, each with a warning.
 
 The 8-bit checksum is computed as the bitwise XOR of all bytes of the UTF-8 encoded line excluding the newline character and written as a two-digit hex number (with leading zeros) separated with an `@` character, for example:
 
@@ -37,11 +39,34 @@ so that no stale commands fire after the host stopped:
 when core.last_message_age > 500 then motor.stop(); core.clear_schedule() end
 ```
 
+## Dead man's switch for wheels
+
+The keep-alive rule above has a blind spot: `core.last_message_age` is reset by _any_ input line, on _any_ channel.
+A robot that is driven by a remote control over Bluetooth while a host keeps sending heartbeats over UART0 therefore never trips such a rule when the Bluetooth connection drops, and keeps driving with the last speed it received.
+
+The wheels modules ([ODrive Wheels](module_reference.md#odrive-wheels), [RoboClaw Wheels](module_reference.md#roboclaw-wheels) and [DunkerWheels](module_reference.md#dunkerwheels)) therefore carry their own dead man's switch that measures what actually matters: the time since the last drive command to that module, whichever channel it came from.
+
+```
+wheels.drive_command_timeout = 0.3
+```
+
+After a non-zero `speed()` or `power()` command, the wheels stop on their own once no further drive command arrived for `drive_command_timeout` seconds.
+Only drive commands count; `enable()`, `off()` or property writes cannot keep a stale motion alive.
+The stop is logged as a warning and held like the `locked` interlock holds, with the zero-speed setpoint refreshed about once per second, so a stop that did not reach the motors — a failing motor send, a dropped CAN frame, a restarting motor controller — is re-asserted.
+The next drive command releases the hold and re-arms the switch, so a reconnecting sender has to issue a fresh command before the robot moves again.
+The default timeout is 1 s as a defensive baseline; `0` disables the switch, e.g. on a test bench.
+
+Consequently, a host that wants to keep driving has to repeat its drive command at least once per timeout.
+A single delayed command can move the robot for at most one timeout.
+Choose the timeout as a trade-off between the stopping distance at full speed and false stops on short radio dropouts: a sender that nominally transmits every 100 ms but skips cycles while a write is pending needs a timeout of a few hundred milliseconds.
+
+The `drive_command_age` property (ms) and the Bluetooth module's `connected` and `last_message_age` properties expose the underlying measurements for rules and logging.
+
 ## Expander watchdog
 
-The `expander` module provides a watchdog feature that restarts the port expander when it gets stuck and does not send messages anymore.
+The `expander` module provides a watchdog feature that detects when the port expander gets stuck and does not send messages anymore.
 After `ping_interval` seconds of no messages from the port expander, the `expander` module will instruct the expander to send a "\_\_PONG\_\_" message.
-If the expander does not answer within `ping_timeout` seconds, it will be restarted.
+If the expander does not answer within `ping_timeout` seconds, the expander and its proxies are marked as not ready (`is_ready` turns `false`).
 
 The reception of the "\_\_PONG\_\_" message is handled internally by the expander module and is not printed to the serial output.
 A similar technique can be used by the main computing unit to check if the core microcontroller is still responsive and restart it otherwise.

@@ -24,7 +24,7 @@ milestone_numbers() {
   {
     gh issue list -R "$REPO" --milestone "$milestone" --state all --limit 300 --json number --jq '.[].number'
     gh pr list   -R "$REPO" --search "milestone:\"$milestone\"" --state all --limit 300 --json number --jq '.[].number'
-  } | sort -un
+  } | sort -u
 }
 
 dossier() {
@@ -86,7 +86,7 @@ verify() {
   [ -f "$file" ] || die "file not found: $file"
   local ms rel
   ms=$(milestone_numbers "$milestone")
-  rel=$(grep -oE '#[0-9]+' "$file" | tr -d '#' | sort -un)
+  rel=$(grep -oE '#[0-9]+' "$file" | tr -d "#" | sort -u)
   echo "Milestone tickets MISSING from $file (investigate each):"
   comm -23 <(echo "$ms") <(echo "$rel") | sed 's/^/  #/' || true
   echo "Numbers in $file NOT in the milestone (expected: cross-refs to discussions/older issues):"

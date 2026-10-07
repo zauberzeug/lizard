@@ -101,7 +101,7 @@ EspNowBridge::EspNowBridge(const std::string name, const std::string node, uint8
         throw std::runtime_error("node \"" + active_bridge->node + "\" already owns the radio");
     }
     this->properties = EspNowBridge::get_defaults();
-    this->get_property("node")->string_value = node;
+    this->get_property("node")->set_string_value(node);
     this->start_radio(channel);
 
     active_bridge = this;
@@ -301,7 +301,7 @@ void EspNowBridge::handle_frame(const Frame &frame) {
     if (from[0] == '\0' || strlen(from) > MAX_NODE_NAME) {
         return;
     }
-    this->get_property("rx")->integer_value++;
+    this->get_property("rx")->set_integer_value(this->get_property("rx")->integer_value() + 1);
     this->learn_peer(from, frame.mac);
     if (kind == 'h') {
         if (strcmp(to, "*") == 0) {
@@ -364,8 +364,8 @@ void EspNowBridge::step() {
     while (xQueueReceive(rx_queue, &frame, 0) == pdTRUE) {
         this->handle_frame(frame);
     }
-    this->get_property("tx")->integer_value = tx_frames.load(std::memory_order_relaxed);
-    this->get_property("lost")->integer_value = lost_frames.load(std::memory_order_relaxed);
+    this->get_property("tx")->set_integer_value(tx_frames.load(std::memory_order_relaxed));
+    this->get_property("lost")->set_integer_value(lost_frames.load(std::memory_order_relaxed));
     if (this->link_target[0] != '\0' && this->find_peer(this->link_target) == nullptr) {
         const unsigned long now_ms = esp_timer_get_time() / 1000;
         if (now_ms - this->last_hello_ms >= HELLO_INTERVAL_MS) {
@@ -390,12 +390,12 @@ void EspNowBridge::call(const std::string method_name, const std::vector<ConstEx
         }
         strncpy(this->link_target, target.c_str(), MAX_NODE_NAME);
         this->link_target[MAX_NODE_NAME] = '\0';
-        this->get_property("link")->string_value = target;
+        this->get_property("link")->set_string_value(target);
         this->send_hello("*");
     } else if (method_name == "unlink") {
         Module::expect(arguments, 0);
         this->link_target[0] = '\0';
-        this->get_property("link")->string_value = "";
+        this->get_property("link")->set_string_value("");
     } else if (method_name == "ping") { // clients measure their round-trip delay with this
         Module::expect(arguments, 0);
         echo("%s pong", this->name.c_str());

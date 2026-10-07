@@ -4,6 +4,7 @@
 #include "timing.h"
 #include "uart.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <optional>
 

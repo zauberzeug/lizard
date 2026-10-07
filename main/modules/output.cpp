@@ -32,8 +32,8 @@ Output::Output(const std::string name) : Module(name) {
 
 void Output::apply_level() {
     this->set_level(this->target_level);
-    this->properties.at("change")->integer_value = this->target_level - this->properties.at("level")->integer_value;
-    this->properties.at("level")->integer_value = this->target_level;
+    this->properties.at("change")->set_integer_value(this->target_level - this->properties.at("level")->integer_value());
+    this->properties.at("level")->set_integer_value(this->target_level);
 }
 
 void Output::step() {
@@ -43,8 +43,8 @@ void Output::step() {
 
     this->apply_level();
     this->sync_enabled();
-    if (this->properties.at("active")->boolean_value != this->active) {
-        if (this->properties.at("active")->boolean_value) {
+    if (this->properties.at("active")->boolean_value() != this->active) {
+        if (this->properties.at("active")->boolean_value()) {
             this->activate();
         } else {
             this->deactivate();
@@ -126,8 +126,8 @@ void Output::do_disable() {
 void Output::activate() {
     if (this->enabled) {
         this->active = true;
-        this->properties.at("active")->boolean_value = true;
-        this->target_level = this->properties.at("inverted")->boolean_value ? 0 : 1;
+        this->properties.at("active")->set_boolean_value(true);
+        this->target_level = this->properties.at("inverted")->boolean_value() ? 0 : 1;
         this->pulse_interval = 0;
         this->apply_level();
     }
@@ -136,8 +136,8 @@ void Output::activate() {
 void Output::deactivate() {
     if (this->enabled) {
         this->active = false;
-        this->properties.at("active")->boolean_value = false;
-        this->target_level = this->properties.at("inverted")->boolean_value ? 1 : 0;
+        this->properties.at("active")->set_boolean_value(false);
+        this->target_level = this->properties.at("inverted")->boolean_value() ? 1 : 0;
         this->pulse_interval = 0;
         this->apply_level();
     }

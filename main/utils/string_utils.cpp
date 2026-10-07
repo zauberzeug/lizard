@@ -24,7 +24,7 @@ int csprintf(char *buffer, size_t buffer_len, const char *format, ...) {
     if (num_chars < 0)
         throw std::runtime_error("encoding error");
     if (num_chars > buffer_len - 1)
-        throw std::runtime_error("buffer too small");
+        throw BufferTooSmallError();
 
     return num_chars;
 }

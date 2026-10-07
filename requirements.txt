@@ -1,2 +1,5 @@
--r requirements-macos.txt
-gpiod
+esp-coredump
+esptool
+gpiod; sys_platform == "linux"
+prompt_toolkit
+pyserial

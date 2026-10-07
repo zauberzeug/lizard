@@ -40,7 +40,7 @@ PwmOutput::PwmOutput(const std::string name,
         .speed_mode = SPEED_MODE,
         .duty_resolution = LEDC_TIMER_8_BIT,
         .timer_num = ledc_timer,
-        .freq_hz = (uint32_t)this->properties.at("frequency")->integer_value,
+        .freq_hz = (uint32_t)this->properties.at("frequency")->integer_value(),
         .clk_cfg = LEDC_AUTO_CLK,
         .deconfigure = false,
     };
@@ -60,9 +60,9 @@ PwmOutput::PwmOutput(const std::string name,
 }
 
 void PwmOutput::step() {
-    uint32_t frequency = this->properties.at("frequency")->integer_value;
+    uint32_t frequency = this->properties.at("frequency")->integer_value();
     ledc_set_freq(SPEED_MODE, this->ledc_timer, frequency);
-    uint32_t duty = this->properties.at("duty")->integer_value;
+    uint32_t duty = this->properties.at("duty")->integer_value();
     ledc_set_duty(SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
     ledc_update_duty(SPEED_MODE, this->ledc_channel);
     this->sync_enabled();

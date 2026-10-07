@@ -20,7 +20,7 @@ CanOpenMaster::CanOpenMaster(const std::string &name, const Can_ptr can)
 }
 
 void CanOpenMaster::step() {
-    const int64_t sync_interval = this->properties["sync_interval"]->integer_value;
+    const int64_t sync_interval = this->properties["sync_interval"]->integer_value();
     this->sync_interval_counter++;
 
     if (sync_interval > 0 && this->sync_interval_counter >= sync_interval) {

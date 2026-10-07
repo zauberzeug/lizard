@@ -16,6 +16,7 @@ using Core_ptr = std::shared_ptr<Core>;
 class Core : public Module {
 private:
     std::list<struct output_element_t> output_list;
+    mutable bool output_overflow_reported = false;
     unsigned long int last_message_millis = 0;
 
 public:
