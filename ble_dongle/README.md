@@ -1,0 +1,50 @@
+# BLE dongle
+
+This standalone firmware turns an ESP32 on the host's USB port into a Bluetooth dongle for the console of a robot running Lizard.
+Everything the host writes to the dongle's serial port goes to the robot as it arrives, and the robot's console comes back byte for byte.
+The host talks to the dongle as if it were the robot's UART0, so RoSys, `monitor.py` and `configure.py` work unchanged.
+
+Compared to a dongle that runs Lizard with a [BLE bridge](../docs/module_reference.md#ble-bridge), it does not wait for a 10 ms main loop on the dongle.
+On a bench with two classic ESP32 the console round trip took about 31 ms, compared to 38 ms with the BLE bridge and 16 ms on the robot's own UART0.
+
+## Robot
+
+The robot needs Lizard's [Bluetooth](../docs/module_reference.md#bluetooth) module, e.g. in its startup script:
+
+```
+bluetooth = Bluetooth("robot")
+```
+
+## Build and flash
+
+Build with ESP-IDF 5.3 and flash the whole image, because the partition table differs from Lizard's:
+
+```bash
+cd ble_dongle
+idf.py set-target esp32 build
+idf.py -p /dev/ttyUSB0 flash
+```
+
+To pair with Lizard's developer PIN, build with `SDKCONFIG_DEFAULTS="sdkconfig.defaults;../sdkconfig.defaults.secret"`; otherwise pass the robot's PIN to `!dongle link`.
+The host's baud rate is fixed at build time (`CONFIG_DONGLE_BAUD_RATE`, 115200 by default).
+
+## Link to a robot
+
+Lines starting with `!dongle` stay on the dongle, every other byte goes to the robot:
+
+| Command                         | Effect                                                          |
+| ------------------------------- | --------------------------------------------------------------- |
+| `!dongle link robot`            | link to the robot advertised as "robot", with the developer PIN |
+| `!dongle link robot 123456`     | same, with the robot's user PIN                                 |
+| `!dongle link "robot 2" 123456` | a device name with spaces                                       |
+| `!dongle unlink`                | stop linking                                                    |
+| `!dongle`                       | show the link and the bytes dropped so far                      |
+
+The robot's name and PIN are stored in the dongle's NVS, the bond after the first pairing, so the dongle links again by itself after every restart.
+It reports its state in lines like `dongle: linked to "robot"`, with a checksum like Lizard's console lines.
+
+## Limits
+
+- The robot's Bluetooth module serves one central at a time, so the app cannot connect while the dongle is linked.
+- The serial port has no flow control: bytes that arrive faster than the link carries (about 50 kB/s) are lost, which cannot happen at 115200 baud.
+- Bytes that arrive while the link is down are dropped; the host notices the broken lines by their checksums.

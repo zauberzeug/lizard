@@ -149,6 +149,7 @@ The robot's Bluetooth module serves one central at a time, so the app cannot con
 Only one BLE bridge can exist per node, and a node cannot run a BLE bridge and a Bluetooth module together.
 The bridge costs about 40 KB of heap on the dongle and about 5 KB on top of the robot's Bluetooth module once a dongle listens, plus up to 16 KB of queued lines under load.
 It adds roughly 25 ms to a console round trip, mostly because the robot and the dongle each handle the lines in their 10 ms main loop.
+A dongle with the standalone firmware in the repository's `ble_dongle/` folder instead of Lizard passes the bytes on right away and saves about 7 ms of that.
 
 ## Serial Bus
 
