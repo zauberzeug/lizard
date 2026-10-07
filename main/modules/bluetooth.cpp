@@ -56,10 +56,20 @@ Bluetooth::Bluetooth(const std::string name, const std::string device_name, Mess
             dropped_lines.fetch_add(1, std::memory_order_relaxed);
         }
     });
-    // mirrors every console line to a listening bridge
+    // mirrors every console line to a listening bridge, with its checksum like on UART0
     register_echo_callback([this](const char *line) {
         BleLineStream *const stream = this->console_output.load();
-        if (stream != nullptr && ZZ::BleCommand::console_ready() && !stream->push(line, strlen(line))) {
+        if (stream == nullptr || !ZZ::BleCommand::console_ready()) {
+            return;
+        }
+        uint8_t checksum = 0;
+        const size_t len = strlen(line);
+        for (size_t i = 0; i < len; ++i) {
+            checksum ^= line[i];
+        }
+        char end[5];
+        snprintf(end, sizeof(end), "@%02x\n", checksum);
+        if (!stream->push(line, len, end)) {
             dropped_output_lines.fetch_add(1, std::memory_order_relaxed);
         }
     });
@@ -95,8 +105,14 @@ void Bluetooth::step() {
     }
     while (const std::unique_ptr<char[]> line = this->console_queue->pop()) {
         this->last_message_millis = millis();
+        bool checksum_ok = true;
+        const int len = check(line.get(), strlen(line.get()), &checksum_ok);
+        if (!checksum_ok) {
+            echo("warning: Checksum mismatch while processing bluetooth console");
+            continue;
+        }
         try {
-            process_line(line.get(), strlen(line.get()));
+            process_line(line.get(), len);
         } catch (const std::exception &e) {
             echo("error processing bluetooth console: %s", e.what());
         }

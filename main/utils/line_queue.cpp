@@ -23,18 +23,15 @@ bool LineQueue::push(std::unique_ptr<char[]> line, size_t len) {
     return true;
 }
 
-bool LineQueue::push_copy(const char *data, size_t len, char end) {
-    const size_t total = end == '\0' ? len : len + 1;
-    std::unique_ptr<char[]> line(new (std::nothrow) char[total + 1]);
+bool LineQueue::push_copy(const char *data, size_t len, const char *end) {
+    const size_t end_len = strlen(end);
+    std::unique_ptr<char[]> line(new (std::nothrow) char[len + end_len + 1]);
     if (!line) {
         return false;
     }
     memcpy(line.get(), data, len);
-    if (end != '\0') {
-        line[len] = end;
-    }
-    line[total] = '\0';
-    return this->push(std::move(line), total);
+    memcpy(line.get() + len, end, end_len + 1);
+    return this->push(std::move(line), len + end_len);
 }
 
 std::unique_ptr<char[]> LineQueue::pop(TickType_t wait) {

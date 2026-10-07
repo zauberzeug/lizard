@@ -435,8 +435,14 @@ void BleBridge::step() {
         if (!line) {
             break;
         }
-        print_remote(line.get());
-        printed += strlen(line.get()) + 1;
+        bool checksum_ok = true;
+        const int len = check(line.get(), strlen(line.get()), &checksum_ok);
+        if (!checksum_ok) {
+            this->lost++;
+            continue;
+        }
+        print_remote(line.get()); // echo() adds the checksum again
+        printed += len + 1;
         this->rx++;
     }
 

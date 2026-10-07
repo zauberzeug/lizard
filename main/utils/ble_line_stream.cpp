@@ -16,8 +16,8 @@ BleLineStream::BleLineStream(const char *task_name, size_t max_lines, size_t max
     }
 }
 
-bool BleLineStream::push(const char *line, size_t len) {
-    return this->queue.push_copy(line, len, '\n');
+bool BleLineStream::push(const char *line, size_t len, const char *end) {
+    return this->queue.push_copy(line, len, end);
 }
 
 void BleLineStream::run(void *arg) {

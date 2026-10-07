@@ -15,8 +15,8 @@ public:
 
     BleLineStream(const char *task_name, size_t max_lines, size_t max_bytes, Ready ready, ChunkSize chunk_size, Send send);
 
-    // queues a copy of the line plus its line end; may run on any task, false if the queue is full
-    bool push(const char *line, size_t len);
+    // queues a copy of the line followed by `end`; may run on any task, false if the queue is full
+    bool push(const char *line, size_t len, const char *end = "\n");
 
 private:
     LineQueue queue;
