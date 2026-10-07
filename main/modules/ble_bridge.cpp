@@ -5,7 +5,6 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
 #include "sdkconfig.h"
 #include <atomic>
 #include <cstring>
@@ -40,12 +39,14 @@
 // request); the main task prints the received lines and a BleLineStream task writes the console input.
 static constexpr size_t RX_QUEUE_LENGTH = 64;
 static constexpr size_t INPUT_QUEUE_LENGTH = 64;
-static constexpr int MIN_FREE_MBUFS = 8; // keep buffers for incoming traffic while writing
+static constexpr size_t QUEUE_BYTES = 8192; // per direction, so that a flood cannot exhaust the heap
+static constexpr int MIN_FREE_MBUFS = 12;   // keep buffers for incoming traffic while writing
 static constexpr int32_t SCAN_MS = 10000;
 static constexpr int32_t CONNECT_TIMEOUT_MS = 5000;
 static constexpr uint32_t RECONNECT_MS = 500;
 static constexpr uint32_t RETRY_AFTER_FAILURE_MS = 5000;
 static constexpr unsigned long LOST_WARNING_INTERVAL_MS = 1000;
+static constexpr size_t MAX_PRINT_PER_STEP = 1024; // printing blocks the main loop, which also has to read the host's lines
 
 constexpr ble_uuid128_t uuid128_from_str(const char *str) {
     ble_uuid128_t result{BLE_UUID_TYPE_128, {0}};
@@ -85,7 +86,7 @@ static size_t rx_len = 0;
 static bool rx_discarding = false;
 
 // shared with the main task
-static QueueHandle_t rx_queue = nullptr;
+static LineQueue *rx_queue = nullptr;
 static std::atomic<uint16_t> conn_handle{BLE_HS_CONN_HANDLE_NONE};
 static std::atomic<uint16_t> console_in_handle{0};
 static std::atomic<uint16_t> console_out_handle{0};
@@ -168,15 +169,7 @@ static void receive(const struct os_mbuf *om) {
                 }
                 continue;
             }
-            char *line = rx_discarding ? nullptr : new (std::nothrow) char[rx_len + 1];
-            if (line != nullptr) {
-                memcpy(line, rx_line, rx_len);
-                line[rx_len] = '\0';
-                if (xQueueSend(rx_queue, &line, 0) != pdTRUE) {
-                    delete[] line;
-                    lost_lines.fetch_add(1, std::memory_order_relaxed);
-                }
-            } else {
+            if (rx_discarding || !rx_queue->push_copy(rx_line, rx_len)) {
                 lost_lines.fetch_add(1, std::memory_order_relaxed);
             }
             rx_len = 0;
@@ -389,9 +382,7 @@ BleBridge::BleBridge(const std::string name) : ConsoleBridge(name) {
         throw std::runtime_error("the BLE radio is already used by the Bluetooth module");
     }
     rx_line = new char[CONSOLE_LINE_SIZE];
-    if (!(rx_queue = xQueueCreate(RX_QUEUE_LENGTH, sizeof(char *)))) {
-        throw std::runtime_error("could not allocate the BLE bridge queue");
-    }
+    rx_queue = new LineQueue(RX_QUEUE_LENGTH, QUEUE_BYTES);
     for (const char *tag : {"BTDM_INIT", "phy_init"}) {
         esp_log_level_set(tag, ESP_LOG_WARN); // keep the radio's init chatter off the host's console
     }
@@ -416,7 +407,7 @@ BleBridge::BleBridge(const std::string name) : ConsoleBridge(name) {
     ble_npl_callout_init(&scan_callout, nimble_port_get_dflt_eventq(), on_scan_callout, nullptr);
     nimble_port_freertos_init(run_host_task);
     this->console_input = std::make_unique<BleLineStream>(
-        "ble_bridge", INPUT_QUEUE_LENGTH, [] { return linked.load(); },
+        "ble_bridge", INPUT_QUEUE_LENGTH, QUEUE_BYTES, [] { return linked.load(); },
         [] {
             const uint16_t mtu = ble_att_mtu(conn_handle);
             return mtu > 3 ? static_cast<size_t>(mtu - 3) : static_cast<size_t>(20);
@@ -438,10 +429,14 @@ void BleBridge::forward(const char *line, size_t len) {
 }
 
 void BleBridge::step() {
-    char *raw;
-    while (xQueueReceive(rx_queue, &raw, 0) == pdTRUE) {
-        const std::unique_ptr<char[]> line(raw);
+    size_t printed = 0;
+    while (printed < MAX_PRINT_PER_STEP) {
+        const std::unique_ptr<char[]> line = rx_queue->pop();
+        if (!line) {
+            break;
+        }
         print_remote(line.get());
+        printed += strlen(line.get()) + 1;
         this->rx++;
     }
 

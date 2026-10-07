@@ -54,7 +54,7 @@ static constexpr size_t MAX_DEVICE_NAME_LEN = 30;
 static constexpr uint16_t TX_DATA_LENGTH = 0xFB;
 static constexpr uint16_t TX_DATA_TIME = 0x0848;
 static constexpr int BLE_DISCONNECT_BOND_MISMATCH = 0x213;
-static constexpr int MIN_FREE_MBUFS = 8; // keep buffers for incoming traffic while streaming the console
+static constexpr int MIN_FREE_MBUFS = 12; // keep buffers for incoming writes and their responses while streaming the console
 
 constexpr ble_uuid128_t uuid128_from_str(const char *str) {
     ble_uuid128_t result{BLE_UUID_TYPE_128, {0}};
@@ -165,6 +165,20 @@ static bool is_authorized(uint16_t conn_handle) {
     }
     struct ble_gap_conn_desc desc;
     return ble_gap_conn_find(conn_handle, &desc) == 0 && desc.sec_state.encrypted && desc.sec_state.authenticated;
+}
+
+// a console central like a laptop often connects with 30-50 ms; ask for 7.5-15 ms, as the BLE bridge uses
+static void request_short_interval(uint16_t conn_handle) {
+    struct ble_gap_conn_desc desc;
+    if (ble_gap_conn_find(conn_handle, &desc) != 0 || desc.conn_itvl <= 12) {
+        return;
+    }
+    struct ble_gap_upd_params params = {};
+    params.itvl_min = 6;
+    params.itvl_max = 12;
+    params.latency = 0;
+    params.supervision_timeout = 200;
+    ble_gap_update_params(conn_handle, &params);
 }
 
 static void mark_app_active() {
@@ -308,6 +322,7 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
             console_subscribed = event->subscribe.cur_notify;
             if (event->subscribe.cur_notify && is_authorized(event->subscribe.conn_handle)) {
                 mark_app_active(); // a console dongle may stay silent for long
+                request_short_interval(event->subscribe.conn_handle);
             }
             return 0;
         }

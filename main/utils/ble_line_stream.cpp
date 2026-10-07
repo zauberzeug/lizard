@@ -1,50 +1,39 @@
 #include "ble_line_stream.h"
 #include "freertos/task.h"
+#include "uart.h"
 #include <algorithm>
-#include <cstring>
 #include <memory>
-#include <new>
 #include <stdexcept>
-#include <string>
 
 static constexpr size_t MAX_PENDING = 2048; // bytes taken from the queue before sending them
 
-BleLineStream::BleLineStream(const char *task_name, size_t queue_length, Ready ready, ChunkSize chunk_size, Send send)
-    : ready(ready), chunk_size(chunk_size), send(send) {
-    if (!(this->queue = xQueueCreate(queue_length, sizeof(char *)))) {
-        throw std::runtime_error("could not allocate the BLE line queue");
-    }
+BleLineStream::BleLineStream(const char *task_name, size_t max_lines, size_t max_bytes, Ready ready, ChunkSize chunk_size,
+                             Send send)
+    : queue(max_lines, max_bytes), ready(ready), chunk_size(chunk_size), send(send) {
+    this->pending.reserve(MAX_PENDING + CONSOLE_LINE_SIZE + 1); // appending a line never reallocates
     if (xTaskCreate(run, task_name, 4096, this, 5, nullptr) != pdPASS) {
         throw std::runtime_error("could not start the BLE send task");
     }
 }
 
 bool BleLineStream::push(const char *line, size_t len) {
-    char *copy = new (std::nothrow) char[len + 2];
-    if (copy == nullptr) {
-        return false;
-    }
-    memcpy(copy, line, len);
-    copy[len] = '\n';
-    copy[len + 1] = '\0';
-    if (xQueueSend(this->queue, &copy, 0) != pdTRUE) {
-        delete[] copy;
-        return false;
-    }
-    return true;
+    return this->queue.push_copy(line, len, '\n');
 }
 
 void BleLineStream::run(void *arg) {
     BleLineStream *stream = static_cast<BleLineStream *>(arg);
-    std::string pending;
-    char *raw;
+    std::string &pending = stream->pending;
     while (true) {
-        if (pending.empty() && xQueueReceive(stream->queue, &raw, portMAX_DELAY) == pdTRUE) {
-            const std::unique_ptr<char[]> line(raw);
-            pending += line.get();
+        if (pending.empty()) {
+            if (const std::unique_ptr<char[]> line = stream->queue.pop(portMAX_DELAY)) {
+                pending += line.get();
+            }
         }
-        while (pending.size() < MAX_PENDING && xQueueReceive(stream->queue, &raw, 0) == pdTRUE) {
-            const std::unique_ptr<char[]> line(raw);
+        while (pending.size() < MAX_PENDING) {
+            const std::unique_ptr<char[]> line = stream->queue.pop();
+            if (!line) {
+                break;
+            }
             pending += line.get(); // several short lines share one chunk
         }
         if (!stream->ready()) {

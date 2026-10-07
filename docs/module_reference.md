@@ -90,6 +90,8 @@ Two more characteristics carry the console for a [BLE bridge](#ble-bridge) dongl
 75cdc16b-212b-4176-8bb8-4222f21cc826 takes console lines as a byte stream, each terminated by a newline, and runs them like lines on UART0, including `!+` and `!.` startup editing.
 f8f511b2-1401-4e28-82f1-ad753df3b750 streams every console line via notifications.
 Both only serve an authenticated central, or every central after `bluetooth.deactivate_pin()`.
+A laptop can use them directly as well, e.g. with Python's `bleak`; the robot asks such a central for a connection interval of 7.5 to 15 ms.
+Lines written without response are not flow-controlled, so bursts of more than about 50 kB/s lose lines; uploads should use writes with response or pace their writes.
 
 The Bluetooth module stores up to four devices.
 When a fifth connects, the oldest entry is removed.
@@ -159,6 +161,7 @@ As with the ESP-NOW bridge, every line the host writes to the dongle's UART0 is 
 Only lines starting with the dongle module's own name (e.g. `usb.unlink()`) stay on the dongle.
 Write the dongle's own startup script before linking, because `!+` and `!.` are forwarded as well.
 Lines the host sends while the link is down are dropped and counted.
+The link carries about 50 kB/s in each direction, so at 115200 baud the UARTs are the limit; at higher rates, lines beyond the link's capacity are dropped and counted as well.
 
 | Constructor            | Description                      | Arguments |
 | ---------------------- | -------------------------------- | --------- |
@@ -191,7 +194,8 @@ usb.link("robot")
 
 The robot's Bluetooth module serves one central at a time, so the app cannot connect while the dongle is linked.
 A node cannot run a BLE bridge and a Bluetooth module together.
-The bridge costs about 40 KB of heap on the dongle and about 5 KB on top of the robot's Bluetooth module once a dongle listens, and it adds roughly 25 ms to a console round trip.
+The bridge costs about 40 KB of heap on the dongle and about 5 KB on top of the robot's Bluetooth module once a dongle listens, plus up to 16 KB of queued lines under load.
+It adds roughly 25 ms to a console round trip, mostly because the robot and the dongle each handle the lines in their 10 ms main loop.
 
 ## Serial Bus
 

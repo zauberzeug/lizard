@@ -26,6 +26,7 @@ const std::map<std::string, Variable_ptr> Bluetooth::get_defaults() {
 static constexpr size_t LINE_QUEUE_LENGTH = 32;
 static constexpr size_t CONSOLE_QUEUE_LENGTH = 64;
 static constexpr size_t OUTPUT_QUEUE_LENGTH = 64;
+static constexpr size_t CONSOLE_QUEUE_BYTES = 8192; // both console directions, so that a flood cannot exhaust the heap
 static std::atomic<uint32_t> dropped_lines{0};
 static std::atomic<uint32_t> dropped_console_lines{0};
 static std::atomic<uint32_t> dropped_output_lines{0};
@@ -35,15 +36,13 @@ Bluetooth::Bluetooth(const std::string name, const std::string device_name, Mess
     if (!ZZ::BleCommand::claim_host(TYPE)) {
         throw std::runtime_error("the BLE radio is already used by a BleBridge");
     }
-    if (!(this->line_queue = xQueueCreate(LINE_QUEUE_LENGTH, sizeof(char *))) ||
-        !(this->console_queue = xQueueCreate(CONSOLE_QUEUE_LENGTH, sizeof(char *)))) {
+    if (!(this->line_queue = xQueueCreate(LINE_QUEUE_LENGTH, sizeof(char *)))) {
         throw std::runtime_error("failed to create bluetooth line queue");
     }
-    ZZ::BleCommand::set_console_callback([queue = this->console_queue](std::unique_ptr<char[]> line) {
-        char *raw = line.get();
-        if (xQueueSend(queue, &raw, 0) == pdTRUE) {
-            line.release();
-        } else {
+    this->console_queue = std::make_unique<LineQueue>(CONSOLE_QUEUE_LENGTH, CONSOLE_QUEUE_BYTES);
+    ZZ::BleCommand::set_console_callback([queue = this->console_queue.get()](std::unique_ptr<char[]> line) {
+        const size_t len = strlen(line.get());
+        if (!queue->push(std::move(line), len)) {
             dropped_console_lines.fetch_add(1, std::memory_order_relaxed);
         }
     });
@@ -84,7 +83,7 @@ void Bluetooth::step() {
     if (this->console_output.load() == nullptr && !this->console_failed && ZZ::BleCommand::console_ready()) {
         // the send task only exists once a bridge listens, so robots without one keep the heap
         try {
-            this->console_output = new BleLineStream("ble_console", OUTPUT_QUEUE_LENGTH, ZZ::BleCommand::console_ready,
+            this->console_output = new BleLineStream("ble_console", OUTPUT_QUEUE_LENGTH, CONSOLE_QUEUE_BYTES, ZZ::BleCommand::console_ready,
                                                      ZZ::BleCommand::console_chunk_size, ZZ::BleCommand::send_console);
         } catch (const std::exception &e) {
             this->console_failed = true;
@@ -94,8 +93,7 @@ void Bluetooth::step() {
     if (const uint32_t dropped = dropped_console_lines.exchange(0, std::memory_order_relaxed)) {
         echo("warning: dropped %lu bluetooth console lines because the line queue was full", static_cast<unsigned long>(dropped));
     }
-    while (xQueueReceive(this->console_queue, &raw, 0) == pdTRUE) {
-        const std::unique_ptr<char[]> line(raw);
+    while (const std::unique_ptr<char[]> line = this->console_queue->pop()) {
         this->last_message_millis = millis();
         try {
             process_line(line.get(), strlen(line.get()));
@@ -103,8 +101,12 @@ void Bluetooth::step() {
             echo("error processing bluetooth console: %s", e.what());
         }
     }
-    if (const uint32_t dropped = dropped_output_lines.exchange(0, std::memory_order_relaxed)) {
-        echo("warning: dropped %lu console lines for the bluetooth console", static_cast<unsigned long>(dropped));
+    // a console that outputs more than the link carries drops lines in every step, so this is reported once a second
+    this->dropped_output += dropped_output_lines.exchange(0, std::memory_order_relaxed);
+    if (this->dropped_output > 0 && millis_since(this->last_drop_warning_millis) >= 1000) {
+        echo("warning: dropped %lu console lines for the bluetooth console", static_cast<unsigned long>(this->dropped_output));
+        this->dropped_output = 0;
+        this->last_drop_warning_millis = millis();
     }
     this->properties.at("connected")->set_boolean_value(ZZ::BleCommand::is_connected());
     this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
