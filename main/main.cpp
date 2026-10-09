@@ -28,7 +28,6 @@
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include "utils/uart_driver.h"
-#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <math.h>
@@ -417,17 +416,6 @@ void process_line(const char *line, const int len, const bool trigger_keep_alive
     }
 }
 
-// drops `count` bytes from UART0, reading them through `scratch` in chunks
-static void discard_uart_input(char *scratch, const size_t scratch_size, int count) {
-    while (count > 0) {
-        const int read = uart_read_bytes(UART_NUM_0, (uint8_t *)scratch, std::min<size_t>(count, scratch_size), 0);
-        if (read <= 0) {
-            break;
-        }
-        count -= read;
-    }
-}
-
 // checks and runs one UART0 line; its errors are reported here so that the lines after it in the same read still run
 static void process_uart_line(char *line, const int len) {
     bool checksum_ok = true;
@@ -458,11 +446,11 @@ void process_uart() {
             // the driver updates the byte count and the pattern queue together, so all `buffered` bytes are
             // unterminated; a flush would also drop whatever arrives from here on, including the next line end
             if (discarding && buffered > 0) {
-                discard_uart_input(input, sizeof(input), buffered);
+                discard_uart_input(UART_NUM_0, buffered);
             } else if (buffered > CONSOLE_LINE_SIZE) {
                 // bytes without a line end that already exceed a line can never be processed; a ring they fill up
                 // disables the receive interrupts until something reads or flushes, so drop them now
-                discard_uart_input(input, sizeof(input), buffered);
+                discard_uart_input(UART_NUM_0, buffered);
                 discarding = true;
                 echo("warning: UART0 input exceeds %d bytes without a line end and is discarded up to the next line end",
                      CONSOLE_LINE_SIZE);
@@ -471,7 +459,7 @@ void process_uart() {
         }
         if (discarding || pos + 1 > CONSOLE_LINE_SIZE) {
             // drop the whole line: reading it into `input` would overrun the buffer
-            discard_uart_input(input, sizeof(input), pos + 1);
+            discard_uart_input(UART_NUM_0, pos + 1);
             if (!discarding) {
                 echo("warning: UART0 line of %d bytes exceeds %d bytes and was discarded", pos + 1, CONSOLE_LINE_SIZE);
             }

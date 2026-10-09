@@ -14,6 +14,10 @@ using ConstSerial_ptr = std::shared_ptr<const Serial>;
 class Serial : public Module {
 private:
     mutable std::vector<std::string> users;
+    mutable std::string pending_lines; // lines after the first of a read that held several; not visible to read() and available()
+
+    /// Set the receive FIFO threshold to what the current reader needs; call after install and after mute/unmute.
+    void apply_rx_full_threshold() const;
 
 public:
     static inline constexpr const char *TYPE = "Serial";
@@ -36,7 +40,6 @@ public:
     bool has_buffered_lines() const;
     int read(const uint32_t timeout = 0) const;
     static constexpr int LINE_DISCARDED = -1;
-    static constexpr int LINE_FLUSHED = -2;
     static constexpr size_t CHECKSUM_TRAILER_LENGTH = 4; // "@xx\n" appended by write_checked_line
     int read_line(char *buffer, size_t buffer_len) const;
     static const char *read_line_error(const int result);
