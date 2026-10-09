@@ -13,6 +13,10 @@ Shadows are useful if multiple modules should behave exactly the same, e.g. two 
 
 The `broadcast` method is used internally with [port expanders](#expander).
 
+Every module reserves the pins and peripherals it uses, i.e. GPIO pins, UART ports and the CAN controller, until the core restarts.
+Creating a module on a reserved pin or peripheral fails with an error that names the owner, e.g. `pin 15 is already used by module "led"`.
+The console UART with its pins and the pins of the SPI flash are reserved from the start.
+
 ## Core
 
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
@@ -504,8 +508,7 @@ You can, however, unmute the serial module to have incoming messages printed to 
 An unmuted module prints one line per batch of bytes the hardware hands over, so a sender that pauses between its messages gets one line per message.
 A line carries at most 85 bytes; the rest of a longer batch follows on the next line.
 
-A UART number and its pins can be used by one serial module at a time.
-They stay reserved for that module until the core restarts, also after `Expander.disconnect()`.
+The UART number and its pins stay reserved for the serial module until the core restarts, also after `Expander.disconnect()`.
 
 ## Linear motor
 

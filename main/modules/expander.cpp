@@ -49,6 +49,8 @@ Expander::Expander(const std::string name,
     this->serial->claim(name);
     this->serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
+        this->claims.pin(boot_pin);
+        this->claims.pin(enable_pin);
         gpio_reset_pin(boot_pin);
         gpio_reset_pin(enable_pin);
         gpio_set_direction(boot_pin, GPIO_MODE_OUTPUT);
