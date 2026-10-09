@@ -588,15 +588,17 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | ----------------------------------------------- | ------------------------ | ------------------------ |
 | `wheels = ODriveWheels(left_motor, left_motor)` | Two ODrive motor modules | two ODrive motor modules |
 
-| Properties                     | Description                                                   | Data type |
-| ------------------------------ | ------------------------------------------------------------- | --------- |
-| `wheels.width`                 | Wheel distance (m)                                            | `float`   |
-| `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
-| `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
-| `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
-| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)      | `bool`    |
-| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)             | `int`     |
-| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off) | `float`   |
+| Properties                     | Description                                                        | Data type |
+| ------------------------------ | ------------------------------------------------------------------ | --------- |
+| `wheels.width`                 | Wheel distance (m)                                                 | `float`   |
+| `wheels.max_linear_speed`      | Maximum forward speed of the robot (m/s, 0 = derived, see below)   | `float`   |
+| `wheels.max_angular_speed`     | Maximum turning speed of the robot (rad/s, 0 = derived, see below) | `float`   |
+| `wheels.linear_speed`          | Forward speed (m/s)                                                | `float`   |
+| `wheels.angular_speed`         | Turning speed (rad/s)                                              | `float`   |
+| `wheels.enabled`               | Whether the wheels are enabled                                     | `bool`    |
+| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)           | `bool`    |
+| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)                  | `int`     |
+| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off)      | `float`   |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -629,6 +631,12 @@ The default is 1 s, so a host has to repeat its drive command at least that ofte
 Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
 `drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
 See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
+
+`max_linear_speed` and `max_angular_speed` declare the speeds the robot is built for (m/s and rad/s).
+They are declarations, not limits: `speed()` does not clamp to them, so existing configurations and hosts keep working unchanged.
+Modules that drive the wheels with relative values scale by them, see [Joystick](#joystick).
+Left at 0, they derive from the drivetrain's own per-wheel speed limit where the module knows it: one wheel's limit is the linear maximum, and two wheels running against each other at that limit give the angular one (`2 * limit / width`).
+Set them explicitly to stay below the physical limit or when the drivetrain has no limit to derive from.
 
 ## RMD Motor
 
@@ -750,16 +758,18 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | ------------------------------------------------- | --------------------- | -------------------------- |
 | `wheels = RoboClawWheels(left_motor, left_motor)` | left and right motors | two RoboClaw motor modules |
 
-| Properties                     | Description                                                   | Data type |
-| ------------------------------ | ------------------------------------------------------------- | --------- |
-| `wheels.width`                 | Wheel distance (m)                                            | `float`   |
-| `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
-| `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
-| `wheels.m_per_tick`            | Meters per encoder tick                                       | `float`   |
-| `wheels.enabled`               | Whether motors react to commands                              | `bool`    |
-| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)      | `bool`    |
-| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)             | `int`     |
-| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off) | `float`   |
+| Properties                     | Description                                                        | Data type |
+| ------------------------------ | ------------------------------------------------------------------ | --------- |
+| `wheels.width`                 | Wheel distance (m)                                                 | `float`   |
+| `wheels.max_linear_speed`      | Maximum forward speed of the robot (m/s, 0 = derived, see below)   | `float`   |
+| `wheels.max_angular_speed`     | Maximum turning speed of the robot (rad/s, 0 = derived, see below) | `float`   |
+| `wheels.linear_speed`          | Forward speed (m/s)                                                | `float`   |
+| `wheels.angular_speed`         | Turning speed (rad/s)                                              | `float`   |
+| `wheels.m_per_tick`            | Meters per encoder tick                                            | `float`   |
+| `wheels.enabled`               | Whether motors react to commands                                   | `bool`    |
+| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)           | `bool`    |
+| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)                  | `int`     |
+| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off)      | `float`   |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -790,6 +800,12 @@ The default is 1 s, so a host has to repeat its drive command at least that ofte
 Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
 `drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
 See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
+
+`max_linear_speed` and `max_angular_speed` declare the speeds the robot is built for (m/s and rad/s).
+They are declarations, not limits: `speed()` does not clamp to them, so existing configurations and hosts keep working unchanged.
+Modules that drive the wheels with relative values scale by them, see [Joystick](#joystick).
+Left at 0, they derive from the drivetrain's own per-wheel speed limit where the module knows it: one wheel's limit is the linear maximum, and two wheels running against each other at that limit give the angular one (`2 * limit / width`).
+Set them explicitly to stay below the physical limit or when the drivetrain has no limit to derive from.
 
 ## Stepper Motor
 
@@ -1102,15 +1118,17 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | ------------------------------------------------ | --------------------- | ----------------------- |
 | `wheels = DunkerWheels(left_motor, right_motor)` | left and right motors | two DunkerMotor modules |
 
-| Properties                     | Description                                                   | Data type |
-| ------------------------------ | ------------------------------------------------------------- | --------- |
-| `wheels.width`                 | Wheel distance (m)                                            | `float`   |
-| `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
-| `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
-| `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
-| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)      | `bool`    |
-| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)             | `int`     |
-| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off) | `float`   |
+| Properties                     | Description                                                        | Data type |
+| ------------------------------ | ------------------------------------------------------------------ | --------- |
+| `wheels.width`                 | Wheel distance (m)                                                 | `float`   |
+| `wheels.max_linear_speed`      | Maximum forward speed of the robot (m/s, 0 = derived, see below)   | `float`   |
+| `wheels.max_angular_speed`     | Maximum turning speed of the robot (rad/s, 0 = derived, see below) | `float`   |
+| `wheels.linear_speed`          | Forward speed (m/s)                                                | `float`   |
+| `wheels.angular_speed`         | Turning speed (rad/s)                                              | `float`   |
+| `wheels.enabled`               | Whether the wheels are enabled                                     | `bool`    |
+| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)           | `bool`    |
+| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)                  | `int`     |
+| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off)      | `float`   |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -1137,6 +1155,67 @@ The default is 1 s, so a host has to repeat its drive command at least that ofte
 Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
 `drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
 See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
+
+`max_linear_speed` and `max_angular_speed` declare the speeds the robot is built for (m/s and rad/s).
+They are declarations, not limits: `speed()` does not clamp to them, so existing configurations and hosts keep working unchanged.
+Modules that drive the wheels with relative values scale by them, see [Joystick](#joystick).
+Left at 0, they derive from the drivetrain's own per-wheel speed limit where the module knows it: one wheel's limit is the linear maximum, and two wheels running against each other at that limit give the angular one (`2 * limit / width`).
+Set them explicitly to stay below the physical limit or when the drivetrain has no limit to derive from.
+
+## Joystick
+
+The joystick module drives a wheels module with relative values from a remote control, e.g. the Zauberzeug app via [Bluetooth](#bluetooth).
+The host sends `drive(forward, turn)` with values between -1 and 1 and does not need to know the robot:
+the module scales them with the wheels' `max_linear_speed` and `max_angular_speed`, ramps towards them, reduces steering at high forward speed and calls `wheels.speed(...)`.
+The wheels' `enabled`, `locked` and `drive_command_timeout` apply unchanged.
+
+| Constructor                   | Description            | Arguments       |
+| ----------------------------- | ---------------------- | --------------- |
+| `joystick = Joystick(wheels)` | Wheels module to drive | a wheels module |
+
+| Properties                | Description                                                         | Data type |
+| ------------------------- | ------------------------------------------------------------------- | --------- |
+| `joystick.ramp`           | Maximum change of the relative setpoints per second (0 = no ramp)   | `float`   |
+| `joystick.turn_reduction` | Share of the turn rate left at full forward speed (clamped to 0..1) | `float`   |
+| `joystick.timeout`        | Stop when no `drive()` arrives for this long (s, 0 = off)           | `float`   |
+| `joystick.forward`        | Current ramped forward setpoint (-1..1)                             | `float`   |
+| `joystick.turn`           | Current ramped turn setpoint (-1..1)                                | `float`   |
+| `joystick.active`         | Whether the setpoints are non-zero, i.e. the robot is in motion     | `bool`    |
+
+| Methods                         | Description                                           | Arguments        |
+| ------------------------------- | ----------------------------------------------------- | ---------------- |
+| `joystick.drive(forward, turn)` | Set the relative forward and turn target (-1..1 each) | `float`, `float` |
+
+The wheels module has to live on the same microcontroller; an expander proxy is not accepted.
+
+Every cycle the module moves `forward` and `turn` towards the last `drive()` values by at most `ramp` per second (default 2, i.e. from standstill to full speed in half a second), so the robot starts gently and changes speed and direction smoothly.
+Releasing the stick is the exception: a `drive(0, 0)` stops the robot at once, without the ramp, because whoever lets go of the stick wants it to stand still now.
+Steering is reduced linearly with the forward setpoint: at standstill the full `max_angular_speed` is available, at full forward speed only `turn_reduction` of it (default 0.5), so the robot does not break away in fast curves.
+The wheels then receive `speed(forward * max_linear_speed, turn * turn_factor * max_angular_speed)`, with the two maxima taken from the wheels' properties or, when those are 0, derived from the drivetrain's per-wheel limit.
+A drivetrain that knows its per-wheel limit also gets a saturation guard: driving and turning at once asks the outer wheel for more than either alone, and if the drivetrain cut that wheel off the robot would veer instead of going where the stick points.
+The module therefore scales linear and angular speed down together until the fastest wheel is within the limit, so the direction is kept and only the speed gives way.
+Without a declared or derivable maximum the module cannot drive; the robot stays still and a warning is echoed once a non-zero `drive()` arrives.
+While the wheels are disabled or `locked`, the setpoints are held at zero, so the ramp starts fresh once driving is allowed again instead of jumping to the deflection the stick reached behind the interlock.
+
+While the setpoints are non-zero, the wheels are commanded every cycle, which also feeds their dead man's switch.
+At standstill the zero-speed command is repeated for about a second, because a single frame can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+Then the module falls silent, so other hosts like rosys can drive the wheels in between without the joystick interfering.
+
+`timeout` is the joystick's own dead man's switch against a lost remote control: when no `drive()` arrived for that long, the stick counts as released and the robot stops at once.
+It is needed because the module feeds the wheels' dead man's switch itself while in motion, so a remote that falls silent with the stick held would otherwise never be noticed.
+The default of 1 s leaves room for the jitter of a Bluetooth remote; with 0.5 s an iPhone sending every 100 ms still produced brief dropouts.
+The remote should send `drive(0, 0)` when the stick is released; the timeout is the fallback.
+
+```
+wheels = ODriveWheels(left, right)
+wheels.max_linear_speed = 1.5   # ODrive wheels have no per-wheel limit to derive from
+wheels.max_angular_speed = 2.0
+wheels.drive_command_timeout = 1.5
+joystick = Joystick(wheels)
+joystick.ramp = 2.0
+joystick.turn_reduction = 0.5
+joystick.timeout = 1.0
+```
 
 ## Analog Unit
 

@@ -79,7 +79,7 @@ end
 | **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                  |
 | **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                       |
 | **Expanders**         | `Mcp23017` (I2C GPIO expander)                                                                                                                                   |
-| **Utilities**         | `MotorAxis`, `Proxy`                                                                                                                                             |
+| **Utilities**         | `MotorAxis`, `Joystick`, `Proxy`                                                                                                                                 |
 
 ---
 
