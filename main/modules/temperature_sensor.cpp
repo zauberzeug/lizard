@@ -40,6 +40,8 @@ TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_pt
     if (!unit) {
         throw std::runtime_error("TemperatureSensor module requires a valid unit");
     }
+    this->claims.pin(temp_pin);
+    this->claims.pin(ref_pin);
 
     adc_unit_t detected_unit;
     adc_channel_t detected_channel;

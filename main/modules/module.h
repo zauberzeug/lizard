@@ -2,6 +2,7 @@
 
 #include "../compilation/expression.h"
 #include "../compilation/variable.h"
+#include "../utils/resources.h"
 #include <functional>
 #include <list>
 #include <map>
@@ -35,6 +36,7 @@ private:
     const Variable_ptr &get_enabled_property();
 
 protected:
+    resources::Claims claims; // the pins and peripherals of this module, released when it is destroyed
     std::list<Module_ptr> shadow_modules;
     std::map<std::string, Variable_ptr> properties;
     bool output_on = false;

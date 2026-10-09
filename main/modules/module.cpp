@@ -23,7 +23,7 @@ ModuleRegistry &get_registry() {
 
 bool Module::broadcast_paused = false;
 
-Module::Module(const std::string name) : name(name) {
+Module::Module(const std::string name) : claims("module \"" + name + "\""), name(name) {
 }
 
 void Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {

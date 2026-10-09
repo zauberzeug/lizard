@@ -81,6 +81,9 @@ GpioLinearMotor::GpioLinearMotor(const std::string name,
                                  const gpio_num_t end_in,
                                  const gpio_num_t end_out)
     : LinearMotor(name), move_in(move_in), move_out(move_out), end_in(end_in), end_out(end_out) {
+    for (const gpio_num_t pin : {move_in, move_out, end_in, end_out}) {
+        this->claims.pin(pin);
+    }
     gpio_reset_pin(move_in);
     gpio_reset_pin(move_out);
     gpio_reset_pin(end_in);
