@@ -196,7 +196,7 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref, const bool all
             struct parsed_await_routine await_routine = parsed_await_routine_get(action.await_routine);
             const std::string routine_name = identifier_to_string(await_routine.routine_name);
             const Routine_ptr routine = Global::get_routine(routine_name);
-            actions.push_back(std::make_shared<AwaitRoutine>(routine));
+            actions.push_back(std::make_shared<AwaitRoutine>(routine, routine_name));
         } else {
             throw std::runtime_error("unknown action type");
         }
@@ -569,6 +569,7 @@ void app_main() {
                 }
                 rule->routine->step();
             } catch (const std::runtime_error &e) {
+                rule->routine->fail(); // end the run, otherwise every loop repeats the failing action
                 echo("error in rule: %s", e.what());
             }
         }
@@ -578,6 +579,7 @@ void app_main() {
             try {
                 routine->step();
             } catch (const std::runtime_error &e) {
+                routine->fail();
                 echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
             }
         }
