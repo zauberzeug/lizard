@@ -1,4 +1,5 @@
 #include "uart.h"
+#include "esp_timer.h"
 #include <algorithm>
 #include <cstdarg>
 #include <cstdint>
@@ -7,6 +8,43 @@
 #include <string>
 
 static std::vector<std::pair<int, EchoCallback>> echo_callbacks;
+
+// printf() returns once the bytes are on the wire, so a console too slow for its output stretches the loop (#258)
+static constexpr int64_t CONSOLE_WINDOW_US = 1000000;
+static constexpr int CONSOLE_STRETCHED_WINDOWS = 3;
+static constexpr int64_t CONSOLE_WARNING_GAP_US = 60 * CONSOLE_WINDOW_US;
+
+static int64_t console_blocked_us = 0; // spent in printf() since the last check_console_load()
+
+void check_console_load(const int64_t work_us, const int64_t period_us) {
+    static int64_t window_start_us = esp_timer_get_time();
+    static int cycles = 0;
+    static int stretched_cycles = 0;
+    static int stretched_windows = 0;
+    static int64_t last_warning_us = -CONSOLE_WARNING_GAP_US;
+
+    const int64_t blocked_us = console_blocked_us;
+    console_blocked_us = 0;
+    ++cycles;
+    // stretched: the cycle ran 20 % past its period, printing took half of it, and without printing it would have fit
+    if (work_us > period_us + period_us / 5 && blocked_us * 2 >= work_us && work_us - blocked_us <= period_us) {
+        ++stretched_cycles;
+    }
+    const int64_t now_us = esp_timer_get_time();
+    const int64_t window_us = now_us - window_start_us;
+    if (window_us < CONSOLE_WINDOW_US) {
+        return;
+    }
+    stretched_windows = stretched_cycles * 2 >= cycles ? stretched_windows + 1 : 0;
+    const int loop_ms = window_us / cycles / 1000;
+    window_start_us = now_us;
+    cycles = 0;
+    stretched_cycles = 0;
+    if (stretched_windows >= CONSOLE_STRETCHED_WINDOWS && now_us - last_warning_us >= CONSOLE_WARNING_GAP_US) {
+        last_warning_us = now_us;
+        echo("warning: printing stretched the loop to %d ms, the console baud rate is too low for its output", loop_ms);
+    }
+}
 
 int register_echo_callback(const EchoCallback &callback) {
     static int next_handle = 0;
@@ -44,7 +82,9 @@ void echo(const char *format, ...) {
     for (unsigned int i = 0; i < pos; ++i) {
         if (buffer[i] == '\n') {
             buffer[i] = '\0';
+            const int64_t before_us = esp_timer_get_time();
             printf("%s@%02x\n", &buffer[start], checksum);
+            console_blocked_us += esp_timer_get_time() - before_us;
             for (const auto &[handle, callback] : echo_callbacks) {
                 callback(&buffer[start]);
             }

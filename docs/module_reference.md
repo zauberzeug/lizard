@@ -56,6 +56,11 @@ After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with t
 Supported rates are 115200, 230400, 460800 and 921600.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
 
+**Console load:**
+Sending a line blocks the main loop until its bytes are on the wire, so at 115200 baud only about 115 bytes fit into one 10 ms cycle.
+When printing is what stretches most cycles well past their 10 ms for three seconds in a row, Lizard warns, e.g. `warning: printing stretched the loop to 83 ms, the console baud rate is too low for its output`, at most once a minute.
+Print less, for example by broadcasting fewer proxies, or raise the baud rate.
+
 ## Bluetooth
 
 Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
