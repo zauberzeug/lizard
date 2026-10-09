@@ -2,6 +2,7 @@
 
 #include "action.h"
 #include "routine.h"
+#include <string>
 
 class AwaitRoutine : public Action {
 private:
@@ -9,7 +10,8 @@ private:
 
 public:
     const Routine_ptr routine;
+    const std::string routine_name;
 
-    AwaitRoutine(const Routine_ptr routine);
+    AwaitRoutine(const Routine_ptr routine, const std::string routine_name);
     bool run() override;
 };

@@ -39,6 +39,15 @@ so that no stale commands fire after the host stopped:
 when core.last_message_age > 500 then motor.stop(); core.clear_schedule() end
 ```
 
+If an action fails, the remaining actions of the rule are skipped (see [failing actions](language.md#actions)).
+In the example above, a motor that rejects `stop()`, e.g. because it has not answered on its bus yet, would keep the schedule from being cleared.
+Safety actions that do not depend on each other therefore belong in separate rules:
+
+```
+when core.last_message_age > 500 then motor.stop(); end
+when core.last_message_age > 500 then core.clear_schedule(); end
+```
+
 ## Dead man's switch for wheels
 
 The keep-alive rule above has a blind spot: `core.last_message_age` is reset by _any_ input line, on _any_ channel.
