@@ -241,6 +241,7 @@ Lines with a leading `!` can indicate one of the following control commands.
 | `!"abc` | Print `abc` to the command-line                          |
 
 Note that the commands `!+`, `!-` and `!?` affect the startup script in RAM, which is only written to non-volatile storage with the `!.` command.
+If `!.` fails, `core.startup_checksum()` reports an error instead of a checksum until the script changes or a `!.` succeeds.
 
 Input from the default command-line interface UART0 is usually interpreted as Lizard code;
 input from a [port expander](module_reference.md#expander) is usually printed to the command-line on UART0.
