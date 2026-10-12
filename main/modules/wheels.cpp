@@ -5,8 +5,6 @@
 const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
     return {
         {"width", std::make_shared<NumberVariable>(1.0)},
-        {"max_linear_speed", std::make_shared<NumberVariable>(0.0)},
-        {"max_angular_speed", std::make_shared<NumberVariable>(0.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
@@ -37,20 +35,6 @@ Wheels::Wheels(const std::string name, const std::map<std::string, Variable_ptr>
 void Wheels::update_speeds(double left_speed, double right_speed) {
     this->properties.at("linear_speed")->set_number_value((left_speed + right_speed) / 2);
     this->properties.at("angular_speed")->set_number_value((right_speed - left_speed) / this->properties.at("width")->number_value());
-}
-
-double Wheels::max_linear_speed() const {
-    const double declared = this->properties.at("max_linear_speed")->number_value();
-    return declared > 0.0 ? declared : this->max_wheel_speed();
-}
-
-double Wheels::max_angular_speed() const {
-    const double declared = this->properties.at("max_angular_speed")->number_value();
-    if (declared > 0.0) {
-        return declared;
-    }
-    const double width = this->properties.at("width")->number_value();
-    return width > 0.0 ? 2.0 * this->max_wheel_speed() / width : 0.0;
 }
 
 bool Wheels::may_drive() const {
@@ -100,6 +84,7 @@ void Wheels::step() {
 }
 
 void Wheels::note_drive_command(bool applied, bool nonzero) {
+    this->command_count++;
     this->last_drive_command_millis = millis();
     if (applied && nonzero) {
         this->moving = true;
@@ -119,21 +104,19 @@ void Wheels::do_off() {
     throw std::runtime_error("module \"" + this->name + "\" has no idle state");
 }
 
-void Wheels::speed(const double linear, const double angular) {
-    const bool nonzero = linear != 0.0 || angular != 0.0;
-    const bool applied = this->may_drive();
-    this->note_drive_command(applied, nonzero);
-    if (applied) {
-        const double width = this->properties.at("width")->number_value();
-        this->do_wheel_speeds(linear - angular * width / 2.0, linear + angular * width / 2.0);
-        this->note_drive_command_sent(nonzero);
-    }
-}
-
 void Wheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "speed") {
         Module::expect(arguments, 2, numbery, numbery);
-        this->speed(arguments[0]->evaluate_number(), arguments[1]->evaluate_number());
+        const double linear = arguments[0]->evaluate_number();
+        const double angular = arguments[1]->evaluate_number();
+        const bool nonzero = linear != 0.0 || angular != 0.0;
+        const bool applied = this->may_drive();
+        this->note_drive_command(applied, nonzero);
+        if (applied) {
+            const double width = this->properties.at("width")->number_value();
+            this->do_wheel_speeds(linear - angular * width / 2.0, linear + angular * width / 2.0);
+            this->note_drive_command_sent(nonzero);
+        }
     } else if (method_name == "power") {
         Module::expect(arguments, 2, numbery, numbery);
         const double left = arguments[0]->evaluate_number();
@@ -147,6 +130,7 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
+        this->command_count++;
         this->do_off();
         this->note_drive_command_sent(false); // idle motors are a stop; the dead man's switch must not re-activate them
     } else if (method_name == "enable") {

@@ -8,16 +8,10 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
 /**
  * Shared base for differential-drive wheels modules.
  *
- * Owns the common properties (`width`, `max_linear_speed`, `max_angular_speed`, `linear_speed`,
- * `angular_speed`, `enabled`, `locked`, `drive_command_age`, `drive_command_timeout`) and the
- * `speed`/`power`/`off`/`enable`/`disable` command flow; the enabled-sync itself comes from
- * `Module`. Concrete drivetrains provide the motor-specific parts through the protected hooks.
- *
- * `max_linear_speed` and `max_angular_speed` declare what the robot is built for. They are not
- * enforced by `speed()` — existing hosts and configurations keep working unchanged — but let
- * modules that drive the wheels with relative values (see `Joystick`) scale to the robot. Left at
- * 0, they derive from the drivetrain's per-wheel limit (`max_wheel_speed()`): a wheel's limit is
- * the linear maximum, and two wheels running against each other give the angular one.
+ * Owns the common properties (`width`, `linear_speed`, `angular_speed`, `enabled`, `locked`,
+ * `drive_command_age`, `drive_command_timeout`) and the `speed`/`power`/`off`/`enable`/`disable`
+ * command flow; the enabled-sync itself comes from `Module`. Concrete drivetrains provide the
+ * motor-specific parts through the protected hooks.
  *
  * `locked` is a safety interlock: while `true`, drive commands are ignored and the wheels are
  * actively held at standstill (zero-speed setpoint, motors stay enabled), so a rule can block
@@ -45,6 +39,7 @@ private:
     bool moving = false;                         // last applied drive command was non-zero and no stop followed since
     bool stopped = false;                        // the dead man's switch tripped and no drive command released it yet
     unsigned long last_drive_command_millis = 0; // `millis()` of the last `speed()`/`power()`, applied or not
+    unsigned long command_count = 0;             // `speed()`, `power()` and `off()` commands so far
 
     /// Copy the shared properties (`locked`, `enabled`, `drive_command_timeout`) onto a freshly attached shadow.
     void sync_shared_properties(Module &shadow) const;
@@ -76,18 +71,11 @@ public:
 
     Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults = Wheels::get_defaults());
     void step() override;
-    /// Drive with `linear` (m/s) and `angular` (rad/s) speed, like `wheels.speed(...)` from a script: subject to
-    /// `enabled`/`locked` and feeding the dead man's switch. For modules that drive the wheels, e.g. `Joystick`.
-    void speed(const double linear, const double angular);
     /// Whether drive commands may be applied: true only while enabled and not locked.
     bool may_drive() const;
-    /// Speed limit of a single wheel (m/s) that the drivetrain enforces itself; 0 when it has none or does not know.
-    virtual double max_wheel_speed() const { return 0.0; }
-    /// The `max_linear_speed` property, or the per-wheel limit when the property is 0; 0 when neither is known.
-    double max_linear_speed() const;
-    /// The `max_angular_speed` property, or what two wheels at their limit turning against each other give; 0 when
-    /// neither is known.
-    double max_angular_speed() const;
+    /// Number of `speed()`, `power()` and `off()` commands so far, so a module driving the wheels can tell
+    /// whether someone else commanded them since its own last command.
+    unsigned long get_command_count() const { return this->command_count; }
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void write_property(const std::string property_name, const ConstExpression_ptr expression,
                         const bool from_expander = false) override;
