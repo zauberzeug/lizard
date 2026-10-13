@@ -4,18 +4,35 @@
 #include "nvs_flash.h"
 #include "utils/string_utils.h"
 #include "utils/uart.h"
+#include <algorithm>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
 
 #define NAMESPACE "storage"
-#define MAX_CHUNK_SIZE 0xf00
+// NVS stores a string as one header entry plus one 32-byte entry per 32 bytes of text and terminator, all on the same
+// page of 126 entries. A chunk of 959 bytes takes 31 entries, so four chunks fill a page, and a single chunk still finds
+// room on a page that holds other keys. The former 0xf00 bytes took 122 entries and needed an almost empty page.
+// Reading does not depend on this size: a script stored in larger chunks still loads.
+#define MAX_CHUNK_SIZE 959
 
 std::string Storage::startup;
+std::string Storage::save_error;
 
 void Storage::init() {
     nvs_flash_init();
     Storage::startup = Storage::get();
+}
+
+// the start of a value for an error message: a message with a whole chunk would exceed the console line and be dropped
+static std::string preview(const std::string &value) {
+    size_t length = std::min(value.size(), size_t(40));
+    while (length < value.size() && (static_cast<unsigned char>(value[length]) & 0xC0) == 0x80) {
+        length--; // do not cut a multi-byte UTF-8 character
+    }
+    std::string shown = length < value.size() ? value.substr(0, length) + "..." : value;
+    std::replace(shown.begin(), shown.end(), '\n', ' ');
+    return shown;
 }
 
 void write(const std::string ns, const std::string key, const std::string value) {
@@ -26,11 +43,11 @@ void write(const std::string ns, const std::string key, const std::string value)
     }
     if ((err = nvs_set_str(handle, key.c_str(), value.c_str())) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(err)) + ")");
+        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + preview(value) + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     if ((err = nvs_commit(handle)) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + value + " (" + std::string(esp_err_to_name(err)) + ")");
+        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + preview(value) + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     nvs_close(handle);
 }
@@ -145,17 +162,24 @@ std::string Storage::get() {
 
 void Storage::append_to_startup(const std::string line) {
     Storage::startup += line + '\n';
+    Storage::save_error.clear(); // the script changed: its checksum is reported again
 }
 
 void Storage::remove_from_startup(const std::string substring) {
     std::string new_startup = "";
+    bool changed = false;
     while (!Storage::startup.empty()) {
         std::string line = cut_first_word(Storage::startup, '\n');
-        if (!starts_with(line, substring)) {
+        if (starts_with(line, substring)) {
+            changed = true;
+        } else {
             new_startup += line + '\n';
         }
     }
     Storage::startup = new_startup;
+    if (changed) {
+        Storage::save_error.clear(); // the script changed: its checksum is reported again
+    }
 }
 
 void Storage::print_startup(const std::string substring) {
@@ -169,7 +193,13 @@ void Storage::print_startup(const std::string substring) {
 }
 
 void Storage::save_startup() {
-    Storage::put(Storage::startup);
+    try {
+        Storage::put(Storage::startup);
+    } catch (const std::exception &e) {
+        Storage::save_error = e.what(); // put() erases the stored script before writing the new one, so NVS holds an incomplete one
+        throw;
+    }
+    Storage::save_error.clear();
 }
 
 void Storage::set_user_pin(const std::uint32_t pin) {

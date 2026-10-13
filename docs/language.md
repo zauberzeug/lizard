@@ -242,7 +242,8 @@ Lines with a leading `!` can indicate one of the following control commands.
 
 Note that the commands `!+`, `!-` and `!?` affect the startup script in RAM, which is only written to non-volatile storage with the `!.` command.
 The `!.` command does not reply when it succeeds.
-The [`core.startup_checksum()`](module_reference.md#core) command sums the bytes of the startup script in RAM, so before a restart it only checks the transfer of the `!+` lines.
+The [`core.startup_checksum()`](module_reference.md#core) command sums the bytes of the startup script in RAM, so before a restart it checks the transfer of the `!+` lines.
+If `!.` fails, `core.startup_checksum()` reports the error instead of a checksum until the script changes or a `!.` succeeds.
 The script is loaded from non-volatile storage again at boot, so after a restart the same command checks what `!.` has stored.
 
 Input from the default command-line interface UART0 is usually interpreted as Lizard code;

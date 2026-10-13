@@ -78,6 +78,9 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
         this->output_on = true;
     } else if (method_name == "startup_checksum") {
+        if (!Storage::save_error.empty()) {
+            throw std::runtime_error("the stored startup script is incomplete: " + Storage::save_error);
+        }
         uint16_t checksum = 0;
         for (char const &c : Storage::startup) {
             checksum += static_cast<uint8_t>(c);
