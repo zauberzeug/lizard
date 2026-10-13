@@ -40,7 +40,7 @@ when core.last_message_age > 500 then motor.stop(); core.clear_schedule() end
 ```
 
 If an action fails, the remaining actions of the rule are skipped (see [failing actions](language.md#actions)).
-In the example above, a motor that rejects its command, e.g. a CANopen motor that has not answered on its bus yet, would keep the schedule from being cleared.
+In the example above, a failing `motor.stop()` would keep the schedule from being cleared.
 Safety actions that do not depend on each other therefore belong in separate rules:
 
 ```
