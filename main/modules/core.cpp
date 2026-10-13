@@ -22,6 +22,7 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
     this->properties["last_message_age"] = std::make_shared<IntegerVariable>();
+    this->properties["startup_error"] = std::make_shared<StringVariable>();
 }
 
 void Core::step() {
