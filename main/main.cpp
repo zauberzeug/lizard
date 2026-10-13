@@ -9,6 +9,7 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
+#include "esp_timer.h"
 #include "global.h"
 #include "main.h"
 #include "modules/bluetooth.h"
@@ -541,11 +542,13 @@ void app_main() {
 
     printf("\nReady.\n");
 
+    constexpr int LOOP_PERIOD_MS = 10;
     // Anchor for the deadline loop below: xTaskDelayUntil advances this by one period
     // each iteration, giving a drift-free 10 ms cadence (no millis() re-read per loop).
     TickType_t last_wake = xTaskGetTickCount();
 
     while (true) {
+        const int64_t cycle_start_us = esp_timer_get_time();
         boot_guard::step();
 
         try {
@@ -582,11 +585,13 @@ void app_main() {
             }
         }
 
+        check_console_load(esp_timer_get_time() - cycle_start_us, LOOP_PERIOD_MS * 1000);
+
         // Sleep until the next 10 ms period boundary instead of a full vTaskDelay(10) after
         // work, so the period is max(10 ms, work) and drift-free (#213). On overrun
         // xTaskDelayUntil returns pdFALSE without blocking; floor at 1 tick so the idle task
         // still runs to feed the watchdog (vTaskDelay(0) only yields to equal-prio tasks).
-        if (xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10)) == pdFALSE) {
+        if (xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(LOOP_PERIOD_MS)) == pdFALSE) {
             last_wake = xTaskGetTickCount();
             delay(1);
         }

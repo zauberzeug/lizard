@@ -8,6 +8,7 @@ constexpr int CONSOLE_LINE_SIZE = 2048;                     // longest line on t
 constexpr int CONSOLE_PAYLOAD_SIZE = CONSOLE_LINE_SIZE - 5; // what a line may carry before "@xx\r\n" (stdout ends lines with CRLF)
 
 void echo(const char *fmt, ...);
+void check_console_load(int64_t work_us, int64_t period_us); // once per loop cycle, warns when printing keeps it past its period
 typedef std::function<void(const char *line)> EchoCallback;
 int register_echo_callback(const EchoCallback &callback);
 void unregister_echo_callback(const int handle);
