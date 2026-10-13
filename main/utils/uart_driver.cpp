@@ -1,5 +1,6 @@
 #include "uart_driver.h"
 #include "esp_ipc.h"
+#include <algorithm>
 
 namespace {
 
@@ -28,4 +29,15 @@ esp_err_t install_uart_driver_on_core1(uart_port_t port, int rx_buffer_size, int
         return request.result;
     }
     return uart_set_rx_full_threshold(port, RX_FULL_THRESHOLD_BYTES);
+}
+
+void discard_uart_input(uart_port_t port, int count) {
+    uint8_t scratch[128];
+    while (count > 0) {
+        const int read = uart_read_bytes(port, scratch, std::min<int>(count, sizeof(scratch)), 0);
+        if (read <= 0) {
+            break;
+        }
+        count -= read;
+    }
 }

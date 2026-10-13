@@ -83,6 +83,13 @@ void Serial::initialize_uart() const {
     if (install_uart_driver_on_core1(uart_num, RX_BUF_SIZE, TX_BUF_SIZE) != ESP_OK) {
         throw std::runtime_error("could not install the uart driver");
     }
+    this->apply_rx_full_threshold();
+}
+
+void Serial::apply_rx_full_threshold() const {
+    // An unmuted Serial prints the ring as one line, so a frame up to the threshold must arrive in one piece.
+    uart_set_rx_full_threshold(this->uart_num,
+                               this->output_on ? RX_FULL_THRESHOLD_DEFAULT_BYTES : RX_FULL_THRESHOLD_BYTES);
 }
 
 void Serial::enable_line_detection() const {
@@ -103,6 +110,7 @@ void Serial::require_sole_user(const std::string &user) const {
 }
 
 void Serial::deinstall() const {
+    this->pending_lines.clear();
     if (uart_is_driver_installed(this->uart_num)) {
         uart_driver_delete(this->uart_num);
     }
@@ -155,10 +163,20 @@ int Serial::available() const {
 }
 
 bool Serial::has_buffered_lines() const {
-    return uart_pattern_get_pos(this->uart_num) != -1;
+    if (!this->pending_lines.empty() || uart_pattern_get_pos(this->uart_num) != -1) {
+        return true;
+    }
+    // a ring that fills without a line end stops receiving, so drop what can never become a line; the driver
+    // updates the byte count and the pattern queue together, so without a pattern all `buffered` bytes are unterminated
+    const int buffered = this->available();
+    if (buffered > CONSOLE_LINE_SIZE && uart_pattern_get_pos(this->uart_num) == -1) {
+        discard_uart_input(this->uart_num, buffered);
+    }
+    return false;
 }
 
 void Serial::flush() const {
+    this->pending_lines.clear();
     uart_flush(this->uart_num);
 }
 
@@ -169,25 +187,38 @@ int Serial::read(uint32_t timeout) const {
 }
 
 int Serial::read_line(char *buffer, size_t buffer_len) const {
+    if (!this->pending_lines.empty()) {
+        const size_t end = this->pending_lines.find('\n');
+        const size_t len = end == std::string::npos ? this->pending_lines.size() : end + 1;
+        if (len > buffer_len) {
+            this->pending_lines.erase(0, len);
+            return LINE_DISCARDED;
+        }
+        this->pending_lines.copy(buffer, len);
+        this->pending_lines.erase(0, len);
+        return len;
+    }
     int pos = uart_pattern_pop_pos(this->uart_num);
     if (pos >= static_cast<int>(buffer_len)) {
-        if (this->available() <= pos) {
-            uart_flush_input(this->uart_num);
-            while (uart_pattern_pop_pos(this->uart_num) > 0)
-                ;
-            return LINE_FLUSHED;
-        }
-
-        for (int i = 0; i <= pos; i++)
-            this->read();
+        // also when the line end sits in the block the driver parked beside a full ring: reading makes room for it
+        discard_uart_input(this->uart_num, pos + 1);
         return LINE_DISCARDED;
     }
-    return pos >= 0 ? uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0) : 0;
+    if (pos < 0) {
+        return 0;
+    }
+    const int len = uart_read_bytes(this->uart_num, (uint8_t *)buffer, pos + 1, 0);
+    // the driver queues only the last line end of each receive chunk, so one read can hold several lines
+    const char *line_end = len > 0 ? static_cast<const char *>(memchr(buffer, '\n', len)) : nullptr;
+    const int first_len = line_end ? line_end - buffer + 1 : len;
+    if (first_len < len) {
+        this->pending_lines.assign(buffer + first_len, len - first_len);
+    }
+    return first_len;
 }
 
 const char *Serial::read_line_error(const int result) {
-    return result == LINE_FLUSHED ? "buffer too small, but cannot discard line. flushed serial."
-                                  : "buffer too small. discarded line.";
+    return "buffer too small. discarded line.";
 }
 
 std::string Serial::get_output() const {
@@ -198,7 +229,8 @@ std::string Serial::get_output() const {
     static char buffer[256];
     int byte;
     int pos = 0;
-    while ((byte = this->read()) >= 0) {
+    // stop once " xx" and the terminator no longer fit; the rest stays in the ring for the next line
+    while (pos + 4 <= static_cast<int>(sizeof(buffer)) && (byte = this->read()) >= 0) {
         pos += csprintf(&buffer[pos], sizeof(buffer) - pos, pos == 0 ? "%02x" : " %02x", byte);
     }
     return buffer;
@@ -215,6 +247,9 @@ void Serial::call(const std::string method_name, const std::vector<ConstExpressi
     } else if (method_name == "read") {
         const std::string output = this->get_output();
         echo("%s %s", this->name.c_str(), output.c_str());
+    } else if (method_name == "mute" || method_name == "unmute") {
+        Module::call(method_name, arguments);
+        this->apply_rx_full_threshold();
     } else {
         Module::call(method_name, arguments);
     }

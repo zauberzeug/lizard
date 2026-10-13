@@ -11,14 +11,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Callable, Dict, Generator, List, Optional, Tuple
 
+from serial_devices import IS_JETSON, resolve_device
+
 try:
     import gpiod
 except ImportError:
     GPIOD_VERSION = None
 else:
     GPIOD_VERSION = 2 if hasattr(gpiod, 'request_lines') else 1
-
-IS_JETSON = Path('/etc/nv_tegra_release').exists()
 
 
 class GpioController:
@@ -98,7 +98,7 @@ class Config:
     so they cannot drift from their inputs.
     """
     chip: str = 'esp32'
-    device: str = ''  # the real default is machine-dependent, see resolve_default_device()
+    device_option: Optional[str] = None  # an explicit --device; otherwise .device detects one on first read
     baud: Optional[int] = None  # an explicit --baud; each command falls back to its own default
     nand: bool = False
     swap: bool = False
@@ -129,6 +129,15 @@ class Config:
     @property
     def g0(self) -> str:
         return self.en_pin if self.swap else self.g0_pin
+
+    @property
+    def device(self) -> str:
+        """The serial device, detected on first read.
+
+        Lazy so that a pin-only command (enable, disable, reset, release_pins) never resolves
+        one -- and hence never asks which of several adapters to use for one it won't open.
+        """
+        return self.device_option or resolve_device()
 
     @property
     def stub_args(self) -> Tuple[str, ...]:
@@ -166,7 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
                                      allow_abbrev=False)
     parser.add_argument('command', choices=list(COMMANDS), help='Command to execute')
     parser.add_argument('--host', default=None,
-                        help='Run on a remote user@host[:path]: rsync espresso.py + build artifacts there '
+                        help='Run on a remote user@host[:path]: rsync the espresso.py tooling + build artifacts there '
                              'and re-invoke the command over SSH (default path: ~/lizard)')
     parser.add_argument('--nand', action='store_true', help='Board has NAND gates')
     parser.add_argument('--bootloader', default=None,
@@ -179,8 +188,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--chip', choices=['esp32', 'esp32s3'], default=None,
                         help=f'ESP chip type (default: {DEFAULT.chip})')
     parser.add_argument('--reset-partition', action='store_true', help='Reset to default OTA partition after flashing')
-    parser.add_argument('-d', '--dry-run', action='store_true', help='Dry run')
-    parser.add_argument('--device', nargs='?', default=None, help='Serial device path (auto-detected on Jetson)')
+    parser.add_argument('-d', '--dry-run', action='store_true',
+                        help='Print the commands instead of running them (still resolves the serial device)')
+    parser.add_argument('--device', nargs='?', default=None,
+                        help='Serial device path (default: auto-detected, asks if ambiguous)')
     parser.add_argument('--baud', type=int, default=None,
                         help=f'Baud rate (default: {DEFAULT.flash_baud} for flashing and erasing, '
                              f'{DEFAULT.coredump_baud} for coredump)')
@@ -207,21 +218,6 @@ def resolve_default_artifact(default: str) -> str:
         return default
     name = json.loads(description.read_text()).get({'.bin': 'app_bin', '.elf': 'app_elf'}[path.suffix])
     return str(path.parent / name) if name else default
-
-
-def resolve_default_device() -> str:
-    """Return the default serial device for the machine actually running the command."""
-    tegra = Path('/etc/nv_tegra_release')
-    if tegra.exists() and (match := re.search(r'R(\d+)', tegra.read_text(encoding='utf-8'))):
-        major = int(match.group(1))
-        if major == 35:
-            return '/dev/ttyTHS0'
-        if major == 36:
-            return '/dev/ttyTHS1'
-        raise RuntimeError(f'Unsupported L4T (Linux for Tegra) version: {major}')
-    if sys.platform.startswith('linux'):
-        return '/dev/ttyUSB0'  # a USB-UART bridge on a non-Jetson Linux host
-    return '/dev/tty.SLAB_USBtoUART'  # the same CP210x bridge under macOS
 
 
 def build_gpio(en: str, g0: str) -> GpioController:
@@ -324,11 +320,11 @@ def remote_command(argv: List[str], parsed: argparse.Namespace, artifacts: Dict[
 
 def run_remote(host: str, command: List[str], *, artifacts: List[str],
                use_sudo: bool, dry_run: bool) -> None:
-    """rsync espresso.py (+ the needed build artifacts) to the host and run the command over SSH.
+    """rsync espresso.py + serial_devices.py (+ the needed build artifacts) to the host and run the command over SSH.
 
     Exactly the files the command uses are copied, with their relative paths preserved
     (rsync -R), so the remote command finds them below the target directory; ``artifacts``
-    is empty for pin-only commands (erase/enable/disable/reset/release_pins), which skip
+    is empty for the commands that build nothing (enable/disable/reset/erase/release_pins), which skip
     the artifact rsync entirely. The paths resolve against the cwd -- the same base a local
     run uses -- so the remote flashes exactly what a local flash would; only espresso.py
     itself is taken from the script's own directory. Under ``dry_run`` nothing is sent or
@@ -350,10 +346,11 @@ def run_remote(host: str, command: List[str], *, artifacts: List[str],
             raise RuntimeError(f'Missing build artifacts: {", ".join(missing)}; run the ESP-IDF build first.')
         print_bold(f'Copying build artifacts to {target}:{path}...')
         runner(['rsync', '-zavR', *artifacts, f'{target}:{path}'])
-    print_bold(f'Copying espresso.py to {target}:{path}...')
+    print_bold(f'Copying espresso.py and serial_devices.py to {target}:{path}...')
     # -p restores the exec bit on a pre-existing non-executable remote copy, whose
     # permissions a plain rsync would keep forever ("./espresso.py: Permission denied").
-    runner(['rsync', '-zp', str(script_dir / 'espresso.py'), f'{target}:{path}/'])
+    runner(['rsync', '-zp', str(script_dir / 'espresso.py'), str(script_dir / 'serial_devices.py'),
+            f'{target}:{path}/'])
 
     print_bold(f'Running "espresso.py {" ".join(command)}" on {target}...')
     sudo = 'sudo ' if use_sudo else ''
@@ -432,13 +429,14 @@ def _reset(config: Config) -> None:
 def erase(config: Config) -> None:
     """Erase the microcontroller."""
     print_bold('Erasing the microcontroller...')
+    device = config.device
     with _pin_config(config):
         with _flash_mode(config):
             success = run(
                 config,
                 'esptool.py',
                 '--chip', config.chip,
-                '--port', config.device,
+                '--port', device,
                 '--baud', config.flash_baud,
                 *config.stub_args,
                 '--before', 'default_reset',
@@ -470,13 +468,14 @@ def reset_partition(config: Config) -> None:
 def flash(config: Config) -> None:
     """Flash the microcontroller."""
     print_bold('Flashing...')
+    device = config.device
     with _pin_config(config):
         with _flash_mode(config):
             success = run(
                 config,
                 'esptool.py',
                 '--chip', config.chip,
-                '--port', config.device,
+                '--port', device,
                 '--baud', config.flash_baud,
                 *config.stub_args,
                 '--before', 'default_reset',
@@ -503,7 +502,7 @@ def coredump(config: Config) -> None:
     deferred so the flash path does not depend on esp_coredump being installed.
     """
     print_bold('Reading core dump...')
-    print(f'  port={config.device} chip={config.chip} baud={config.coredump_baud} elf={config.elf}')
+    print(f'  device={config.device} chip={config.chip} baud={config.coredump_baud} elf={config.elf}')
     if config.dry_run:
         return
     try:
@@ -603,7 +602,7 @@ def main(argv: List[str]) -> None:
 
     config = Config(
         chip=args.chip or DEFAULT.chip,
-        device=args.device or resolve_default_device(),
+        device_option=args.device,
         baud=args.baud,
         nand=args.nand,
         swap=args.swap,

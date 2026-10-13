@@ -70,11 +70,21 @@ static auto init_connection(const uart_port_t uart_num,
 }
 
 static auto connect() -> bool {
-    esp_loader_connect_args_t args{};
-    args.trials = 4;
-    args.sync_timeout = 100;
-    esp_loader_error_t status{esp_loader_connect(&args)};
-    ESP_LOGD(TAG, "esp_loader_connect() -> %u", status);
+    // the target's ROM leaves up to nine sync packets unanswered on the bench (#255), so keep the default of 10 trials
+    esp_loader_connect_args_t args = ESP_LOADER_CONNECT_DEFAULT();
+    // like esptool, start over with a fresh reset if connecting fails
+    static constexpr int CONNECT_ATTEMPTS = 3;
+    esp_loader_error_t status;
+    for (int attempt = 1; attempt <= CONNECT_ATTEMPTS; ++attempt) {
+        status = esp_loader_connect(&args);
+        ESP_LOGD(TAG, "esp_loader_connect() attempt %d -> %u", attempt, status);
+        if (status == ESP_LOADER_SUCCESS) {
+            break;
+        }
+        if (attempt < CONNECT_ATTEMPTS) {
+            ESP_LOGW(TAG, "Connecting failed (%s), resetting the target again", ERROR_STRINGS[status]);
+        }
+    }
 
     HANDLE_ERROR(status, "connecting");
 

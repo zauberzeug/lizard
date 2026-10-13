@@ -10,7 +10,8 @@ private:
     // The startup script lives in NVS and is only held in RAM while it is edited (from the first `!+` or `!-` to `!.`),
     // in pieces of at most one NVS chunk, so that neither booting nor editing needs one large block of heap.
     static bool editing;
-    static bool save_failed; // the last `!.` failed and the edit did not change since
+    // the error of a failed "!." until the edit changes or a "!." succeeds; startup_checksum() reports it instead of a checksum
+    static std::string save_error;
     static std::vector<std::string> edit_pieces;
 
     static void read_stored(const std::function<void(const std::string &piece)> &piece);
