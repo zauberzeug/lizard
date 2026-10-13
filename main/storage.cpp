@@ -158,15 +158,20 @@ void Storage::append_to_startup(const std::string line) {
 }
 
 void Storage::remove_from_startup(const std::string substring) {
-    Storage::save_error.clear(); // the script changed: its checksum is reported again
     std::string new_startup = "";
+    bool changed = false;
     while (!Storage::startup.empty()) {
         std::string line = cut_first_word(Storage::startup, '\n');
-        if (!starts_with(line, substring)) {
+        if (starts_with(line, substring)) {
+            changed = true;
+        } else {
             new_startup += line + '\n';
         }
     }
     Storage::startup = new_startup;
+    if (changed) {
+        Storage::save_error.clear(); // the script changed: its checksum is reported again
+    }
 }
 
 void Storage::print_startup(const std::string substring) {
