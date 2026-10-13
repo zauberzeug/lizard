@@ -1,10 +1,13 @@
 #include "wheels.h"
+#include <algorithm>
+#include <cmath>
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 
 const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
     return {
         {"width", std::make_shared<NumberVariable>(1.0)},
+        {"max_wheel_speed", std::make_shared<NumberVariable>(0.0)},
         {"linear_speed", std::make_shared<NumberVariable>()},
         {"angular_speed", std::make_shared<NumberVariable>()},
         {"enabled", std::make_shared<BooleanVariable>(true)},
@@ -80,10 +83,22 @@ void Wheels::step() {
         this->do_wheel_speeds(0.0, 0.0);
     }
 
+    // Stop repeat: a single zero-speed frame after motion can be lost on the bus or refused by a drive (seen
+    // on Innotronic tracks, which then crept on at the last setpoint), so it is re-sent every cycle for a
+    // while. A hold takes over the standstill on its own, and any other command ends the repeat early.
+    if (this->repeating_stop) {
+        if (this->holding || !this->may_drive() || millis_since(this->stop_repeat_millis) >= STOP_REPEAT_MILLIS) {
+            this->repeating_stop = false;
+        } else {
+            this->do_wheel_speeds(0.0, 0.0);
+        }
+    }
+
     Module::step();
 }
 
 void Wheels::note_drive_command(bool applied, bool nonzero) {
+    this->repeating_stop = false;
     this->last_drive_command_millis = millis();
     if (applied && nonzero) {
         this->moving = true;
@@ -108,18 +123,40 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         Module::expect(arguments, 2, numbery, numbery);
         const double linear = arguments[0]->evaluate_number();
         const double angular = arguments[1]->evaluate_number();
+        if (!std::isfinite(linear) || !std::isfinite(angular)) {
+            throw std::runtime_error("module \"" + this->name + "\" expects finite speeds");
+        }
         const bool nonzero = linear != 0.0 || angular != 0.0;
         const bool applied = this->may_drive();
+        const bool was_moving = this->moving;
         this->note_drive_command(applied, nonzero);
         if (applied) {
             const double width = this->properties.at("width")->number_value();
-            this->do_wheel_speeds(linear - angular * width / 2.0, linear + angular * width / 2.0);
+            double left = linear - angular * width / 2.0;
+            double right = linear + angular * width / 2.0;
+            // Saturation: scale both wheels down together, so the robot keeps its direction instead of veering
+            // when the drive cuts off only the faster wheel.
+            const double max_wheel_speed = this->properties.at("max_wheel_speed")->number_value();
+            const double fastest_wheel = std::max(std::abs(left), std::abs(right));
+            if (max_wheel_speed > 0.0 && fastest_wheel > max_wheel_speed) {
+                left *= max_wheel_speed / fastest_wheel;
+                right *= max_wheel_speed / fastest_wheel;
+            }
+            // Arm the repeat before the send, so a stop that fails to go out is retried as well.
+            if (!nonzero && was_moving) {
+                this->repeating_stop = true;
+                this->stop_repeat_millis = millis();
+            }
+            this->do_wheel_speeds(left, right);
             this->note_drive_command_sent(nonzero);
         }
     } else if (method_name == "power") {
         Module::expect(arguments, 2, numbery, numbery);
         const double left = arguments[0]->evaluate_number();
         const double right = arguments[1]->evaluate_number();
+        if (!std::isfinite(left) || !std::isfinite(right)) {
+            throw std::runtime_error("module \"" + this->name + "\" expects finite powers");
+        }
         const bool nonzero = left != 0.0 || right != 0.0;
         const bool applied = this->may_drive();
         this->note_drive_command(applied, nonzero);
@@ -129,6 +166,7 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
+        this->repeating_stop = false;
         this->do_off();
         this->note_drive_command_sent(false); // idle motors are a stop; the dead man's switch must not re-activate them
     } else if (method_name == "enable") {
@@ -170,6 +208,12 @@ void Wheels::sync_shared_properties(Module &shadow) const {
 
 void Wheels::write_property(const std::string property_name, const ConstExpression_ptr expression,
                             const bool from_expander) {
+    if (property_name == "max_wheel_speed") {
+        const double max_wheel_speed = expression->evaluate_number();
+        if (!std::isfinite(max_wheel_speed) || max_wheel_speed < 0.0) {
+            throw std::runtime_error("max_wheel_speed of module \"" + this->name + "\" must be finite and not negative");
+        }
+    }
     Module::write_property(property_name, expression, from_expander);
     // Shadowed wheels mirror method calls but not property writes. Forward the shared properties
     // so a shadow stops together with its master. Write them one level deep via
@@ -186,6 +230,7 @@ void Wheels::disable() {
     // The standstill hold dies with the motors; clear it first so a throwing do_disable()
     // cannot leave it stale, and re-send it if locking persists.
     this->holding = false;
+    this->repeating_stop = false;
     Module::disable();
     // Only a completed disable is a stop; while it stays pending, the dead man's switch may still fire.
     this->moving = false;

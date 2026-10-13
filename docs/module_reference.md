@@ -589,6 +589,7 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
@@ -607,6 +608,14 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 When the wheels are disabled, they will stop and ignore movement commands.
 This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
+
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+`power()` is not limited.
+
+A `speed(0, 0)` after motion is repeated every cycle for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+Any other command, e.g. the next `speed()`, `power()` or `off()`, ends the repeat early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
 
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
@@ -751,6 +760,7 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.m_per_tick`            | Meters per encoder tick                                       | `float`   |
@@ -768,6 +778,14 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | `wheels.disable()`              | Disable both motors                             |                  |
 
 When the wheels are disabled, they will stop and ignore movement commands.
+
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+`power()` is not limited.
+
+A `speed(0, 0)` after motion is repeated every cycle for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+Any other command, e.g. the next `speed()`, `power()` or `off()`, ends the repeat early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
 
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
@@ -1103,6 +1121,7 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
@@ -1117,6 +1136,13 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | `wheels.disable()`              | Disable both motors                             |                  |
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
+
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+
+A `speed(0, 0)` after motion is repeated every cycle for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+The next `speed()` ends the repeat early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
 
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
