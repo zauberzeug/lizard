@@ -10,8 +10,10 @@
 #include <string>
 
 #define NAMESPACE "storage"
-// 959 characters and the terminator fill 30 NVS entries plus one header entry, so four chunks share a page of 126
-// entries and still fit on fragmented pages, where a chunk of 0xf00 needs an almost empty one; larger ones read back too
+// NVS stores a string as one header entry plus one 32-byte entry per 32 bytes of text and terminator, all on the same
+// page of 126 entries. A chunk of 959 bytes takes 31 entries, so four chunks fill a page, and a single chunk still finds
+// room on a page that holds other keys. The former 0xf00 bytes took 122 entries and needed an almost empty page.
+// Reading does not depend on this size: a script stored in larger chunks still loads.
 #define MAX_CHUNK_SIZE 959
 
 std::string Storage::startup;
@@ -28,7 +30,7 @@ void write(const std::string ns, const std::string key, const std::string value)
     if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
         throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
     }
-    // the value only starts the message: a whole chunk would make it too long to be printed at all
+    // quote only the start of the value: a message with a whole chunk would exceed the console line and be dropped
     std::string shown = value.size() > 40 ? value.substr(0, 40) + "..." : value;
     std::replace(shown.begin(), shown.end(), '\n', ' ');
     if ((err = nvs_set_str(handle, key.c_str(), value.c_str())) != ESP_OK) {
@@ -152,11 +154,11 @@ std::string Storage::get() {
 
 void Storage::append_to_startup(const std::string line) {
     Storage::startup += line + '\n';
-    Storage::save_failed = false; // the edit changes: the checksum covers it again
+    Storage::save_failed = false; // the script changed: its checksum is reported again
 }
 
 void Storage::remove_from_startup(const std::string substring) {
-    Storage::save_failed = false;
+    Storage::save_failed = false; // the script changed: its checksum is reported again
     std::string new_startup = "";
     while (!Storage::startup.empty()) {
         std::string line = cut_first_word(Storage::startup, '\n');
@@ -181,7 +183,7 @@ void Storage::save_startup() {
     try {
         Storage::put(Storage::startup);
     } catch (...) {
-        Storage::save_failed = true; // the old chunks are gone already: the stored script is incomplete
+        Storage::save_failed = true; // put() erases the stored script before writing the new one, so NVS holds an incomplete one
         throw;
     }
     Storage::save_failed = false;
