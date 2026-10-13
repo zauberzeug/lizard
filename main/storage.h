@@ -11,8 +11,8 @@ private:
 
 public:
     static std::string startup;
-    // set by a failed "!." until the script changes or a "!." succeeds; startup_checksum() reports an error while set
-    static bool save_failed;
+    // the error of a failed "!." until the script changes or a "!." succeeds; startup_checksum() reports it instead of a checksum
+    static std::string save_error;
 
     static void init();
     static void append_to_startup(const std::string line);

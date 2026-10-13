@@ -17,7 +17,7 @@
 #define MAX_CHUNK_SIZE 959
 
 std::string Storage::startup;
-bool Storage::save_failed = false;
+std::string Storage::save_error;
 
 void Storage::init() {
     nvs_flash_init();
@@ -154,11 +154,11 @@ std::string Storage::get() {
 
 void Storage::append_to_startup(const std::string line) {
     Storage::startup += line + '\n';
-    Storage::save_failed = false; // the script changed: its checksum is reported again
+    Storage::save_error.clear(); // the script changed: its checksum is reported again
 }
 
 void Storage::remove_from_startup(const std::string substring) {
-    Storage::save_failed = false; // the script changed: its checksum is reported again
+    Storage::save_error.clear(); // the script changed: its checksum is reported again
     std::string new_startup = "";
     while (!Storage::startup.empty()) {
         std::string line = cut_first_word(Storage::startup, '\n');
@@ -182,11 +182,11 @@ void Storage::print_startup(const std::string substring) {
 void Storage::save_startup() {
     try {
         Storage::put(Storage::startup);
-    } catch (...) {
-        Storage::save_failed = true; // put() erases the stored script before writing the new one, so NVS holds an incomplete one
+    } catch (const std::exception &e) {
+        Storage::save_error = e.what(); // put() erases the stored script before writing the new one, so NVS holds an incomplete one
         throw;
     }
-    Storage::save_failed = false;
+    Storage::save_error.clear();
 }
 
 void Storage::set_user_pin(const std::uint32_t pin) {
