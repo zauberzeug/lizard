@@ -7,6 +7,11 @@
 // At 921600 baud the default leaves ~70 us for the ISR, and a late one silently loses bytes.
 constexpr int RX_FULL_THRESHOLD_BYTES = 32;
 
+// What an unmuted Serial restores (the IDF default, private to its driver, hence the literal). Firing early hands a
+// frame longer than the threshold to the ring in two chunks, which get_output() prints as two lines; line-based
+// readers reassemble on "\n" and keep the early interrupt.
+constexpr int RX_FULL_THRESHOLD_DEFAULT_BYTES = 120;
+
 // Depth of the driver's event queue. Nothing reads it, it only has to exist: when the receive ring runs full while
 // a line end is detected, the receive ISR of IDF 5.3.1 (and still of master) posts to the queue without a NULL
 // check, and FreeRTOS asserts in the ISR if there is none (#146, #302). Any depth works; 20 is what #146 chose.
