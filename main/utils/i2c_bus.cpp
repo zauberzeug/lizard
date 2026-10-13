@@ -22,7 +22,8 @@ void I2cBusManager::ensure(i2c_port_t port, gpio_num_t sda_pin, gpio_num_t scl_p
     }
 
     // claim first: a conflict must be found before the pins are routed to the bus
-    auto claims = std::make_unique<resources::Claims>("i2c port " + std::to_string(port));
+    config.owner = "i2c port " + std::to_string(port);
+    auto claims = std::make_unique<resources::Claims>(config.owner, false);
     claims->pin(sda_pin);
     claims->pin(scl_pin);
 
@@ -45,5 +46,10 @@ void I2cBusManager::ensure(i2c_port_t port, gpio_num_t sda_pin, gpio_num_t scl_p
         i2c_driver_delete(port);
         throw std::runtime_error("could not set i2c timeout");
     }
-    config = BusConfig{.sda_pin = sda_pin, .scl_pin = scl_pin, .clk_speed_hz = clk_speed_hz, .initialized = true, .claims = std::move(claims)};
+    // field by field: assigning a whole BusConfig would empty `owner`, which the claims refer to
+    config.sda_pin = sda_pin;
+    config.scl_pin = scl_pin;
+    config.clk_speed_hz = clk_speed_hz;
+    config.initialized = true;
+    config.claims = std::move(claims);
 }

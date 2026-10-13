@@ -13,8 +13,10 @@ Shadows are useful if multiple modules should behave exactly the same, e.g. two 
 
 The `broadcast` method is used internally with [port expanders](#expander).
 
-Every module reserves the pins and peripherals it uses, i.e. GPIO pins, UART ports and the CAN controller, until the core restarts.
+A module reserves the pins and peripherals it uses on its microcontroller, i.e. GPIO pins, UART ports, the CAN controller and ADC units, until the core restarts.
+I2C modules on the same port share its SDA and SCL pins, which stay reserved for that port.
 Creating a module on a reserved pin or peripheral fails with an error that names the owner, e.g. `pin 15 is already used by module "led"`.
+In the startup script, such an error stops the script like any other error (see [Startup Script](getting_started.md#startup-script)).
 The console UART with its pins and the pins of the SPI flash are reserved from the start.
 
 ## Core

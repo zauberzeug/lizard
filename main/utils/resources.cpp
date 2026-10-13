@@ -2,18 +2,16 @@
 #include "soc/soc_caps.h"
 #include "soc/spi_pins.h"
 #include "soc/uart_channel.h"
-#include <list>
 #include <stdexcept>
 
 namespace resources {
 
 namespace {
 
-const std::string *pin_owners[GPIO_NUM_MAX] = {};
-const std::string *uart_owners[UART_NUM_MAX] = {};
-const std::string *can_owners[SOC_TWAI_CONTROLLER_NUM] = {};
-const std::string *adc_owners[SOC_ADC_PERIPH_NUM + 1] = {}; // indexed by the 1-based unit number
-std::list<std::string> permanent_owners;                    // a list keeps its strings in place, so the pointers above stay valid
+const Claims *pin_owners[GPIO_NUM_MAX] = {};
+const Claims *uart_owners[UART_NUM_MAX] = {};
+const Claims *can_owners[SOC_TWAI_CONTROLLER_NUM] = {};
+const Claims *adc_owners[SOC_ADC_PERIPH_NUM + 1] = {}; // indexed by the 1-based unit number
 
 const char *describe(const Kind kind) {
     switch (kind) {
@@ -28,7 +26,7 @@ const char *describe(const Kind kind) {
     }
 }
 
-const std::string *&slot(const Kind kind, const int index) {
+const Claims *&slot(const Kind kind, const int index) {
     switch (kind) {
     case Kind::pin:
         if (index < 0 || index >= GPIO_NUM_MAX || !GPIO_IS_VALID_GPIO(index)) {
@@ -53,32 +51,35 @@ const std::string *&slot(const Kind kind, const int index) {
     }
 }
 
-void take(const Kind kind, const int index, const std::string &owner) {
-    const std::string *&current = slot(kind, index);
+void take(const Kind kind, const int index, const Claims &owner) {
+    const Claims *&current = slot(kind, index);
     if (current) {
-        throw std::runtime_error(std::string(describe(kind)) + " " + std::to_string(index) + " is already used by " + *current);
+        throw std::runtime_error(std::string(describe(kind)) + " " + std::to_string(index) + " is already used by " + current->owner());
     }
     current = &owner;
 }
 
 } // namespace
 
-void reserve(const Kind kind, const int index, const std::string &owner) {
-    permanent_owners.push_back(owner);
-    take(kind, index, permanent_owners.back());
-}
-
 void reserve_boot_resources() {
-    reserve(Kind::uart, UART_NUM_0, "the console");
-    reserve(Kind::pin, UART_NUM_0_TXD_DIRECT_GPIO_NUM, "the console");
-    reserve(Kind::pin, UART_NUM_0_RXD_DIRECT_GPIO_NUM, "the console");
+    static const std::string console_name = "the console";
+    static const std::string flash_name = "the SPI flash";
+    static Claims console(console_name, false);
+    static Claims flash(flash_name, false);
+    console.uart(UART_NUM_0);
+    console.pin(static_cast<gpio_num_t>(UART_NUM_0_TXD_DIRECT_GPIO_NUM));
+    console.pin(static_cast<gpio_num_t>(UART_NUM_0_RXD_DIRECT_GPIO_NUM));
     for (const int pin : {SPI_IOMUX_PIN_NUM_CLK, SPI_IOMUX_PIN_NUM_CS, SPI_IOMUX_PIN_NUM_MISO,
                           SPI_IOMUX_PIN_NUM_MOSI, SPI_IOMUX_PIN_NUM_WP, SPI_IOMUX_PIN_NUM_HD}) {
-        reserve(Kind::pin, pin, "the SPI flash");
+        flash.pin(static_cast<gpio_num_t>(pin));
     }
 }
 
-Claims::Claims(const std::string &owner) : owner(owner) {
+Claims::Claims(const std::string &name, const bool is_module) : name(name), is_module(is_module) {
+}
+
+std::string Claims::owner() const {
+    return this->is_module ? "module \"" + this->name + "\"" : this->name;
 }
 
 Claims::~Claims() {
@@ -89,7 +90,7 @@ Claims::~Claims() {
 
 void Claims::claim(const Kind kind, const int index) {
     this->claimed.reserve(this->claimed.size() + 1); // so the record cannot fail after the slot is taken
-    take(kind, index, this->owner);
+    take(kind, index, *this);
     this->claimed.emplace_back(kind, index);
 }
 

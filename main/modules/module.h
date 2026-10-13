@@ -36,7 +36,6 @@ private:
     const Variable_ptr &get_enabled_property();
 
 protected:
-    resources::Claims claims; // the pins and peripherals of this module, released when it is destroyed
     std::list<Module_ptr> shadow_modules;
     std::map<std::string, Variable_ptr> properties;
     bool output_on = false;
@@ -57,6 +56,10 @@ public:
     static bool broadcast_paused;
     const std::string name;
 
+protected:
+    resources::Claims claims; // the pins and peripherals of this module, released when it is destroyed; after `name`, which it refers to
+
+public:
     Module(const std::string name);
     virtual ~Module() = default;
     static void expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...);

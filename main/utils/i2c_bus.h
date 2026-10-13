@@ -16,6 +16,7 @@ private:
         gpio_num_t scl_pin;
         int clk_speed_hz;
         bool initialized;
+        std::string owner;                         // named by the claims
         std::unique_ptr<resources::Claims> claims; // the driver is never deinstalled, so the pins stay with the port
     };
 
