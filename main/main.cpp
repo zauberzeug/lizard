@@ -554,7 +554,7 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
-        for (auto const &[module_name, module] : Global::modules) {
+        for (auto const &module : Global::ordered_modules) {
             if (module != core_module) {
                 run_step(module);
             }

@@ -67,8 +67,7 @@ void restore_if_needed() {
             }
         }
         for (const std::string &name : serials_to_remove) {
-            Global::modules.erase(name);
-            Global::variables.erase(name);
+            Global::remove_module(name);
         }
         Serial_ptr backup_serial = std::make_shared<Serial>(
             "_backup_serial", static_cast<gpio_num_t>(rx), static_cast<gpio_num_t>(tx),
