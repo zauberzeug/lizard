@@ -1,0 +1,30 @@
+menu "BLE dongle"
+
+config DONGLE_BAUD_RATE
+    int "Baud rate of the host's serial port"
+    default 115200
+
+config ZZ_BLE_DEV_PIN
+    int "Developer PIN"
+    range 0 999999
+    default 0
+    help
+        PIN for pairing when "!dongle link" names none; the same option as in Lizard, so sdkconfig.defaults.secret applies.
+
+config DONGLE_SVC_UUID
+    string "Service UUID of Lizard's Bluetooth module"
+    default "23014ccc-4677-4864-b4c1-8f772b373fac"
+
+config DONGLE_CONSOLE_IN_UUID
+    string "Console input characteristic UUID"
+    default "75cdc16b-212b-4176-8bb8-4222f21cc826"
+
+config DONGLE_CONSOLE_OUT_UUID
+    string "Console output characteristic UUID"
+    default "f8f511b2-1401-4e28-82f1-ad753df3b750"
+
+config DONGLE_CONSOLE_FLOW_UUID
+    string "Console flow characteristic UUID"
+    default "d1e7616c-a8ac-4ec8-9c49-3ae32a008a89"
+
+endmenu

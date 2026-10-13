@@ -425,7 +425,9 @@ static void process_uart_line(char *line, const int len) {
         return;
     }
     try {
-        process_line(line, payload_len);
+        if (!intercept_uart0(line, payload_len)) {
+            process_line(line, payload_len);
+        }
     } catch (const std::exception &e) {
         echo("error processing uart0: %s", e.what());
     }
