@@ -1,4 +1,5 @@
 #include "wheels.h"
+#include "../compilation/expressions.h"
 #include <algorithm>
 #include <cmath>
 #include "../utils/timing.h"
@@ -18,8 +19,9 @@ const std::map<std::string, Variable_ptr> Wheels::get_defaults() {
 }
 
 // The properties that must stay in sync between a master and its shadows: the gates and the
-// dead man's timeout, so shadowed wheels stop together with (and as early as) their master.
-static constexpr const char *SHARED_PROPERTIES[] = {"locked", "enabled", "drive_command_timeout"};
+// dead man's timeout, so shadowed wheels stop together with (and as early as) their master,
+// and the speed limit, so a shadow does not outrun a capped master and fight it.
+static constexpr const char *SHARED_PROPERTIES[] = {"locked", "enabled", "drive_command_timeout", "max_wheel_speed"};
 
 static bool is_shared_property(const std::string &property_name) {
     for (const char *shared : SHARED_PROPERTIES) {
@@ -84,12 +86,14 @@ void Wheels::step() {
     }
 
     // Stop repeat: a single zero-speed frame after motion can be lost on the bus or refused by a drive (seen
-    // on Innotronic tracks, which then crept on at the last setpoint), so it is re-sent every cycle for a
-    // while. A hold takes over the standstill on its own, and any other command ends the repeat early.
+    // on Innotronic tracks, which then crept on at the last setpoint), so it is re-sent every few cycles for
+    // a while — often enough to catch a lost frame, rarely enough not to flood the bus. A hold takes over the
+    // standstill on its own, and any command other than another stop ends the repeat early.
     if (this->repeating_stop) {
         if (this->holding || !this->may_drive() || millis_since(this->stop_repeat_millis) >= STOP_REPEAT_MILLIS) {
             this->repeating_stop = false;
-        } else {
+        } else if (++this->stop_repeat_cycle >= STOP_REPEAT_CYCLES) {
+            this->stop_repeat_cycle = 0;
             this->do_wheel_speeds(0.0, 0.0);
         }
     }
@@ -128,7 +132,7 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         }
         const bool nonzero = linear != 0.0 || angular != 0.0;
         const bool applied = this->may_drive();
-        const bool was_moving = this->moving;
+        const bool was_stopping = this->moving || this->repeating_stop; // a further stop restarts the repeat
         this->note_drive_command(applied, nonzero);
         if (applied) {
             const double width = this->properties.at("width")->number_value();
@@ -143,9 +147,10 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
                 right *= max_wheel_speed / fastest_wheel;
             }
             // Arm the repeat before the send, so a stop that fails to go out is retried as well.
-            if (!nonzero && was_moving) {
+            if (!nonzero && was_stopping) {
                 this->repeating_stop = true;
                 this->stop_repeat_millis = millis();
+                this->stop_repeat_cycle = 0;
             }
             this->do_wheel_speeds(left, right);
             this->note_drive_command_sent(nonzero);
@@ -206,13 +211,15 @@ void Wheels::sync_shared_properties(Module &shadow) const {
     }
 }
 
-void Wheels::write_property(const std::string property_name, const ConstExpression_ptr expression,
+void Wheels::write_property(const std::string property_name, ConstExpression_ptr expression,
                             const bool from_expander) {
     if (property_name == "max_wheel_speed") {
+        // Evaluate once and store the checked value, so validation and assignment cannot disagree.
         const double max_wheel_speed = expression->evaluate_number();
         if (!std::isfinite(max_wheel_speed) || max_wheel_speed < 0.0) {
-            throw std::runtime_error("max_wheel_speed of module \"" + this->name + "\" must be finite and not negative");
+            throw std::runtime_error("max_wheel_speed of module \"" + this->name + "\" must be finite and >= 0");
         }
+        expression = std::make_shared<NumberExpression>(max_wheel_speed);
     }
     Module::write_property(property_name, expression, from_expander);
     // Shadowed wheels mirror method calls but not property writes. Forward the shared properties

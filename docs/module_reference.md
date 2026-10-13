@@ -616,8 +616,9 @@ Driving and turning at once asks the outer wheel for more than either alone; if 
 So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
 `power()` is not limited.
 
-A `speed(0, 0)` after motion is repeated every cycle for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
-Any other command, e.g. the next `speed()`, `power()` or `off()`, ends the repeat early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; any other command, e.g. the next non-zero `speed()`, `power()` or `off()`, ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second, so call `wheels.off()` rather than `off()` on each motor to idle them right after a stop.
 
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
@@ -626,7 +627,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -786,8 +787,9 @@ Driving and turning at once asks the outer wheel for more than either alone; if 
 So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
 `power()` is not limited.
 
-A `speed(0, 0)` after motion is repeated every cycle for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
-Any other command, e.g. the next `speed()`, `power()` or `off()`, ends the repeat early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; any other command, e.g. the next non-zero `speed()`, `power()` or `off()`, ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second, so call `wheels.off()` rather than `off()` on each motor to idle them right after a stop.
 
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
@@ -796,7 +798,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -1143,8 +1145,9 @@ When the wheels are disabled, they will freewheel and ignore movement commands.
 Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
 So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
 
-A `speed(0, 0)` after motion is repeated every cycle for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
-The next `speed()` ends the repeat early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; a non-zero `speed()` ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second.
 
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
@@ -1152,7 +1155,7 @@ This lets a rule block driving while some other condition is unmet, for example 
 The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.

@@ -31,13 +31,15 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  *
  * `max_wheel_speed` caps `speed()`: when the faster wheel would exceed it, linear and angular
  * speed are scaled down together, so the robot keeps its direction instead of veering when a
- * drive cuts off only the outer wheel. A zero `speed()` after motion is repeated for a second,
- * since a single stop can be lost on the bus or refused by a drive; any other command ends it.
+ * drive cuts off only the outer wheel. A zero `speed()` after motion is repeated about every
+ * 100 ms for a second, since a single stop can be lost on the bus or refused by a drive; a further
+ * stop restarts the repeat, any other wheels command ends it.
  */
 class Wheels : public Module {
 private:
     static constexpr unsigned int HOLD_REFRESH_CYCLES = 100;  // re-send the standstill hold about once per second
     static constexpr unsigned long STOP_REPEAT_MILLIS = 1000; // repeat a stop after motion for this long
+    static constexpr unsigned int STOP_REPEAT_CYCLES = 10;    // re-send the repeated stop about every 100 ms
 
     bool holding = false;        // wheels are currently held at standstill (by `locked` or a tripped dead man's switch)
     unsigned int hold_cycle = 0; // `step()` cycles since the hold was last sent
@@ -48,8 +50,9 @@ private:
 
     bool repeating_stop = false;          // a zero `speed()` after motion is being repeated
     unsigned long stop_repeat_millis = 0; // `millis()` when that stop was commanded
+    unsigned int stop_repeat_cycle = 0;   // `step()` cycles since the stop was last sent
 
-    /// Copy the shared properties (`locked`, `enabled`, `drive_command_timeout`) onto a freshly attached shadow.
+    /// Copy the shared properties (`locked`, `enabled`, `drive_command_timeout`, `max_wheel_speed`) onto a new shadow.
     void sync_shared_properties(Module &shadow) const;
 
 protected:
