@@ -60,7 +60,13 @@ Expander::Expander(const std::string name,
     const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value() * 1000;
     while (this->properties.at("is_ready")->boolean_value() == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
-            echo("warning: expander %s connection timed out.", this->name.c_str());
+            const size_t unterminated = this->serial->unterminated_bytes();
+            if (unterminated > 0) {
+                echo("warning: expander %s connection timed out. %d bytes arrived without a line end, is the expander at %ld baud?",
+                     this->name.c_str(), (int)unterminated, this->serial->baud_rate);
+            } else {
+                echo("warning: expander %s connection timed out.", this->name.c_str());
+            }
             // TODO: trigger error code
             break;
         }
