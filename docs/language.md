@@ -196,9 +196,9 @@ end
 **Failing actions**
 
 If an action fails, for example because a module reports an error, the error is printed and the remaining actions are skipped.
-The rule or routine has then finished:
-a rule fires again the next time its condition is true, and a routine can be called again.
+The rule or routine has then finished: a rule fires again the next time its condition is true, and a routine can be called again.
 If an awaited routine fails, the `await` fails as well and the actions after it are skipped.
+A routine started without `await` runs on its own, so its failure does not affect the rule or routine that started it.
 
 ## Data types
 
