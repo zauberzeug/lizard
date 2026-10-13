@@ -84,7 +84,6 @@ void Wheels::step() {
 }
 
 void Wheels::note_drive_command(bool applied, bool nonzero) {
-    this->command_count++;
     this->last_drive_command_millis = millis();
     if (applied && nonzero) {
         this->moving = true;
@@ -130,7 +129,6 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
-        this->command_count++;
         this->do_off();
         this->note_drive_command_sent(false); // idle motors are a stop; the dead man's switch must not re-activate them
     } else if (method_name == "enable") {

@@ -39,12 +39,14 @@ private:
     bool moving = false;                         // last applied drive command was non-zero and no stop followed since
     bool stopped = false;                        // the dead man's switch tripped and no drive command released it yet
     unsigned long last_drive_command_millis = 0; // `millis()` of the last `speed()`/`power()`, applied or not
-    unsigned long command_count = 0;             // `speed()`, `power()` and `off()` commands so far
 
     /// Copy the shared properties (`locked`, `enabled`, `drive_command_timeout`) onto a freshly attached shadow.
     void sync_shared_properties(Module &shadow) const;
 
 protected:
+    /// Whether drive commands may be applied: true only while enabled and not locked.
+    bool may_drive() const;
+
     /// Record an incoming drive command *before* it is sent: refreshes `drive_command_age` and, if the command
     /// is applied and non-zero, arms the dead man's switch — before the send, so a send that fails is still stopped.
     void note_drive_command(bool applied, bool nonzero);
@@ -67,15 +69,8 @@ protected:
     virtual void update_odometry() = 0;
 
 public:
-    static inline constexpr const char *TYPE = "Wheels"; // not registered; names the base for `get_module_argument<Wheels>`
-
     Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults = Wheels::get_defaults());
     void step() override;
-    /// Whether drive commands may be applied: true only while enabled and not locked.
-    bool may_drive() const;
-    /// Number of `speed()`, `power()` and `off()` commands so far, so a module driving the wheels can tell
-    /// whether someone else commanded them since its own last command.
-    unsigned long get_command_count() const { return this->command_count; }
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void write_property(const std::string property_name, const ConstExpression_ptr expression,
                         const bool from_expander = false) override;
