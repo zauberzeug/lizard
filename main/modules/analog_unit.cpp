@@ -22,6 +22,7 @@ AnalogUnit::AnalogUnit(const std::string name, uint8_t unit_id)
         unit_id = 1;
     }
 
+    this->claims.adc(unit_id);
     this->adc_unit = static_cast<adc_unit_t>(unit_id - 1);
 
     adc_oneshot_unit_init_cfg_t init_config = {

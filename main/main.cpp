@@ -23,6 +23,7 @@
 #include "utils/boot_guard.h"
 #include "utils/bus_backup.h"
 #include "utils/interpreter_lock.h"
+#include "utils/resources.h"
 #include "utils/scheduler.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
@@ -512,6 +513,7 @@ void app_main() {
     uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
 
     try {
+        resources::reserve_boot_resources();
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
         scheduler::init();
     } catch (const std::runtime_error &e) {
