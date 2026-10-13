@@ -24,22 +24,30 @@ void Storage::init() {
     Storage::startup = Storage::get();
 }
 
+// the start of a value for an error message: a message with a whole chunk would exceed the console line and be dropped
+static std::string preview(const std::string &value) {
+    size_t length = std::min(value.size(), size_t(40));
+    while (length < value.size() && (static_cast<unsigned char>(value[length]) & 0xC0) == 0x80) {
+        length--; // do not cut a multi-byte UTF-8 character
+    }
+    std::string shown = length < value.size() ? value.substr(0, length) + "..." : value;
+    std::replace(shown.begin(), shown.end(), '\n', ' ');
+    return shown;
+}
+
 void write(const std::string ns, const std::string key, const std::string value) {
     esp_err_t err;
     nvs_handle handle;
     if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
         throw std::runtime_error("could not open storage namespace \"" + ns + "\" (" + std::string(esp_err_to_name(err)) + ")");
     }
-    // quote only the start of the value: a message with a whole chunk would exceed the console line and be dropped
-    std::string shown = value.size() > 40 ? value.substr(0, 40) + "..." : value;
-    std::replace(shown.begin(), shown.end(), '\n', ' ');
     if ((err = nvs_set_str(handle, key.c_str(), value.c_str())) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + shown + " (" + std::string(esp_err_to_name(err)) + ")");
+        throw std::runtime_error("could not write to storage " + ns + "." + key + "=" + preview(value) + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     if ((err = nvs_commit(handle)) != ESP_OK) {
         nvs_close(handle);
-        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + shown + " (" + std::string(esp_err_to_name(err)) + ")");
+        throw std::runtime_error("could not commit to storage " + ns + "." + key + "=" + preview(value) + " (" + std::string(esp_err_to_name(err)) + ")");
     }
     nvs_close(handle);
 }
