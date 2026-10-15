@@ -617,7 +617,7 @@ So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled 
 `power()` is not limited.
 
 A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
-A further `speed(0, 0)` restarts the repeat; any other command, e.g. the next non-zero `speed()`, `power()` or `off()`, ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+A further `speed(0, 0)` restarts the repeat; any other `speed()`, `power()` or `off()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
 Commands sent to the motors directly are not noticed and get overwritten within that second, so call `wheels.off()` rather than `off()` on each motor to idle them right after a stop.
 
 The `locked` property is a safety interlock for rules running on the microcontroller:
@@ -788,8 +788,8 @@ So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled 
 `power()` is not limited.
 
 A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
-A further `speed(0, 0)` restarts the repeat; any other command, e.g. the next non-zero `speed()`, `power()` or `off()`, ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
-Commands sent to the motors directly are not noticed and get overwritten within that second, so call `wheels.off()` rather than `off()` on each motor to idle them right after a stop.
+A further `speed(0, 0)` restarts the repeat; any other `speed()`, `power()` or `off()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second.
 
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
@@ -1146,7 +1146,7 @@ Driving and turning at once asks the outer wheel for more than either alone; if 
 So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
 
 A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
-A further `speed(0, 0)` restarts the repeat; a non-zero `speed()` ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+A further `speed(0, 0)` restarts the repeat; a non-zero `speed()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
 Commands sent to the motors directly are not noticed and get overwritten within that second.
 
 The `locked` property is a safety interlock for rules running on the microcontroller:

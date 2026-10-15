@@ -86,14 +86,14 @@ void Wheels::step() {
     }
 
     // Stop repeat: a single zero-speed frame after motion can be lost on the bus or refused by a drive (seen
-    // on Innotronic tracks, which then crept on at the last setpoint), so it is re-sent every few cycles for
-    // a while — often enough to catch a lost frame, rarely enough not to flood the bus. A hold takes over the
-    // standstill on its own, and any command other than another stop ends the repeat early.
+    // on some tracks, which then crept on at the last setpoint), so it is re-sent at an interval for a while —
+    // often enough to catch a lost frame, rarely enough not to flood the bus. A hold takes over the standstill
+    // on its own, and any other `speed()`, `power()` or `off()` that went through ends the repeat early.
     if (this->repeating_stop) {
         if (this->holding || !this->may_drive() || millis_since(this->stop_repeat_millis) >= STOP_REPEAT_MILLIS) {
             this->repeating_stop = false;
-        } else if (++this->stop_repeat_cycle >= STOP_REPEAT_CYCLES) {
-            this->stop_repeat_cycle = 0;
+        } else if (millis_since(this->stop_repeat_sent_millis) >= STOP_REPEAT_INTERVAL_MILLIS) {
+            this->stop_repeat_sent_millis = millis();
             this->do_wheel_speeds(0.0, 0.0);
         }
     }
@@ -102,7 +102,6 @@ void Wheels::step() {
 }
 
 void Wheels::note_drive_command(bool applied, bool nonzero) {
-    this->repeating_stop = false;
     this->last_drive_command_millis = millis();
     if (applied && nonzero) {
         this->moving = true;
@@ -150,9 +149,12 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
             if (!nonzero && was_stopping) {
                 this->repeating_stop = true;
                 this->stop_repeat_millis = millis();
-                this->stop_repeat_cycle = 0;
+                this->stop_repeat_sent_millis = this->stop_repeat_millis;
             }
             this->do_wheel_speeds(left, right);
+            if (nonzero) {
+                this->repeating_stop = false; // only once the motion went out, so a failed send keeps the stop repeating
+            }
             this->note_drive_command_sent(nonzero);
         }
     } else if (method_name == "power") {
@@ -167,12 +169,13 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         this->note_drive_command(applied, nonzero);
         if (applied) {
             this->do_wheel_powers(left, right);
+            this->repeating_stop = false; // only once the command went out, so a failed one keeps the stop repeating
             this->note_drive_command_sent(nonzero);
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
-        this->repeating_stop = false;
         this->do_off();
+        this->repeating_stop = false;         // only once the motors idle, so a failed off() keeps the stop repeating
         this->note_drive_command_sent(false); // idle motors are a stop; the dead man's switch must not re-activate them
     } else if (method_name == "enable") {
         Module::expect(arguments, 0);
