@@ -221,18 +221,28 @@ The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional
 When using multiple PWM outputs, set different channel IDs to avoid conflicts.
 Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
 
-| Properties         | Description                              | Data type |
-| ------------------ | ---------------------------------------- | --------- |
-| `output.duty`      | Duty cycle (8 bit: 0..256, default: 128) | `int`     |
-| `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
-| `output.enabled`   | Whether the output is enabled            | `bool`    |
+| Properties      | Description                       | Data type |
+| --------------- | --------------------------------- | --------- |
+| `pwm.duty`      | Duty cycle (0..256, default: 128) | `int`     |
+| `pwm.frequency` | Frequency (Hz, default: 1000)     | `int`     |
+| `pwm.enabled`   | Whether the output is enabled     | `bool`    |
 
-| Methods            | Description             | Arguments |
-| ------------------ | ----------------------- | --------- |
-| `output.on()`      | Turn on the PWM signal  |           |
-| `output.off()`     | Turn off the PWM signal |           |
-| `output.enable()`  | Enable the PWM output   |           |
-| `output.disable()` | Disable the PWM output  |           |
+A PWM period is divided into 256 steps, and `duty` sets for how many of them the pin stays high.
+That makes 257 settings, one more than an 8 bit value holds:
+
+| `duty` | Output                                  |
+| ------ | --------------------------------------- |
+| 0      | always low                              |
+| 128    | high for half of the period             |
+| 255    | high for 255 of 256 steps, not fully on |
+| 256    | always high                             |
+
+| Methods         | Description             | Arguments |
+| --------------- | ----------------------- | --------- |
+| `pwm.on()`      | Turn on the PWM signal  |           |
+| `pwm.off()`     | Turn off the PWM signal |           |
+| `pwm.enable()`  | Enable the PWM output   |           |
+| `pwm.disable()` | Disable the PWM output  |           |
 
 When the output is disabled, it will turn off the PWM signal and ignore on/off commands.
 
