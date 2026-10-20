@@ -13,6 +13,4 @@ public:
     virtual void position(const double position, const double speed, const double acceleration) = 0;
     virtual double get_speed() = 0;
     virtual void speed(const double speed, const double acceleration) = 0;
-    virtual void enable() = 0;
-    virtual void disable() = 0;
 };

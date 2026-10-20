@@ -1,9 +1,20 @@
 #include "output.h"
+#include "mcp23017.h"
+#include "module_helpers.h"
 #include "utils/timing.h"
 #include <math.h>
 #include <stdexcept>
 
-REGISTER_MODULE_DEFAULTS(Output)
+static Module_ptr create_output(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() == 1) {
+        Module::expect(arguments, 1, integer);
+        return std::make_shared<GpioOutput>(name, (gpio_num_t)arguments[0]->evaluate_integer());
+    }
+    Module::expect(arguments, 2, identifier, integer);
+    const Mcp23017_ptr mcp = get_module_argument<Mcp23017>(arguments[0]);
+    return std::make_shared<McpOutput>(name, mcp, arguments[1]->evaluate_integer());
+}
+REGISTER_MODULE(Output, &create_output)
 
 const std::map<std::string, Variable_ptr> Output::get_defaults() {
     return {
@@ -15,8 +26,14 @@ const std::map<std::string, Variable_ptr> Output::get_defaults() {
     };
 }
 
-Output::Output(const std::string name) : Module(output, name) {
+Output::Output(const std::string name) : Module(name) {
     this->properties = Output::get_defaults();
+}
+
+void Output::apply_level() {
+    this->set_level(this->target_level);
+    this->properties.at("change")->set_integer_value(this->target_level - this->properties.at("level")->integer_value());
+    this->properties.at("level")->set_integer_value(this->target_level);
 }
 
 void Output::step() {
@@ -24,18 +41,10 @@ void Output::step() {
         this->target_level = fmod(millis() / 1000.0, this->pulse_interval) / this->pulse_interval < this->pulse_duty_cycle;
     }
 
-    this->set_level(this->target_level);
-    this->properties.at("change")->integer_value = this->target_level - this->properties.at("level")->integer_value;
-    this->properties.at("level")->integer_value = this->target_level;
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
-    if (this->properties.at("active")->boolean_value != this->active) {
-        if (this->properties.at("active")->boolean_value) {
+    this->apply_level();
+    this->sync_enabled();
+    if (this->properties.at("active")->boolean_value() != this->active) {
+        if (this->properties.at("active")->boolean_value()) {
             this->activate();
         } else {
             this->deactivate();
@@ -49,21 +58,21 @@ void Output::call(const std::string method_name, const std::vector<ConstExpressi
         if (this->enabled) {
             this->target_level = 1;
             this->pulse_interval = 0;
-            this->step();
+            this->apply_level();
         }
     } else if (method_name == "off") {
         Module::expect(arguments, 0);
         if (this->enabled) {
             this->target_level = 0;
             this->pulse_interval = 0;
-            this->step();
+            this->apply_level();
         }
     } else if (method_name == "level") {
         Module::expect(arguments, 1, boolean);
         if (this->enabled) {
             this->target_level = arguments[0]->evaluate_boolean();
             this->pulse_interval = 0;
-            this->step();
+            this->apply_level();
         }
     } else if (method_name == "pulse") {
         if (arguments.size() < 1 || arguments.size() > 2) {
@@ -110,33 +119,26 @@ void McpOutput::set_level(bool level) const {
     this->mcp->set_level(this->number, level);
 }
 
-void Output::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void Output::disable() {
+void Output::do_disable() {
     this->deactivate();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 void Output::activate() {
     if (this->enabled) {
         this->active = true;
-        this->properties.at("active")->boolean_value = true;
-        this->target_level = this->properties.at("inverted")->boolean_value ? 0 : 1;
+        this->properties.at("active")->set_boolean_value(true);
+        this->target_level = this->properties.at("inverted")->boolean_value() ? 0 : 1;
         this->pulse_interval = 0;
-        this->step();
+        this->apply_level();
     }
 }
 
 void Output::deactivate() {
     if (this->enabled) {
         this->active = false;
-        this->properties.at("active")->boolean_value = false;
-        this->target_level = this->properties.at("inverted")->boolean_value ? 1 : 0;
+        this->properties.at("active")->set_boolean_value(false);
+        this->target_level = this->properties.at("inverted")->boolean_value() ? 1 : 0;
         this->pulse_interval = 0;
-        this->step();
+        this->apply_level();
     }
 }

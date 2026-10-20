@@ -115,6 +115,8 @@ class RoboClaw : public Module {
     };
 
 public:
+    static inline constexpr const char *TYPE = "RoboClaw";
+
     RoboClaw(const std::string name, const ConstSerial_ptr serial, const uint8_t address);
     void step() override;
     static const std::map<std::string, Variable_ptr> get_defaults();

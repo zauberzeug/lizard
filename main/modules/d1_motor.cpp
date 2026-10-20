@@ -1,10 +1,19 @@
 #include "d1_motor.h"
 #include "canopen.h"
+#include "module_helpers.h"
 #include "uart.h"
 #include "utils/timing.h"
 #include <cinttypes>
 
-REGISTER_MODULE_DEFAULTS(D1Motor)
+static Module_ptr create_d1_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
+    const int64_t node_id = arguments[1]->evaluate_integer();
+    auto motor = std::make_shared<D1Motor>(name, can, node_id);
+    motor->subscribe_to_can();
+    return motor;
+}
+REGISTER_MODULE(D1Motor, &create_d1_motor)
 
 const std::map<std::string, Variable_ptr> D1Motor::get_defaults() {
     return {
@@ -23,7 +32,7 @@ const std::map<std::string, Variable_ptr> D1Motor::get_defaults() {
 }
 
 D1Motor::D1Motor(const std::string &name, Can_ptr can, int64_t node_id)
-    : Module(d1_motor, name), can(can), node_id(check_node_id(node_id)) {
+    : Module(name), can(can), node_id(check_node_id(node_id)) {
     this->properties = D1Motor::get_defaults();
 }
 
@@ -137,13 +146,7 @@ void D1Motor::step() {
     this->sdo_read(0x2014, 0);
     this->sdo_read(0x6064, 0);
     this->sdo_read(0x606C, 0);
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     Module::step();
 }
 
@@ -153,16 +156,16 @@ void D1Motor::handle_can_msg(const uint32_t id, const int count, const uint8_t *
     } else if (id == 0x580 + this->node_id) {
         this->waiting_sdo_writes--;
         if (data[1] == 0x41 && data[2] == 0x60) {
-            this->properties["status_word"]->integer_value = data[5] << 8 | data[4];
+            this->properties["status_word"]->set_integer_value(data[5] << 8 | data[4]);
         }
         if (data[1] == 0x14 && data[2] == 0x20) {
-            this->properties["status_flags"]->integer_value = data[4];
+            this->properties["status_flags"]->set_integer_value(data[4]);
         }
         if (data[1] == 0x64 && data[2] == 0x60) {
-            this->properties["position"]->integer_value = data[5] << 8 | data[4];
+            this->properties["position"]->set_integer_value(data[5] << 8 | data[4]);
         }
         if (data[1] == 0x6C && data[2] == 0x60) {
-            this->properties["velocity"]->integer_value = (data[7] << 24) | (data[6] << 16) | (data[5] << 8) | data[4];
+            this->properties["velocity"]->set_integer_value((data[7] << 24) | (data[6] << 16) | (data[5] << 8) | data[4]);
         }
     }
 }
@@ -178,9 +181,9 @@ void D1Motor::home() {
         return;
     this->sdo_write(0x6060, 0, 8, 6);
     // set specific homing parameters
-    this->sdo_write(0x6099, 1, 32, this->properties["switch_search_speed"]->integer_value);
-    this->sdo_write(0x6099, 2, 32, this->properties["zero_search_speed"]->integer_value);
-    this->sdo_write(0x609A, 0, 32, this->properties["homing_acceleration"]->integer_value);
+    this->sdo_write(0x6099, 1, 32, this->properties["switch_search_speed"]->integer_value());
+    this->sdo_write(0x6099, 2, 32, this->properties["zero_search_speed"]->integer_value());
+    this->sdo_write(0x609A, 0, 32, this->properties["homing_acceleration"]->integer_value());
     this->sdo_write(0x6040, 0, 16, 15);
     this->sdo_write(0x6040, 0, 16, 0x1F);
 }
@@ -193,9 +196,9 @@ void D1Motor::profile_position(const int32_t position) {
     // commit target position
     this->sdo_write(0x607A, 0, 32, position);
     // set driving parameters
-    this->sdo_write(0x6083, 0, 32, this->properties["profile_acceleration"]->integer_value);
-    this->sdo_write(0x6081, 0, 32, this->properties["profile_velocity"]->integer_value);
-    this->sdo_write(0x6084, 0, 32, this->properties["profile_deceleration"]->integer_value);
+    this->sdo_write(0x6083, 0, 32, this->properties["profile_acceleration"]->integer_value());
+    this->sdo_write(0x6081, 0, 32, this->properties["profile_velocity"]->integer_value());
+    this->sdo_write(0x6084, 0, 32, this->properties["profile_deceleration"]->integer_value());
     // reset control word
     this->sdo_write(0x6040, 0, 16, 15);
     // start motion
@@ -209,7 +212,7 @@ void D1Motor::profile_velocity(const int32_t velocity) {
     this->sdo_write(0x6060, 0, 8, 3);
     // commit target velocity
     this->sdo_write(0x60FF, 0, 32, velocity);
-    this->sdo_write(0x6083, 0, 32, this->properties["profile_acceleration"]->integer_value);
+    this->sdo_write(0x6083, 0, 32, this->properties["profile_acceleration"]->integer_value());
     // reset control word
     this->sdo_write(0x6040, 0, 16, 15);
     // start motion
@@ -220,13 +223,6 @@ void D1Motor::stop() {
     this->sdo_write(0x6040, 0, 16, 7);
 }
 
-void D1Motor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void D1Motor::disable() {
+void D1Motor::do_disable() {
     this->stop();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }

@@ -18,25 +18,30 @@ The `broadcast` method is used internally with [port expanders](#expander).
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
 It is automatically created right after the boot sequence.
 
-| Properties    | Description                                             | Data type |
-| ------------- | ------------------------------------------------------- | --------- |
-| `core.debug`  | Whether to output debug information to the command line | `bool`    |
-| `core.millis` | Time since booting the microcontroller (ms)             | `int`     |
-| `core.heap`   | Free heap memory (bytes)                                | `int`     |
+| Properties              | Description                                                     | Data type |
+| ----------------------- | --------------------------------------------------------------- | --------- |
+| `core.debug`            | Whether to output debug information to the command line         | `bool`    |
+| `core.millis`           | Time since booting the microcontroller (ms)                     | `int`     |
+| `core.heap`             | Free heap memory (bytes)                                        | `int`     |
+| `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
 
-| Methods                          | Description                                        | Arguments    |
-| -------------------------------- | -------------------------------------------------- | ------------ |
-| `core.restart()`                 | Restart the microcontroller                        |              |
-| `core.version()`                 | Show lizard version                                |              |
-| `core.info()`                    | Show lizard version, compile time and IDF version  |              |
-| `core.print(...)`                | Print arbitrary arguments to the command line      | arbitrary    |
-| `core.output(format)`            | Define the output format                           | `str`        |
-| `core.startup_checksum()`        | Show 16-bit checksum of the startup script         |              |
-| `core.get_pin_status(pin)`       | Print the status of the chosen pin                 | `int`        |
-| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level    | `int`, `int` |
-| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register | `int`        |
-| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)            |              |
-| `core.resume_broadcasts()`       | Resume property broadcasts                         |              |
+| Methods                          | Description                                                                                        | Arguments    |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- | ------------ |
+| `core.restart()`                 | Restart the microcontroller                                                                        |              |
+| `core.version()`                 | Show project name and version                                                                      |              |
+| `core.info()`                    | Show project name, version, compile time and IDF version                                           |              |
+| `core.print(...)`                | Print arbitrary arguments to the command line                                                      | arbitrary    |
+| `core.output(format)`            | Define the output format                                                                           | `str`        |
+| `core.startup_checksum()`        | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes), or the error of a failed `!.` |              |
+| `core.get_pin_status(pin)`       | Print the status of the chosen pin                                                                 | `int`        |
+| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level                                                    | `int`, `int` |
+| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register                                                 | `int`        |
+| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS                                                  |              |
+| `core.set_baudrate(baud)`        | Persist UART0 baud rate (applied after restart)                                                    | `int`        |
+| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)                                                            |              |
+| `core.resume_broadcasts()`       | Resume property broadcasts                                                                         |              |
+| `core.clear_schedule()`          | Discard all pending scheduled blocks                                                               |              |
+| `core.keep_alive()`              | Reset `last_message_age` without producing output                                                  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -44,14 +49,29 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
+**UART baud rate:**
+The console (UART0) defaults to 115200 baud.
+`core.set_baudrate(baud)` persists a new rate to non-volatile storage; it takes effect on the next restart, so the change is not a breaking one for hosts that are not updated yet.
+After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with the host tools at the new rate, e.g. `./monitor.py /dev/ttyUSB0 --baud 921600` (`monitor.py`, `configure.py` and `otb_update.py` all accept `--baud`, defaulting to 115200).
+Supported rates are 115200, 230400, 460800 and 921600.
+Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
+
 ## Bluetooth
 
 Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
 Simply create a Bluetooth module with a device name of your choice.
+Received lines are queued and parsed on the main loop, one step later at most.
+If the main loop is blocked for long and the queue (32 lines) overflows, further lines are dropped and a warning is printed once the main loop continues.
+Clients uploading many lines at once should therefore pace their writes or wait for a response.
 
 | Constructor                          | Description                                        | Arguments |
 | ------------------------------------ | -------------------------------------------------- | --------- |
 | `bluetooth = Bluetooth(device_name)` | initialize bluetooth with advertised `device_name` | `str`     |
+
+| Properties                   | Description                                              | Data type |
+| ---------------------------- | -------------------------------------------------------- | --------- |
+| `bluetooth.connected`        | Whether a device is currently connected                  | `bool`    |
+| `bluetooth.last_message_age` | Time since the last line was received via Bluetooth (ms) | `int`     |
 
 | Methods                      | Description                                             | Arguments |
 | ---------------------------- | ------------------------------------------------------- | --------- |
@@ -71,6 +91,10 @@ When a fifth connects, the oldest entry is removed.
 
 To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
 
+Unlike `core.last_message_age`, which any input channel resets, `bluetooth.last_message_age` only counts lines received via Bluetooth.
+Together with `connected`, it lets rules and the host tell a silent or disconnected app apart from a host that keeps talking on UART0.
+Neither property stops anything by itself; use the wheels' `drive_command_timeout` for that (see [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels)).
+
 ## Serial Bus
 
 The serial bus module lets multiple ESP32s share a UART link with a coordinator that polls peers in turn.
@@ -79,10 +103,46 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | ----------------------------- | ---------------------------------------------- | --------------- |
 | `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
 
-| Methods                             | Description                                                | Arguments    |
-| ----------------------------------- | ---------------------------------------------------------- | ------------ |
-| `bus.send(receiver, payload)`       | Send a single line of text to a peer `receiver` (0-255)    | `int`, `str` |
-| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator | `int`s       |
+| Properties                 | Description                                                                                                   | Data type |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
+| `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
+| `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
+
+| Methods                             | Description                                                                                                                                 | Arguments         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
+| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
+
+**Time Synchronization:**
+Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle.
+The coordinator stamps its local `esp_timer` clock when it sends a POLL (T1) and when it receives the DONE response (T4), and the peer reports its own receive and send stamps (T2, T3) in the DONE response.
+Like NTP, the offset is estimated as `((T2 - T1) + (T3 - T4)) / 2`, so the peer's processing time between T2 and T3 cancels out, and the remaining unknown transport delay bounds the error of each sample.
+The coordinator publishes the estimate as the property `offset_<id>` and its bound as `offset_<id>_accuracy`.
+This is intended for timestamping sensor data (e.g. wheel odometry) received from bus peers.
+
+- Applying it: a peer timestamp `t_peer` in milliseconds maps to coordinator time as `t_peer - offset_<id>`; mind the units, since the peer's `esp_timer` stamps are in microseconds and the properties in milliseconds.
+- Sign: the offset is the peer's clock minus the coordinator's, so it is positive while the peer's `esp_timer` runs ahead; as both sides count from their own boot, a peer that booted later than the coordinator has a negative offset.
+- Accuracy: each sample's error bound is half the transport time that is not explained by the known airtime of the two frames; samples within 0.5 ms replace the estimate immediately, otherwise the best sample of every 2 s does, so the estimate keeps following crystal drift even on a busy bus.
+  Systematic asymmetries such as RS485 turnaround are not covered by the bound.
+- Validity: the properties are NaN until the first sample arrives and return to NaN whenever the estimate turns invalid, i.e. when the peer's poll times out (e.g. across a peer reboot), or when `make_coordinator()` or `enable_time_sync()` is called again, which restarts all estimates.
+  An expander's broadcast carries NaN as the literal `nan`, so a proxied offset turns NaN as well; the host firmware has to know that literal.
+- Scope: the properties exist only on the coordinator, are created once both `make_coordinator()` and `enable_time_sync()` have been called, and stay (as NaN) for IDs dropped from a later list.
+  Referencing them on a peer, before they are created, or for an ID that was never listed is an unknown-property error rather than NaN.
+  Behind an expander, the host learns them with the first broadcast after `enable_time_sync()`, so a startup script cannot reference them yet.
+  The two properties per peer also count against the coordinator's 1024-byte broadcast line, which overflows at roughly 16 peers;
+  from then on the coordinator reports `buffer too small` on every step instead of broadcasting any of its properties.
+- Convergence: the first sample after enabling or after a timeout locks the estimate, whatever its bound, within two poll rounds; while polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.
+- Compatibility: update the coordinator's firmware first, and treat `__POLL__<digits>` and `__DONE__<digits>,<digits>,<digits>` payloads as reserved for this protocol.
+  A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.
+
+**Bus Backup:**
+When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
+If multiple SerialBus modules exist, only the first one is backed up.
+On boot, if the startup script does not create a SerialBus but a backup config exists,
+Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
+This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
+To remove the saved configuration, call `core.forget_serial_bus()`.
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.
@@ -153,22 +213,36 @@ When the output is disabled, it will deactivate and ignore on/off or level comma
 
 The PWM output module is associated with a digital output pin that is connected to an LED, actuator or other output signal.
 
-| Constructor            | Description                            | Arguments |
-| ---------------------- | -------------------------------------- | --------- |
-| `pwm = PwmOutput(pin)` | `pin` is the corresponding GPIO number | `int`     |
+| Constructor                        | Description                            | Arguments  |
+| ---------------------------------- | -------------------------------------- | ---------- |
+| `pwm = PwmOutput(pin[, lt[, lc]])` | `pin` is the corresponding GPIO number | 1–3x `int` |
 
-| Properties         | Description                              | Data type |
-| ------------------ | ---------------------------------------- | --------- |
-| `output.duty`      | Duty cycle (8 bit: 0..256, default: 128) | `int`     |
-| `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
-| `output.enabled`   | Whether the output is enabled            | `bool`    |
+The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
+When using multiple PWM outputs, set different channel IDs to avoid conflicts.
+Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
 
-| Methods            | Description             | Arguments |
-| ------------------ | ----------------------- | --------- |
-| `output.on()`      | Turn on the PWM signal  |           |
-| `output.off()`     | Turn off the PWM signal |           |
-| `output.enable()`  | Enable the PWM output   |           |
-| `output.disable()` | Disable the PWM output  |           |
+| Properties      | Description                       | Data type |
+| --------------- | --------------------------------- | --------- |
+| `pwm.duty`      | Duty cycle (0..256, default: 128) | `int`     |
+| `pwm.frequency` | Frequency (Hz, default: 1000)     | `int`     |
+| `pwm.enabled`   | Whether the output is enabled     | `bool`    |
+
+A PWM period is divided into 256 steps, and `duty` sets for how many of them the pin stays high.
+That makes 257 settings, one more than an 8 bit value holds:
+
+| `duty` | Output                                  |
+| ------ | --------------------------------------- |
+| 0      | always low                              |
+| 128    | high for half of the period             |
+| 255    | high for 255 of 256 steps, not fully on |
+| 256    | always high                             |
+
+| Methods         | Description             | Arguments |
+| --------------- | ----------------------- | --------- |
+| `pwm.on()`      | Turn on the PWM signal  |           |
+| `pwm.off()`     | Turn off the PWM signal |           |
+| `pwm.enable()`  | Enable the PWM output   |           |
+| `pwm.disable()` | Disable the PWM output  |           |
 
 When the output is disabled, it will turn off the PWM signal and ignore on/off commands.
 
@@ -278,6 +352,10 @@ The following bits are available:
 - 0x0080: gravity
 - 0x0100: temperature
 
+The IMU is read in a background task, so the properties hold the newest completed sample.
+While reading fails, an error is printed at most once per second and the properties keep their last values.
+A message is printed when reading works again.
+
 | Methods              | Description                   | Arguments |
 | -------------------- | ----------------------------- | --------- |
 | `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
@@ -314,6 +392,75 @@ Note that the individual sensors need to be calibrated before the compensated an
 | Magnetometer  | Move the sensor in a figure-8 pattern in space         |
 | Gyroscope     | Keep the sensor still for a few seconds                |
 
+## IMU BNO085
+
+The IMU BNO085 module provides access to a Bosch BNO085 9-axis absolute orientation sensor over the shared I²C bus.
+This module uses the same API as the [IMU](#imu) module but offers improved fusion quality and additional reports.
+
+Note: Only one `ImuBno085` instance can be active at a time due to hardware abstraction layer constraints.
+
+| Constructor                                                             | Description | Arguments |
+| ----------------------------------------------------------------------- | ----------- | --------- |
+| `imu = ImuBno085([port[, sda[, scl[, int[, rst[, address[, clk]]]]]]])` | See below   | `int`s    |
+
+The constructor expects up to seven arguments:
+
+- `port`: I²C port number (default: 0)
+- `sda`: SDA pin (default matches target, e.g. 21 on ESP32)
+- `scl`: SCL pin (default matches target, e.g. 22 on ESP32)
+- `int`: Interrupt pin (default: 26 on ESP32, none on ESP32-S3)
+- `rst`: Reset pin (default: 32 on ESP32, none on ESP32-S3)
+- `address`: I²C address (default: 0x4A)
+- `clk`: I²C clock in Hz (default: 400000)
+
+The properties and methods are similar to the [IMU](#imu) module.
+The BNO085 offers improved accuracy and better sensor fusion algorithms compared to the BNO055.
+Unlike the BNO055 module, euler angles (`yaw`, `roll`, `pitch`) are not computed on-device —
+only quaternion output (`quat_w/x/y/z`) is provided.
+Euler conversion should be done upstream.
+The gyroscope (`gyr_x/y/z`) is reported in **rad/s** (the SH2 calibrated gyroscope report), not degrees/s as on the BNO055.
+
+| Methods              | Description                   | Arguments |
+| -------------------- | ----------------------------- | --------- |
+| `imu.set_mode(mode)` | Set operation mode of the IMU | `str`     |
+
+The `mode` parameter supports the same modes as the [IMU](#imu) module, except `ndof_fmc_off` (use `ndof` instead).
+The configured mode is automatically restored if the BNO085 resets during operation.
+
+**Data Select**
+
+The `data_select` property is a bitmask that controls which sensor values are updated each step.
+It defaults to `0xffff` (all enabled).
+Set individual bits to `0` to skip costly updates you don't need.
+
+| Bit | Value    | Data                                |
+| --- | -------- | ----------------------------------- |
+| 0   | `0x0001` | Calibration (`cal_sys/gyr/acc/mag`) |
+| 1   | `0x0002` | Accelerometer (`acc_x/y/z`)         |
+| 2   | `0x0004` | Magnetometer (`mag_x/y/z`)          |
+| 3   | `0x0008` | Gyroscope (`gyr_x/y/z`)             |
+| 4   | `0x0010` | Quaternion (`quat_w/x/y/z`)         |
+| 5   | `0x0020` | Linear acceleration (`lin_x/y/z`)   |
+| 6   | `0x0040` | Gravity (`grav_x/y/z`)              |
+| 7   | `0x0080` | Temperature (`temp`)                |
+
+**Differences to BNO055**
+
+The calibration properties (`cal_sys`, `cal_gyr`, `cal_acc`, `cal_mag`) use the same 0–3 range as the BNO055,
+but the meaning differs:
+
+| Value | BNO055               | BNO085                           |
+| ----- | -------------------- | -------------------------------- |
+| 0     | Not calibrated       | Unreliable                       |
+| 1     | Partially calibrated | Low accuracy                     |
+| 2     | Mostly calibrated    | Medium accuracy                  |
+| 3     | Fully calibrated     | High accuracy (fully calibrated) |
+
+On the BNO055, `cal_sys`, `cal_gyr`, `cal_acc`, and `cal_mag` are read together in a single calibration register.
+On the BNO085, each calibration value is derived from the accuracy status of its corresponding sensor report
+(e.g. `cal_acc` is updated when an accelerometer event arrives, `cal_sys` when a rotation vector event arrives).
+This means calibration values only update while the corresponding sensor report is enabled via `set_mode`.
+
 ## CAN interface
 
 The CAN module allows communicating with peripherals on the specified CAN bus.
@@ -328,7 +475,6 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | `can.get_status()`                                  | Print the driver status        |           |
 | `can.start()`                                       | Start the driver               |           |
 | `can.stop()`                                        | Stop the driver                |           |
-| `can.recover()`                                     | Recover the driver             |           |
 | `can.reset()`                                       | Reset the driver               |           |
 
 The method `get_status()` prints the following information:
@@ -347,8 +493,8 @@ The method `get_status()` prints the following information:
 After creating a CAN module, the driver is started automatically.
 The `start()` and `stop()` methods are primarily for debugging purposes.
 
-The `recover()` method can be used to recover the driver from a "BUS_OFF" state.
-In contrast, the `reset()` method will stop the driver, try to recover it and then start it again.
+The `reset()` method will stop the driver, try to recover it and then start it again.
+It can be used to recover the driver from a "BUS_OFF" state.
 
 ## Serial interface
 
@@ -365,6 +511,11 @@ The serial module allows communicating with peripherals via the specified connec
 
 This module might be used by other modules that communicate with peripherals via serial.
 You can, however, unmute the serial module to have incoming messages printed to the command line instead of keeping them buffered for other modules.
+An unmuted module prints one line per batch of bytes the hardware hands over, so a sender that pauses between its messages gets one line per message.
+A line carries at most 85 bytes; the rest of a longer batch follows on the next line.
+
+A UART number and its pins can be used by one serial module at a time.
+They stay reserved for that module until the core restarts, also after `Expander.disconnect()`.
 
 ## Linear motor
 
@@ -413,10 +564,16 @@ Version 0.5.6 allows to read the motor error flag.
 | `motor.motor_error`       | Motor error flat (requires version 0.5.6) | `int`     |
 | `motor.enabled`           | Whether the motor is enabled              | `bool`    |
 | `motor.motor_temperature` | Motor temperature (°C)                    | `float`   |
+| `motor.current`           | Measured motor current Iq (A)             | `float`   |
+| `motor.current_setpoint`  | Commanded motor current Iq (A)            | `float`   |
 
 The `motor_temperature` will only update if the firmware generated from the
 [zauberzeug/ODrive](https://github.com/zauberzeug/ODrive) fork is installed on the ODrive.
 Otherwise, the `motor_temperature` property will remain at 0.
+
+The ODrive sends its current only when asked to, so `current` and `current_setpoint` stay at 0
+until the periodic message is switched on for the axis — `<axis>.config.can.iq_rate_ms` (requires version 0.5.6)
+defaults to 0 and is the interval in milliseconds.
 
 | Methods                        | Description                            | Arguments        |
 | ------------------------------ | -------------------------------------- | ---------------- |
@@ -441,12 +598,15 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | ----------------------------------------------- | ------------------------ | ------------------------ |
 | `wheels = ODriveWheels(left_motor, left_motor)` | Two ODrive motor modules | two ODrive motor modules |
 
-| Properties             | Description                    | Data type |
-| ---------------------- | ------------------------------ | --------- |
-| `wheels.width`         | Wheel distance (m)             | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
-| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
+| Properties                     | Description                                                   | Data type |
+| ------------------------------ | ------------------------------------------------------------- | --------- |
+| `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
+| `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
+| `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
+| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)      | `bool`    |
+| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)             | `int`     |
+| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off) | `float`   |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -459,6 +619,26 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 When the wheels are disabled, they will stop and ignore movement commands.
 This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
+
+The `locked` property is a safety interlock for rules running on the microcontroller:
+while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
+This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
+The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
+`locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
+While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
+Driving resumes as soon as `locked` is `false` again.
+Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+
+The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
+after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
+The stop is always a zero _speed_, also after `power()`, so it switches the motors from torque to velocity control.
+Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
+The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
+The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
+Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
+`drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
+See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
 
 ## RMD Motor
 
@@ -580,13 +760,16 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | ------------------------------------------------- | --------------------- | -------------------------- |
 | `wheels = RoboClawWheels(left_motor, left_motor)` | left and right motors | two RoboClaw motor modules |
 
-| Properties             | Description                      | Data type |
-| ---------------------- | -------------------------------- | --------- |
-| `wheels.width`         | Wheel distance (m)               | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)              | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)            | `float`   |
-| `wheels.m_per_tick`    | Meters per encoder tick          | `float`   |
-| `wheels.enabled`       | Whether motors react to commands | `bool`    |
+| Properties                     | Description                                                   | Data type |
+| ------------------------------ | ------------------------------------------------------------- | --------- |
+| `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
+| `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
+| `wheels.m_per_tick`            | Meters per encoder tick                                       | `float`   |
+| `wheels.enabled`               | Whether motors react to commands                              | `bool`    |
+| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)      | `bool`    |
+| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)             | `int`     |
+| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off) | `float`   |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -597,6 +780,26 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | `wheels.disable()`              | Disable both motors                             |                  |
 
 When the wheels are disabled, they will stop and ignore movement commands.
+
+The `locked` property is a safety interlock for rules running on the microcontroller:
+while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
+This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
+The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
+`locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
+While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
+Driving resumes as soon as `locked` is `false` again.
+Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+
+The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
+after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
+The stop is always a zero _speed_, also after `power()`, so it switches the motors from torque to velocity control.
+Only `speed()` and `power()` count as drive commands; `enable()`, `off()` and property writes do not, so they cannot keep a stale motion alive.
+The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
+The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
+Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
+`drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
+See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
 
 ## Stepper Motor
 
@@ -630,6 +833,80 @@ The optional acceleration argument defaults to 0, which starts and stops pulsing
 
 When the motor is disabled, it will stop and ignore movement commands.
 
+## MKS Servo Motor
+
+The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/makerbase-motor/MKS-SERVO42D-57D) closed-loop stepper motor via CAN.
+
+| Constructor                          | Description                | Arguments         |
+| ------------------------------------ | -------------------------- | ----------------- |
+| `motor = MksServoMotor(can, can_id)` | CAN module and CAN node ID | CAN module, `int` |
+
+| Properties              | Description                                                     | Data type |
+| ----------------------- | --------------------------------------------------------------- | --------- |
+| `motor.position`        | Motor position (degrees)                                        | `float`   |
+| `motor.speed`           | Motor speed (RPM)                                               | `int`     |
+| `motor.working_current` | Working current (mA, 0-3000, default: 1700)                     | `int`     |
+| `motor.enabled`         | Whether the motor is enabled                                    | `bool`    |
+| `motor.position_error`  | Last read position error (degrees)                              | `float`   |
+| `motor.set_mode_status` | Result of the last `set_mode` (0 = OK, 1 = failed, 2 = pending) | `int`     |
+
+| Methods                               | Description                                                                  | Arguments             |
+| ------------------------------------- | ---------------------------------------------------------------------------- | --------------------- |
+| `motor.enable()`                      | Enable the motor                                                             |                       |
+| `motor.disable()`                     | Disable the motor                                                            |                       |
+| `motor.set_mode(mode)`                | Set working mode (see [working modes](#working-modes))                       | `int`                 |
+| `motor.zero()`                        | Set current position as zero                                                 |                       |
+| `motor.set_working_current(ma)`       | Set working current (mA, 0-3000)                                             | `int`                 |
+| `motor.set_holding_current(pct)`      | Set holding current as percentage of working current (10-100 in steps of 10) | `int`                 |
+| `motor.set_bitrate(hz)`               | Set CAN bitrate in Hz (125000, 250000, 500000 or 1000000)                    | `int`                 |
+| `motor.set_can_id(id)`                | Set motor's CAN ID (1-2047)                                                  | `int`                 |
+| `motor.position(degrees, speed, acc)` | Move to absolute position (degrees, RPM, acceleration)                       | `float`, `int`, `int` |
+| `motor.speed(speed, direction, acc)`  | Run motor continuously (0-3000 RPM, direction, acceleration)                 | `int`, `int`, `int`   |
+| `motor.stop(acc)`                     | Stop motor with given deceleration (0-255)                                   | `int`                 |
+| `motor.read_position_error()`         | Request position error from motor via CAN                                    |                       |
+
+The `position()` method moves the motor to an absolute coordinate position (in degrees from the zero point)
+with a given speed in RPM (0-3000) and acceleration (0-255).
+
+The `speed()` method accepts a speed in RPM (0-3000), direction (0: CCW, 1: CW) and acceleration (0-255).
+The acceleration parameter controls the ramp rate: higher values mean faster acceleration.
+If acceleration is 0, the motor runs directly at the set speed without ramping.
+
+The `stop()` method decelerates and stops the motor with the given acceleration (0-255).
+If acceleration is 0, the motor stops immediately.
+
+The `read_position_error()` method requests the current position error from the motor via CAN.
+The result is available in the `position_error` property (in degrees) once the motor responds.
+
+The `set_bitrate()` method changes the CAN bitrate on the motor.
+The rate is given in Hz and must be one of the four supported values (125000, 250000, 500000 or 1000000);
+any other value is rejected with a log message and no command is sent.
+The motor switches to the new bitrate immediately, which means communication with the motor is lost
+until the Lizard CAN bus is also reconfigured to match the new bitrate.
+
+The `set_can_id()` method changes the motor's CAN ID (range 1-2047, default 1).
+The new ID is persisted on the drive, so the motor only responds on the new ID afterwards —
+the Lizard script must be updated to construct the module with the new `can_id`.
+ID `0` is reserved as the broadcast address (all motors listen, none respond) and is therefore not accepted here.
+
+**Working Modes**
+
+The MKS SERVO42D/57D supports the following working modes:
+
+| Mode | Name     | Description                      | Remark  |
+| ---- | -------- | -------------------------------- | ------- |
+| 0x00 | CR_OPEN  | Pulse interface open-loop mode   |         |
+| 0x01 | CR_CLOSE | Pulse interface closed-loop mode |         |
+| 0x02 | CR_vFOC  | Pulse interface FOC mode         | default |
+| 0x03 | SR_OPEN  | Bus interface open-loop mode     |         |
+| 0x04 | SR_CLOSE | Bus interface closed-loop mode   |         |
+| 0x05 | SR_vFOC  | Bus interface FOC mode           |         |
+
+The `set_mode()` method sets the working mode of the motor.
+For CAN bus control, use SR_vFOC mode (0x05): `motor.set_mode(5)`.
+The constructor automatically sets SR_vFOC mode (0x05),
+which is required for the bus motion commands (`position()`, `speed()`, `stop()`).
+
 ## Motor Axis
 
 The motor axis module wraps a motor and two limit switches.
@@ -659,7 +936,12 @@ When the motor axis is disabled, it will stop the motor and ignore movement comm
 
 ## CanOpenMaster
 
-The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
+The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes.
+At creation, no messages are sent until `sync_interval` is set to a value greater than 0.
+
+A CanOpenMaster on the same CAN bus is required for CanOpenMotor —
+without periodic SYNC messages, position, velocity and status properties will not update.
+Other CAN motor modules (D1Motor, DunkerMotor) do not need a CanOpenMaster.
 
 | Constructor                      | Description | Arguments  |
 | -------------------------------- | ----------- | ---------- |
@@ -672,8 +954,10 @@ The CanOpenMaster module sends periodic SYNC messages to all CANopen nodes. At c
 ## CanOpenMotor
 
 The CanOpenMotor module implements a subset of commands necessary to control a motor implementing DS402.
-Positional and velocity units are currently undefined and must by manually measured.
+Positional and velocity units are currently undefined and must be manually measured.
 Once the configuration sequence has finished, current status, position and velocity are queried on every SYNC.
+
+A [CanOpenMaster](#canopenmaster) on the same CAN bus is needed for position, velocity and status updates.
 
 | Constructor                          | Description                     | Arguments         |
 | ------------------------------------ | ------------------------------- | ----------------- |
@@ -682,7 +966,7 @@ Once the configuration sequence has finished, current status, position and veloc
 | Methods                                                   | Description                                                                               | Arguments |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
 | `motor.enter_pp_mode(velo)`                               | Set 402 operating mode to profile position, halt off, and target velocity to `velo`       | `int`     |
-| `motor.enter_pv_mode()`                                   | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
+| `motor.enter_pv_mode(velo)`                               | Set 402 operating mode to profile velocity, halt on, and target velocity to `velo`        | `int`     |
 | `motor.set_target_position(pos)`                          | Set target position to `pos` (signed). [pp mode]                                          | `int`     |
 | `motor.commit_target_position()`                          | Instruct motor to move to previously set target position. [pp mode]                       |           |
 | `motor.set_target_velocity(velo)`                         | Set target velocity to `velo`. Absolute for pp mode, signed for pv mode                   | `int`     |
@@ -694,26 +978,28 @@ Once the configuration sequence has finished, current status, position and veloc
 | `motor.reset_fault()`                                     | Clear any faults (like positioning errors). Implicitly sets the "halt" bit.               |           |
 | `motor.sdo_read(index)`                                   | Performs an SDO read at index `index` and sub index `0x00`                                | `int`     |
 
-| Properties              | Description                                              | Data type |
-| ----------------------- | -------------------------------------------------------- | --------- |
-| `initialized`           | Concurrent init sequence has finished, motor is ready    | `bool`    |
-| `last_heartbeat`        | Time in µs since bootup when last heartbeat was received | `int`     |
-| `is_booting`            | Node is in booting state                                 | `bool`    |
-| `is_preoperational`     | Node is in pre-operational state                         | `bool`    |
-| `is_operational`        | Node is in operational state                             | `bool`    |
-| `actual_position`       | Motor position at last SYNC                              | `int`     |
-| `position_offset`       | Offset implicitly added to target/reported position      | `int`     |
-| `actual_velocity`       | Motor velocity at last SYNC                              | `int`     |
-| `status_enabled`        | Operation enabled bit of status word since last SYNC     | `bool`    |
-| `status_fault`          | Fault bit of status word since last SYNC                 | `bool`    |
-| `status_target_reached` | Target reached bit of status word since last SYNC        | `bool`    |
-| `ctrl_enable`           | Latched operation enable bit of every sent control word  | `bool`    |
-| `ctrl_halt`             | Latched halt bit of every sent control word              | `bool`    |
+| Properties                 | Description                                              | Data type |
+| -------------------------- | -------------------------------------------------------- | --------- |
+| `initialized`              | Concurrent init sequence has finished, motor is ready    | `bool`    |
+| `last_heartbeat`           | Time in µs since bootup when last heartbeat was received | `int`     |
+| `is_booting`               | Node is in booting state                                 | `bool`    |
+| `is_preoperational`        | Node is in pre-operational state                         | `bool`    |
+| `is_operational`           | Node is in operational state                             | `bool`    |
+| `actual_position`          | Motor position at last SYNC                              | `int`     |
+| `position_offset`          | Offset implicitly added to target/reported position      | `int`     |
+| `actual_velocity`          | Motor velocity at last SYNC                              | `int`     |
+| `status_enabled`           | Operation enabled bit of status word since last SYNC     | `bool`    |
+| `status_fault`             | Fault bit of status word since last SYNC                 | `bool`    |
+| `status_target_reached`    | Target reached bit of status word since last SYNC        | `bool`    |
+| `pp_set_point_acknowledge` | Set point acknowledge bit (profile position mode)        | `bool`    |
+| `pv_is_moving`             | Motor is moving (profile velocity mode)                  | `bool`    |
+| `ctrl_enable`              | Latched operation enable bit of every sent control word  | `bool`    |
+| `ctrl_halt`                | Latched halt bit of every sent control word              | `bool`    |
+| `enabled`                  | Whether the motor is enabled                             | `bool`    |
 
 **Configuration sequence**
 
 After creation of the module, the configuration is stepped through automatically on each heartbeat; once finished, the `initialized` attribute is set to `true`.
-Note that for runtime variables (actual position, velocity, and status bits) to be updated, a CanOpenMaster module must exist and be sending periodic SYNCs.
 
 **Target position sequence**
 
@@ -815,8 +1101,6 @@ Note: To reduce bandwidth, voltages are only queried when explicitly requested b
 | `motor.sdo_read(index[, subindex])`             | Read SDO                      | 2x `int`  |
 | `motor.sdo_write(index, subindex, bits, value)` | Write SDO                     | 4x `int`  |
 | `motor.update_voltages()`                       | Update voltages               |           |
-| `motor.enable()`                                | Enable the Motor              |           |
-| `motor.disable()`                               | Disable the Motor             |           |
 
 When the motor is disabled, it will freewheel and ignore movement commands.
 
@@ -828,12 +1112,15 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | ------------------------------------------------ | --------------------- | ----------------------- |
 | `wheels = DunkerWheels(left_motor, right_motor)` | left and right motors | two DunkerMotor modules |
 
-| Properties             | Description                    | Data type |
-| ---------------------- | ------------------------------ | --------- |
-| `wheels.width`         | Wheel distance (m)             | `float`   |
-| `wheels.linear_speed`  | Forward speed (m/s)            | `float`   |
-| `wheels.angular_speed` | Turning speed (rad/s)          | `float`   |
-| `wheels.enabled`       | Whether the wheels are enabled | `bool`    |
+| Properties                     | Description                                                   | Data type |
+| ------------------------------ | ------------------------------------------------------------- | --------- |
+| `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
+| `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
+| `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
+| `wheels.locked`                | Whether driving is blocked (safety interlock, see below)      | `bool`    |
+| `wheels.drive_command_age`     | Time since the last drive command (ms, see below)             | `int`     |
+| `wheels.drive_command_timeout` | Stop when no drive command arrives for this long (s, 0 = off) | `float`   |
 
 | Methods                         | Description                                     | Arguments        |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -842,6 +1129,24 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | `wheels.disable()`              | Disable both motors                             |                  |
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
+
+The `locked` property is a safety interlock for rules running on the microcontroller:
+while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
+This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
+The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
+`locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
+Driving resumes as soon as `locked` is `false` again.
+Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+
+The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
+after a non-zero `speed()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
+Only `speed()` counts as a drive command; `enable()` and property writes do not, so they cannot keep a stale motion alive.
+The stop is logged as a warning and held like `locked` holds: the zero-speed setpoint is refreshed about once per second, so a stop that did not reach the motors is re-asserted.
+The next drive command releases the hold and re-arms the switch.
+The default is 1 s, so a host has to repeat its drive command at least that often to keep driving.
+Robots driven by a remote control should use a shorter timeout, and `0` disables the switch, e.g. on a test bench.
+`drive_command_age` holds the time in milliseconds since the last drive command, whether it was applied or not, for rules that need finer control.
+See [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels) for the background.
 
 ## Analog Unit
 
@@ -913,8 +1218,20 @@ The expander module allows communication with another microcontroller connected 
 
 The `flash()` method requires the `boot` and `enable` pins to be defined.
 The optional `force` argument skips the default check whether certain strapping pins are set correctly.
+Flashing erases the other microcontroller's NVS:
+its startup script, a persisted console baud rate and the bus backup are reset to defaults.
+The other microcontroller then boots the copied app from its first OTA slot.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
+After `disconnect()` the expander stays disconnected until `flash(true)` reinstalls the serial connection;
+`run()`, `restart()` and forwarded calls fail with an error until then because there is no serial connection,
+and `flash()` without `force` fails because the strapping pins cannot be checked without it.
+Both `disconnect()` and `flash()` fail if another module, e.g. a serial bus, uses the same serial module.
+After `disconnect()`, the UART and its pins stay reserved for the expander's serial module until the core restarts (see [Serial interface](#serial-interface)).
+
+[Proxy](#proxy) modules are set up on the other microcontroller only once, when they are created.
+After `restart()`, `flash()` or a reboot of the other microcontroller (recognized by its `Ready.` line), `is_ready` returns to `true`, but the proxies no longer exist there:
+their `is_ready` turns `false` and the main microcontroller needs a restart, e.g. `core.restart()`, to create them again.
 
 Note that the expander forwards all other method calls to the remote core module, e.g. `expander.info()`.
 
@@ -941,6 +1258,12 @@ Note that the remote module has to have turned on broadcasting: `x.broadcast()`.
 
 Note that the proxy module forwards all method calls to the remote module.
 
-| Properties | Description                                       | Data type |
-| ---------- | ------------------------------------------------- | --------- |
-| `is_ready` | Whether the remote module has booted and is ready | `bool`    |
+Proxies cannot be passed as arguments to other module constructors (e.g. as end stops for a motor axis), because the actual module only exists on the remote microcontroller.
+Declare the depending module on the same microcontroller instead.
+
+| Properties | Description                                                    | Data type |
+| ---------- | -------------------------------------------------------------- | --------- |
+| `is_ready` | Whether the definition was sent in the expander's current boot | `bool`    |
+
+`is_ready` turns `false` again when the other microcontroller restarts or the connection is lost,
+because the main microcontroller cannot tell whether the remote module still exists (see [Expander](#expander)).

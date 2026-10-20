@@ -32,12 +32,14 @@ private:
     int32_t target_position = 0;
     int32_t target_speed = 0;
     uint32_t target_acceleration = 0;
-    bool enabled = true;
 
+    void do_disable() override;
     void read_position();
     void set_state(StepperState new_state);
 
 public:
+    static inline constexpr const char *TYPE = "StepperMotor";
+
     StepperMotor(const std::string name,
                  const gpio_num_t step_pin,
                  const gpio_num_t dir_pin,
@@ -52,8 +54,6 @@ public:
     int32_t get_target_speed() const { return this->target_speed; }
     uint32_t get_target_acceleration() const { return this->target_acceleration; }
 
-    void enable() override;
-    void disable() override;
     void stop() override;
     double get_position() override;
     void position(const double position, const double speed, const double acceleration) override;

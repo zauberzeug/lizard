@@ -17,6 +17,8 @@ private:
     adc_cali_handle_t adc_cali_handle;
 
 public:
+    static inline constexpr const char *TYPE = "Analog";
+
     Analog(const std::string name, const AnalogUnit_ptr unit, gpio_num_t pin, float attenuation_level);
     void step() override;
     static const std::map<std::string, Variable_ptr> get_defaults();

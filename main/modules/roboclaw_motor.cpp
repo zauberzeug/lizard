@@ -1,10 +1,17 @@
 #include "roboclaw_motor.h"
+#include "module_helpers.h"
 #include <memory>
 #include <stdexcept>
 
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
-REGISTER_MODULE_DEFAULTS(RoboClawMotor)
+static Module_ptr create_roboclaw_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const RoboClaw_ptr roboclaw = get_module_argument<RoboClaw>(arguments[0]);
+    const int64_t motor_number = arguments[1]->evaluate_integer();
+    return std::make_shared<RoboClawMotor>(name, roboclaw, motor_number);
+}
+REGISTER_MODULE(RoboClawMotor, &create_roboclaw_motor)
 
 const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
     return {
@@ -14,7 +21,7 @@ const std::map<std::string, Variable_ptr> RoboClawMotor::get_defaults() {
 }
 
 RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw, const unsigned int motor_number)
-    : Module(roboclaw_motor, name), motor_number(constrain(motor_number, 1, 2)), roboclaw(roboclaw) {
+    : Module(name), motor_number(constrain(motor_number, 1, 2)), roboclaw(roboclaw) {
     if (this->motor_number != motor_number) {
         throw std::runtime_error("illegal motor number");
     }
@@ -22,13 +29,7 @@ RoboClawMotor::RoboClawMotor(const std::string name, const RoboClaw_ptr roboclaw
 }
 
 void RoboClawMotor::step() {
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 
     uint8_t status;
     bool valid;
@@ -36,7 +37,7 @@ void RoboClawMotor::step() {
     if (!valid) {
         throw std::runtime_error("could not read motor position");
     }
-    this->properties["position"]->integer_value = position;
+    this->properties["position"]->set_integer_value(position);
     Module::step();
 }
 
@@ -64,7 +65,7 @@ void RoboClawMotor::call(const std::string method_name, const std::vector<ConstE
 }
 
 int64_t RoboClawMotor::get_position() const {
-    return this->properties.at("position")->integer_value;
+    return this->properties.at("position")->integer_value();
 }
 
 void RoboClawMotor::power(double value) {
@@ -99,13 +100,6 @@ void RoboClawMotor::speed(int value) {
     throw std::runtime_error("could not set speed after " + std::to_string(max_retries) + " retries");
 }
 
-void RoboClawMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void RoboClawMotor::disable() {
-    this->speed(0);
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
+void RoboClawMotor::do_disable() {
+    this->speed(0); // must run before `enabled` is cleared: `speed()` is gated on it
 }

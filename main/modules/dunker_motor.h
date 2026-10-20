@@ -14,14 +14,17 @@ private:
     const uint8_t node_id;
     int waiting_nmt_writes = 0;
     int waiting_sdo_writes = 0;
-    bool enabled = true;
 
+    void do_enable() override;
+    void do_disable() override;
     void sdo_read(const uint16_t index, const uint8_t sub);
     void nmt_write(const uint8_t cs);
     void sdo_write(const uint16_t index, const uint8_t sub, const uint8_t bits, const uint32_t value, const bool wait = true);
     void wait();
 
 public:
+    static inline constexpr const char *TYPE = "DunkerMotor";
+
     DunkerMotor(const std::string &name, const Can_ptr can, int64_t node_id);
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
@@ -29,7 +32,5 @@ public:
     static const std::map<std::string, Variable_ptr> get_defaults();
     void speed(const double speed);
     double get_speed();
-    void enable();
-    void disable();
     void step() override;
 };

@@ -15,6 +15,7 @@ Lizard is a **domain-specific language (DSL)** for defining and controlling hard
 **Tech Stack**: C++17 on ESP-IDF, with Python tooling for build/flash.
 
 **Related Projects**:
+
 - [RoSys](https://github.com/zauberzeug/rosys) – Robot System framework (Python, uses Lizard)
 - [NiceGUI](https://github.com/zauberzeug/nicegui) – Web UI framework often used with RoSys
 
@@ -69,16 +70,16 @@ end
 
 ## Available Module Types
 
-| Category | Modules |
-|----------|---------|
-| **Core** | `Core` (always present) |
-| **I/O** | `Input`, `Output`, `PwmOutput`, `Analog`, `AnalogUnit` |
-| **Communication** | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander` |
+| Category              | Modules                                                                                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Core**              | `Core` (always present)                                                                                                                                          |
+| **I/O**               | `Input`, `Output`, `PwmOutput`, `Analog`, `AnalogUnit`                                                                                                           |
+| **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander`                                                                                                            |
 | **Motor Controllers** | `LinearMotor`, `ODriveMotor`, `ODriveWheels`, `RmdMotor`, `RmdPair`, `StepperMotor`, `RoboClawMotor`, `RoboClawWheels`, `D1Motor`, `DunkerMotor`, `DunkerWheels` |
-| **CANopen** | `CanOpenMaster`, `CanOpenMotor` |
-| **Sensors** | `Imu`, `TemperatureSensor` |
-| **Expanders** | `Mcp23017` (I2C GPIO expander) |
-| **Utilities** | `MotorAxis`, `Proxy` |
+| **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                  |
+| **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                       |
+| **Expanders**         | `Mcp23017` (I2C GPIO expander)                                                                                                                                   |
+| **Utilities**         | `MotorAxis`, `Proxy`                                                                                                                                             |
 
 ---
 
@@ -98,20 +99,21 @@ lizard/
 ├── docs/                   # MkDocs documentation
 ├── examples/               # Usage examples (ROS integration, trajectories)
 ├── build.py               # Build script (wraps idf.py)
-├── flash.py               # Flash script
+├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
 ├── monitor.py             # Serial monitor
+├── serial_devices.py      # Serial device discovery shared by the host tools
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
-└── gen_parser.sh          # Regenerates parser.c from language.owl
+└── gen_parser.sh          # Regenerates parser.h from language.owl
 ```
 
 ### Key Entry Points
 
-| File | Purpose |
-|------|---------|
-| `main/main.cpp` | `app_main()` – initialization, main loop |
-| `main/modules/module.cpp` | `Module::create()` – module factory |
-| `main/global.cpp` | Global state management |
-| `language.owl` | DSL grammar definition |
+| File                      | Purpose                                  |
+| ------------------------- | ---------------------------------------- |
+| `main/main.cpp`           | `app_main()` – initialization, main loop |
+| `main/modules/module.cpp` | `Module::create()` – module factory      |
+| `main/global.cpp`         | Global state management                  |
+| `language.owl`            | DSL grammar definition                   |
 
 ---
 
@@ -134,8 +136,8 @@ python build.py esp32s3 --clean
 ### Flash & Monitor
 
 ```bash
-# Flash to connected device
-python flash.py
+# Flash to connected device (add --device <port> if not auto-detected)
+python espresso.py flash
 
 # Monitor serial output
 python monitor.py
@@ -169,22 +171,42 @@ using MyModule_ptr = std::shared_ptr<MyModule>;
 
 class MyModule : public Module {
 public:
+    static inline constexpr const char *TYPE = "MyModule";
+
     MyModule(const std::string name, /* constructor args */);
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     std::string get_output() const override;
+    static const std::map<std::string, Variable_ptr> get_defaults();
 };
 ```
 
-2. **Implement** (`my_module.cpp`):
+`TYPE` is the identifier users will type in Lizard scripts (`my = MyModule(...)`). Keeping it as a separate constant means renaming the C++ class doesn't silently break existing scripts in the wild.
+
+2. **Implement and self-register** (`my_module.cpp`):
 
 ```cpp
 #include "my_module.h"
+#include "module_helpers.h"  // only if you need get_module_argument<T>(...) for dependency lookup
+
+static Module_ptr create_my_module(const std::string &name,
+                                   const std::vector<ConstExpression_ptr> &arguments,
+                                   MessageHandler) {
+    Module::expect(arguments, /* expected count */, /* arg types */);
+    // Look up dependency modules (if any) via get_module_argument<T>(arguments[N])
+    return std::make_shared<MyModule>(name, /* args */);
+}
+REGISTER_MODULE(MyModule, &create_my_module)
+
+const std::map<std::string, Variable_ptr> MyModule::get_defaults() {
+    return {
+        {"some_property", std::make_shared<NumberVariable>(0.0)},
+    };
+}
 
 MyModule::MyModule(const std::string name, /* args */)
-    : Module(my_module, name) {
-    // Initialize properties
-    this->properties["some_property"] = std::make_shared<NumberVariable>(0.0);
+    : Module(name) {
+    this->properties = MyModule::get_defaults();
 }
 
 void MyModule::step() {
@@ -202,12 +224,9 @@ void MyModule::call(const std::string method_name, const std::vector<ConstExpres
 }
 ```
 
-3. **Register in module factory** (`module.cpp`):
-   - Add to `ModuleType` enum in `module.h`
-   - Add creation logic in `Module::create()` in `module.cpp`
-   - Include the header in `module.cpp`
+The `REGISTER_MODULE` macro adds the module to the global factory registry at static-init time, keyed off `MyModule::TYPE`. There is **no central file to edit** — registration is local to your module's `.cpp`. If your module exposes no defaults, return an empty map from `get_defaults()`.
 
-4. **Document in `docs/module_reference.md`**:
+3. **Document in `docs/module_reference.md`**:
 
 ```markdown
 ## My Module
@@ -301,54 +320,82 @@ For significant changes:
 ## Common Pitfalls
 
 ### Main Loop Timing
+
 The main loop runs every **10ms** (`delay(10)` in `app_main`). Any operation that takes longer will delay all modules, rules, and routines. Avoid:
+
 - Blocking I/O operations
 - Long computations
 - Waiting for external responses synchronously
 
 ### Module Registration
-When adding a new module, you must:
-1. Add to `ModuleType` enum in `module.h`
-2. Add creation case in `Module::create()` in `module.cpp`
-3. Include the header in `module.cpp`
 
-Forgetting any step causes "unknown module type" errors.
+Modules self-register via `REGISTER_MODULE(ClassName, &create_X)` in their own `.cpp`. The macro keys off the class's `static constexpr const char *TYPE` constant — both the factory and the static `ClassName::get_defaults()` method are registered under that string. Forgetting either the macro or the `TYPE` constant causes the DSL to report `unknown module type "ClassName"`. Two modules trying to register under the same `TYPE` throw a hard error at static-init time, so collisions are caught at first boot rather than silently shadowing.
+
+The class must define `static const std::map<std::string, Variable_ptr> get_defaults()` (return an empty map if there are no defaults) and pass only the instance name to the `Module(name)` base constructor — the runtime type identity comes from RTTI on the polymorphic `Module`. Inheriting `get_defaults()` from an intermediate base class (e.g. `Wheels`) is fine; a subclass that adds properties must shadow `get_defaults()` and pass its result to the base constructor, so that the registered defaults always equal the constructed properties — expander proxies seed their properties exclusively from the registered `get_defaults()`, so a property that exists only in a constructor breaks proxied instances at runtime.
+
+#### `WHOLE_ARCHIVE` is mandatory
+
+`REGISTER_MODULE` works by emitting a static-init object in an unnamed namespace. From the linker's point of view that object is unreferenced — so without `--whole-archive` the entire object file gets dropped at link time, the static initializer never runs, and the DSL reports `unknown module type "ClassName"` for a module whose code is otherwise compiled and present in the source tree. **The build stays green; the failure shows up only at runtime when a startup script tries to instantiate the module.**
+
+This applies equally to the `main` component (where Lizard's built-in modules live) and to any out-of-tree component that uses `REGISTER_MODULE`. ESP-IDF does **not** whole-archive `main` by default on v5.3, so the `WHOLE_ARCHIVE` flag has to be set explicitly in both places:
+
+```cmake
+idf_component_register(
+    SRCS ${SRC_FILES}
+    INCLUDE_DIRS ...
+    REQUIRES ...
+    WHOLE_ARCHIVE
+)
+```
+
+This is the canonical footgun for self-registration patterns — easy to miss and silently broken when missing.
 
 ### Argument Validation
+
 Always use `Module::expect()` to validate constructor/method arguments:
+
 ```cpp
 Module::expect(arguments, 2, identifier, integer);  // Exactly 2 args
 Module::expect(arguments, -1, numbery, numbery);    // Variable count, validate types only
 ```
 
 ### Base Class Calls
+
 Always call parent implementations:
+
 - `Module::step()` – handles `output_on` and `broadcast` flags
 - `Module::call()` – handles `mute`, `unmute`, `shadow`, `broadcast` methods
 
 ### Parser Regeneration
-After modifying `language.owl`, always run `./gen_parser.sh`. The `parser.c` file is **generated** – never edit it directly.
+
+After modifying `language.owl`, always run `./gen_parser.sh`. The `parser.h` file is **generated** – never edit it directly.
 
 ---
 
 ## Error Handling Patterns
 
 ### User-Facing Output
+
 Use `echo()` for messages sent to the serial console:
+
 ```cpp
 echo("error in module \"%s\": %s", module->name.c_str(), e.what());
 echo("warning: Checksum mismatch");
 ```
 
 ### Exceptions
+
 Use `std::runtime_error` for recoverable errors that should be reported:
+
 ```cpp
 throw std::runtime_error("module \"" + name + "\" is no serial connection");
 throw std::runtime_error("unknown method \"" + this->name + "." + method_name + "\"");
 ```
 
 ### Error Wrapping
+
 The main loop catches exceptions per-module to prevent one failing module from crashing others:
+
 ```cpp
 try {
     module->step();
@@ -362,13 +409,17 @@ try {
 ## Debugging
 
 ### Enable Debug Mode
+
 In a Lizard session:
+
 ```
 core.debug = true
 ```
+
 This prints parsing details and timing information.
 
 ### Serial Monitor
+
 ```bash
 python monitor.py
 # or
@@ -376,19 +427,24 @@ idf.py monitor
 ```
 
 ### Core Dumps
-If the device crashes, use `core_dumper.py` to analyze:
+
+If the device crashes, use `espresso.py coredump` to analyze:
+
 ```bash
-python core_dumper.py
+python espresso.py coredump
 ```
 
 ### Common Debug Techniques
+
 - Add temporary `echo()` calls (remove before committing)
 - Check `core.millis` for timing issues
 - Use `module.unmute()` / `module.mute()` to control output
 - Enable `module.broadcast()` to see all property changes
 
 ### ESP-IDF Logging
+
 For low-level debugging, use ESP-IDF logging macros:
+
 ```cpp
 #include "esp_log.h"
 static const char *TAG = "my_module";
@@ -408,7 +464,7 @@ Before claiming a task complete, verify:
 3. No blocking operations in main loop?
 4. Debug code removed?
 5. Memory management correct (no leaks, no dangling pointers)?
-6. New module registered in `Module::create()` if applicable?
+6. New module self-registered via `REGISTER_MODULE(...)` in its own `.cpp` if applicable?
 7. New module documented in `docs/module_reference.md` if applicable?
 
 ---
@@ -452,7 +508,7 @@ Prefer one structured top-level comment with suggested diffs over many line-by-l
 2. **Unnecessary complexity**: simpler design meets requirements
 3. **Resource hygiene**: unclosed handles, missing RAII, leaked FreeRTOS resources
 4. **Platform issues**: hardcoded values without ESP32/ESP32-S3 guards
-5. **Missing registration**: new module not added to `Module::create()` or `ModuleType` enum
+5. **Missing registration**: new module without a `REGISTER_MODULE(ClassName, &create_X)` line in its `.cpp`
 6. **Missing documentation**: new module not documented in `docs/module_reference.md`
 
 #### CLEANUP (suggest quick diffs)

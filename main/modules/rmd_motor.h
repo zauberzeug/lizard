@@ -18,13 +18,15 @@ private:
     int32_t last_encoder_position;
     bool has_last_encoder_position = false;
     unsigned long int last_msg_millis = 0;
-    bool enabled = true;
 
+    void do_disable() override;
     bool send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
               const unsigned long int timeout_ms = 3);
 
 public:
+    static inline constexpr const char *TYPE = "RmdMotor";
+
     RmdMotor(const std::string name, const Can_ptr can, const uint8_t motor_id, const int ratio);
     void subscribe_to_can();
     void step() override;
@@ -43,6 +45,4 @@ public:
     double get_position() const;
     double get_speed() const;
     bool set_acceleration(const uint8_t index, const uint32_t acceleration);
-    void enable();
-    void disable();
 };

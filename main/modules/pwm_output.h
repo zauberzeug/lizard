@@ -10,9 +10,11 @@ private:
     const ledc_timer_t ledc_timer;
     const ledc_channel_t ledc_channel;
     bool is_on = false;
-    bool enabled = true;
+    void do_disable() override;
 
 public:
+    static inline constexpr const char *TYPE = "PwmOutput";
+
     PwmOutput(const std::string name,
               const gpio_num_t pin,
               const ledc_timer_t ledc_timer,
@@ -20,6 +22,4 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
-    void enable();
-    void disable();
 };

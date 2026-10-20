@@ -7,16 +7,36 @@
 To install Lizard on your ESP32 run
 
 ```bash
-sudo ./espresso.py flash <device_path>
+sudo ./espresso.py flash [--device <device_path>]
 ```
+
+Without `--device` the serial device is auto-detected, and you are asked which one to use if several are found.
+`--dry-run` prints the commands instead of running them.
+It still resolves the serial device, so it needs the adapter attached (or an explicit `--device`).
 
 Note that flashing may require root access (hence the sudo).
 The command also does not work while the serial interface is busy communicating with another process.
+
+If flashing fails on your USB-UART bridge, you can lower the baud rate with `--baud` (default: 921600).
+If the stub upload itself fails (e.g. "Failed to write to target RAM"), pass `--no-stub` to flash via the ROM loader instead.
+On boards with a native USB-Serial-JTAG port (e.g. ESP32-S3), prefer that port over an external USB-UART bridge as the most robust way to flash.
 
 ### Robot Brain
 
 The `espresso.py` script can also upload firmware on a [Robot Brain](https://www.zauberzeug.com/product-robot-brain.html)
 where the microcontroller is connected to the pin header of an NVIDIA Jetson computer.
+This requires a Jetson Orin (L4T 35 or 36);
+for Nano/Xavier Robot Brains use release 0.12.x or earlier, which still ships `flash.py`.
+
+To flash a Robot Brain over the network from a development machine, pass `--host`.
+This rsyncs the binaries, `espresso.py` and `serial_devices.py` to the target and runs the command there over SSH:
+
+```bash
+./espresso.py flash --host user@robot-brain[:path]
+```
+
+`--host` works for every command (`flash`, `erase`, `enable`, `disable`, `reset`, `release_pins`, `coredump`),
+so e.g. `./espresso.py erase --host user@robot-brain` performs a remote recovery erase.
 
 ## Interaction
 
@@ -28,11 +48,22 @@ Use the serial monitor to read the current output and interactively send [Lizard
 ./monitor.py [<device_path>]
 ```
 
+Without a device path the monitor detects the serial device itself:
+on a Robot Brain it is the Jetson's UART to the microcontroller, whatever else is attached via USB,
+on a development host it is the attached USB-UART bridge.
+If several devices are found, it lists them and asks which one to use.
+A microcontroller on a USB-UART bridge attached to a Jetson is not detected and needs its device path.
+Pass the device path explicitly when several devices may be found and there is no terminal to answer the question.
+Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see [Robot Brain](#robot-brain)).
+
 You can also use an SSH monitor to access a microcontroller via SSH:
 
 ```bash
 ./monitor_ssh.sh <user@host>
 ```
+
+This copies `monitor.py` and `serial_devices.py` from this checkout to `~/lizard` on the target and starts the monitor there,
+so which device it detects does not depend on the age of the target's own checkout.
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
@@ -41,17 +72,17 @@ Note that the serial monitor cannot communicate while the serial interface is bu
 `otb_update.py` pushes firmware to a peer over a `SerialBus` coordinator using the OTB (Over The Bus) protocol.
 
 ```bash
-./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target <peer_id> [--bus <name>] [--expander <name>]
+./otb_update.py build/lizard.bin [--device <path>] --target <peer_id> [--bus <name>] [--expander <name>]
 ```
 
-| Argument     | Description                                           |
-| ------------ | ----------------------------------------------------- |
-| `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`) |
-| `--port`     | Serial port (default: `/dev/ttyUSB0`)                 |
-| `--baud`     | Baudrate (default: `115200`)                          |
-| `--target`   | Bus ID of the target node (required)                  |
-| `--bus`      | Name of the SerialBus module (default: `bus`)         |
-| `--expander` | Expander name when coordinator is behind an expander  |
+| Argument     | Description                                                    |
+| ------------ | -------------------------------------------------------------- |
+| `firmware`   | Path to the firmware binary (e.g. `build/lizard.bin`)          |
+| `--device`   | Serial device path (default: auto-detected, asks if ambiguous) |
+| `--baud`     | Baudrate (default: `115200`)                                   |
+| `--target`   | Bus ID of the target node (required)                           |
+| `--bus`      | Name of the SerialBus module (default: `bus`)                  |
+| `--expander` | Expander name when coordinator is behind an expander           |
 
 **Expander chains:**
 
@@ -62,7 +93,7 @@ and resume them afterwards to keep the UART link clear.
 Example:
 
 ```bash
-./otb_update.py build/lizard.bin --port /dev/ttyUSB0 --target 1 --expander p0
+./otb_update.py build/lizard.bin --target 1 --expander p0
 ```
 
 This flashes node 1 through expander `p0`.
@@ -72,53 +103,70 @@ The target node will reboot with the new firmware after a successful transfer.
 
 The OTB (Over The Bus) protocol uses these message types:
 
-| Host → Target              | Description                                                |
-| -------------------------- | ---------------------------------------------------------- |
-| `__OTB_BEGIN__`            | Begin firmware update session                              |
-| `__OTB_CHUNK_<seq>__:data` | Send base64-encoded firmware chunk (incl. sequence number) |
-| `__OTB_COMMIT__`           | Commit update and set boot partition                       |
-| `__OTB_ABORT__`            | Cancel the update session                                  |
+| Host → Target                      | Description                                                          |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `__OTB_BEGIN__`                    | Begin firmware update session                                        |
+| `__OTB_CHUNK_<seq>__:<crc>:<data>` | Send base64-encoded firmware chunk (incl. sequence number and CRC32) |
+| `__OTB_COMMIT__`                   | Commit update and set boot partition                                 |
+| `__OTB_ABORT__`                    | Cancel the update session                                            |
 
-| Host ← Target             | Description                               |
-| ------------------------- | ----------------------------------------- |
-| `__OTB_ACK_BEGIN__`       | Acknowledge begin                         |
-| `__OTB_ACK_CHUNK_<seq>__` | Acknowledge chunk (incl. sequence number) |
-| `__OTB_ACK_COMMIT__`      | Acknowledge commit                        |
-| `__OTB_ERROR__:reason`    | Error response with reason code           |
+| Host ← Target             | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| `__OTB_ACK_BEGIN__:crc32` | Acknowledge begin (suffix: target checks chunk CRCs) |
+| `__OTB_ACK_CHUNK_<seq>__` | Acknowledge chunk (incl. sequence number)            |
+| `__OTB_ACK_COMMIT__`      | Acknowledge commit                                   |
+| `__OTB_ERROR__:reason`    | Error response with reason code                      |
 
 Flow:
 
 ```
-Host                            Target
-  |                                |
-  |--- __OTB_BEGIN__ ------------->|
-  |<-- __OTB_ACK_BEGIN__ ----------|
-  |                                |
-  |--- __OTB_CHUNK_<0>__:... ----->|
-  |<-- __OTB_ACK_CHUNK_<0>__ ------|
-  |                                |
-  |--- __OTB_CHUNK_<1>__:... ----->|
-  |<-- __OTB_ACK_CHUNK_<1>__ ------|
-  |                                |
-  |       ... more chunks ...      |
-  |                                |
-  |--- __OTB_CHUNK_<N-1>__:... --->|
-  |<-- __OTB_ACK_CHUNK_<N-1>__ ----|
-  |                                |
-  |--- __OTB_COMMIT__ ------------>|
-  |<-- __OTB_ACK_COMMIT__ ---------|
-  |                                |
+Host                              Target
+  |                                    |
+  |--- __OTB_BEGIN__ ----------------->|
+  |<-- __OTB_ACK_BEGIN__:crc32 --------|
+  |                                    |
+  |--- __OTB_CHUNK_<0>__:<crc>:... --->|
+  |<-- __OTB_ACK_CHUNK_<0>__ ----------|
+  |                                    |
+  |--- __OTB_CHUNK_<1>__:<crc>:... --->|
+  |<-- __OTB_ACK_CHUNK_<1>__ ----------|
+  |                                    |
+  |        ... more chunks ...         |
+  |                                    |
+  |--- __OTB_CHUNK_<N-1>__:<crc>:... ->|
+  |<-- __OTB_ACK_CHUNK_<N-1>__ --------|
+  |                                    |
+  |--- __OTB_COMMIT__ ---------------->|
+  |<-- __OTB_ACK_COMMIT__ -------------|
+  |                                    |
 ```
 
 On error at any point, the target responds with `__OTB_ERROR__:<message>` with a human-readable error message.
+
+**Retransmission and integrity:**
+frames can get lost or corrupted on a busy bus (e.g. while the target stalls on flash writes),
+so the transfer recovers instead of aborting:
+on a gap, duplicate, or corrupted chunk the target re-acknowledges the last chunk it has written
+(or `__OTB_ACK_BEGIN__` when nothing arrived yet),
+and the host treats such a duplicate acknowledgement — or an acknowledgement timeout — as a signal to rewind and resend from there (go-back-N).
+Chunks are only ever written in order, so duplicates are discarded safely;
+the session is aborted only when no chunk gets written for 10 s.
+Because the bus frames' own checksum is only 8 bits,
+each chunk additionally carries a zlib CRC32 over its decimal sequence number followed by its decoded bytes
+(`__OTB_CHUNK_<seq>__:<8-hex-crc32>:<base64>`).
+The target advertises this with the `:crc32` suffix of its begin acknowledgement;
+the host only sends the CRC field to targets that do, so older firmware can still be updated,
+and a target still accepts chunks without the field from older hosts.
 
 ### Configure
 
 Use the configure script to send a new startup script to the microcontroller.
 
 ```bash
-./configure.py <config_file> <device_path>
+./configure.py <config_file> [<device_path>]
 ```
+
+Without a device path the serial device is detected the same way as for the [serial monitor](#serial-monitor).
 
 Note that the configure script cannot communicate while the serial interface is busy communicating with another process.
 
@@ -150,15 +198,43 @@ After making changes to the Lizard language definition or its C++ implementation
 
 To upload the compiled firmware you can use the `./espresso.py` command described above.
 
+Integrators building Lizard as part of their own project can override the project name,
+e.g. `idf.py -DLIZARD_PROJECT_NAME=lizard-zz build`.
+The name is reported by `core.version()` and also names the build artifacts (`build/lizard-zz.bin`, `build/lizard-zz.elf`);
+`espresso.py` picks them up automatically via `build/project_description.json`,
+other tools like `otb_update.py` or `addr2line` need the renamed paths passed explicitly.
+
 ### Backtrace
 
-In case Lizard terminates with a backtrace printed to the serial terminal, you can use the following script to print corresponding source code lines.
+In case Lizard terminates with a backtrace printed to the serial terminal,
+you can translate the addresses to source code lines with the `addr2line` tool from the ESP-IDF toolchain.
+Make sure the toolchain is on your `PATH` (e.g. by sourcing `. $IDF_PATH/export.sh`)
+and that a compiled ELF file is located at `build/lizard.elf`.
+Use the `addr2line` that matches the active ESP-IDF toolchain.
+On ESP-IDF 5.2 and newer, the unified Xtensa binary below covers both ESP32 and ESP32-S3.
 
 ```bash
-./backtrace.sh <addresses>
+xtensa-esp-elf-addr2line -e build/lizard.elf <addresses>
 ```
 
-Note that the script assumes Espressif IDF tools being installed at `~/esp/esp-tools_4.4/` and a compiled ELF file being located at `build/lizard.elf`.
+### Core Dumps
+
+If Lizard crashes, the ESP32 can store a core dump that you read back over the serial device:
+
+```bash
+./espresso.py coredump            # print core dump info
+./espresso.py coredump --debug    # start a GDB debug session, then return to the shell
+```
+
+This needs a compiled ELF at `build/lizard.elf` and, on the machine reading the dump,
+a sourced ESP-IDF environment: `esp_coredump` looks up the core dump partition via
+`$IDF_PATH/components/partition_table/parttool.py` and symbolizes with the matching GDB
+(`xtensa-esp32-elf-gdb`/`xtensa-esp32s3-elf-gdb`), so the pip package alone is not enough
+and it must be importable by `python3` (not just a CLI on the `PATH`).
+Add `--host user@robot-brain` to pull a core dump off a Robot Brain without logging in;
+the requirements above then apply to the Robot Brain itself, which reads the dump.
+Unlike flashing, the remote core dump runs without sudo,
+so the SSH user needs access to the serial device (e.g. membership in the `dialout` group).
 
 ### Releasing
 

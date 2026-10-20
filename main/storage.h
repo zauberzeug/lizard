@@ -7,18 +7,23 @@ class Storage {
 private:
     static void put(const std::string value);
     static std::string get();
+    static void nvs_delete_key(const std::string &ns, const std::string &key);
 
 public:
     static std::string startup;
+    // the error of a failed "!." until the script changes or a "!." succeeds; startup_checksum() reports it instead of a checksum
+    static std::string save_error;
 
     static void init();
     static void append_to_startup(const std::string line);
     static void remove_from_startup(const std::string substring = "");
     static void print_startup(const std::string substring = "");
     static void save_startup();
-    static void clear_nvs();
 
     static void set_user_pin(const std::uint32_t pin);
     static bool get_user_pin(std::uint32_t &pin);
     static void remove_user_pin();
+
+    static void set_baudrate(const std::uint32_t baudrate);
+    static bool get_baudrate(std::uint32_t &baudrate);
 };

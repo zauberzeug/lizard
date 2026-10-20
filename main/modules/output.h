@@ -10,15 +10,17 @@ private:
     double pulse_interval = 0.0;
     double pulse_duty_cycle = 0.5;
     virtual void set_level(bool level) const = 0;
-    bool enabled = true;
     bool active = false;
+    /// Write `target_level` to the pin and update the `level`/`change` properties.
+    void apply_level();
+    void do_disable() override;
 
 protected:
     Output(const std::string name);
 
 public:
-    void enable();
-    void disable();
+    static inline constexpr const char *TYPE = "Output";
+
     void activate();
     void deactivate();
     void step() override;

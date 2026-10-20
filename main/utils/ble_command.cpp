@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstring>
+#include <new>
 
 #include <nvs.h>
 #include <nvs_flash.h>
@@ -124,7 +125,6 @@ static void on_idle_timeout(TimerHandle_t /* timer */) {
         ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
     }
 }
-
 
 // No BLE-level security - authentication is done at application level via AUTH command
 static const struct ble_gatt_svc_def gatt_svcs[] = {
@@ -267,20 +267,19 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
                 return 0;
             }
 
-            char *buf = (char *)malloc(len + 1);
-            if (!buf || ble_hs_mbuf_to_flat(ctxt->om, buf, len, NULL) != 0) {
-                free(buf);
+            std::unique_ptr<char[]> buf(new (std::nothrow) char[len + 1]);
+            if (!buf || ble_hs_mbuf_to_flat(ctxt->om, buf.get(), len, NULL) != 0) {
                 return BLE_ATT_ERR_UNLIKELY;
             }
             buf[len] = '\0';
 
 #if ZZ_BLE_DEBUG
-            echo("BLE rx: %s", buf);
+            echo("BLE rx: %s", buf.get());
 #endif
 
             // Handle AUTH command
-            if (len >= 5 && strncmp(buf, "AUTH ", 5) == 0) {
-                if (pin_deactivated || check_pin(buf, len)) {
+            if (len >= 5 && strncmp(buf.get(), "AUTH ", 5) == 0) {
+                if (pin_deactivated || check_pin(buf.get(), len)) {
                     authenticated = true;
                     if (idle_timer) {
                         xTimerStop(idle_timer, 0);
@@ -294,7 +293,6 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
                         xTimerReset(idle_timer, 0);
                     }
                 }
-                free(buf);
                 return 0;
             }
 
@@ -302,7 +300,6 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
             if (!authenticated && !pin_deactivated) {
                 echo("BLE: rejected command before authentication");
                 send_notification(conn_handle, "AUTH_REQUIRED\n");
-                free(buf);
                 return 0;
             }
 
@@ -316,9 +313,8 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
 
             // Process command normally
             if (client_callback) {
-                client_callback(std::string_view(buf, len));
+                client_callback(std::move(buf));
             }
-            free(buf);
             return 0;
         }
     }
@@ -388,14 +384,13 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
 
     ble_svc_gap_device_name_set(ble_device_name.data());
 
+    running = true;
     nimble_port_freertos_init(run_host_task);
 
     if (!idle_timer) {
         idle_timer = xTimerCreate("ble_idle", pdMS_TO_TICKS(IDLE_TIMEOUT_MS),
                                   pdFALSE, nullptr, on_idle_timeout);
     }
-
-    running = true;
 }
 
 int send(const std::string_view &data) {
@@ -412,6 +407,10 @@ int send(const std::string_view &data) {
     echo("BLE tx: %.*s", (int)data.length(), data.data());
 #endif
     return ble_gattc_notify_custom(current_con, send_chr_val_handle, om);
+}
+
+bool is_connected() {
+    return current_con != BLE_HS_CONN_HANDLE_NONE;
 }
 
 void finalize() {

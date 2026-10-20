@@ -1,9 +1,17 @@
 #include "rmd_pair.h"
+#include "module_helpers.h"
+#include "rmd_motor.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include <math.h>
 
-REGISTER_MODULE_DEFAULTS(RmdPair)
+static Module_ptr create_rmd_pair(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, identifier);
+    const RmdMotor_ptr rmd1 = get_module_argument<RmdMotor>(arguments[0]);
+    const RmdMotor_ptr rmd2 = get_module_argument<RmdMotor>(arguments[1]);
+    return std::make_shared<RmdPair>(name, rmd1, rmd2);
+}
+REGISTER_MODULE(RmdPair, &create_rmd_pair)
 
 const std::map<std::string, Variable_ptr> RmdPair::get_defaults() {
     return {
@@ -14,13 +22,13 @@ const std::map<std::string, Variable_ptr> RmdPair::get_defaults() {
 }
 
 RmdPair::RmdPair(const std::string name, const RmdMotor_ptr rmd1, const RmdMotor_ptr rmd2)
-    : Module(rmd_pair, name), rmd1(rmd1), rmd2(rmd2) {
+    : Module(name), rmd1(rmd1), rmd2(rmd2) {
     this->properties = RmdPair::get_defaults();
 }
 
 RmdPair::TrajectoryTriple RmdPair::compute_trajectory(double x0, double x1, double v0, double v1) const {
-    const double v_max = std::abs(this->properties.at("v_max")->number_value);
-    const double a_max = std::abs(this->properties.at("a_max")->number_value);
+    const double v_max = std::abs(this->properties.at("v_max")->number_value());
+    const double a_max = std::abs(this->properties.at("a_max")->number_value());
     v0 = std::min(std::max(v0, -v_max), v_max);
     v1 = std::min(std::max(v1, -v_max), v_max);
 
@@ -66,13 +74,7 @@ void RmdPair::throttle(TrajectoryPart &part, double factor) const {
 }
 
 void RmdPair::step() {
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     Module::step();
 }
 
@@ -135,16 +137,12 @@ void RmdPair::call(const std::string method_name, const std::vector<ConstExpress
     }
 }
 
-void RmdPair::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
+void RmdPair::do_enable() {
     this->rmd1->enable();
     this->rmd2->enable();
 }
 
-void RmdPair::disable() {
+void RmdPair::do_disable() {
     this->rmd1->disable();
     this->rmd2->disable();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }

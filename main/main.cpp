@@ -10,19 +10,27 @@
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
 #include "global.h"
+#include "main.h"
 #include "modules/bluetooth.h"
 #include "modules/core.h"
 #include "modules/expander.h"
 #include "modules/module.h"
+#include "nvs_flash.h"
 #include "proxy.h"
 #include "rom/gpio.h"
 #include "rom/uart.h"
 #include "storage.h"
+#include "utils/boot_guard.h"
+#include "utils/bus_backup.h"
+#include "utils/interpreter_lock.h"
+#include "utils/scheduler.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
+#include "utils/uart_driver.h"
 #include <chrono>
 #include <functional>
+#include <math.h>
 #include <memory>
 #include <stdexcept>
 #include <stdint.h>
@@ -31,7 +39,13 @@
 #include <string>
 #include <vector>
 
-#define BUFFER_SIZE 1024
+// a host configuring the startup script sends a hundred-odd lines in one burst; at 921600 baud they arrive faster
+// than the main loop drains them, so the receive ring and the pattern queue hold a whole script
+constexpr int RX_RING_SIZE = 8192;
+constexpr int RX_PATTERN_QUEUE = 512;
+// process_uart only reads once a line end is queued; a ring no larger than a line fills before the flush guard
+// can see the overflow, the driver then disables the receive interrupts and UART0 stays deaf until a reset
+static_assert(RX_RING_SIZE > CONSOLE_LINE_SIZE, "the receive ring must hold more than one line");
 
 Core_ptr core_module;
 
@@ -64,6 +78,10 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
         return std::make_shared<BooleanExpression>(true);
     case PARSED_FALSE:
         return std::make_shared<BooleanExpression>(false);
+    case PARSED_NAN:
+        return std::make_shared<NumberExpression>(NAN);
+    case PARSED_INF:
+        return std::make_shared<NumberExpression>(INFINITY);
     case PARSED_STRING: {
         const struct parsed_string string = parsed_string_get(expression.string);
         return std::make_shared<StringExpression>(std::string(string.string, string.length));
@@ -128,7 +146,7 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
     }
 }
 
-std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
+std::vector<Action_ptr> compile_actions(const struct owl_ref ref, const bool allow_await = true) {
     std::vector<Action_ptr> actions;
     for (struct owl_ref r = ref; !r.empty; r = owl_next(r)) {
         const struct parsed_action action = parsed_action_get(r);
@@ -165,10 +183,16 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref) {
             }
             actions.push_back(std::make_shared<VariableAssignment>(variable, expression));
         } else if (!action.await_condition.empty) {
+            if (!allow_await) {
+                throw std::runtime_error("await is not allowed in scheduled blocks");
+            }
             struct parsed_await_condition await_condition = parsed_await_condition_get(action.await_condition);
             const ConstExpression_ptr condition = compile_expression(await_condition.condition);
             actions.push_back(std::make_shared<AwaitCondition>(condition));
         } else if (!action.await_routine.empty) {
+            if (!allow_await) {
+                throw std::runtime_error("await is not allowed in scheduled blocks");
+            }
             struct parsed_await_routine await_routine = parsed_await_routine_get(action.await_routine);
             const std::string routine_name = identifier_to_string(await_routine.routine_name);
             const Routine_ptr routine = Global::get_routine(routine_name);
@@ -189,13 +213,16 @@ void process_tree(owl_tree *const tree, bool from_expander) {
             const ConstExpression_ptr expression = compile_expression(statement.expression);
             static char buffer[256];
             expression->print_to_buffer(buffer, sizeof(buffer));
-            echo(buffer);
+            echo("%s", buffer);
         } else if (!statement.constructor.empty) {
             const struct parsed_constructor constructor = parsed_constructor_get(statement.constructor);
             if (constructor.expander_name.empty) {
                 const std::string module_name = identifier_to_string(constructor.module_name);
                 if (Global::has_module(module_name)) {
                     throw std::runtime_error("module \"" + module_name + "\" already exists");
+                }
+                if (Global::has_variable(module_name)) {
+                    throw std::runtime_error("variable \"" + module_name + "\" already exists");
                 }
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
@@ -205,11 +232,17 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 const std::string module_name = identifier_to_string(constructor.module_name);
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::string expander_name = identifier_to_string(constructor.expander_name);
+                if (Global::has_module(module_name)) {
+                    throw std::runtime_error("module \"" + module_name + "\" already exists");
+                }
+                if (Global::has_variable(module_name)) {
+                    throw std::runtime_error("variable \"" + module_name + "\" already exists");
+                }
                 const Module_ptr expander_module = Global::get_module(expander_name);
-                if (expander_module->type != expander) {
+                const Expander_ptr expander = std::dynamic_pointer_cast<Expander>(expander_module);
+                if (!expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
-                const Expander_ptr expander = std::static_pointer_cast<Expander>(expander_module);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
                 const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
                 Global::add_module(module_name, proxy);
@@ -280,6 +313,15 @@ void process_tree(owl_tree *const tree, bool from_expander) {
             const Routine_ptr routine = std::make_shared<Routine>(compile_actions(actions.action));
             const ConstExpression_ptr condition = compile_expression(rule_definition.condition);
             Global::add_rule(std::make_shared<Rule>(condition, routine));
+        } else if (!statement.schedule_definition.empty) {
+            const struct parsed_schedule_definition schedule_definition = parsed_schedule_definition_get(statement.schedule_definition);
+            const ConstExpression_ptr time = compile_expression(schedule_definition.time);
+            if (!time->is_numbery()) {
+                throw std::runtime_error("schedule time must be a number");
+            }
+            const struct parsed_actions actions = parsed_actions_get(schedule_definition.actions);
+            const Routine_ptr routine = std::make_shared<Routine>(compile_actions(actions.action, false));
+            scheduler::add(static_cast<int64_t>(time->evaluate_number() * 1000.0), routine);
         } else {
             throw std::runtime_error("unknown statement type");
         }
@@ -287,11 +329,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
 }
 
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
+    InterpreterLock lock;
     if (trigger_keep_alive) {
         core_module->keep_alive();
     }
 
-    const bool debug = core_module->get_property("debug")->boolean_value;
+    const bool debug = core_module->get_property("debug")->boolean_value();
     if (debug) {
         echo(">> %s", line);
         tic();
@@ -299,6 +342,10 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(line), owl_tree_destroy);
     if (debug) {
         toc("Tree creation");
+    }
+    if (!tree) {
+        echo("error: allocation failure while parsing");
+        return;
     }
     struct source_range range;
     switch (owl_tree_get_error(tree.get(), &range)) {
@@ -319,7 +366,10 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     case ERROR_MORE_INPUT_NEEDED:
         echo("error: more input needed at range %zu %zu", range.start, range.end);
         break;
-    default:
+    case ERROR_ALLOCATION_FAILURE:
+        echo("error: allocation failure while parsing");
+        break;
+    case ERROR_NONE:
         if (debug) {
             owl_tree_print(tree.get());
             tic();
@@ -328,10 +378,16 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
         if (debug) {
             toc("Tree traversal");
         }
+        break;
+    default:
+        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
+        echo("error: unknown parse error");
+        break;
     }
 }
 
-void process_line(const char *line, const int len) {
+void process_line(const char *line, const int len, const bool trigger_keep_alive) {
+    InterpreterLock lock;
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
         case '+':
@@ -347,38 +403,82 @@ void process_line(const char *line, const int len) {
             Storage::save_startup();
             break;
         case '!':
-            process_lizard(line + 2);
+            process_lizard(line + 2, trigger_keep_alive);
             break;
         case '"':
-            echo(line + 2);
+            echo("%s", line + 2);
             break;
         default:
             throw std::runtime_error("unrecognized control command");
         }
     } else {
-        process_lizard(line);
+        process_lizard(line, trigger_keep_alive);
+    }
+}
+
+// checks and runs one UART0 line; its errors are reported here so that the lines after it in the same read still run
+static void process_uart_line(char *line, const int len) {
+    bool checksum_ok = true;
+    const int payload_len = check(line, len, &checksum_ok);
+    if (!checksum_ok) {
+        echo("warning: Checksum mismatch while processing UART0");
+        return;
+    }
+    try {
+        process_line(line, payload_len);
+    } catch (const std::exception &e) {
+        echo("error processing uart0: %s", e.what());
     }
 }
 
 void process_uart() {
-    static char input[BUFFER_SIZE];
+    static char input[CONSOLE_LINE_SIZE];
+    static bool discarding = false; // an unterminated run exceeded a line: drop everything up to its line end
     while (true) {
         const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
+            size_t buffered = 0;
+            uart_get_buffered_data_len(UART_NUM_0, &buffered);
+            if (uart_pattern_get_pos(UART_NUM_0) >= 0) {
+                // a line end arrived after the pop, so `buffered` may contain complete lines: pop them first
+                continue;
+            }
+            // the driver updates the byte count and the pattern queue together, so all `buffered` bytes are
+            // unterminated; a flush would also drop whatever arrives from here on, including the next line end
+            if (discarding && buffered > 0) {
+                discard_uart_input(UART_NUM_0, buffered);
+            } else if (buffered > CONSOLE_LINE_SIZE) {
+                // bytes without a line end that already exceed a line can never be processed; a ring they fill up
+                // disables the receive interrupts until something reads or flushes, so drop them now
+                discard_uart_input(UART_NUM_0, buffered);
+                discarding = true;
+                echo("warning: UART0 input exceeds %d bytes without a line end and is discarded up to the next line end",
+                     CONSOLE_LINE_SIZE);
+            }
             break;
         }
-        int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
-        bool checksum_ok = true;
-        len = check(input, len, &checksum_ok);
-        if (!checksum_ok) {
-            echo("warning: Checksum mismatch while processing UART0");
+        if (discarding || pos + 1 > CONSOLE_LINE_SIZE) {
+            // drop the whole line: reading it into `input` would overrun the buffer
+            discard_uart_input(UART_NUM_0, pos + 1);
+            if (!discarding) {
+                echo("warning: UART0 line of %d bytes exceeds %d bytes and was discarded", pos + 1, CONSOLE_LINE_SIZE);
+            }
+            discarding = false;
             continue;
         }
-        process_line(input, len);
+        const int len = uart_read_bytes(UART_NUM_0, (uint8_t *)input, pos + 1, 0);
+        // the driver queues only the last line end of each receive chunk, so one read can hold several lines
+        for (int start = 0; start < len;) {
+            const char *const line_end = static_cast<const char *>(memchr(input + start, '\n', len - start));
+            const int end = line_end ? line_end - input + 1 : len;
+            process_uart_line(input + start, end - start);
+            start = end;
+        }
     }
 }
 
 void run_step(Module_ptr module) {
+    InterpreterLock lock;
     try {
         module->step();
     } catch (const std::runtime_error &e) {
@@ -389,8 +489,15 @@ void run_step(Module_ptr module) {
 void app_main() {
     vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
+    // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be
+    // initialized first; Storage::init() below calls nvs_flash_init() again, which is safe.
+    // Note: the ROM bootloader and early boot log always use 115200 regardless of this value.
+    nvs_flash_init();
+    uint32_t baud_rate = 115200;
+    Storage::get_baudrate(baud_rate);
+
     const uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = static_cast<int>(baud_rate),
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -400,31 +507,50 @@ void app_main() {
         .flags = {},
     };
     uart_param_config(UART_NUM_0, &uart_config);
-    QueueHandle_t uart_queue;
-    uart_driver_install(UART_NUM_0, BUFFER_SIZE * 2, 0, 20, &uart_queue, 0);
+    ESP_ERROR_CHECK(install_uart_driver_on_core1(UART_NUM_0, RX_RING_SIZE, 0));
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
-    uart_pattern_queue_reset(UART_NUM_0, 100);
+    uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
 
     try {
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
+        scheduler::init();
     } catch (const std::runtime_error &e) {
         echo("error while initializing core module: %s", e.what());
         exit(1);
     }
 
+    // a storage error is not a failed startup: report it and continue with an empty script so the console stays reachable
     try {
         Storage::init();
-        process_lizard(Storage::startup.c_str());
-    } catch (const std::runtime_error &e) {
-        echo("error while loading startup script: %s", e.what());
+    } catch (const std::exception &e) {
+        echo("error while reading startup script from storage: %s", e.what());
     }
+
+    try {
+        if (boot_guard::should_run_startup()) {
+            process_lizard(Storage::startup.c_str());
+        }
+    } catch (const std::exception &e) {
+        boot_guard::startup_failed(e.what());
+    } catch (...) {
+        boot_guard::startup_failed("unknown exception");
+    }
+
+    bus_backup::save_if_present();
+    bus_backup::restore_if_needed();
 
     printf("\nReady.\n");
 
+    // Anchor for the deadline loop below: xTaskDelayUntil advances this by one period
+    // each iteration, giving a drift-free 10 ms cadence (no millis() re-read per loop).
+    TickType_t last_wake = xTaskGetTickCount();
+
     while (true) {
+        boot_guard::step();
+
         try {
             process_uart();
-        } catch (const std::runtime_error &e) {
+        } catch (const std::exception &e) {
             echo("error processing uart0: %s", e.what());
         }
 
@@ -436,6 +562,7 @@ void app_main() {
         run_step(core_module);
 
         for (auto const &rule : Global::rules) {
+            InterpreterLock lock;
             try {
                 if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
                     rule->routine->start();
@@ -447,6 +574,7 @@ void app_main() {
         }
 
         for (auto const &[routine_name, routine] : Global::routines) {
+            InterpreterLock lock;
             try {
                 routine->step();
             } catch (const std::runtime_error &e) {
@@ -454,6 +582,13 @@ void app_main() {
             }
         }
 
-        delay(10);
+        // Sleep until the next 10 ms period boundary instead of a full vTaskDelay(10) after
+        // work, so the period is max(10 ms, work) and drift-free (#213). On overrun
+        // xTaskDelayUntil returns pdFALSE without blocking; floor at 1 tick so the idle task
+        // still runs to feed the watchdog (vTaskDelay(0) only yields to equal-prio tasks).
+        if (xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10)) == pdFALSE) {
+            last_wake = xTaskGetTickCount();
+            delay(1);
+        }
     }
 }

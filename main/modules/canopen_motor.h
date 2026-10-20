@@ -13,7 +13,9 @@ using CanOpenMotor_ptr = std::shared_ptr<CanOpenMotor>;
 class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenMotor>, virtual public Motor {
     Can_ptr can;
     const uint8_t node_id;
-    bool enabled = true;
+
+    void do_enable() override;
+    void do_disable() override;
 
     enum InitState init_state = WaitingForPreoperational;
 
@@ -56,6 +58,8 @@ class CanOpenMotor : public Module, public std::enable_shared_from_this<CanOpenM
     void set_profile_quick_stop_deceleration(uint16_t deceleration);
 
 public:
+    static inline constexpr const char *TYPE = "CanOpenMotor";
+
     CanOpenMotor(const std::string &name, const Can_ptr can, int64_t node_id);
     void subscribe_to_can();
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
@@ -67,7 +71,5 @@ public:
     void position(const double position, const double speed, const double acceleration) override;
     double get_speed() override;
     void speed(const double speed, const double acceleration) override;
-    void enable() override;
-    void disable() override;
     void step() override;
 };

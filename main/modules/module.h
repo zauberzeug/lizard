@@ -9,70 +9,54 @@
 #include <string>
 #include <vector>
 
-#define REGISTER_MODULE_DEFAULTS(module_name)                                   \
-    namespace {                                                                 \
-    struct RegisterDefaults {                                                   \
-        RegisterDefaults() {                                                    \
-            Module::register_defaults(#module_name, module_name::get_defaults); \
-        }                                                                       \
-    } register_defaults;                                                        \
-    } // namespace
-
-enum ModuleType {
-    bluetooth,
-    core,
-    expander,
-    input,
-    output,
-    pwm_output,
-    mcp23017,
-    imu,
-    can,
-    serial,
-    odrive_motor,
-    odrive_wheels,
-    rmd_motor,
-    rmd_pair,
-    roboclaw,
-    roboclaw_motor,
-    roboclaw_wheels,
-    stepper_motor,
-    motor_axis,
-    canopen_motor,
-    canopen_master,
-    d1_motor,
-    dunker_motor,
-    dunker_wheels,
-    analog,
-    analog_unit,
-    temperature_sensor,
-    proxy,
-    serial_bus,
-};
-
 class Module;
 using Module_ptr = std::shared_ptr<Module>;
 using ConstModule_ptr = std::shared_ptr<const Module>;
 using MessageHandler = void (*)(const char *line, bool trigger_keep_alive, bool from_expander);
+using ModuleFactory = std::function<Module_ptr(const std::string &name,
+                                               const std::vector<ConstExpression_ptr> &arguments,
+                                               MessageHandler message_handler)>;
 using DefaultsFunction = std::function<std::map<std::string, Variable_ptr>()>;
-using DefaultsRegistry = std::map<std::string, DefaultsFunction>;
+
+#define REGISTER_MODULE(class_name, factory_fn)                                                 \
+    namespace {                                                                                 \
+    struct RegisterModule_##class_name {                                                        \
+        RegisterModule_##class_name() {                                                         \
+            Module::register_module(class_name::TYPE, (factory_fn), &class_name::get_defaults); \
+        }                                                                                       \
+    } register_module_##class_name;                                                             \
+    } // namespace
 
 class Module {
 private:
-    std::list<Module_ptr> shadow_modules;
-    static DefaultsRegistry &get_defaults_registry();
+    Variable_ptr enabled_property; // cached by get_enabled_property()
+
+    /// The `enabled` property; throws a runtime_error for modules that do not declare one.
+    const Variable_ptr &get_enabled_property();
 
 protected:
+    std::list<Module_ptr> shadow_modules;
     std::map<std::string, Variable_ptr> properties;
     bool output_on = false;
     bool broadcast = false;
+    bool enabled = true; // last value applied to the hardware; `sync_enabled()` edge-detects direct property writes against it
+
+    /// Apply a direct write to the `enabled` property by calling enable()/disable(); call from step().
+    void sync_enabled();
+
+    /// Module-specific part of enable()/disable(). Both hooks run while `enabled` still holds the
+    /// old value, and the flags are committed only after the hook returned, so a hook that throws
+    /// leaves the transition pending and `sync_enabled()` retries it on the next step.
+    /// Hence `do_disable()` may still use methods gated on `enabled`, but `do_enable()` may not.
+    virtual void do_enable() {}
+    virtual void do_disable() {}
 
 public:
     static bool broadcast_paused;
-    const ModuleType type;
     const std::string name;
 
-    Module(const ModuleType type, const std::string name);
+    Module(const std::string name);
+    virtual ~Module() = default;
     static void expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...);
     static Module_ptr create(const std::string type,
                              const std::string name,
@@ -80,7 +64,11 @@ public:
                              MessageHandler message_handler);
     virtual void step();
     virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
-    static void register_defaults(const std::string &type_name, DefaultsFunction defaults_function);
+    /// Switch the module on/off and keep the `enabled` member and property in sync.
+    /// Throws for modules that do not declare an `enabled` property.
+    virtual void enable();
+    virtual void disable();
+    static void register_module(const std::string &type_name, ModuleFactory factory, DefaultsFunction defaults);
     static const std::map<std::string, Variable_ptr> get_module_defaults(const std::string &type_name);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     virtual std::string get_output() const;

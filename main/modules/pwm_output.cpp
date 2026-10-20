@@ -7,7 +7,17 @@
 #define SPEED_MODE LEDC_HIGH_SPEED_MODE
 #endif
 
-REGISTER_MODULE_DEFAULTS(PwmOutput)
+static Module_ptr create_pwm_output(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() < 1 || arguments.size() > 3) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, integer, integer, integer);
+    const gpio_num_t pin = (gpio_num_t)arguments[0]->evaluate_integer();
+    const ledc_timer_t ledc_timer = arguments.size() > 1 ? (ledc_timer_t)arguments[1]->evaluate_integer() : LEDC_TIMER_0;
+    const ledc_channel_t ledc_channel = arguments.size() > 2 ? (ledc_channel_t)arguments[2]->evaluate_integer() : LEDC_CHANNEL_0;
+    return std::make_shared<PwmOutput>(name, pin, ledc_timer, ledc_channel);
+}
+REGISTER_MODULE(PwmOutput, &create_pwm_output)
 
 const std::map<std::string, Variable_ptr> PwmOutput::get_defaults() {
     return {
@@ -21,7 +31,7 @@ PwmOutput::PwmOutput(const std::string name,
                      const gpio_num_t pin,
                      const ledc_timer_t ledc_timer,
                      const ledc_channel_t ledc_channel)
-    : Module(pwm_output, name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
+    : Module(name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
     gpio_reset_pin(pin);
 
     this->properties = PwmOutput::get_defaults();
@@ -30,7 +40,7 @@ PwmOutput::PwmOutput(const std::string name,
         .speed_mode = SPEED_MODE,
         .duty_resolution = LEDC_TIMER_8_BIT,
         .timer_num = ledc_timer,
-        .freq_hz = (uint32_t)this->properties.at("frequency")->integer_value,
+        .freq_hz = (uint32_t)this->properties.at("frequency")->integer_value(),
         .clk_cfg = LEDC_AUTO_CLK,
         .deconfigure = false,
     };
@@ -50,18 +60,12 @@ PwmOutput::PwmOutput(const std::string name,
 }
 
 void PwmOutput::step() {
-    uint32_t frequency = this->properties.at("frequency")->integer_value;
+    uint32_t frequency = this->properties.at("frequency")->integer_value();
     ledc_set_freq(SPEED_MODE, this->ledc_timer, frequency);
-    uint32_t duty = this->properties.at("duty")->integer_value;
+    uint32_t duty = this->properties.at("duty")->integer_value();
     ledc_set_duty(SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
     ledc_update_duty(SPEED_MODE, this->ledc_channel);
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     Module::step();
 }
 
@@ -87,13 +91,6 @@ void PwmOutput::call(const std::string method_name, const std::vector<ConstExpre
     }
 }
 
-void PwmOutput::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void PwmOutput::disable() {
+void PwmOutput::do_disable() {
     this->is_on = false;
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }

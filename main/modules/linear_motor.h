@@ -10,17 +10,17 @@ private:
     virtual bool get_out() const = 0;
     virtual void set_in(bool level) const = 0;
     virtual void set_out(bool level) const = 0;
-    bool enabled = true;
+    void do_disable() override;
 
 protected:
     LinearMotor(const std::string name);
 
 public:
+    static inline constexpr const char *TYPE = "LinearMotor";
+
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
-    void enable();
-    void disable();
 };
 
 class GpioLinearMotor : public LinearMotor {

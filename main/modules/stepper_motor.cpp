@@ -28,7 +28,18 @@ static void check_error(esp_err_t err, const char *msg) {
 #define DUTY_VALUE 1 // 50% of max 1 with 1-bit resolution
 #endif
 
-REGISTER_MODULE_DEFAULTS(StepperMotor)
+static Module_ptr create_stepper_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() < 2 || arguments.size() > 4) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, integer, integer, integer, integer);
+    const gpio_num_t step_pin = (gpio_num_t)arguments[0]->evaluate_integer();
+    const gpio_num_t dir_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+    const ledc_timer_t ledc_timer = arguments.size() > 2 ? (ledc_timer_t)arguments[2]->evaluate_integer() : LEDC_TIMER_0;
+    const ledc_channel_t ledc_channel = arguments.size() > 3 ? (ledc_channel_t)arguments[3]->evaluate_integer() : LEDC_CHANNEL_0;
+    return std::make_shared<StepperMotor>(name, step_pin, dir_pin, ledc_timer, ledc_channel);
+}
+REGISTER_MODULE(StepperMotor, &create_stepper_motor)
 
 const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
     return {
@@ -44,7 +55,7 @@ StepperMotor::StepperMotor(const std::string name,
                            const gpio_num_t dir_pin,
                            const ledc_timer_t ledc_timer,
                            const ledc_channel_t ledc_channel)
-    : Module(stepper_motor, name),
+    : Module(name),
       step_pin(step_pin),
       dir_pin(dir_pin),
       ledc_timer(ledc_timer),
@@ -119,13 +130,14 @@ void StepperMotor::read_position() {
     if (d_count < -15000) {
         d_count += 30000;
     }
-    this->properties.at("position")->integer_value += d_count;
+    const Variable_ptr &position = this->properties.at("position");
+    position->set_integer_value(position->integer_value() + d_count);
     this->last_count = count;
 }
 
 void StepperMotor::set_state(StepperState new_state) {
     this->state = new_state;
-    this->properties.at("idle")->boolean_value = (new_state == Idle);
+    this->properties.at("idle")->set_boolean_value((new_state == Idle));
 
     gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : SPEED_OUT_IDX + this->ledc_channel, 0, 0);
     ledc_set_duty(SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : DUTY_VALUE);
@@ -139,18 +151,12 @@ void StepperMotor::step() {
     double dt = micros_since(this->last_micros) * 1e-6;
     this->last_micros = micros();
 
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
 
     if (this->state != Idle && this->enabled) {
         // current state
-        int32_t position = this->properties.at("position")->integer_value;
-        int32_t speed = this->properties.at("speed")->integer_value;
+        int32_t position = this->properties.at("position")->integer_value();
+        int32_t speed = this->properties.at("speed")->integer_value();
 
         // current target speed
         int32_t target_speed = this->target_speed;
@@ -197,9 +203,9 @@ void StepperMotor::step() {
             set_state(Idle);
         }
 
-        this->properties.at("speed")->integer_value = speed;
+        this->properties.at("speed")->set_integer_value(speed);
     } else {
-        this->properties.at("speed")->integer_value = 0;
+        this->properties.at("speed")->set_integer_value(0);
     }
 
     Module::step();
@@ -244,19 +250,19 @@ void StepperMotor::stop() {
 }
 
 double StepperMotor::get_position() {
-    return static_cast<double>(this->properties.at("position")->integer_value);
+    return static_cast<double>(this->properties.at("position")->integer_value());
 }
 
 void StepperMotor::position(const double position, const double speed, const double acceleration) {
     this->target_position = static_cast<int32_t>(position);
-    bool forward = this->target_position > this->properties.at("position")->integer_value;
+    bool forward = this->target_position > this->properties.at("position")->integer_value();
     this->target_speed = static_cast<int32_t>(speed) * (forward ? 1 : -1);
     this->target_acceleration = static_cast<uint32_t>(acceleration);
     set_state(Positioning);
 }
 
 double StepperMotor::get_speed() {
-    return static_cast<double>(this->properties.at("speed")->integer_value);
+    return static_cast<double>(this->properties.at("speed")->integer_value());
 }
 
 void StepperMotor::speed(const double speed, const double acceleration) {
@@ -265,13 +271,6 @@ void StepperMotor::speed(const double speed, const double acceleration) {
     set_state(this->target_speed == 0 ? Idle : Speeding);
 }
 
-void StepperMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
-}
-
-void StepperMotor::disable() {
+void StepperMotor::do_disable() {
     this->stop();
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }

@@ -1,10 +1,21 @@
 #include "mcp23017.h"
+#include "i2c_bus.h"
+#include "module_helpers.h"
 #include <stdexcept>
 
-#define I2C_MASTER_TX_BUF_DISABLE 0
-#define I2C_MASTER_RX_BUF_DISABLE 0
-
-REGISTER_MODULE_DEFAULTS(Mcp23017)
+static Module_ptr create_mcp23017(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() > 5) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, integer, integer, integer, integer, integer);
+    const i2c_port_t port = arguments.size() > 0 ? (i2c_port_t)arguments[0]->evaluate_integer() : I2C_NUM_0;
+    const gpio_num_t sda_pin = arguments.size() > 1 ? (gpio_num_t)arguments[1]->evaluate_integer() : DEFAULT_I2C_SDA_PIN;
+    const gpio_num_t scl_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : DEFAULT_I2C_SCL_PIN;
+    const uint8_t address = arguments.size() > 3 ? arguments[3]->evaluate_integer() : 0x20;
+    const int clk_speed = arguments.size() > 4 ? arguments[4]->evaluate_integer() : 100000;
+    return std::make_shared<Mcp23017>(name, port, sda_pin, scl_pin, address, clk_speed);
+}
+REGISTER_MODULE(Mcp23017, &create_mcp23017)
 
 const std::map<std::string, Variable_ptr> Mcp23017::get_defaults() {
     return {
@@ -15,30 +26,16 @@ const std::map<std::string, Variable_ptr> Mcp23017::get_defaults() {
 }
 
 Mcp23017::Mcp23017(const std::string name, i2c_port_t i2c_port, gpio_num_t sda_pin, gpio_num_t scl_pin, uint8_t address, int clk_speed)
-    : Module(mcp23017, name), i2c_port(i2c_port), address(address) {
-    i2c_config_t config;
-    config.mode = I2C_MODE_MASTER;
-    config.sda_io_num = sda_pin,
-    config.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    config.scl_io_num = scl_pin;
-    config.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    config.master.clk_speed = clk_speed;
-    config.clk_flags = 0;
-    if (i2c_param_config(i2c_port, &config) != ESP_OK) {
-        throw std::runtime_error("could not configure i2c port");
-    }
-    if (i2c_driver_install(i2c_port, I2C_MODE_MASTER, I2C_MASTER_TX_BUF_DISABLE, I2C_MASTER_RX_BUF_DISABLE, 0) != ESP_OK) {
-        throw std::runtime_error("could not install i2c driver");
-    }
-
+    : Module(name), i2c_port(i2c_port), address(address) {
+    I2cBusManager::ensure(i2c_port, sda_pin, scl_pin, clk_speed);
     this->properties = Mcp23017::get_defaults();
 
-    this->set_inputs(this->properties.at("inputs")->integer_value);
-    this->set_pullups(this->properties.at("pullups")->integer_value);
+    this->set_inputs(this->properties.at("inputs")->integer_value());
+    this->set_pullups(this->properties.at("pullups")->integer_value());
 }
 
 void Mcp23017::step() {
-    this->properties.at("levels")->integer_value = this->read_pins();
+    this->properties.at("levels")->set_integer_value(this->read_pins());
     Module::step();
 }
 
@@ -46,17 +43,17 @@ void Mcp23017::call(const std::string method_name, const std::vector<ConstExpres
     if (method_name == "levels") {
         Module::expect(arguments, 1, integer);
         const uint16_t value = arguments[0]->evaluate_integer();
-        this->properties.at("levels")->integer_value = value;
+        this->properties.at("levels")->set_integer_value(value);
         this->write_pins(value);
     } else if (method_name == "pullups") {
         Module::expect(arguments, 1, integer);
         const uint16_t value = arguments[0]->evaluate_integer();
-        this->properties.at("pullups")->integer_value = value;
+        this->properties.at("pullups")->set_integer_value(value);
         this->set_pullups(value);
     } else if (method_name == "inputs") {
         Module::expect(arguments, 1, integer);
         const uint16_t value = arguments[0]->evaluate_integer();
-        this->properties.at("inputs")->integer_value = value;
+        this->properties.at("inputs")->set_integer_value(value);
         this->set_inputs(value);
     } else {
         Module::call(method_name, arguments);
@@ -124,38 +121,38 @@ void Mcp23017::set_pullups(uint16_t pullups) const {
 }
 
 bool Mcp23017::get_level(const uint8_t number) const {
-    return this->properties.at("levels")->integer_value & (1 << number);
+    return this->properties.at("levels")->integer_value() & (1 << number);
 }
 
 void Mcp23017::set_level(const uint8_t number, const bool value) const {
-    uint16_t levels = this->properties.at("levels")->integer_value;
+    uint16_t levels = this->properties.at("levels")->integer_value();
     if (value) {
         levels |= 1 << number;
     } else {
         levels &= ~(1 << number);
     }
-    this->properties.at("levels")->integer_value = levels;
+    this->properties.at("levels")->set_integer_value(levels);
     this->write_pins(levels);
 }
 
 void Mcp23017::set_input(const uint8_t number, const bool value) const {
-    uint16_t inputs = this->properties.at("inputs")->integer_value;
+    uint16_t inputs = this->properties.at("inputs")->integer_value();
     if (value) {
         inputs |= 1 << number;
     } else {
         inputs &= ~(1 << number);
     }
-    this->properties.at("inputs")->integer_value = inputs;
+    this->properties.at("inputs")->set_integer_value(inputs);
     this->set_inputs(inputs);
 }
 
 void Mcp23017::set_pullup(const uint8_t number, const bool value) const {
-    uint16_t pullups = this->properties.at("pullups")->integer_value;
+    uint16_t pullups = this->properties.at("pullups")->integer_value();
     if (value) {
         pullups |= 1 << number;
     } else {
         pullups &= ~(1 << number);
     }
-    this->properties.at("pullups")->integer_value = pullups;
+    this->properties.at("pullups")->set_integer_value(pullups);
     this->set_pullups(pullups);
 }

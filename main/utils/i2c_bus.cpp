@@ -1,0 +1,45 @@
+#include "i2c_bus.h"
+
+#include <stdexcept>
+#include "hal/i2c_ll.h"
+
+namespace {
+constexpr int I2C_MASTER_TX_BUF_DISABLE = 0;
+constexpr int I2C_MASTER_RX_BUF_DISABLE = 0;
+// I2C_LL_MAX_TIMEOUT is a cycle count on ESP32 (~13 ms) but an exponent on ESP32-S3 (~54 s)
+constexpr uint32_t DEFAULT_TIMEOUT_TICKS = I2C_LL_MAX_TIMEOUT;
+} // namespace
+
+std::map<i2c_port_t, I2cBusManager::BusConfig> I2cBusManager::configs;
+
+void I2cBusManager::ensure(i2c_port_t port, gpio_num_t sda_pin, gpio_num_t scl_pin, int clk_speed_hz) {
+    BusConfig &config = configs[port];
+    if (config.initialized) {
+        if (config.sda_pin != sda_pin || config.scl_pin != scl_pin || config.clk_speed_hz != clk_speed_hz) {
+            throw std::runtime_error("i2c bus already initialized with different parameters");
+        }
+        return;
+    }
+
+    i2c_config_t i2c_config = {};
+    i2c_config.mode = I2C_MODE_MASTER;
+    i2c_config.sda_io_num = sda_pin;
+    i2c_config.sda_pullup_en = GPIO_PULLUP_ENABLE;
+    i2c_config.scl_io_num = scl_pin;
+    i2c_config.scl_pullup_en = GPIO_PULLUP_ENABLE;
+    i2c_config.master.clk_speed = clk_speed_hz;
+    i2c_config.clk_flags = 0;
+
+    if (i2c_param_config(port, &i2c_config) != ESP_OK) {
+        throw std::runtime_error("could not configure i2c port");
+    }
+    if (i2c_driver_install(port, I2C_MODE_MASTER, I2C_MASTER_TX_BUF_DISABLE, I2C_MASTER_RX_BUF_DISABLE, 0) != ESP_OK) {
+        throw std::runtime_error("could not install i2c driver");
+    }
+    if (i2c_set_timeout(port, DEFAULT_TIMEOUT_TICKS) != ESP_OK) {
+        i2c_driver_delete(port);
+        throw std::runtime_error("could not set i2c timeout");
+    }
+
+    config = BusConfig{.sda_pin = sda_pin, .scl_pin = scl_pin, .clk_speed_hz = clk_speed_hz, .initialized = true};
+}

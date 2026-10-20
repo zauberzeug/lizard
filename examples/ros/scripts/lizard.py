@@ -11,7 +11,7 @@ from std_msgs.msg import Empty, String
 
 
 def send(line):
-    checksum = reduce(ixor, map(ord, line))
+    checksum = reduce(ixor, line.encode(), 0)
     line = f'{line}@{checksum:02x}\n'
     port.write(line.encode())
 
@@ -44,8 +44,12 @@ if __name__ == '__main__':
             except UnicodeDecodeError:
                 continue
             if line[-3:-2] == '@':
-                line, checksum = line.split('@')
-                if reduce(ixor, map(ord, line)) != int(checksum, 16):
+                try:
+                    check = int(line[-2:], 16)
+                except ValueError:
+                    continue
+                line = line[:-3]
+                if reduce(ixor, line.encode(), 0) != check:
                     continue
 
             words = line.split()

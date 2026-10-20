@@ -9,14 +9,16 @@ The following statement types are currently supported.
 
 An expression can be a constant value, a variable, a module property, an arithmetic or logical expression as well as various combinations:
 
-    true
-    42
-    3.14
-    "Hello world"
-    led
-    button.level
-    1 + (2 - 3 * 4)**5
-    1 == 2 or (x == 4 and button.level == 0)
+```
+true
+42
+3.14
+"Hello world"
+led
+button.level
+1 + (2 - 3 * 4)**5
+1 == 2 or (x == 4 and button.level == 0)
+```
 
 Expressions can be assigned to variables, used in conditions and passed to constructors, method calls or routine calls.
 Plain expression statements print their result to the command line.
@@ -25,65 +27,121 @@ Plain expression statements print their result to the command line.
 
 New variables need to be explicitly declared with a data type:
 
-    int i
+```
+int i
+```
 
 They can be immediately initialized:
 
-    int i = 1
+```
+int i = 1
+```
 
 Otherwise they have an initial value of `false`, `0`, `0.0` or `""`, respectively.
 
 Variables can be assigned a new value of compatible data type:
 
-    i = 2
+```
+i = 2
+```
 
 **Modules: constructors, method calls and property assignments**
 
 Constructors are used to create module instances:
 
-    led = Output(15)
+```
+led = Output(15)
+```
 
 See the module reference for more details about individual modules and their argument lists.
 
 Constructors can also be used with [expander modules](module_reference.md#expander) to instantiate a remote module that can be controlled from the main microcontroller:
 
-    led = expander.Output(15)
+```
+led = expander.Output(15)
+```
 
 You can call module methods as follows:
 
-    led.on()
+```
+led.on()
+```
 
 Some module properties are meant to be written to:
 
-    motor.reversed = true
+```
+motor.reversed = true
+```
 
 **Routines: definition and call**
 
 Routines have a name and contain a list of actions:
 
-    let all_on do
-        green.on()
-        red.on()
-    end
+```
+let all_on do
+    green.on()
+    red.on()
+end
+```
 
 They can be called similar to module methods:
 
-    all_on()
+```
+all_on()
+```
 
 **Rules: definition**
 
 Rules execute a list of actions when a condition is met:
 
-    when button.level == 0 then
-        core.print("Off!")
-        led.off()
-    end
+```
+when button.level == 0 then
+    core.print("Off!")
+    led.off()
+end
+```
 
 In contrast to an if-statement known from other languages a when-condition is checked in every cycle of Lizard's main loop.
 Whenever the condition is true, the actions are executed.
 
 Note that actions can be asynchronous.
 If there are still actions running asynchronously, a truthy condition is ignored.
+
+**Scheduled blocks**
+
+Scheduled blocks execute a list of actions once at a given time,
+specified in milliseconds since boot (matching `core.millis`):
+
+```
+at 125015 do
+    en3.on()
+end
+```
+
+The time expression is evaluated once when the statement is interpreted,
+so relative times can be expressed with `core.millis`:
+
+```
+at core.millis + 500 do en3.off() end
+```
+
+In contrast to rules and routines, scheduled blocks fire with millisecond precision, decoupled from the main loop.
+This allows streaming time-critical sequences like trajectory setpoints from a host system.
+
+Each scheduled block is executed exactly once and discarded afterwards.
+If the time is already in the past, the actions are executed immediately.
+Blocks with equal times fire in the order of their definition.
+
+`await` is not allowed inside scheduled blocks.
+A scheduled block can, however, call a routine that itself awaits conditions or routines:
+the routine starts at the scheduled time and continues with Lizard's regular main loop cycle.
+
+At most 100 scheduled blocks can be pending at the same time;
+further `at` statements fail with the error message "schedule is full".
+All pending blocks can be discarded with [`core.clear_schedule()`](module_reference.md#core),
+for example when the connection to the host system is lost (see [machine safety](machine_safety.md)).
+
+When `core.debug` is true, each firing reports its lateness, e.g. `at 125015: fired 0.3 ms late`.
 
 ## Actions
 
@@ -93,39 +151,47 @@ Routines and rules contain a list of actions.
 
 Like with a method call statement, you can call methods and routines with an action:
 
-    when clicked then
-        core.print("On!")
-        all_on()
-    end
+```
+when clicked then
+    core.print("On!")
+    all_on()
+end
+```
 
 **Property and variable assignments**
 
 Like with the corresponding assignment statements, you can assign properties and variables with an action as well:
 
-    when i > 0 then
-        i = 0
-        core.debug = true
-    end
+```
+when i > 0 then
+    i = 0
+    core.debug = true
+end
+```
 
 **Await conditions and routines**
 
 In contrast to statements, actions can _await_ conditions, causing the execution of subsequent actions to wait until the condition is met.
 
-    int t
-    let blink do
-        t = core.millis
-        led.on()
-        await core.millis > t + 1000
-        led.off()
-    end
+```
+int t
+let blink do
+    t = core.millis
+    led.on()
+    await core.millis > t + 1000
+    led.off()
+end
+```
 
 Similarly, actions can await asynchronous routines, causing subsequent actions to wait until a routine is completed.
 
-    when button.level == 0 then
-        core.print("Blink...")
-        await blink()
-        core.print("Done.")
-    end
+```
+when button.level == 0 then
+    core.print("Blink...")
+    await blink()
+    core.print("Done.")
+end
+```
 
 ## Data types
 
@@ -136,15 +202,20 @@ Lizard currently supports five data types:
 | boolean               | `bool b = true`    | `false`, `true`         |
 | integer number        | `int i = 0`        | 64-bit unsigned integer |
 | floating point number | `float f = 0.0`    | 64-bit float            |
-| string                | `str s = "foo"`    |
-| identifier            | `led = Output(15)` |
+| string                | `str s = "foo"`    |                         |
+| identifier            | `led = Output(15)` |                         |
 
 Note that identifiers cannot be created via variable declarations, but only via constructors.
 
+Floating point numbers can also be `nan` (not a number) and `inf` (infinity), both as literals and in outputs; every comparison with `nan` is false except `!=`, which is always true, so `x != x` tests for `nan`.
+Like `true` and `false`, `nan` and `inf` are reserved words and cannot be used as variable or module names.
+
 Implicit conversion only happens from integers to floating point numbers:
 
-    int i = 42
-    float f = i + 3.14
+```
+int i = 42
+float f = i + 3.14
+```
 
 ## Whitespace, comments and line breaks
 
@@ -170,6 +241,7 @@ Lines with a leading `!` can indicate one of the following control commands.
 | `!"abc` | Print `abc` to the command-line                          |
 
 Note that the commands `!+`, `!-` and `!?` affect the startup script in RAM, which is only written to non-volatile storage with the `!.` command.
+If `!.` fails, `core.startup_checksum()` reports the error instead of a checksum until the script changes or a `!.` succeeds.
 
 Input from the default command-line interface UART0 is usually interpreted as Lizard code;
 input from a [port expander](module_reference.md#expander) is usually printed to the command-line on UART0.

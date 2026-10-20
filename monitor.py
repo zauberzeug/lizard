@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
+import argparse
 import asyncio
-import os.path
 import sys
 
 import serial
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
+
+from serial_devices import resolve_device
+
+parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
+parser.add_argument('device', nargs='?', help='Serial device path (default: auto-detected, asks if ambiguous)')
+parser.add_argument('--baud', type=int, default=115200, help='Baud rate (default: 115200)')
+args = parser.parse_args()
 
 
 class LineReader:
@@ -36,20 +43,21 @@ class LineReader:
 def receive() -> None:
     line_reader = LineReader(port)
     while True:
-        try:
-            line = line_reader.readline().decode('utf-8').strip('\r\n')
-        except UnicodeDecodeError:
-            print(f'ERROR: COULD NOT DECODE "{line}"')
-        else:
-            if line[-3:-2] == '@':
+        # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
+        line = line_reader.readline().decode(errors='replace').strip('\r\n')
+        if line[-3:-2] == '@':
+            try:
                 check = int(line[-2:], 16)
+            except ValueError:
+                check = None
+            if check is not None:
                 line = line[:-3]
                 checksum = 0
-                for c in line:
-                    checksum ^= ord(c)
+                for byte in line.encode():
+                    checksum ^= byte
                 if checksum != check:
                     print(f'ERROR: CHECKSUM MISMATCH ({checksum} vs. {check} for "{line}")')
-            print(line)
+        print(line)
 
 
 async def send() -> None:
@@ -57,16 +65,14 @@ async def send() -> None:
     while True:
         try:
             with patch_stdout():
-                line = await session.prompt_async('> ') + '\n'
-                checksum = 0
-                start = 0
-                for i, c in enumerate(line):
-                    if c == '\n':
-                        port.write(f'{line[start:i]}@{checksum:02x}\n'.encode('utf-8'))
-                        checksum = 0
-                        start = i
-                    else:
-                        checksum ^= ord(c)
+                line = await session.prompt_async('> ')
+                for segment in line.split('\n'):
+                    # drop the \r of a CRLF paste, which would otherwise end up inside the checksum payload
+                    segment = segment.rstrip('\r')
+                    checksum = 0
+                    for byte in segment.encode():
+                        checksum ^= byte
+                    port.write(f'{segment}@{checksum:02x}\n'.encode())
         except (KeyboardInterrupt, EOFError):
             print('Bye!')
             loop.stop()
@@ -74,29 +80,17 @@ async def send() -> None:
 
 
 def serial_connection() -> serial.Serial:
-    if len(sys.argv) > 1:
-        usb_path = sys.argv[1]
-    else:
-        usb_paths = [
-            '/dev/ttyTHS0',
-            '/dev/ttyTHS1',
-            '/dev/ttyUSB0',
-            '/dev/ttyUSB1',
-            '/dev/tty.SLAB_USBtoUART',
-            '/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0',
-        ]
-        for usb_path in usb_paths:
-            if os.path.exists(usb_path):
-                break
-        else:
-            raise Exception('No serial port found')
-
-    print(f'Connecting to {usb_path}')
-    return serial.Serial(usb_path, baudrate=115200, timeout=0.1)
+    device = resolve_device(args.device)
+    print(f'Connecting to {device} at {args.baud} baud')
+    return serial.Serial(device, baudrate=args.baud, timeout=0.1)
 
 
 if __name__ == '__main__':
-    with serial_connection() as port:
+    try:
+        connection = serial_connection()
+    except (RuntimeError, serial.SerialException) as e:
+        sys.exit(f'Error: {e}')
+    with connection as port:
         loop = asyncio.get_event_loop_policy().get_event_loop()
         loop.create_task(send())
         loop.run_in_executor(None, receive)

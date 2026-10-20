@@ -1,10 +1,19 @@
 #include "dunker_motor.h"
 #include "canopen.h"
+#include "module_helpers.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include <cinttypes>
 
-REGISTER_MODULE_DEFAULTS(DunkerMotor)
+static Module_ptr create_dunker_motor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    Module::expect(arguments, 2, identifier, integer);
+    const Can_ptr can = get_module_argument<Can>(arguments[0]);
+    const int64_t node_id = arguments[1]->evaluate_integer();
+    auto motor = std::make_shared<DunkerMotor>(name, can, node_id);
+    motor->subscribe_to_can();
+    return motor;
+}
+REGISTER_MODULE(DunkerMotor, &create_dunker_motor)
 
 const std::map<std::string, Variable_ptr> DunkerMotor::get_defaults() {
     return {
@@ -18,7 +27,7 @@ const std::map<std::string, Variable_ptr> DunkerMotor::get_defaults() {
 }
 
 DunkerMotor::DunkerMotor(const std::string &name, Can_ptr can, int64_t node_id)
-    : Module(dunker_motor, name), can(can), node_id(check_node_id(node_id)) {
+    : Module(name), can(can), node_id(check_node_id(node_id)) {
     this->properties = DunkerMotor::get_defaults();
 }
 
@@ -134,18 +143,18 @@ void DunkerMotor::handle_can_msg(const uint32_t id, const int count, const uint8
     if (id == 0x580 + this->node_id) {
         this->waiting_sdo_writes--;
         if (data[0] == 0x43 && data[1] == 0x10 && data[2] == 0x41 && data[3] == 0x01) {
-            this->properties["voltage_logic"]->number_value = ((data[5] << 8) | data[4]) / 1000.0;
+            this->properties["voltage_logic"]->set_number_value(((data[5] << 8) | data[4]) / 1000.0);
         }
         if (data[0] == 0x43 && data[1] == 0x11 && data[2] == 0x41 && data[3] == 0x01) {
-            this->properties["voltage_power"]->number_value = ((data[5] << 8) | data[4]) / 1000.0;
+            this->properties["voltage_power"]->set_number_value(((data[5] << 8) | data[4]) / 1000.0);
         }
     }
     if (id == 0x180 + this->node_id) {
         const int32_t motor_speed = demarshal_i32(data);
-        this->properties["speed"]->number_value = motor_speed *
-                                                  (this->properties.at("reversed")->boolean_value ? -1 : 1) *
-                                                  this->properties.at("m_per_turn")->number_value /
-                                                  60;
+        this->properties["speed"]->set_number_value(motor_speed *
+                                                    (this->properties.at("reversed")->boolean_value() ? -1 : 1) *
+                                                    this->properties.at("m_per_turn")->number_value() /
+                                                    60);
     }
 }
 
@@ -153,35 +162,25 @@ void DunkerMotor::speed(const double speed) {
     if (!this->enabled)
         return;
     const int32_t motor_speed = speed /
-                                this->properties.at("m_per_turn")->number_value /
-                                (this->properties.at("reversed")->boolean_value ? -1 : 1) *
+                                this->properties.at("m_per_turn")->number_value() /
+                                (this->properties.at("reversed")->boolean_value() ? -1 : 1) *
                                 60;
     this->sdo_write(0x4300, 1, 32, motor_speed, false);
 }
 
 double DunkerMotor::get_speed() {
-    return this->properties.at("speed")->number_value;
+    return this->properties.at("speed")->number_value();
 }
 
-void DunkerMotor::enable() {
-    this->enabled = true;
-    this->properties.at("enabled")->boolean_value = true;
+void DunkerMotor::do_enable() {
     this->sdo_write(0x4004, 1, 8, 1);
 }
 
-void DunkerMotor::disable() {
+void DunkerMotor::do_disable() {
     this->sdo_write(0x4004, 1, 8, 0);
-    this->enabled = false;
-    this->properties.at("enabled")->boolean_value = false;
 }
 
 void DunkerMotor::step() {
-    if (this->properties.at("enabled")->boolean_value != this->enabled) {
-        if (this->properties.at("enabled")->boolean_value) {
-            this->enable();
-        } else {
-            this->disable();
-        }
-    }
+    this->sync_enabled();
     Module::step();
 }

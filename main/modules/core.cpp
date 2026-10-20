@@ -1,6 +1,8 @@
 #include "core.h"
 #include "../global.h"
 #include "../storage.h"
+#include "../utils/bus_backup.h"
+#include "../utils/scheduler.h"
 #include "../utils/string_utils.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
@@ -15,7 +17,7 @@
 #include <stdexcept>
 #include <stdlib.h>
 
-Core::Core(const std::string name) : Module(core, name) {
+Core::Core(const std::string name) : Module(name) {
     this->properties["debug"] = std::make_shared<BooleanVariable>(false);
     this->properties["millis"] = std::make_shared<IntegerVariable>();
     this->properties["heap"] = std::make_shared<IntegerVariable>();
@@ -23,9 +25,9 @@ Core::Core(const std::string name) : Module(core, name) {
 }
 
 void Core::step() {
-    this->properties.at("millis")->integer_value = millis();
-    this->properties.at("heap")->integer_value = xPortGetFreeHeapSize();
-    this->properties.at("last_message_age")->integer_value = millis_since(this->last_message_millis);
+    this->properties.at("millis")->set_integer_value(millis());
+    this->properties.at("heap")->set_integer_value(xPortGetFreeHeapSize());
+    this->properties.at("last_message_age")->set_integer_value(millis_since(this->last_message_millis));
     Module::step();
 }
 
@@ -35,11 +37,12 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         esp_restart();
     } else if (method_name == "version") {
         const esp_app_desc_t *app_desc = esp_app_get_description();
-        echo("version: %s", app_desc->version);
+        echo("version: %s %s", app_desc->project_name, app_desc->version);
     } else if (method_name == "info") {
         Module::expect(arguments, 0);
         const esp_app_desc_t *app_desc = esp_app_get_description();
-        echo("lizard version: %s", app_desc->version);
+        echo("project name: %s", app_desc->project_name);
+        echo("version: %s", app_desc->version);
         echo("compile time: %s, %s", app_desc->date, app_desc->time);
         echo("idf version: %s", app_desc->idf_ver);
     } else if (method_name == "print") {
@@ -51,10 +54,11 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             }
             pos += argument->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
         }
-        echo(buffer);
+        echo("%s", buffer);
     } else if (method_name == "output") {
         Module::expect(arguments, 1, string);
         this->output_list.clear();
+        this->output_overflow_reported = false;
         std::string format = arguments[0]->evaluate_string();
         while (!format.empty()) {
             std::string element = cut_first_word(format);
@@ -74,9 +78,12 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         }
         this->output_on = true;
     } else if (method_name == "startup_checksum") {
+        if (!Storage::save_error.empty()) {
+            throw std::runtime_error("the stored startup script is incomplete: " + Storage::save_error);
+        }
         uint16_t checksum = 0;
         for (char const &c : Storage::startup) {
-            checksum += c;
+            checksum += static_cast<uint8_t>(c);
         }
         echo("checksum: %04x", checksum);
     } else if (method_name == "get_pin_status") {
@@ -129,31 +136,75 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
             throw std::runtime_error("invalid pin");
         }
         const uint32_t strapping_reg = REG_READ(GPIO_STRAP_REG);
-        // Register 4.13. GPIO_STRAP_REG (0x0038)
-        // https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf
+#ifdef CONFIG_IDF_TARGET_ESP32
+        // GPIO_STRAPPING is {10'b0, MTDI, GPIO0, GPIO2, GPIO4, MTDO, GPIO5}, see soc/gpio_reg.h
         switch (gpio_num) {
         case GPIO_NUM_0:
-            echo("Strapping GPIO0: %d", (strapping_reg & BIT(0)) ? 1 : 0);
+            echo("Strapping GPIO0: %d", (strapping_reg & BIT(4)) ? 1 : 0);
             break;
         case GPIO_NUM_2:
-            echo("Strapping GPIO2: %d", (strapping_reg & BIT(1)) ? 1 : 0);
+            echo("Strapping GPIO2: %d", (strapping_reg & BIT(3)) ? 1 : 0);
             break;
         case GPIO_NUM_4:
-            echo("Strapping GPIO4: %d", (strapping_reg & BIT(5)) ? 1 : 0);
+            echo("Strapping GPIO4: %d", (strapping_reg & BIT(2)) ? 1 : 0);
             break;
         case GPIO_NUM_5:
-            echo("Strapping GPIO5: %d", (strapping_reg & BIT(4)) ? 1 : 0);
+            echo("Strapping GPIO5: %d", (strapping_reg & BIT(0)) ? 1 : 0);
             break;
         case GPIO_NUM_12:
-            echo("Strapping GPIO12 (MTDI): %d", (strapping_reg & BIT(3)) ? 1 : 0);
+            echo("Strapping GPIO12 (MTDI): %d", (strapping_reg & BIT(5)) ? 1 : 0);
             break;
         case GPIO_NUM_15:
-            echo("Strapping GPIO15 (MTDO): %d", (strapping_reg & BIT(2)) ? 1 : 0);
+            echo("Strapping GPIO15 (MTDO): %d", (strapping_reg & BIT(1)) ? 1 : 0);
             break;
         default:
             echo("Not a strapping pin");
             break;
         }
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+        // The S3's soc/gpio_reg.h does not document the strapping layout. GPIO0 = bit 3 and GPIO46 = bit 2 follow
+        // from soc/boot_mode.h (download boot requires both bits to be low); GPIO45 = bit 4 matches esptool's
+        // GPIO_STRAP_VDDSPI_MASK. GPIO3 (JTAG source selection) is also a strapping pin, but no ESP-IDF or esptool
+        // source documents its bit position, so we only report the raw register for it.
+        switch (gpio_num) {
+        case GPIO_NUM_0:
+            echo("Strapping GPIO0: %d", (strapping_reg & BIT(3)) ? 1 : 0);
+            break;
+        case GPIO_NUM_45:
+            echo("Strapping GPIO45: %d", (strapping_reg & BIT(4)) ? 1 : 0);
+            break;
+        case GPIO_NUM_46:
+            echo("Strapping GPIO46: %d", (strapping_reg & BIT(2)) ? 1 : 0);
+            break;
+        case GPIO_NUM_3:
+            echo("Strapping GPIO3: unknown bit position, register: 0x%04x", strapping_reg);
+            break;
+        default:
+            echo("Not a strapping pin");
+            break;
+        }
+#else
+        // Other targets strap different pins into different bits; decode them here when a new target is added.
+        echo("Strapping register: 0x%04x", strapping_reg);
+#endif
+    } else if (method_name == "forget_serial_bus") {
+        Module::expect(arguments, 0);
+        bus_backup::remove();
+    } else if (method_name == "set_baudrate") {
+        Module::expect(arguments, 1, integer);
+        const int baudrate = arguments[0]->evaluate_integer();
+        bool supported = false;
+        for (const int rate : {115200, 230400, 460800, 921600}) {
+            if (rate == baudrate) {
+                supported = true;
+                break;
+            }
+        }
+        if (!supported) {
+            throw std::runtime_error("unsupported baudrate (use 115200, 230400, 460800 or 921600)");
+        }
+        Storage::set_baudrate(baudrate);
+        echo("baudrate set to %d; restart to apply", baudrate);
     } else if (method_name == "pause_broadcasts") {
         Module::expect(arguments, 0);
         Module::broadcast_paused = true;
@@ -162,36 +213,54 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 0);
         Module::broadcast_paused = false;
         echo("broadcasts resumed");
+    } else if (method_name == "clear_schedule") {
+        Module::expect(arguments, 0);
+        scheduler::clear();
+    } else if (method_name == "keep_alive") {
+        Module::expect(arguments, 0);
+        this->keep_alive();
     } else {
         Module::call(method_name, arguments);
     }
 }
 
 std::string Core::get_output() const {
-    static char output_buffer[1024];
+    // Module::step sends this as "core <output>", so the "core " prefix comes off the payload budget (plus the terminator)
+    static char output_buffer[CONSOLE_PAYLOAD_SIZE - 5 + 1];
     int pos = 0;
-    for (auto const &element : this->output_list) {
-        if (pos > 0) {
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, " ");
+    try {
+        for (auto const &element : this->output_list) {
+            if (pos > 0) {
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, " ");
+            }
+            const Variable_ptr variable =
+                element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
+            switch (variable->type) {
+            case boolean:
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value() ? "true" : "false");
+                break;
+            case integer:
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value());
+                break;
+            case number:
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value());
+                break;
+            case string:
+                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value().c_str());
+                break;
+            default:
+                throw std::runtime_error("invalid type");
+            }
         }
-        const Variable_ptr variable =
-            element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
-        switch (variable->type) {
-        case boolean:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value ? "true" : "false");
-            break;
-        case integer:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%lld", variable->integer_value);
-            break;
-        case number:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value);
-            break;
-        case string:
-            pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value.c_str());
-            break;
-        default:
-            throw std::runtime_error("invalid type");
+        this->output_overflow_reported = false; // a line that fits again ends the episode, the next overflow is reported
+    } catch (const BufferTooSmallError &) {
+        // one error per episode instead of a warning every tick
+        if (!this->output_overflow_reported) {
+            echo("error: the core line with %d output fields exceeds %d bytes and is suppressed until it fits again",
+                 static_cast<int>(this->output_list.size()), CONSOLE_LINE_SIZE);
+            this->output_overflow_reported = true;
         }
+        return "";
     }
     return std::string(output_buffer);
 }

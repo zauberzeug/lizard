@@ -15,6 +15,8 @@ protected:
     Input(const std::string name);
 
 public:
+    static inline constexpr const char *TYPE = "Input";
+
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();

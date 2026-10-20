@@ -1,14 +1,27 @@
 #include "temperature_sensor.h"
 #include "../utils/uart.h"
+#include "analog_unit.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "module_helpers.h"
 #include <cmath>
 
-REGISTER_MODULE_DEFAULTS(TemperatureSensor)
+static Module_ptr create_temperature_sensor(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
+    if (arguments.size() < 3 || arguments.size() > 4) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    Module::expect(arguments, -1, identifier, integer, integer, numbery);
+    const AnalogUnit_ptr unit = get_module_argument<AnalogUnit>(arguments[0]);
+    const gpio_num_t temp_pin = (gpio_num_t)arguments[1]->evaluate_integer();
+    const gpio_num_t ref_pin = (gpio_num_t)arguments[2]->evaluate_integer();
+    const float attenuation = arguments.size() > 3 ? arguments[3]->evaluate_number() : 12;
+    return std::make_shared<TemperatureSensor>(name, unit, temp_pin, ref_pin, attenuation);
+}
+REGISTER_MODULE(TemperatureSensor, &create_temperature_sensor)
 
 const std::map<std::string, Variable_ptr> TemperatureSensor::get_defaults() {
     return {
@@ -21,7 +34,7 @@ const std::map<std::string, Variable_ptr> TemperatureSensor::get_defaults() {
 }
 
 TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_ptr unit, gpio_num_t temp_pin, gpio_num_t ref_pin, float attenuation_level)
-    : Module(temperature_sensor, name), unit(unit), temp_pin(temp_pin), ref_pin(ref_pin) {
+    : Module(name), unit(unit), temp_pin(temp_pin), ref_pin(ref_pin) {
     this->properties = TemperatureSensor::get_defaults();
 
     if (!unit) {
@@ -100,12 +113,12 @@ void TemperatureSensor::step() {
     ESP_ERROR_CHECK(adc_cali_raw_to_voltage(this->adc_cali_temp, raw_t, &mv_t));
     ESP_ERROR_CHECK(adc_cali_raw_to_voltage(this->adc_cali_ref, raw_r, &mv_r));
 
-    this->properties.at("raw_temp")->integer_value = raw_t;
-    this->properties.at("raw_ref")->integer_value = raw_r;
+    this->properties.at("raw_temp")->set_integer_value(raw_t);
+    this->properties.at("raw_ref")->set_integer_value(raw_r);
     const double v_temp = mv_t * 0.001;
     const double v_ref = mv_r * 0.001;
-    this->properties.at("voltage_temp")->number_value = v_temp;
-    this->properties.at("voltage_ref")->number_value = v_ref;
+    this->properties.at("voltage_temp")->set_number_value(v_temp);
+    this->properties.at("voltage_ref")->set_number_value(v_ref);
 
     // Compute temperature using reference divider (10k top, 3k bottom) and NTC divider (NTC top, 3k bottom)
     const double R_BOTTOM = 3000.0;   // 3k to GND
@@ -123,7 +136,7 @@ void TemperatureSensor::step() {
             temperature_c = temp_k - 273.15;
         }
     }
-    this->properties.at("temperature_c")->number_value = temperature_c;
+    this->properties.at("temperature_c")->set_number_value(temperature_c);
 
     Module::step();
 }

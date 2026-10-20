@@ -1,0 +1,14 @@
+# Encodes the C++ style documented in CONTRIBUTING.md.
+# Chosen to format the existing codebase with ZERO changes (verified zero-diff for clang-format
+# 20.1.8 through 22.1.5; the pre-commit hook is pinned to the latest, 22.1.5).
+# NOTE: ColumnLimit is 0 (no line re-flowing) so adopting clang-format does not churn the tree;
+# the 120-column rule from CONTRIBUTING.md is therefore NOT enforced here (see that file).
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 0
+AccessModifierOffset: -4
+BreakBeforeBraces: Attach
+PointerAlignment: Right
+SortIncludes: false
+AllowShortFunctionsOnASingleLine: Inline
+ReflowComments: false

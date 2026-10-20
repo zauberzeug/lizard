@@ -1,8 +1,5 @@
 esp-coredump
 esptool
-gpiod
-mkdocs
-mkdocs-material
-mdx-include
+gpiod; sys_platform == "linux"
 prompt_toolkit
 pyserial
