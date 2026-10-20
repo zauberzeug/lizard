@@ -48,7 +48,8 @@
 
 namespace ZZ::BleCommand {
 
-static constexpr uint32_t IDLE_TIMEOUT_MS = 15000; // Kick clients that don't authenticate
+static constexpr uint32_t IDLE_TIMEOUT_MS = 30000; // Kick clients that don't authenticate (leaves time to type the PIN)
+static constexpr uint8_t MAX_PIN_FAILURES = 3;     // Wrong PINs per connection before it is closed
 static constexpr size_t MAX_DEVICE_NAME_LEN = 30;
 static constexpr uint16_t TX_DATA_LENGTH = 0xFB;
 static constexpr uint16_t TX_DATA_TIME = 0x0848;
@@ -71,6 +72,7 @@ static uint8_t own_addr_type = 0;
 static bool running = false;
 static bool pin_deactivated = false;
 static std::atomic<bool> authenticated{false};
+static uint8_t pin_failures = 0;
 static TimerHandle_t idle_timer = nullptr;
 
 // 16-bit Alert Notification Service UUID for app filtering
@@ -197,6 +199,7 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
     case BLE_GAP_EVENT_CONNECT:
         if (event->connect.status == 0) {
             current_con = event->connect.conn_handle;
+            pin_failures = 0;
 
             ble_gap_set_data_len(event->connect.conn_handle, TX_DATA_LENGTH, TX_DATA_TIME);
 
@@ -245,11 +248,9 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
-        // Send newline on subscribe to signal connection readiness to apps waiting for data
+        // Signal readiness on subscribe; AUTH_REQUIRED tells the app to ask for the PIN
         if (event->subscribe.cur_notify) {
-            struct os_mbuf *om = ble_hs_mbuf_from_flat("\n", 1);
-            if (om)
-                ble_gattc_notify_custom(event->subscribe.conn_handle, send_chr_val_handle, om);
+            send_notification(event->subscribe.conn_handle, authenticated || pin_deactivated ? "\n" : "AUTH_REQUIRED\n");
         }
         return 0;
 
@@ -289,7 +290,10 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
                 } else {
                     echo("BLE: wrong PIN");
                     send_notification(conn_handle, "AUTH_FAIL\n");
-                    if (idle_timer) {
+                    if (++pin_failures >= MAX_PIN_FAILURES) {
+                        echo("BLE: too many wrong PINs, disconnecting");
+                        ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+                    } else if (idle_timer) {
                         xTimerReset(idle_timer, 0);
                     }
                 }
