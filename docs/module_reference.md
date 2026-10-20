@@ -221,11 +221,23 @@ The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional
 When using multiple PWM outputs, set different channel IDs to avoid conflicts.
 Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
 
-| Properties         | Description                              | Data type |
-| ------------------ | ---------------------------------------- | --------- |
-| `output.duty`      | Duty cycle (8 bit: 0..256, default: 128) | `int`     |
-| `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
-| `output.enabled`   | Whether the output is enabled            | `bool`    |
+| Properties         | Description                       | Data type |
+| ------------------ | --------------------------------- | --------- |
+| `output.duty`      | Duty cycle (0..256, default: 128) | `int`     |
+| `output.frequency` | Frequency (Hz, default: 1000)     | `int`     |
+| `output.enabled`   | Whether the output is enabled     | `bool`    |
+
+A PWM period is divided into 256 steps, and `duty` sets for how many of them the pin stays high.
+That makes 257 settings, one more than an 8 bit value holds:
+
+| `duty` | Output                                  |
+| ------ | --------------------------------------- |
+| 0      | always low                              |
+| 128    | high for half of the period             |
+| 255    | high for 255 of 256 steps, not fully on |
+| 256    | always high                             |
+
+Arduino's `analogWrite` special-cases its maximum instead, which is where the expectation of 255 comes from.
 
 | Methods            | Description             | Arguments |
 | ------------------ | ----------------------- | --------- |
