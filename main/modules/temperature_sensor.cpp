@@ -35,6 +35,9 @@ const std::map<std::string, Variable_ptr> TemperatureSensor::get_defaults() {
 
 TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_ptr unit, gpio_num_t temp_pin, gpio_num_t ref_pin, float attenuation_level)
     : Module(name), unit(unit), temp_pin(temp_pin), ref_pin(ref_pin) {
+#ifndef CONFIG_IDF_TARGET_ESP32S3
+    throw std::runtime_error("TemperatureSensor is only supported for ESP32S3 devices");
+#endif
     this->properties = TemperatureSensor::get_defaults();
 
     if (!unit) {
@@ -44,14 +47,14 @@ TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_pt
     adc_unit_t detected_unit;
     adc_channel_t detected_channel;
     if (adc_oneshot_io_to_channel(temp_pin, &detected_unit, &detected_channel) != ESP_OK) {
-        throw std::runtime_error("TemperatureSensor temp pin is not an ADC pin");
+        throw std::runtime_error("TemperatureSensor temp pin " + std::to_string(temp_pin) + " has no ADC channel");
     }
     if (detected_unit != unit->get_adc_unit()) {
         throw std::runtime_error("TemperatureSensor temp pin does not belong to the provided unit");
     }
     this->channel_temp = detected_channel;
     if (adc_oneshot_io_to_channel(ref_pin, &detected_unit, &detected_channel) != ESP_OK) {
-        throw std::runtime_error("TemperatureSensor ref pin is not an ADC pin");
+        throw std::runtime_error("TemperatureSensor ref pin " + std::to_string(ref_pin) + " has no ADC channel");
     }
     if (detected_unit != unit->get_adc_unit()) {
         throw std::runtime_error("TemperatureSensor ref pin does not belong to the provided unit");
@@ -100,8 +103,6 @@ TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_pt
         };
         ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &this->adc_cali_ref));
     }
-#else
-    throw std::runtime_error("TemperatureSensor is only supported for ESP32S3 devices");
 #endif
 }
 
