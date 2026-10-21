@@ -131,7 +131,9 @@ void Wheels::call(const std::string method_name, const std::vector<ConstExpressi
         }
         const bool nonzero = linear != 0.0 || angular != 0.0;
         const bool applied = this->may_drive();
-        const bool was_stopping = this->moving || this->repeating_stop; // a further stop restarts the repeat
+        // A stop is due after motion, after a tripped dead man's switch (its release must not be a single, losable
+        // zero) and while a stop is already repeating (a further stop restarts the repeat).
+        const bool was_stopping = this->moving || this->stopped || this->repeating_stop;
         this->note_drive_command(applied, nonzero);
         if (applied) {
             const double width = this->properties.at("width")->number_value();
