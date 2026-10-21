@@ -8,8 +8,8 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
 /**
  * Shared base for differential-drive wheels modules.
  *
- * Owns the common properties (`width`, `linear_speed`, `angular_speed`, `enabled`, `locked`,
- * `drive_command_age`, `drive_command_timeout`) and the `speed`/`power`/`off`/`enable`/`disable`
+ * Owns the common properties (`width`, `max_wheel_speed`, `linear_speed`, `angular_speed`, `enabled`,
+ * `locked`, `drive_command_age`, `drive_command_timeout`) and the `speed`/`power`/`off`/`enable`/`disable`
  * command flow; the enabled-sync itself comes from `Module`. Concrete drivetrains provide the
  * motor-specific parts through the protected hooks.
  *
@@ -28,10 +28,18 @@ using Wheels_ptr = std::shared_ptr<Wheels>;
  * zero-speed setpoint is refreshed at a low rate, so a stop that did not reach the motors is
  * re-asserted); the next drive command releases the hold and re-arms the switch.
  * `drive_command_age` exposes the time since the last drive command for rules.
+ *
+ * `max_wheel_speed` caps `speed()`: when the faster wheel would exceed it, linear and angular
+ * speed are scaled down together, so the robot keeps its direction instead of veering when a
+ * drive cuts off only the outer wheel. A zero `speed()` after motion is repeated about every
+ * 100 ms for a second, since a single stop can be lost on the bus or refused by a drive; a further
+ * stop restarts the repeat, any other `speed()`, `power()` or `off()` that goes through ends it.
  */
 class Wheels : public Module {
 private:
-    static constexpr unsigned int HOLD_REFRESH_CYCLES = 100; // re-send the standstill hold about once per second
+    static constexpr unsigned int HOLD_REFRESH_CYCLES = 100;          // re-send the standstill hold about once per second
+    static constexpr unsigned long STOP_REPEAT_MILLIS = 1000;         // repeat a stop after motion for this long
+    static constexpr unsigned long STOP_REPEAT_INTERVAL_MILLIS = 100; // re-send the repeated stop at this interval
 
     bool holding = false;        // wheels are currently held at standstill (by `locked` or a tripped dead man's switch)
     unsigned int hold_cycle = 0; // `step()` cycles since the hold was last sent
@@ -40,7 +48,11 @@ private:
     bool stopped = false;                        // the dead man's switch tripped and no drive command released it yet
     unsigned long last_drive_command_millis = 0; // `millis()` of the last `speed()`/`power()`, applied or not
 
-    /// Copy the shared properties (`locked`, `enabled`, `drive_command_timeout`) onto a freshly attached shadow.
+    bool repeating_stop = false;               // a zero `speed()` after motion is being repeated
+    unsigned long stop_repeat_millis = 0;      // `millis()` when that stop was commanded
+    unsigned long stop_repeat_sent_millis = 0; // `millis()` when the stop was last sent
+
+    /// Copy the shared properties (`locked`, `enabled`, `drive_command_timeout`, `max_wheel_speed`) onto a new shadow.
     void sync_shared_properties(Module &shadow) const;
 
 protected:
@@ -72,7 +84,7 @@ public:
     Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults = Wheels::get_defaults());
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
-    void write_property(const std::string property_name, const ConstExpression_ptr expression,
+    void write_property(const std::string property_name, ConstExpression_ptr expression,
                         const bool from_expander = false) override;
     void disable() override;
     /// Shared property defaults; subclasses that add properties shadow this and pass the result to the constructor.

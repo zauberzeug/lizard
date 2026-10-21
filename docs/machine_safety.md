@@ -60,6 +60,11 @@ Consequently, a host that wants to keep driving has to repeat its drive command 
 A single delayed command can move the robot for at most one timeout.
 Choose the timeout as a trade-off between the stopping distance at full speed and false stops on short radio dropouts: a sender that nominally transmits every 100 ms but skips cycles while a write is pending needs a timeout of a few hundred milliseconds.
 
+A stop that the wheels did send counts as a stop for the switch, so a zero that got lost on the bus or was refused by a drive would otherwise never be caught: the wheels would creep at their last setpoint until the next command.
+Therefore a `speed(0, 0)` after motion, including the one that releases a tripped switch, is repeated about every 100 ms for one second.
+Any other `speed()`, `power()` or `off()` that goes through ends the repeat early, and so do `locked`, a tripped switch and disabling the wheels, which hold or stop the wheels on their own.
+The [ODrive Wheels](module_reference.md#odrive-wheels) section of the module reference describes the details.
+
 The `drive_command_age` property (ms) and the Bluetooth module's `connected` and `last_message_age` properties expose the underlying measurements for rules and logging.
 
 ## Expander watchdog
