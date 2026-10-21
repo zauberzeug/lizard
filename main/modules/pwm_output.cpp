@@ -60,13 +60,19 @@ PwmOutput::PwmOutput(const std::string name,
 }
 
 void PwmOutput::step() {
-    uint32_t frequency = this->properties.at("frequency")->integer_value();
-    ledc_set_freq(SPEED_MODE, this->ledc_timer, frequency);
+    const int64_t frequency = this->properties.at("frequency")->integer_value();
+    const bool valid_frequency = frequency >= 1 && frequency <= 312500; // 80 MHz / 256 duty steps
+    if (valid_frequency) {
+        ledc_set_freq(SPEED_MODE, this->ledc_timer, frequency);
+    }
     uint32_t duty = this->properties.at("duty")->integer_value();
     ledc_set_duty(SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
     ledc_update_duty(SPEED_MODE, this->ledc_channel);
     this->sync_enabled();
     Module::step();
+    if (!valid_frequency) {
+        throw std::runtime_error("frequency must be between 1 and 312500 Hz");
+    }
 }
 
 void PwmOutput::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
