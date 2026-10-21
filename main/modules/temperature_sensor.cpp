@@ -43,12 +43,16 @@ TemperatureSensor::TemperatureSensor(const std::string name, const AnalogUnit_pt
 
     adc_unit_t detected_unit;
     adc_channel_t detected_channel;
-    ESP_ERROR_CHECK(adc_oneshot_io_to_channel(temp_pin, &detected_unit, &detected_channel));
+    if (adc_oneshot_io_to_channel(temp_pin, &detected_unit, &detected_channel) != ESP_OK) {
+        throw std::runtime_error("TemperatureSensor temp pin is not an ADC pin");
+    }
     if (detected_unit != unit->get_adc_unit()) {
         throw std::runtime_error("TemperatureSensor temp pin does not belong to the provided unit");
     }
     this->channel_temp = detected_channel;
-    ESP_ERROR_CHECK(adc_oneshot_io_to_channel(ref_pin, &detected_unit, &detected_channel));
+    if (adc_oneshot_io_to_channel(ref_pin, &detected_unit, &detected_channel) != ESP_OK) {
+        throw std::runtime_error("TemperatureSensor ref pin is not an ADC pin");
+    }
     if (detected_unit != unit->get_adc_unit()) {
         throw std::runtime_error("TemperatureSensor ref pin does not belong to the provided unit");
     }
