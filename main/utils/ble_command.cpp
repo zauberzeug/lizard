@@ -98,7 +98,11 @@ static bool check_pin(const char *buf, uint16_t len) {
     }
 
     const char *pin_str = buf + 5;
-    const uint16_t pin_len = len - 5;
+    uint16_t pin_len = len - 5;
+    // Ignore a trailing line end or spaces, e.g. "AUTH 123456\r\n"
+    while (pin_len > 0 && (pin_str[pin_len - 1] == '\n' || pin_str[pin_len - 1] == '\r' || pin_str[pin_len - 1] == ' ')) {
+        pin_len--;
+    }
     if (pin_len == 0 || pin_len > 6) {
         return false;
     }
@@ -400,6 +404,10 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
 int send(const std::string_view &data) {
     if (current_con == BLE_HS_CONN_HANDLE_NONE) {
         return BLE_HS_ENOTCONN;
+    }
+    // Nothing goes out to a client that has not entered the PIN yet
+    if (!authenticated && !pin_deactivated) {
+        return BLE_HS_EAUTHEN;
     }
 
     struct os_mbuf *om = ble_hs_mbuf_from_flat(data.data(), data.length());
