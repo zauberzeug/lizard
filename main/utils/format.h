@@ -7,8 +7,8 @@
 // Printf-style formatter for Lizard expressions.
 //
 // Walks `fmt` and replaces each specifier with the corresponding argument, starting at `arguments[args_start]`.
-// Flags, width, and precision between '%' and the specifier letter are passed straight to snprintf,
-// so the full printf syntax works (e.g. "%.3f", "%-10s", "%5d").
+// Flags, width, precision, and 'h'/'l' between '%' and the specifier letter are passed straight to snprintf
+// (e.g. "%.3f", "%-10s", "%5d"); anything else, like "%n" or "*", is rejected.
 // Recognized specifiers:
 //   %d  — integer
 //   %f  — number (integer is promoted)
