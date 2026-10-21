@@ -13,9 +13,15 @@ static Module_ptr create_pwm_output(const std::string &name, const std::vector<C
     }
     Module::expect(arguments, -1, integer, integer, integer);
     const gpio_num_t pin = (gpio_num_t)arguments[0]->evaluate_integer();
-    const ledc_timer_t ledc_timer = arguments.size() > 1 ? (ledc_timer_t)arguments[1]->evaluate_integer() : LEDC_TIMER_0;
-    const ledc_channel_t ledc_channel = arguments.size() > 2 ? (ledc_channel_t)arguments[2]->evaluate_integer() : LEDC_CHANNEL_0;
-    return std::make_shared<PwmOutput>(name, pin, ledc_timer, ledc_channel);
+    const int64_t ledc_timer = arguments.size() > 1 ? arguments[1]->evaluate_integer() : 0;
+    const int64_t ledc_channel = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 0;
+    if (ledc_timer < 0 || ledc_timer > 3) {
+        throw std::runtime_error("LEDC timer must be between 0 and 3");
+    }
+    if (ledc_channel < 0 || ledc_channel > 7) {
+        throw std::runtime_error("LEDC channel must be between 0 and 7");
+    }
+    return std::make_shared<PwmOutput>(name, pin, (ledc_timer_t)ledc_timer, (ledc_channel_t)ledc_channel);
 }
 REGISTER_MODULE(PwmOutput, &create_pwm_output)
 
@@ -36,14 +42,7 @@ PwmOutput::PwmOutput(const std::string name,
 
     this->properties = PwmOutput::get_defaults();
 
-    ledc_timer_config_t timer_config = {
-        .speed_mode = SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_8_BIT,
-        .timer_num = ledc_timer,
-        .freq_hz = (uint32_t)this->properties.at("frequency")->integer_value(),
-        .clk_cfg = LEDC_AUTO_CLK,
-        .deconfigure = false,
-    };
+    this->configure_timer(this->properties.at("frequency")->integer_value());
     ledc_channel_config_t channel_config = {
         .gpio_num = pin,
         .speed_mode = SPEED_MODE,
@@ -54,25 +53,51 @@ PwmOutput::PwmOutput(const std::string name,
         .hpoint = 0,
         .flags = {},
     };
-    ledc_timer_config(&timer_config);
     gpio_set_direction(pin, GPIO_MODE_OUTPUT);
-    ledc_channel_config(&channel_config);
+    if (ledc_channel_config(&channel_config) != ESP_OK) {
+        throw std::runtime_error("could not configure LEDC channel");
+    }
+}
+
+void PwmOutput::configure_timer(const uint32_t frequency) {
+    const ledc_timer_config_t timer_config = {
+        .speed_mode = SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_8_BIT,
+        .timer_num = this->ledc_timer,
+        .freq_hz = frequency,
+        .clk_cfg = LEDC_AUTO_CLK,
+        .deconfigure = false,
+    };
+    if (ledc_timer_config(&timer_config) != ESP_OK) {
+        throw std::runtime_error("could not configure LEDC timer for " + std::to_string(frequency) + " Hz");
+    }
+}
+
+void PwmOutput::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "frequency" && expression->type == integer) {
+        const int64_t frequency = expression->evaluate_integer();
+        if (frequency < 1 || frequency > 312500) { // 80 MHz / 256 duty steps
+            throw std::runtime_error("frequency must be between 1 and 312500 Hz");
+        }
+        if (frequency != this->properties.at("frequency")->integer_value()) {
+            this->configure_timer(frequency);
+        }
+    }
+    if (property_name == "duty" && expression->type == integer) {
+        const int64_t duty = expression->evaluate_integer();
+        if (duty < 0 || duty > 256) {
+            throw std::runtime_error("duty must be between 0 and 256");
+        }
+    }
+    Module::write_property(property_name, expression, from_expander);
 }
 
 void PwmOutput::step() {
-    const int64_t frequency = this->properties.at("frequency")->integer_value();
-    const bool valid_frequency = frequency >= 1 && frequency <= 312500; // 80 MHz / 256 duty steps
-    if (valid_frequency) {
-        ledc_set_freq(SPEED_MODE, this->ledc_timer, frequency);
-    }
     uint32_t duty = this->properties.at("duty")->integer_value();
     ledc_set_duty(SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
     ledc_update_duty(SPEED_MODE, this->ledc_channel);
     this->sync_enabled();
     Module::step();
-    if (!valid_frequency) {
-        throw std::runtime_error("frequency must be between 1 and 312500 Hz");
-    }
 }
 
 void PwmOutput::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {

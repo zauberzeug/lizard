@@ -220,12 +220,13 @@ The PWM output module is associated with a digital output pin that is connected 
 The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
 When using multiple PWM outputs, set different channel IDs to avoid conflicts.
 Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
+The lowest reachable frequency is about 4 Hz on the ESP32 and about 70 Hz on the ESP32-S3; lower values are rejected with an error.
 
-| Properties      | Description                       | Data type |
-| --------------- | --------------------------------- | --------- |
-| `pwm.duty`      | Duty cycle (0..256, default: 128) | `int`     |
-| `pwm.frequency` | Frequency (Hz, default: 1000)     | `int`     |
-| `pwm.enabled`   | Whether the output is enabled     | `bool`    |
+| Properties      | Description                              | Data type |
+| --------------- | ---------------------------------------- | --------- |
+| `pwm.duty`      | Duty cycle (0..256, default: 128)        | `int`     |
+| `pwm.frequency` | Frequency (Hz, 1..312500, default: 1000) | `int`     |
+| `pwm.enabled`   | Whether the output is enabled            | `bool`    |
 
 A PWM period is divided into 256 steps, and `duty` sets for how many of them the pin stays high.
 That makes 257 settings, one more than an 8 bit value holds:
