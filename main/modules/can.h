@@ -4,6 +4,8 @@
 #include "driver/twai.h"
 #include "module.h"
 #include <memory>
+#include <utility>
+#include <vector>
 
 class Can;
 using Can_ptr = std::shared_ptr<Can>;
@@ -11,6 +13,7 @@ using Can_ptr = std::shared_ptr<Can>;
 class Can : public Module {
 private:
     std::map<uint32_t, Module_ptr> subscribers;
+    std::vector<std::pair<uint32_t, uint32_t>> extended_outputs; // (mask, code) pairs for 29-bit frames
     twai_general_config_t g_config;
     twai_timing_config_t t_config;
     twai_filter_config_t f_config;
