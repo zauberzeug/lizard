@@ -396,25 +396,6 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     }
 }
 
-// The quote of a string literal that is still open after `line` (0: none), given the one open before it.
-static char string_state_after(const std::string &line, char quote) {
-    for (size_t i = 0; i < line.size(); ++i) {
-        const char c = line[i];
-        if (quote) {
-            if (c == '\\') {
-                ++i; // an escaped character
-            } else if (c == quote) {
-                quote = 0;
-            }
-        } else if (c == '"' || c == '\'') {
-            quote = c;
-        } else if (c == '#') {
-            break; // a comment runs to the end of its line
-        }
-    }
-    return quote;
-}
-
 // Whether `line` holds the word "end", which can close a rule, routine or schedule.
 static bool has_end_word(const std::string &line) {
     const auto is_word = [](const char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
@@ -435,7 +416,6 @@ static bool walk_startup(const bool run) {
     std::string statement;
     size_t statement_offset = 0;
     size_t offset = 0;
-    char quote = 0; // of a string literal that is open at the end of `statement`
     bool ok = true;
     Storage::read_startup_lines([&](const std::string &line) {
         if (!ok) {
@@ -448,13 +428,8 @@ static bool walk_startup(const bool run) {
         statement += line;
         statement += '\n';
         offset += line.size() + 1;
-        const bool string_was_open = quote != 0;
-        quote = string_state_after(line, quote);
-        if (quote) {
-            return; // a string that continues on the next line
-        }
-        // an open block ends only with "end" and an open string with its quote, so other lines need no new parse
-        if (continued && !string_was_open && !has_end_word(line)) {
+        // an open block ends only with "end", so other lines need no new parse
+        if (continued && !has_end_word(line)) {
             return;
         }
         auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
