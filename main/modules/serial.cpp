@@ -33,9 +33,6 @@ Serial::Serial(const std::string name,
     this->claims.uart(uart_num);
     this->claims.pin(rx_pin);
     this->claims.pin(tx_pin);
-    if (uart_is_driver_installed(uart_num)) {
-        throw std::runtime_error("serial interface is already in use");
-    }
 
     this->initialize_uart();
 }
