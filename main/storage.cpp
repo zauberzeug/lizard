@@ -295,7 +295,7 @@ void Storage::print_startup(const std::string &prefix) {
                 echo("%s", line.c_str());
             }
         });
-    } catch (const std::runtime_error &e) {
+    } catch (const std::exception &e) {
         echo("warning: %s", e.what());
     }
 }
