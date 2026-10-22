@@ -578,8 +578,7 @@ void run_step(Module_ptr module) {
 void app_main() {
     vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
-    // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be
-    // initialized first; Storage::init() below calls nvs_flash_init() again, which is safe.
+    // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be initialized first.
     // Note: the ROM bootloader and early boot log always use 115200 regardless of this value.
     nvs_flash_init();
     uint32_t baud_rate = 115200;
@@ -606,13 +605,6 @@ void app_main() {
     } catch (const std::runtime_error &e) {
         echo("error while initializing core module: %s", e.what());
         exit(1);
-    }
-
-    // a storage error is not a failed startup: report it and continue with an empty script so the console stays reachable
-    try {
-        Storage::init();
-    } catch (const std::exception &e) {
-        echo("error while reading startup script from storage: %s", e.what());
     }
 
     try {

@@ -20,8 +20,6 @@ private:
     static void nvs_delete_key(const std::string &ns, const std::string &key);
 
 public:
-    static void init();
-
     // Calls `piece` with the startup script in order, in pieces of at most one NVS chunk; a line may span two pieces.
     static void read_startup(const std::function<void(const std::string &piece)> &piece);
     // Calls `line` with every line of the startup script, without its '\n'.

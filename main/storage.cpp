@@ -1,7 +1,6 @@
 #include "storage.h"
 #include "esp_check.h"
 #include "nvs.h"
-#include "nvs_flash.h"
 #include "utils/string_utils.h"
 #include "utils/uart.h"
 #include <algorithm>
@@ -20,10 +19,6 @@ static constexpr size_t CHUNK_SIZE = 959;
 bool Storage::editing = false;
 std::string Storage::save_error;
 std::vector<std::string> Storage::edit_pieces;
-
-void Storage::init() {
-    nvs_flash_init();
-}
 
 // the start of a value for an error message: a message with a whole chunk would exceed the console line and be dropped
 static std::string preview(const std::string &value) {
