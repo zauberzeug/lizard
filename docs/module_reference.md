@@ -478,10 +478,15 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | Methods                                             | Description                    | Arguments |
 | --------------------------------------------------- | ------------------------------ | --------- |
 | `can.send(node_id, d0, d1, d2, d3, d4, d5, d6, d7)` | Send a frame with 8 data bytes | 9x `int`  |
+| `can.output_extended(mask, code)`                   | Print matching 29-bit frames   | 2x `int`  |
 | `can.get_status()`                                  | Print the driver status        |           |
 | `can.start()`                                       | Start the driver               |           |
 | `can.stop()`                                        | Stop the driver                |           |
 | `can.reset()`                                       | Reset the driver               |           |
+
+IDs above `0x7FF` are sent as extended (29-bit) frames.
+Received extended frames never reach modules that subscribed to an 11-bit ID.
+`output_extended(mask, code)` prints every extended frame with `(id & mask) == code` in the same format as the module's output, with an 8-digit hex ID; it can be called several times to add more filters.
 
 The method `get_status()` prints the following information:
 

@@ -119,16 +119,26 @@ bool Can::receive() {
         return false;
     }
 
-    if (this->subscribers.count(message.identifier)) {
+    // Subscriptions are 11-bit IDs; an extended frame with the same numeric value must not reach them.
+    bool print = this->output_on;
+    if (message.extd) {
+        for (const auto &[mask, code] : this->extended_outputs) {
+            if ((message.identifier & mask) == code) {
+                print = true;
+                break;
+            }
+        }
+    } else if (this->subscribers.count(message.identifier)) {
         this->subscribers[message.identifier]->handle_can_msg(
             message.identifier,
             message.data_length_code,
             message.data);
     }
 
-    if (this->output_on) {
+    if (print) {
         static char buffer[256];
-        int pos = csprintf(buffer, sizeof(buffer), "%s %03lx", this->name.c_str(), message.identifier);
+        int pos = csprintf(buffer, sizeof(buffer), message.extd ? "%s %08lx" : "%s %03lx", this->name.c_str(),
+                           message.identifier);
         if (!(message.flags & TWAI_MSG_FLAG_RTR)) {
             for (int i = 0; i < message.data_length_code; ++i) {
                 pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ",%02x", message.data[i]);
@@ -151,9 +161,14 @@ void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t
         return;
     }
 
+    if (id > 0x1FFFFFFF) {
+        throw std::runtime_error("CAN ID does not fit into 29 bits");
+    }
+
     twai_message_t message;
     message.identifier = id;
     message.flags = rtr ? TWAI_MSG_FLAG_RTR : TWAI_MSG_FLAG_NONE;
+    message.extd = id > 0x7FF; // without the flag the driver silently cuts the ID to 11 bits
     message.data_length_code = dlc;
     for (int i = 0; i < dlc; ++i) {
         message.data[i] = data[i];
@@ -182,6 +197,9 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
                    arguments[6]->evaluate_integer(),
                    arguments[7]->evaluate_integer(),
                    arguments[8]->evaluate_integer());
+    } else if (method_name == "output_extended") {
+        Module::expect(arguments, 2, integer, integer);
+        this->extended_outputs.emplace_back(arguments[0]->evaluate_integer(), arguments[1]->evaluate_integer());
     } else if (method_name == "get_status") {
         Module::expect(arguments, 0);
         echo("state:            %s", this->properties.at("state")->string_value().c_str());
