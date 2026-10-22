@@ -1,4 +1,5 @@
 #include "stepper_motor.h"
+#include "../utils/esp_error.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "rom/gpio.h"
@@ -9,12 +10,6 @@
 #include <stdexcept>
 
 #define MIN_SPEED 490
-
-static void check_error(esp_err_t err, const char *msg) {
-    if (err != ESP_OK) {
-        throw std::runtime_error(std::string(msg) + ": " + esp_err_to_name(err));
-    }
-}
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 #define SPEED_MODE LEDC_LOW_SPEED_MODE
