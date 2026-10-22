@@ -3,6 +3,7 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "module.h"
+#include <vector>
 
 class PwmOutput : public Module {
 private:
@@ -12,6 +13,7 @@ private:
     bool is_on = false;
     void do_disable() override;
     void configure_timer(const uint32_t frequency);
+    std::vector<PwmOutput *> timer_siblings() const;
 
 public:
     static inline constexpr const char *TYPE = "PwmOutput";

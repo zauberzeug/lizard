@@ -1,4 +1,5 @@
 #include "pwm_output.h"
+#include "../global.h"
 #include "../utils/esp_error.h"
 #include <driver/ledc.h>
 #include <soc/soc.h>
@@ -48,7 +49,13 @@ PwmOutput::PwmOutput(const std::string name,
 
     this->properties = PwmOutput::get_defaults();
 
-    this->configure_timer(this->properties.at("frequency")->integer_value());
+    // Outputs on one timer share its frequency: follow the existing ones instead of resetting the timer to the default.
+    const std::vector<PwmOutput *> siblings = this->timer_siblings();
+    if (siblings.empty()) {
+        this->configure_timer(this->properties.at("frequency")->integer_value());
+    } else {
+        this->properties.at("frequency")->set_integer_value(siblings.front()->properties.at("frequency")->integer_value());
+    }
     ledc_channel_config_t channel_config = {
         .gpio_num = pin,
         .speed_mode = SPEED_MODE,
@@ -75,6 +82,17 @@ void PwmOutput::configure_timer(const uint32_t frequency) {
     check_error(ledc_timer_config(&timer_config), "could not configure LEDC timer for " + std::to_string(frequency) + " Hz");
 }
 
+std::vector<PwmOutput *> PwmOutput::timer_siblings() const {
+    std::vector<PwmOutput *> siblings;
+    for (auto const &[name, module] : Global::modules) {
+        PwmOutput *const other = dynamic_cast<PwmOutput *>(module.get());
+        if (other != nullptr && other != this && other->ledc_timer == this->ledc_timer) {
+            siblings.push_back(other);
+        }
+    }
+    return siblings;
+}
+
 void PwmOutput::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
     if (expression->type == integer) {
         const int64_t value = expression->evaluate_integer();
@@ -84,6 +102,9 @@ void PwmOutput::write_property(const std::string property_name, const ConstExpre
             }
             if (value != this->properties.at("frequency")->integer_value()) {
                 this->configure_timer(value);
+                for (PwmOutput *const sibling : this->timer_siblings()) {
+                    sibling->properties.at("frequency")->set_integer_value(value);
+                }
             }
         } else if (property_name == "duty") {
             if (value < 0 || value > MAX_DUTY) {
