@@ -221,6 +221,8 @@ The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional
 When using multiple PWM outputs, set different channel IDs to avoid conflicts.
 Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
 The lowest reachable frequency is about 4 Hz on the ESP32 and about 70 Hz on the ESP32-S3; lower values are rejected with an error.
+On the ESP32-S3 all timers share one clock source, so the 70 Hz are only reachable while no other timer is in use, also none of a `StepperMotor`.
+With a second timer running, all frequencies must fit the same source, in practice all above about 306 Hz or all on one timer; a value that needs another source is rejected with an error.
 
 | Properties      | Description                              | Data type |
 | --------------- | ---------------------------------------- | --------- |

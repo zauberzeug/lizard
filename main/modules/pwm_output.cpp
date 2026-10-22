@@ -1,11 +1,17 @@
 #include "pwm_output.h"
+#include "../utils/esp_error.h"
 #include <driver/ledc.h>
+#include <soc/soc.h>
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 #define SPEED_MODE LEDC_LOW_SPEED_MODE
 #else
 #define SPEED_MODE LEDC_HIGH_SPEED_MODE
 #endif
+
+static constexpr ledc_timer_bit_t DUTY_RESOLUTION = LEDC_TIMER_8_BIT;
+static constexpr int64_t MAX_DUTY = 1 << DUTY_RESOLUTION;                       // 256 steps per period, see the duty table in the docs
+static constexpr int64_t MAX_FREQUENCY = APB_CLK_FREQ / (1 << DUTY_RESOLUTION); // 312500 Hz, the fastest clock divided by one period of duty steps
 
 static Module_ptr create_pwm_output(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     if (arguments.size() < 1 || arguments.size() > 3) {
@@ -15,11 +21,11 @@ static Module_ptr create_pwm_output(const std::string &name, const std::vector<C
     const gpio_num_t pin = (gpio_num_t)arguments[0]->evaluate_integer();
     const int64_t ledc_timer = arguments.size() > 1 ? arguments[1]->evaluate_integer() : 0;
     const int64_t ledc_channel = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 0;
-    if (ledc_timer < 0 || ledc_timer > 3) {
-        throw std::runtime_error("LEDC timer must be between 0 and 3");
+    if (ledc_timer < 0 || ledc_timer >= LEDC_TIMER_MAX) {
+        throw std::runtime_error("LEDC timer must be 0.." + std::to_string(LEDC_TIMER_MAX - 1));
     }
-    if (ledc_channel < 0 || ledc_channel > 7) {
-        throw std::runtime_error("LEDC channel must be between 0 and 7");
+    if (ledc_channel < 0 || ledc_channel >= LEDC_CHANNEL_MAX) {
+        throw std::runtime_error("LEDC channel must be 0.." + std::to_string(LEDC_CHANNEL_MAX - 1));
     }
     return std::make_shared<PwmOutput>(name, pin, (ledc_timer_t)ledc_timer, (ledc_channel_t)ledc_channel);
 }
@@ -54,39 +60,35 @@ PwmOutput::PwmOutput(const std::string name,
         .flags = {},
     };
     gpio_set_direction(pin, GPIO_MODE_OUTPUT);
-    if (ledc_channel_config(&channel_config) != ESP_OK) {
-        throw std::runtime_error("could not configure LEDC channel");
-    }
+    check_error(ledc_channel_config(&channel_config), "could not configure LEDC channel");
 }
 
 void PwmOutput::configure_timer(const uint32_t frequency) {
     const ledc_timer_config_t timer_config = {
         .speed_mode = SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_8_BIT,
+        .duty_resolution = DUTY_RESOLUTION,
         .timer_num = this->ledc_timer,
         .freq_hz = frequency,
         .clk_cfg = LEDC_AUTO_CLK,
         .deconfigure = false,
     };
-    if (ledc_timer_config(&timer_config) != ESP_OK) {
-        throw std::runtime_error("could not configure LEDC timer for " + std::to_string(frequency) + " Hz");
-    }
+    check_error(ledc_timer_config(&timer_config), "could not configure LEDC timer for " + std::to_string(frequency) + " Hz");
 }
 
 void PwmOutput::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
-    if (property_name == "frequency" && expression->type == integer) {
-        const int64_t frequency = expression->evaluate_integer();
-        if (frequency < 1 || frequency > 312500) { // 80 MHz / 256 duty steps
-            throw std::runtime_error("frequency must be between 1 and 312500 Hz");
-        }
-        if (frequency != this->properties.at("frequency")->integer_value()) {
-            this->configure_timer(frequency);
-        }
-    }
-    if (property_name == "duty" && expression->type == integer) {
-        const int64_t duty = expression->evaluate_integer();
-        if (duty < 0 || duty > 256) {
-            throw std::runtime_error("duty must be between 0 and 256");
+    if (expression->type == integer) {
+        const int64_t value = expression->evaluate_integer();
+        if (property_name == "frequency") {
+            if (value < 1 || value > MAX_FREQUENCY) {
+                throw std::runtime_error("frequency must be 1.." + std::to_string(MAX_FREQUENCY) + " Hz");
+            }
+            if (value != this->properties.at("frequency")->integer_value()) {
+                this->configure_timer(value);
+            }
+        } else if (property_name == "duty") {
+            if (value < 0 || value > MAX_DUTY) {
+                throw std::runtime_error("duty must be 0.." + std::to_string(MAX_DUTY));
+            }
         }
     }
     Module::write_property(property_name, expression, from_expander);
