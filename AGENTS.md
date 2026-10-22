@@ -321,7 +321,7 @@ For significant changes:
 
 ### Main Loop Timing
 
-The main loop runs every **10ms** (`delay(10)` in `app_main`). Any operation that takes longer will delay all modules, rules, and routines. Avoid:
+The main loop runs every **10ms** (`LOOP_PERIOD_MS` in `app_main`, paced with `xTaskDelayUntil`). Any operation that takes longer will delay all modules, rules, and routines. Avoid:
 
 - Blocking I/O operations
 - Long computations

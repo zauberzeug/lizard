@@ -168,6 +168,8 @@ Use the configure script to send a new startup script to the microcontroller.
 
 Without a device path the serial device is detected the same way as for the [serial monitor](#serial-monitor).
 
+Afterwards the configure script restarts the microcontroller and fails if `core.startup_checksum()` does not match the file or the microcontroller does not answer.
+
 Note that the configure script cannot communicate while the serial interface is busy communicating with another process.
 
 ## Development

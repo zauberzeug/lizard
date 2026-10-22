@@ -56,6 +56,12 @@ After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with t
 Supported rates are 115200, 230400, 460800 and 921600.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
 
+**Console load:**
+Sending a line blocks the main loop until its bytes are on the wire, so at 115200 baud only about 115 bytes fit into one 10 ms cycle.
+When printing is what stretches at least half of the cycles well past their 10 ms for three seconds in a row, Lizard warns, e.g. `warning: printing stretched the loop to 83 ms, the console baud rate is too low for its output`, at most once a minute.
+Print less, for example by broadcasting fewer proxies, or raise the baud rate.
+On an expander the console is its serial link to the core: the warning arrives there with the expander's name in front, e.g. `p: warning: …`, and the rate in question is that of the link, not the core's UART0.
+
 ## Bluetooth
 
 Lizard can receive messages via Bluetooth Low Energy, and also send messages in return to a connected device.
@@ -221,18 +227,28 @@ The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional
 When using multiple PWM outputs, set different channel IDs to avoid conflicts.
 Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
 
-| Properties         | Description                              | Data type |
-| ------------------ | ---------------------------------------- | --------- |
-| `output.duty`      | Duty cycle (8 bit: 0..256, default: 128) | `int`     |
-| `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
-| `output.enabled`   | Whether the output is enabled            | `bool`    |
+| Properties      | Description                       | Data type |
+| --------------- | --------------------------------- | --------- |
+| `pwm.duty`      | Duty cycle (0..256, default: 128) | `int`     |
+| `pwm.frequency` | Frequency (Hz, default: 1000)     | `int`     |
+| `pwm.enabled`   | Whether the output is enabled     | `bool`    |
 
-| Methods            | Description             | Arguments |
-| ------------------ | ----------------------- | --------- |
-| `output.on()`      | Turn on the PWM signal  |           |
-| `output.off()`     | Turn off the PWM signal |           |
-| `output.enable()`  | Enable the PWM output   |           |
-| `output.disable()` | Disable the PWM output  |           |
+A PWM period is divided into 256 steps, and `duty` sets for how many of them the pin stays high.
+That makes 257 settings, one more than an 8 bit value holds:
+
+| `duty` | Output                                  |
+| ------ | --------------------------------------- |
+| 0      | always low                              |
+| 128    | high for half of the period             |
+| 255    | high for 255 of 256 steps, not fully on |
+| 256    | always high                             |
+
+| Methods         | Description             | Arguments |
+| --------------- | ----------------------- | --------- |
+| `pwm.on()`      | Turn on the PWM signal  |           |
+| `pwm.off()`     | Turn off the PWM signal |           |
+| `pwm.enable()`  | Enable the PWM output   |           |
+| `pwm.disable()` | Disable the PWM output  |           |
 
 When the output is disabled, it will turn off the PWM signal and ignore on/off commands.
 
@@ -591,6 +607,7 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
@@ -610,6 +627,15 @@ When the wheels are disabled, they will stop and ignore movement commands.
 This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
 
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+`power()` is not limited.
+
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; any other `speed()`, `power()` or `off()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second, so call `wheels.off()` rather than `off()` on each motor to idle them right after a stop.
+
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
@@ -617,7 +643,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -753,6 +779,7 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.m_per_tick`            | Meters per encoder tick                                       | `float`   |
@@ -771,6 +798,15 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 
 When the wheels are disabled, they will stop and ignore movement commands.
 
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+`power()` is not limited.
+
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; any other `speed()`, `power()` or `off()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second.
+
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
@@ -778,7 +814,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -1105,6 +1141,7 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
@@ -1120,13 +1157,21 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
 
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; a non-zero `speed()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second.
+
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
 The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.

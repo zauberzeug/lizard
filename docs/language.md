@@ -242,6 +242,9 @@ Lines with a leading `!` can indicate one of the following control commands.
 
 Note that `!+` and `!-` edit a copy of the startup script in RAM, which is only written to non-volatile storage with the `!.` command; until then `!?` prints this copy.
 Otherwise the startup script is not held in RAM: `!?` reads it from non-volatile storage, and the boot runs it from there statement by statement.
+The `!.` command does not reply when it succeeds and prints an error when it cannot write to non-volatile storage.
+The [`core.startup_checksum()`](module_reference.md#core) command sums the bytes of the copy while there is one, so before `!.` it checks the result of the `!+` and `!-` commands.
+After a successful `!.` there is no copy, and the same command sums what `!.` has stored, also before a restart.
 If `!.` fails, the copy stays in RAM for another `!.`, and `core.startup_checksum()` reports the error instead of a checksum until the copy changes or a `!.` succeeds.
 If the stored script cannot be read, `!+` and `!-abc` report the error and change nothing; `!-` starts a new script without reading the old one.
 
