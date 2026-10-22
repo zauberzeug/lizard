@@ -563,12 +563,11 @@ void app_main() {
 
         for (auto const &rule : Global::rules) {
             InterpreterLock lock;
-            bool condition;
+            bool condition = false;
             try {
                 condition = rule->condition->evaluate_boolean();
             } catch (const std::runtime_error &e) {
-                echo("error in rule: %s", e.what()); // skip this cycle only: ending the run would leave a pending await
-                continue;
+                echo("error in rule: %s", e.what()); // only prevents a new start, a running run keeps stepping
             }
             try {
                 if (condition && !rule->routine->is_running()) {
