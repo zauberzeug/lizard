@@ -60,6 +60,8 @@ StepperMotor::StepperMotor(const std::string name,
       dir_pin(dir_pin),
       ledc_timer(ledc_timer),
       ledc_channel(ledc_channel) {
+    this->claims.pin(step_pin);
+    this->claims.pin(dir_pin);
     gpio_reset_pin(step_pin);
     gpio_reset_pin(dir_pin);
 

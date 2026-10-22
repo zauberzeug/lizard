@@ -64,6 +64,7 @@ std::string Input::get_output() const {
 
 GpioInput::GpioInput(const std::string name, const gpio_num_t number)
     : Input(name), number(number) {
+    this->claims.pin(number);
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_INPUT);
     this->properties.at("level")->set_integer_value(this->get_level());

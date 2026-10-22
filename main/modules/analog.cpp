@@ -36,6 +36,7 @@ Analog::Analog(const std::string name, const AnalogUnit_ptr unit, gpio_num_t pin
     if (!unit) {
         throw std::runtime_error("Analog module requires a valid unit");
     }
+    this->claims.pin(pin);
 
     adc_unit_t detected_unit;
     adc_channel_t detected_channel;
