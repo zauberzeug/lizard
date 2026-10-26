@@ -74,6 +74,7 @@ static bool pin_deactivated = false;
 static std::atomic<bool> authenticated{false};
 static uint8_t pin_failures = 0;
 static TimerHandle_t idle_timer = nullptr;
+static std::atomic<bool> kicked_by_idle_timer{false};
 
 // 16-bit Alert Notification Service UUID for app filtering
 static const ble_uuid16_t alert_uuid = BLE_UUID16_INIT(0x1811);
@@ -125,9 +126,10 @@ static bool check_pin(const char *buf, uint16_t len) {
     return received_pin == expected_pin;
 }
 
+// Runs in the FreeRTOS timer task, whose small stack cannot hold echo(); the kick is logged on disconnect instead
 static void on_idle_timeout(TimerHandle_t /* timer */) {
     if (current_con != BLE_HS_CONN_HANDLE_NONE && !authenticated) {
-        echo("BLE: kicking unauthenticated client (timeout)");
+        kicked_by_idle_timer = true;
         ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
     }
 }
@@ -233,6 +235,9 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
     case BLE_GAP_EVENT_DISCONNECT: {
         const uint8_t *addr = event->disconnect.conn.peer_id_addr.val;
         int reason = event->disconnect.reason;
+        if (kicked_by_idle_timer.exchange(false)) {
+            echo("BLE: kicking unauthenticated client (timeout)");
+        }
         echo("BLE: disconnected %02x:%02x:%02x:%02x:%02x:%02x (reason=%d)",
              addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], reason);
 
