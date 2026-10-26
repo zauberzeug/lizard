@@ -1,0 +1,37 @@
+# Test script for the app-level Bluetooth PIN
+#
+# Connect with a BLE app (e.g. nRF Connect) to "lizard-pin-test":
+#   service         23014CCC-4677-4864-B4C1-8F772B373FAC
+#   write (command) 37107598-7030-46D3-B688-E3664C1712F0
+#   notify          19f91f52-e3b1-4809-9d71-bc16ecd81069
+#
+# Things to try:
+#   - subscribe to notify          -> AUTH_REQUIRED
+#   - write "core.millis"          -> AUTH_REQUIRED, not executed
+#   - no "ping" arrives before authentication
+#   - write "AUTH 000000"          -> AUTH_FAIL (three times closes the connection)
+#   - wait 30 s without a PIN      -> connection is closed
+#   - write "AUTH 123456"          -> POST /notification Connected, then "ping" every 2 s
+#   - write "core.millis"          -> executed
+
+bluetooth = Bluetooth("lizard-pin-test")
+bluetooth.set_pin(123456)
+bluetooth.get_pin()
+
+core.output("core.millis bluetooth.connected bluetooth.last_message_age")
+
+bool was_connected = false
+when bluetooth.connected and not was_connected then
+    was_connected = true
+    core.print("BLE client connected")
+end
+when was_connected and not bluetooth.connected then
+    was_connected = false
+    core.print("BLE client disconnected")
+end
+
+int t = 0
+when bluetooth.connected and core.millis > t + 2000 then
+    t = core.millis
+    bluetooth.send("ping")
+end
