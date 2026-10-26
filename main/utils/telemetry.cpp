@@ -4,8 +4,8 @@
 #include "interpreter_lock.h"
 #include "timing.h"
 #include "uart.h"
+#include "esp_rom_crc.h"
 #include <algorithm>
-#include <array>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -28,37 +28,16 @@ struct Field {
 
 struct Frame {
     std::vector<Field> fields;
-    size_t bits_offset; // the bools follow the floats and ints as bits
-    size_t payload_size;
-    unsigned long interval;
-    unsigned long last_millis;
+    size_t bits_offset = 0; // the bools follow the floats and ints as bits
+    size_t payload_size = 0;
+    unsigned long interval = 0;
+    unsigned long last_millis = 0;
     uint8_t sequence = 0;
     size_t layout_lines_sent = 0;
     bool announced = false; // all layout lines were sent once, so readers can decode the frame
 };
 
 static std::vector<Frame> frames; // frame ID = index + 1
-
-// CRC-16/CCITT-FALSE
-static constexpr auto CRC_TABLE = [] {
-    std::array<uint16_t, 256> table{};
-    for (int byte = 0; byte < 256; ++byte) {
-        uint16_t crc = byte << 8;
-        for (int bit = 0; bit < 8; ++bit) {
-            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
-        }
-        table[byte] = crc;
-    }
-    return table;
-}();
-
-static uint16_t crc16(const uint8_t *data, const size_t length) {
-    uint16_t crc = 0xffff;
-    for (size_t i = 0; i < length; ++i) {
-        crc = (crc << 8) ^ CRC_TABLE[(crc >> 8) ^ data[i]];
-    }
-    return crc;
-}
 
 static size_t encode_base64(const uint8_t *data, const size_t length, char *text) {
     static constexpr char ALPHABET[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -99,7 +78,7 @@ static Field to_field(const ConstExpression_ptr &argument) {
     if (!field.variable) {
         throw std::runtime_error("telemetry fields must be properties or variables");
     }
-    if (field.variable->type != boolean && field.variable->type != integer && field.variable->type != number) {
+    if (!argument->is_numbery()) {
         throw std::runtime_error("telemetry field \"" + field.name + "\" is not a bool, int or float");
     }
     return field;
@@ -109,7 +88,7 @@ void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
     if (frames.size() >= MAX_FRAMES) {
         throw std::runtime_error("too many telemetry frames");
     }
-    Frame frame{};
+    Frame frame;
     size_t field_count = arguments.size();
     if (field_count > 1 && std::dynamic_pointer_cast<const IntegerExpression>(arguments.back())) {
         const int64_t interval = arguments.back()->evaluate_integer();
@@ -193,23 +172,23 @@ static void send_frame(const uint8_t id, Frame &frame, const uint32_t now) {
         }
     }
     const size_t length = HEADER_SIZE + frame.payload_size;
-    const uint16_t crc = crc16(body, length);
+    const uint16_t crc = ~esp_rom_crc16_be(static_cast<uint16_t>(~0xffff), body, length); // CRC-16/CCITT-FALSE
     memcpy(&body[length], &crc, CRC_SIZE);
 
-    char line[1 + (MAX_BODY + 2) / 3 * 4 + 1];
-    line[0] = '~';
-    line[1 + encode_base64(body, length + CRC_SIZE, &line[1])] = '\0';
-    echo("%s", line);
+    char text[(MAX_BODY + 2) / 3 * 4 + 1];
+    text[encode_base64(body, length + CRC_SIZE, text)] = '\0';
+    echo("~%s", text);
 }
 
 void step() {
     InterpreterLock lock;
-    send_layout_lines();
     const unsigned long now = millis();
+    send_layout_lines();
     for (size_t i = 0; i < frames.size(); ++i) {
         Frame &frame = frames[i];
         if (frame.announced && now - frame.last_millis >= frame.interval) {
-            frame.last_millis = now;
+            // keep the rate when steps run late, catching up at most one interval
+            frame.last_millis = now - frame.last_millis < 2 * frame.interval ? frame.last_millis + frame.interval : now - frame.interval;
             send_frame(i + 1, frame, now);
         }
     }
