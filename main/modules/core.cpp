@@ -4,6 +4,7 @@
 #include "../utils/bus_backup.h"
 #include "../utils/scheduler.h"
 #include "../utils/string_utils.h"
+#include "../utils/telemetry.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "driver/gpio.h"
@@ -212,6 +213,14 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "keep_alive") {
         Module::expect(arguments, 0);
         this->keep_alive();
+    } else if (method_name == "telemetry") {
+        telemetry::add_frame(arguments);
+    } else if (method_name == "telemetry_info") {
+        Module::expect(arguments, 0);
+        telemetry::announce();
+    } else if (method_name == "clear_telemetry") {
+        Module::expect(arguments, 0);
+        telemetry::clear();
     } else {
         Module::call(method_name, arguments);
     }

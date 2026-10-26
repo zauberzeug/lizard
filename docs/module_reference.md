@@ -48,6 +48,9 @@ It is automatically created right after the boot sequence.
 | `core.resume_broadcasts()`       | Resume property broadcasts                                                                         |              |
 | `core.clear_schedule()`          | Discard all pending scheduled blocks                                                               |              |
 | `core.keep_alive()`              | Reset `last_message_age` without producing output                                                  |              |
+| `core.telemetry(...)`            | Define a telemetry frame of properties and variables                                               | see below    |
+| `core.telemetry_info()`          | Send the layout lines of all telemetry frames again                                                |              |
+| `core.clear_telemetry()`         | Clear all telemetry frames frames                                                                  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -67,6 +70,56 @@ Sending a line blocks the main loop until its bytes are on the wire, so at 11520
 When printing is what stretches at least half of the cycles well past their 10 ms for three seconds in a row, Lizard warns, e.g. `warning: printing stretched the loop to 83 ms, the console baud rate is too low for its output`, at most once a minute.
 Print less, for example by broadcasting fewer proxies, or raise the baud rate.
 On an expander the console is its serial link to the core: the warning arrives there with the expander's name in front, e.g. `p: warning: …`, and the rate in question is that of the link, not the core's UART0.
+
+**Telemetry frames:**
+`core.telemetry(...)` sends properties and variables in binary form, as one line per frame next to the text lines on the console.
+Layout lines name and type the fields, so a reader needs no configuration.
+
+```
+core.telemetry(imu.yaw, imu.pitch, imu.temp)                   # frame 1, every step
+core.telemetry(wheels.linear_speed, wheels.angular_speed, 20)  # frame 2, every 20 ms
+```
+
+Each call defines one frame; frame IDs count up from 1 in the order of definition.
+The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames.
+An integer literal as last argument is the interval in milliseconds (0 to 3600000); an `int` variable or property in that place is a field.
+Without an interval or with 0, the frame is sent every step.
+Frames go out with the 10 ms steps, so the gaps between them vary, e.g. 10 and 20 ms for an interval of 15 ms, but match the interval on average.
+Frames are built at the end of the step, after modules, rules and routines, so all fields of a frame come from the same step.
+The values of one frame take at most 180 bytes, e.g. 45 floats.
+`core.clear_telemetry()` removes all frames and frees their IDs.
+
+A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (standard alphabet with `=` padding) and the usual [checksum](machine_safety.md#checksums).
+
+| Bytes | Content                                                           |
+| ----- | ----------------------------------------------------------------- |
+| 1     | frame ID                                                          |
+| 1     | sequence number per frame ID, modulo 256; a gap means lost frames |
+| 4     | time since booting (ms) when the frame was built                  |
+| n     | values of the fields                                              |
+| 2     | CRC-16/CCITT-FALSE over all preceding bytes                       |
+
+The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as int32, clamped to its range.
+The `bool` fields follow as bits in their order, least significant bit first, padded to a full byte.
+All multi-byte numbers, including the time and the CRC, are little-endian.
+
+A layout line `__LAYOUT__v1 <frame>.<index>/<count> <name>:<type>` describes one field: its frame ID, its position from 0, the number of fields in the frame, its name and its type: `f` for `float`, `i` for `int` or `?` for `bool`.
+For example, `core.telemetry(motor.position, motor.axis_state, motor.enabled)` yields:
+
+```
+__LAYOUT__v1 1.0/3 motor.position:f@6e
+__LAYOUT__v1 1.1/3 motor.axis_state:i@52
+__LAYOUT__v1 1.2/3 motor.enabled:?@49
+~AQdA4gEAtvOdPwgAAAABwBc=@5c
+```
+
+The frame body `01 07 40e20100 b6f39d3f 08000000 01 c017` holds frame ID 1, sequence number 7, millis 123456, the values 1.234, 8 and true, and the CRC.
+
+Layout lines go out when a frame is defined and on `core.telemetry_info()`, four per step in the order of the frames.
+A new frame is sent for the first time once all of its layout lines are out.
+Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines.
+There is no timer for them: a host that connects later or logs for hours calls `core.telemetry_info()` itself.
+Only the prefix `~` and the word `__LAYOUT__` stay the same in future versions of the format; the version is part of each layout line.
 
 ## Bluetooth
 

@@ -26,6 +26,7 @@
 #include "utils/interpreter_lock.h"
 #include "utils/resources.h"
 #include "utils/scheduler.h"
+#include "utils/telemetry.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -682,6 +683,8 @@ void app_main() {
                 echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
             }
         }
+
+        telemetry::step();
 
         check_console_load(esp_timer_get_time() - cycle_start_us, LOOP_PERIOD_MS * 1000);
 
