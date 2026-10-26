@@ -50,7 +50,7 @@ It is automatically created right after the boot sequence.
 | `core.keep_alive()`              | Reset `last_message_age` without producing output                                                  |              |
 | `core.telemetry(...)`            | Define a telemetry frame of properties and variables                                               | see below    |
 | `core.telemetry_info()`          | Send the layout lines of all telemetry frames again                                                |              |
-| `core.clear_telemetry()`         | Remove all telemetry frames                                                                        |              |
+| `core.clear_telemetry()`         | Clear all telemetry frames frames                                                                  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -76,7 +76,7 @@ On an expander the console is its serial link to the core: the warning arrives t
 Layout lines name and type the fields, so a reader needs no configuration.
 
 ```
-core.telemetry(imu.yaw, imu.pitch, imu.temp)                 # frame 1, every step
+core.telemetry(imu.yaw, imu.pitch, imu.temp)                   # frame 1, every step
 core.telemetry(wheels.linear_speed, wheels.angular_speed, 20)  # frame 2, every 20 ms
 ```
 
