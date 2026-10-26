@@ -73,7 +73,7 @@ Some module properties are meant to be written to:
 motor.reversed = true
 ```
 
-**Properties: declaration and nesting**
+**Properties: declaration**
 
 Some modules accept property declarations, which work like variable declarations:
 
@@ -81,16 +81,8 @@ Some modules accept property declarations, which work like variable declarations
 float x.level = 0.5
 ```
 
-Without an initial value the property starts at `false`, `0`, `0.0` or `""`, respectively.
-A second name after a dot declares a nested property:
-
-```
-bool arm.motor.enabled = false
-```
-
-Declared and nested properties are read like any other property, e.g. in `when arm.motor.enabled == false then ...` or in `core.output("arm.motor.position:3")`.
 Modules that do not accept declarations report an error.
-[Proxies](module_reference.md#proxy) accept declarations without nesting.
+[Proxies](module_reference.md#proxy) accept declarations.
 
 **Routines: definition and call**
 
