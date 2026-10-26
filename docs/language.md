@@ -73,6 +73,17 @@ Some module properties are meant to be written to:
 motor.reversed = true
 ```
 
+**Properties: declaration**
+
+Some modules accept property declarations, which work like variable declarations:
+
+```
+float x.level = 0.5
+```
+
+Modules that do not accept declarations report an error.
+[Proxies](module_reference.md#proxy) accept declarations.
+
 **Routines: definition and call**
 
 Routines have a name and contain a list of actions:
