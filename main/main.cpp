@@ -97,6 +97,15 @@ std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
 }
 
 Expression_ptr compile_expression(const struct owl_ref ref) {
+    static const int MAX_EXPRESSION_DEPTH = 20; // each level takes ~1 kB of the 32 kB main task stack
+    static int depth = 0; // a plain static is fine: compilation only runs under the InterpreterLock
+    if (depth >= MAX_EXPRESSION_DEPTH) {
+        throw std::runtime_error("expression is nested too deeply");
+    }
+    struct DepthGuard {
+        DepthGuard() { ++depth; }
+        ~DepthGuard() { --depth; }
+    } depth_guard;
     const struct parsed_expression expression = parsed_expression_get(ref);
     switch (expression.type) {
     case PARSED_TRUE:
