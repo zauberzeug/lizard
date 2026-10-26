@@ -152,6 +152,10 @@ void Module::write_property(const std::string property_name, const ConstExpressi
     this->get_property(property_name)->assign(expression);
 }
 
+void Module::declare_property(const std::string &property_name, const Variable_ptr &variable) {
+    throw std::runtime_error("module \"" + this->name + "\" does not accept property declarations");
+}
+
 void Module::handle_can_msg(const uint32_t id, const int count, const uint8_t *data) {
     throw std::runtime_error("CAN message handler is not implemented");
 }

@@ -1311,3 +1311,7 @@ Declare the depending module on the same microcontroller instead.
 
 `is_ready` turns `false` again when the other microcontroller restarts or the connection is lost,
 because the main microcontroller cannot tell whether the remote module still exists (see [Expander](#expander)).
+
+A proxy accepts [property declarations](language.md) without nesting, e.g. `float x.level = 0.5`, so rules can use a property before the remote module broadcasts it.
+An unknown property is added, a known one of the same type is set to the declared value, and a known one of another type is an error.
+Nothing is sent to the remote module; its broadcasts overwrite the declared values.
