@@ -112,7 +112,6 @@ void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
     if (frame.payload_size > MAX_PAYLOAD) {
         throw std::runtime_error("too many fields for one frame");
     }
-    frame.last_millis = millis() - frame.interval; // due as soon as it is announced
     frames.push_back(std::move(frame));
 }
 
@@ -126,7 +125,7 @@ void clear() {
     frames.clear();
 }
 
-static void send_layout_lines() {
+static void send_layout_lines(const unsigned long now) {
     size_t budget = LAYOUT_LINES_PER_STEP;
     for (size_t i = 0; i < frames.size() && budget > 0; ++i) {
         Frame &frame = frames[i];
@@ -136,7 +135,10 @@ static void send_layout_lines() {
             echo("__LAYOUT__v1 %d.%d/%d %s:%c", static_cast<int>(i + 1), static_cast<int>(index),
                  static_cast<int>(frame.fields.size()), field.name.c_str(), type_letter(field.variable->type));
         }
-        frame.announced |= frame.layout_lines_sent == frame.fields.size();
+        if (!frame.announced && frame.layout_lines_sent == frame.fields.size()) {
+            frame.announced = true;
+            frame.last_millis = now - frame.interval; // due right away, however long the layout took
+        }
     }
 }
 
@@ -183,7 +185,7 @@ static void send_frame(const uint8_t id, Frame &frame, const uint32_t now) {
 void step() {
     InterpreterLock lock;
     const unsigned long now = millis();
-    send_layout_lines();
+    send_layout_lines(now);
     for (size_t i = 0; i < frames.size(); ++i) {
         Frame &frame = frames[i];
         if (frame.announced && now - frame.last_millis >= frame.interval) {
