@@ -35,9 +35,6 @@
 
 #include <esp_zeug/ble/uuid.h>
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/timers.h>
-
 #include "../storage.h"
 #include "../utils/uart.h"
 #include "sdkconfig.h"
@@ -73,8 +70,7 @@ static bool running = false;
 static bool pin_deactivated = false;
 static std::atomic<bool> authenticated{false};
 static uint8_t pin_failures = 0;
-static TimerHandle_t idle_timer = nullptr;
-static std::atomic<bool> kicked_by_idle_timer{false};
+static ble_npl_callout idle_timer; // posts to the NimBLE host task, so it runs in line with the GAP and GATT callbacks
 
 // 16-bit Alert Notification Service UUID for app filtering
 static const ble_uuid16_t alert_uuid = BLE_UUID16_INIT(0x1811);
@@ -126,14 +122,18 @@ static bool check_pin(const char *buf, uint16_t len) {
     return received_pin == expected_pin();
 }
 
-// Runs in the FreeRTOS timer task, whose small stack cannot hold echo(); the kick is logged on disconnect instead
-static void on_idle_timeout(TimerHandle_t /* timer */) {
-    const uint16_t con = current_con;
-    if (con != BLE_HS_CONN_HANDLE_NONE && !authenticated) {
-        kicked_by_idle_timer = true;
-        if (ble_gap_terminate(con, BLE_ERR_REM_USER_CONN_TERM) != 0) {
-            kicked_by_idle_timer = false; // the client left on its own, so no later disconnect is logged as a kick
-        }
+static void start_idle_timer() {
+    ble_npl_callout_reset(&idle_timer, ble_npl_time_ms_to_ticks32(IDLE_TIMEOUT_MS));
+}
+
+static void stop_idle_timer() {
+    ble_npl_callout_stop(&idle_timer);
+}
+
+static void on_idle_timeout(ble_npl_event * /* event */) {
+    if (current_con != BLE_HS_CONN_HANDLE_NONE && !authenticated) {
+        echo("BLE: kicking unauthenticated client (timeout)");
+        ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
     }
 }
 
@@ -223,9 +223,7 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
                 echo("BLE PIN: %06lu", (unsigned long)expected_pin());
             }
 
-            if (idle_timer) {
-                xTimerStart(idle_timer, 0);
-            }
+            start_idle_timer();
         } else {
             advertise();
         }
@@ -234,18 +232,13 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
     case BLE_GAP_EVENT_DISCONNECT: {
         const uint8_t *addr = event->disconnect.conn.peer_id_addr.val;
         int reason = event->disconnect.reason;
-        if (kicked_by_idle_timer.exchange(false)) {
-            echo("BLE: kicking unauthenticated client (timeout)");
-        }
         echo("BLE: disconnected %02x:%02x:%02x:%02x:%02x:%02x (reason=%d)",
              addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], reason);
 
         if (event->disconnect.conn.conn_handle == current_con) {
             current_con = BLE_HS_CONN_HANDLE_NONE;
             authenticated = false;
-            if (idle_timer) {
-                xTimerStop(idle_timer, 0);
-            }
+            stop_idle_timer();
         }
         advertise();
         return 0;
@@ -286,16 +279,14 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
             echo("BLE rx: %s", buf.get());
 #endif
 
-            // Handle AUTH command
-            if (len >= 5 && strncmp(buf.get(), "AUTH ", 5) == 0) {
+            // Handle AUTH until the client is authenticated; afterwards it is an ordinary line
+            if (!authenticated && len >= 5 && strncmp(buf.get(), "AUTH ", 5) == 0) {
                 if (pin_failures >= MAX_PIN_FAILURES) {
                     return 0; // the connection is already closing, so queued guesses are not checked anymore
                 }
                 if (pin_deactivated || check_pin(buf.get(), len)) {
                     authenticated = true;
-                    if (idle_timer) {
-                        xTimerStop(idle_timer, 0);
-                    }
+                    stop_idle_timer();
                     echo("BLE: authenticated%s", pin_deactivated ? " (PIN deactivated)" : " via app PIN");
                     send_notification(conn_handle, "POST /notification Connected\n");
                 } else {
@@ -304,8 +295,8 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
                     if (++pin_failures >= MAX_PIN_FAILURES) {
                         echo("BLE: too many wrong PINs, disconnecting");
                         ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-                    } else if (idle_timer) {
-                        xTimerReset(idle_timer, 0);
+                    } else {
+                        start_idle_timer();
                     }
                 }
                 return 0;
@@ -321,9 +312,7 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
             // Mark as authenticated on first command when PIN is deactivated
             if (!authenticated && pin_deactivated) {
                 authenticated = true;
-                if (idle_timer) {
-                    xTimerStop(idle_timer, 0);
-                }
+                stop_idle_timer();
             }
 
             // Process command normally
@@ -399,13 +388,10 @@ void init(const std::string_view &device_name, CommandCallback on_command) {
 
     ble_svc_gap_device_name_set(ble_device_name.data());
 
+    ble_npl_callout_init(&idle_timer, nimble_port_get_dflt_eventq(), on_idle_timeout, nullptr);
+
     running = true;
     nimble_port_freertos_init(run_host_task);
-
-    if (!idle_timer) {
-        idle_timer = xTimerCreate("ble_idle", pdMS_TO_TICKS(IDLE_TIMEOUT_MS),
-                                  pdFALSE, nullptr, on_idle_timeout);
-    }
 }
 
 int send(const std::string_view &data) {
@@ -436,12 +422,10 @@ void finalize() {
     if (!running) {
         return;
     }
+    stop_idle_timer();
     if (nimble_port_stop() == 0) {
+        ble_npl_callout_deinit(&idle_timer);
         nimble_port_deinit();
-    }
-    if (idle_timer) {
-        xTimerDelete(idle_timer, 0);
-        idle_timer = nullptr;
     }
     running = false;
 }
