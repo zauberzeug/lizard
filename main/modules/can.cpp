@@ -163,7 +163,9 @@ bool Can::receive() {
 }
 
 void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
-    to_29_bit(id, "CAN ID");
+    if (id > MAX_EXTENDED_ID) {
+        throw std::runtime_error("CAN ID does not fit into 29 bits");
+    }
 
     twai_status_info_t status_info;
     if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
