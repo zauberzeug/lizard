@@ -8,6 +8,7 @@
 #include "serial.h"
 #include <atomic>
 #include <cstdint>
+#include <map>
 #include <vector>
 
 class SerialBus;
@@ -28,6 +29,17 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+
+    // --- telemetry frames (see utils/telemetry.h) ---------------------------
+    // peer side, main task: the node that polls this one, 0 before the first poll
+    uint8_t coordinator() const { return this->coordinator_id; }
+    bool send_telemetry_layout(const char *line, const size_t length); // false while the outbound queue is full
+    bool telemetry_frame_pending(const uint8_t frame_id);
+    // keeps the newest frame of an ID for the next poll; with `replace` only while the previous one has not left yet
+    bool store_telemetry_frame(const uint8_t frame_id, const char *line, const size_t length, const bool replace);
+    void clear_telemetry_slots();
+    // coordinator side
+    void request_passed_layouts(); // asks the peers whose frames are passed on for their layout lines
 
 private:
     struct IncomingMessage {
@@ -129,13 +141,48 @@ private:
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;
 
+    // --- telemetry, peer side ----------------------------------------------
+    // The main task leaves the newest frame of each ID in a slot and the communication task sends the slots with the
+    // next poll, so a poll delivers current values and no backlog. The frame ID is only touched by the main task.
+    struct FrameSlot {
+        uint8_t frame_id = 0; // 0: free
+        bool pending = false; // stored and not sent yet
+        uint16_t length = 0;
+        char line[PAYLOAD_CAPACITY];
+    };
+    static constexpr size_t FRAME_SLOTS = 8;
+    std::atomic<FrameSlot *> frame_slots{nullptr}; // allocated by the main task with the first frame
+    portMUX_TYPE frame_slot_lock = portMUX_INITIALIZER_UNLOCKED;
+    std::atomic<uint8_t> coordinator_id{0};
+    unsigned long last_slot_warning_millis = 0;
+    void send_frame_slots(const uint8_t receiver);
+
+    // --- telemetry, coordinator side (main task) ---------------------------
+    struct PeerLayout {
+        std::map<uint8_t, std::vector<char>> frames; // type letter per field index, 0 until its layout line arrived
+        bool other_version = false;                  // the peer sends a format this node does not read, until its Ready.
+        bool requested = false;
+        unsigned long request_millis = 0;
+    };
+    bool pass_all_telemetry = false;
+    std::vector<uint8_t> passed_peers;
+    std::map<uint8_t, PeerLayout> peer_layouts; // only of peers whose frames are passed on
+    std::atomic<unsigned> dropped_frames{0};    // counted by the communication task
+    Variable_ptr telemetry_errors;
+    Variable_ptr telemetry_dropped;
+    bool passes_telemetry(const uint8_t peer_id) const;
+    void handle_telemetry_frame(const IncomingMessage &message);
+    void handle_telemetry_layout(const IncomingMessage &message);
+    void request_layout(const uint8_t peer_id, PeerLayout &layout);
+
     static void communication_loop(void *param);
     void adopt_config(const Config &config);
     void process_uart();
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
-    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
+    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length,
+                                  const TickType_t wait = pdMS_TO_TICKS(50));
     bool send_outgoing_queue();
     size_t send_message(const uint8_t receiver, const char *payload, const size_t length) const;
 
