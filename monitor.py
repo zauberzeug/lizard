@@ -2,11 +2,14 @@
 import argparse
 import asyncio
 import sys
+import threading
+import time
 
 import serial
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
+import telemetry
 from serial_devices import resolve_device
 
 parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
@@ -42,22 +45,34 @@ class LineReader:
 
 def receive() -> None:
     line_reader = LineReader(port)
+    decoder = telemetry.Decoder()
+    unknown_versions = set()
+    last_layout_request = 0.0
     while True:
         # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
-        line = line_reader.readline().decode(errors='replace').strip('\r\n')
-        if line[-3:-2] == '@':
-            try:
-                check = int(line[-2:], 16)
-            except ValueError:
-                check = None
-            if check is not None:
-                line = line[:-3]
-                checksum = 0
-                for byte in line.encode():
-                    checksum ^= byte
-                if checksum != check:
-                    print(f'ERROR: CHECKSUM MISMATCH ({checksum} vs. {check} for "{line}")')
-        print(line)
+        line, check = telemetry.split_checksum(line_reader.readline().decode(errors='replace').strip('\r\n'))
+        if check is not None and telemetry.checksum(line) != check:
+            print(f'ERROR: CHECKSUM MISMATCH ({telemetry.checksum(line)} vs. {check} for "{line}")')
+            print(line)  # never taken as a frame or a layout line
+            continue
+        result = decoder.feed(line)
+        if not isinstance(result, telemetry.Frame):
+            print(line)
+            continue
+        if result.status == 'unknown_version':
+            if result.sender in unknown_versions:
+                continue
+            unknown_versions.add(result.sender)
+        print(result if result.sender is None else f'bus[{result.sender}]: {result}')
+        undecoded = result.status in ('no_layout', 'layout_incomplete', 'layout_mismatch')
+        if undecoded and time.monotonic() > last_layout_request + 2.0:
+            write_line('core.telemetry_info()')  # e.g. the frames started before the monitor
+            last_layout_request = time.monotonic()
+
+
+def write_line(text: str) -> None:
+    with port_lock:
+        port.write(f'{text}@{telemetry.checksum(text):02x}\n'.encode())
 
 
 async def send() -> None:
@@ -68,11 +83,7 @@ async def send() -> None:
                 line = await session.prompt_async('> ')
                 for segment in line.split('\n'):
                     # drop the \r of a CRLF paste, which would otherwise end up inside the checksum payload
-                    segment = segment.rstrip('\r')
-                    checksum = 0
-                    for byte in segment.encode():
-                        checksum ^= byte
-                    port.write(f'{segment}@{checksum:02x}\n'.encode())
+                    write_line(segment.rstrip('\r'))
         except (KeyboardInterrupt, EOFError):
             print('Bye!')
             loop.stop()
@@ -90,6 +101,7 @@ if __name__ == '__main__':
         connection = serial_connection()
     except (RuntimeError, serial.SerialException) as e:
         sys.exit(f'Error: {e}')
+    port_lock = threading.Lock()  # the receiver asks for telemetry layouts while the prompt sends commands
     with connection as port:
         loop = asyncio.get_event_loop_policy().get_event_loop()
         loop.create_task(send())

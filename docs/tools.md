@@ -56,16 +56,56 @@ A microcontroller on a USB-UART bridge attached to a Jetson is not detected and 
 Pass the device path explicitly when several devices may be found and there is no terminal to answer the question.
 Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see [Robot Brain](#robot-brain)).
 
+The monitor shows [telemetry frames](module_reference.md#core) with the names of their fields:
+
+```
+[frame 1 seq=7 millis=123456] motor.position=1.234 motor.axis_state=8 motor.enabled=true
+```
+
+A frame it cannot decode shows its [status](#telemetry-decoder) and its payload in hex, e.g. `[frame 1 seq=7 millis=123456 no_layout] b6f39d3f0800000001`;
+of a sender with an unknown format version it shows only the first frame.
+If the layout of a frame is missing or does not fit, e.g. because the frames started before the monitor, the monitor sends `core.telemetry_info()`, at most every 2 s.
+
 You can also use an SSH monitor to access a microcontroller via SSH:
 
 ```bash
 ./monitor_ssh.sh <user@host>
 ```
 
-This copies `monitor.py` and `serial_devices.py` from this checkout to `~/lizard` on the target and starts the monitor there,
+This copies `monitor.py`, `serial_devices.py` and `telemetry.py` from this checkout to `~/lizard` on the target and starts the monitor there,
 so which device it detects does not depend on the age of the target's own checkout.
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
+
+### Telemetry Decoder
+
+`telemetry.py` decodes [telemetry frames](module_reference.md#core) for the serial monitor and for other host software:
+
+```python
+import telemetry
+
+decoder = telemetry.Decoder()
+for line in lines:
+    text, check = telemetry.split_checksum(line)
+    if check is not None and telemetry.checksum(text) != check:
+        continue  # a damaged line
+    result = decoder.feed(text)
+    if isinstance(result, telemetry.Frame) and result.status == 'ok':
+        print(result.frame_id, result.seq, result.millis, result.values)
+```
+
+`feed` returns a `Text`, a `Layout` or a `Frame` and keeps the layouts of each sender.
+A frame that cannot be decoded has `values = None` and one of these statuses:
+
+| Status              | Meaning                                                         |
+| ------------------- | --------------------------------------------------------------- |
+| `no_layout`         | no layout line of the frame has arrived                         |
+| `layout_incomplete` | layout lines of some fields are missing                         |
+| `layout_mismatch`   | the payload size does not match the layout                      |
+| `unknown_version`   | the sender's layout lines have a format version other than `v1` |
+
+When a frame gets new fields, e.g. after `core.clear_telemetry()`, the decoder decodes it only once the new layout is complete.
+Logs should keep the raw lines and decode them when they are read.
 
 ### OTB Update
 
