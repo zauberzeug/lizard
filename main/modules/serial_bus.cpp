@@ -134,8 +134,10 @@ void SerialBus::step() {
         this->apply_offset_update(update);
     }
 
+    // only what is waiting now: messages that keep arriving while the console blocks must not hold up the main loop
     IncomingMessage message;
-    while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
+    for (UBaseType_t waiting = uxQueueMessagesWaiting(this->inbound_queue);
+         waiting > 0 && xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE; --waiting) {
         this->handle_incoming_message(message);
     }
 
