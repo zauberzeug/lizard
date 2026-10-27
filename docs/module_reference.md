@@ -99,6 +99,7 @@ A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (
 | n     | values of the fields                                              |
 | 2     | CRC-16/CCITT-FALSE over all preceding bytes                       |
 
+The sequence number starts at 0 when a frame is defined, also when its ID is reused after `core.clear_telemetry()`.
 The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as int32, clamped to its range.
 The `bool` fields follow as bits in their order, least significant bit first, padded to a full byte.
 All multi-byte numbers, including the time and the CRC, are little-endian.

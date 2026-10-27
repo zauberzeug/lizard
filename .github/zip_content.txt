@@ -6,6 +6,7 @@ configure.py
 espresso.py
 monitor.py
 serial_devices.py
+telemetry.py
 upload_ssh.py
 README.md
 requirements.txt

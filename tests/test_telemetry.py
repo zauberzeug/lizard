@@ -67,6 +67,18 @@ def encode(frame_id: int, seq: int, millis: int, payload: bytes) -> str:
     return with_crc(struct.pack('<BBI', frame_id, seq, millis) + payload)
 
 
+def with_seq(line: str, seq: int) -> str:
+    body = bytearray(base64.b64decode(strip(line)[1:])[:-2])
+    body[1] = seq
+    return with_crc(bytes(body))
+
+
+def flip_bit(line: str) -> str:
+    body = bytearray(base64.b64decode(strip(line)[1:]))
+    body[7] ^= 0x01
+    return '~' + base64.b64encode(body).decode()
+
+
 def f32(value: float) -> float:
     return struct.unpack('<f', struct.pack('<f', value))[0]
 
@@ -103,18 +115,46 @@ def test_frames_keep_decoding_while_layout_lines_repeat():
     assert [result.status for result in results if isinstance(result, Frame)] == ['ok'] * 6
 
 
+def test_frames_keep_decoding_while_layout_lines_repeat_across_the_sequence_wrap():
+    decoder = Decoder()
+    feed(decoder, LAYOUT_1)
+    decoder.feed(with_seq(FRAMES_1[0], 255))
+    feed(decoder, LAYOUT_1[:1])
+    assert decoder.feed(strip(FRAMES_1[0])).status == 'ok'
+
+
 def test_reused_frame_id():
     results = feed(Decoder(), LAYOUT_1 + FRAMES_1 + REDEFINED + SHORTENED)
     assert list(results[-4].values) == ['pos', 'on', 'state']
     assert results[-1].values == {'pos': f32(1.234), 'state': 8}
 
 
-def test_reused_frame_id_is_not_decoded_with_the_old_layout_when_layout_lines_are_lost():
+@pytest.mark.parametrize('frames', [FRAMES_1, []])  # with and without frames of the old layout
+def test_reused_frame_id_is_not_decoded_with_the_old_layout_when_layout_lines_are_lost(frames):
     decoder = Decoder()
-    feed(decoder, LAYOUT_1 + FRAMES_1)
+    feed(decoder, LAYOUT_1 + frames)
     # the first line of the new layout matches the old one, the lines that differ are lost
     assert feed(decoder, REDEFINED[:1] + REDEFINED[3:])[-1].status == 'layout_incomplete'
     assert feed(decoder, REDEFINED)[-1].status == 'ok'
+
+
+@pytest.mark.parametrize('lines', [
+    REDEFINED[1:2] + REDEFINED[3:],  # a differing line
+    SHORTENED[:1] + SHORTENED[2:],  # a differing count
+])
+def test_differing_layout_line_drops_the_old_layout_although_the_sequence_seems_to_continue(lines):
+    decoder = Decoder()
+    feed(decoder, LAYOUT_1)
+    decoder.feed(with_seq(FRAMES_1[0], 255))  # the new definition starts again at 0
+    assert feed(decoder, lines)[-1].status == 'layout_incomplete'
+
+
+@pytest.mark.parametrize('lines', [
+    LAYOUT_1[:2] + REDEFINED[:1] + REDEFINED[2:],  # a line with index 0 starts the layout again
+    SHORTENED[1:2] + REDEFINED[1:],  # so does a line with another count
+])
+def test_lines_of_an_older_layout_are_not_mixed_into_a_new_one(lines):
+    assert feed(Decoder(), lines)[-1].status == 'layout_incomplete'
 
 
 def test_lost_last_layout_line():
@@ -150,6 +190,13 @@ def test_unknown_version():
     assert feed(decoder, LAYOUT_1 + FRAMES_1)[-1].status == 'ok'
 
 
+def test_another_version_drops_the_layouts():
+    decoder = Decoder()
+    feed(decoder, LAYOUT_1 + FRAMES_1[:1])
+    decoder.feed('__LAYOUT__v2 1:pos:f32')
+    assert feed(decoder, LAYOUT_1[:1] + FRAMES_1[1:])[-1].status == 'layout_incomplete'
+
+
 def test_bus_prefix():
     decoder = Decoder()
     results = [decoder.feed(f'bus[2]: {strip(line)}') for line in LAYOUT_1 + FRAMES_1]
@@ -158,12 +205,6 @@ def test_bus_prefix():
     assert decoder.feed(strip(FRAMES_1[0])).status == 'no_layout'  # layouts are kept per sender
     assert decoder.feed('bus[2]: hello') == Text(None, 'bus[2]: hello')
     assert decoder.feed(f'bus[3]: {strip(FRAMES_1[0])}', sender='core').sender == ('core', 3)
-
-
-def flip_bit(line: str) -> str:
-    body = bytearray(base64.b64decode(strip(line)[1:]))
-    body[7] ^= 0x01
-    return '~' + base64.b64encode(body).decode()
 
 
 @pytest.mark.parametrize('line', [

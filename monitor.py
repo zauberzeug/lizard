@@ -47,15 +47,17 @@ def receive() -> None:
     line_reader = LineReader(port)
     decoder = telemetry.Decoder()
     unknown_versions = set()
-    last_layout_request = 0.0
+    layout_activity = 0.0  # time of the last layout request or layout line
     while True:
         # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
         line, check = telemetry.split_checksum(line_reader.readline().decode(errors='replace').strip('\r\n'))
-        if check is not None and telemetry.checksum(line) != check:
-            print(f'ERROR: CHECKSUM MISMATCH ({telemetry.checksum(line)} vs. {check} for "{line}")')
+        if check is not None and (actual := telemetry.checksum(line)) != check:
+            print(f'ERROR: CHECKSUM MISMATCH ({actual} vs. {check} for "{line}")')
             print(line)  # never taken as a frame or a layout line
             continue
         result = decoder.feed(line)
+        if isinstance(result, telemetry.Layout):
+            layout_activity = time.monotonic()  # a new request would restart the layout lines still coming
         if not isinstance(result, telemetry.Frame):
             print(line)
             continue
@@ -64,10 +66,10 @@ def receive() -> None:
                 continue
             unknown_versions.add(result.sender)
         print(result if result.sender is None else f'bus[{result.sender}]: {result}')
-        undecoded = result.status in ('no_layout', 'layout_incomplete', 'layout_mismatch')
-        if undecoded and time.monotonic() > last_layout_request + 2.0:
+        now = time.monotonic()
+        if result.status in ('no_layout', 'layout_incomplete', 'layout_mismatch') and now > layout_activity + 2.0:
             write_line('core.telemetry_info()')  # e.g. the frames started before the monitor
-            last_layout_request = time.monotonic()
+            layout_activity = now
 
 
 def write_line(text: str) -> None:

@@ -8,7 +8,7 @@ import binascii
 import re
 import struct
 from dataclasses import dataclass
-from typing import Dict, Hashable, List, Optional, Tuple, Union
+from typing import Dict, Hashable, List, Optional, Tuple, Union, cast
 
 VERSION = 'v1'
 HEADER = struct.Struct('<BBI')  # frame ID, sequence number, millis
@@ -90,12 +90,13 @@ class Decoder:
         self._versions: Dict[Hashable, str] = {}  # format version of the sender's last layout line
         self._layouts: Dict[Tuple[Hashable, int], List[Field]] = {}  # complete layouts that decode frames
         self._incoming: Dict[Tuple[Hashable, int], List[Optional[Field]]] = {}  # layouts whose lines still arrive
-        self._seqs: Dict[Tuple[Hashable, int], int] = {}
+        self._seqs: Dict[Tuple[Hashable, int], int] = {}  # sequence number of the last frame
 
     def feed(self, line: str, sender: Hashable = None) -> Union[Text, Layout, Frame]:
         """Classify a line given without line end and checksum.
 
-        A line "bus[N]: ..." comes from peer N, so its sender is N or, if a sender is given, (sender, N).
+        The layout lines and frames of a line "bus[N]: ..." come from peer N,
+        so their sender is N or, if a sender is given, (sender, N).
         """
         relayed = BUS_LINE.fullmatch(line)
         if relayed:
@@ -110,20 +111,29 @@ class Decoder:
             body = _frame_body(line[1:])
             return None if body is None else self._frame(sender, body)
         match = LAYOUT_LINE.fullmatch(line)
-        return None if match is None else self._layout(sender, match.group(1), match.group(2))
-
-    def _layout(self, sender: Hashable, version: str, rest: str) -> Optional[Layout]:
-        match = LAYOUT_FIELD.fullmatch(rest)
-        if version == VERSION and (match is None or int(match.group(2)) >= int(match.group(3))):
+        if match is None:
             return None
-        if self._versions.get(sender) != version:
+        version, rest = match.groups()
+        if version != VERSION:
+            self._set_version(sender, version)
+            return None
+        return self._layout(sender, rest)
+
+    def _set_version(self, sender: Hashable, version: str) -> None:
+        if self._versions.get(sender) != version:  # layouts of another format version must not decode frames
             self._versions[sender] = version
             for table in (self._layouts, self._incoming):
                 for key in [key for key in table if key[0] == sender]:
                     del table[key]
-        if version != VERSION:
+
+    def _layout(self, sender: Hashable, rest: str) -> Optional[Layout]:
+        match = LAYOUT_FIELD.fullmatch(rest)
+        if match is None:
             return None
         frame_id, index, count = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        if index >= count:
+            return None
+        self._set_version(sender, VERSION)
         field = (match.group(4), match.group(5))
         key = (sender, frame_id)
         incoming = self._incoming.get(key)
@@ -134,7 +144,7 @@ class Decoder:
         if layout is not None and (len(layout) != count or layout[index] != field):
             del self._layouts[key]  # the frame got new fields, which must never be decoded with the old ones
         if None not in incoming:
-            self._layouts[key] = self._incoming.pop(key)
+            self._layouts[key] = cast(List[Field], self._incoming.pop(key))
         return Layout(sender, frame_id, index, count, *field)
 
     def _frame(self, sender: Hashable, body: bytes) -> Frame:

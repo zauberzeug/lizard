@@ -62,9 +62,9 @@ The monitor shows [telemetry frames](module_reference.md#core) with the names of
 [frame 1 seq=7 millis=123456] motor.position=1.234 motor.axis_state=8 motor.enabled=true
 ```
 
-A frame it cannot decode shows its [status](#telemetry-decoder) and its payload in hex, e.g. `[frame 1 seq=7 millis=123456 no_layout] b6f39d3f0800000001`;
-of a sender with an unknown format version it shows only the first frame.
-If the layout of a frame is missing or does not fit, e.g. because the frames started before the monitor, the monitor sends `core.telemetry_info()`, at most every 2 s.
+A frame it cannot decode shows its [status](#telemetry-decoder) and its payload in hex, e.g. `[frame 1 seq=7 millis=123456 no_layout] b6f39d3f0800000001`.
+For a sender with an unknown format version it shows only the first frame.
+If the layout of a frame is missing or does not fit, e.g. because the frames started before the monitor, the monitor sends `core.telemetry_info()`, but only 2 s after its last request and the last layout line, so that it does not restart layout lines that are still coming.
 
 You can also use an SSH monitor to access a microcontroller via SSH:
 
@@ -95,6 +95,7 @@ for line in lines:
 ```
 
 `feed` returns a `Text`, a `Layout` or a `Frame` and keeps the layouts of each sender.
+`str()` of a frame gives the line the monitor shows, with floats rounded to the seven significant digits of a float32.
 A frame that cannot be decoded has `values = None` and one of these statuses:
 
 | Status              | Meaning                                                         |
@@ -104,7 +105,10 @@ A frame that cannot be decoded has `values = None` and one of these statuses:
 | `layout_mismatch`   | the payload size does not match the layout                      |
 | `unknown_version`   | the sender's layout lines have a format version other than `v1` |
 
-When a frame gets new fields, e.g. after `core.clear_telemetry()`, the decoder decodes it only once the new layout is complete.
+A host that cannot decode a frame because of its layout, e.g. because the frames started before it, sends `core.telemetry_info()` like the monitor.
+When a frame gets new fields, e.g. after `core.clear_telemetry()`, the decoder waits until the new layout is complete.
+If the layout lines that differ from the old layout are lost, it notices the change by the sequence numbers, which start again at 0 with a new definition.
+It can decode the frame with its old layout only if all layout lines of the new definition are lost, or if the differing ones are lost and the new sequence numbers happen to continue the old ones, e.g. from 255 to 0.
 Logs should keep the raw lines and decode them when they are read.
 
 ### OTB Update
