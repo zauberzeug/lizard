@@ -6,6 +6,7 @@
 #include "timing.h"
 #include "uart.h"
 #include "esp_rom_crc.h"
+#include "mbedtls/base64.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -17,9 +18,11 @@ namespace telemetry {
 
 constexpr int64_t MAX_INTERVAL = 3600000;
 constexpr size_t MAX_FRAMES = 255;
-constexpr size_t MAX_NAME = 200;            // keeps every layout line within one serial bus payload
-constexpr size_t LAYOUT_LINES_PER_STEP = 4; // spread, so announcing a large frame does not stall one step
+constexpr size_t MAX_FIELDS = 8 * MAX_PAYLOAD; // all of them bools
+constexpr size_t MAX_NAME = 200;               // keeps every layout line within one serial bus payload
+constexpr size_t LAYOUT_LINES_PER_STEP = 4;    // spread, so announcing a large frame does not stall one step
 static_assert(sizeof("__LAYOUT__v1 255.1439/1440 :f") + MAX_NAME <= SerialBus::PAYLOAD_CAPACITY);
+constexpr size_t MAX_LINE = 1 + (MAX_BODY + 2) / 3 * 4; // "~" and the Base64 text, without terminator
 static_assert(MAX_LINE < SerialBus::PAYLOAD_CAPACITY);
 
 struct Field {
@@ -55,50 +58,13 @@ static size_t encode_base64(const uint8_t *data, const size_t length, char *text
     return pos;
 }
 
-static int base64_value(const char c) {
-    if (c >= 'A' && c <= 'Z') {
-        return c - 'A';
-    }
-    if (c >= 'a' && c <= 'z') {
-        return c - 'a' + 26;
-    }
-    if (c >= '0' && c <= '9') {
-        return c - '0' + 52;
-    }
-    if (c == '+') {
-        return 62;
-    }
-    return c == '/' ? 63 : -1;
-}
-
-// returns the number of decoded bytes, 0 if the text is no padded Base64 or does not fit
-static size_t decode_base64(const char *text, const size_t length, uint8_t *data, const size_t capacity) {
-    if (length == 0 || length % 4 != 0) {
-        return 0;
-    }
-    size_t size = 0;
-    for (size_t i = 0; i < length; i += 4) {
-        const size_t padding = i + 4 < length ? 0 : (text[i + 3] == '=') + (text[i + 2] == '=');
-        uint32_t chunk = 0;
-        for (size_t j = 0; j < 4; ++j) {
-            const int value = j < 4 - padding ? base64_value(text[i + j]) : 0;
-            if (value < 0) {
-                return 0;
-            }
-            chunk = chunk << 6 | value;
-        }
-        if (size + 3 - padding > capacity) {
-            return 0;
-        }
-        for (size_t j = 0; j < 3 - padding; ++j) {
-            data[size++] = chunk >> (16 - 8 * j) & 0xff;
-        }
-    }
-    return size;
-}
-
 static uint16_t crc16(const uint8_t *data, const size_t length) {
     return ~esp_rom_crc16_be(static_cast<uint16_t>(~0xffff), data, length); // CRC-16/CCITT-FALSE
+}
+
+// 4 bytes per float or int, then the bools as bits
+static size_t payload_size(const size_t fields, const size_t bools) {
+    return 4 * (fields - bools) + (bools + 7) / 8;
 }
 
 static char type_letter(const Type type) {
@@ -160,7 +126,7 @@ void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
         bools += frame.fields.back().variable->type == boolean;
     }
     frame.bits_offset = 4 * (field_count - bools);
-    frame.payload_size = frame.bits_offset + (bools + 7) / 8;
+    frame.payload_size = payload_size(field_count, bools);
     if (frame.payload_size > MAX_PAYLOAD) {
         throw std::runtime_error("too many fields for one frame");
     }
@@ -314,11 +280,10 @@ void step() {
 }
 
 size_t decode_frame(const char *line, const size_t length, uint8_t *body) {
-    if (length < 1 || line[0] != FRAME_PREFIX) {
-        return 0;
-    }
-    const size_t body_length = decode_base64(&line[1], length - 1, body, MAX_BODY);
-    if (body_length < HEADER_SIZE + CRC_SIZE) {
+    size_t body_length = 0;
+    if (length < 1 || line[0] != FRAME_PREFIX ||
+        mbedtls_base64_decode(body, MAX_BODY, &body_length, reinterpret_cast<const unsigned char *>(&line[1]), length - 1) != 0 ||
+        body_length < HEADER_SIZE + CRC_SIZE) {
         return 0;
     }
     uint16_t crc;
@@ -352,7 +317,8 @@ bool parse_layout(const char *line, LayoutLine &layout) {
         return false;
     }
     const char *const colon = std::strrchr(c, ':');
-    if (frame_id == 0 || frame_id > MAX_FRAMES || index >= count || !colon || colon == c || colon[1] == '\0' || colon[2] != '\0') {
+    if (frame_id == 0 || frame_id > MAX_FRAMES || count > MAX_FIELDS || index >= count || !colon || colon == c ||
+        colon[1] == '\0' || colon[2] != '\0') {
         return false;
     }
     layout.type = colon[1];
@@ -367,8 +333,7 @@ bool parse_layout(const char *line, LayoutLine &layout) {
 }
 
 size_t payload_size(const std::vector<char> &types) {
-    const size_t bools = std::count(types.begin(), types.end(), '?');
-    return 4 * (types.size() - bools) + (bools + 7) / 8;
+    return payload_size(types.size(), std::count(types.begin(), types.end(), '?'));
 }
 
 } // namespace telemetry

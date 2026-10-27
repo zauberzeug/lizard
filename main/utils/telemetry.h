@@ -18,7 +18,6 @@ constexpr size_t HEADER_SIZE = 6; // frame ID, sequence number, millis
 constexpr size_t MAX_PAYLOAD = 180;
 constexpr size_t CRC_SIZE = 2;
 constexpr size_t MAX_BODY = HEADER_SIZE + MAX_PAYLOAD + CRC_SIZE;
-constexpr size_t MAX_LINE = 1 + (MAX_BODY + 2) / 3 * 4; // "~" and the Base64 text, without terminator
 
 void add_frame(const std::vector<ConstExpression_ptr> &arguments);
 void announce();

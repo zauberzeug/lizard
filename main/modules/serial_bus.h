@@ -7,6 +7,7 @@
 #include "module.h"
 #include "serial.h"
 #include <atomic>
+#include <bitset>
 #include <cstdint>
 #include <map>
 #include <vector>
@@ -33,7 +34,7 @@ public:
     // --- telemetry frames (see utils/telemetry.h) ---------------------------
     // peer side, main task: the node that polls this one, 0 before the first poll
     uint8_t coordinator() const { return this->coordinator_id; }
-    bool send_telemetry_layout(const char *line, const size_t length); // false while the outbound queue is full
+    bool send_telemetry_layout(const char *line, const size_t length); // false while only the queue's reserve is free
     bool telemetry_frame_pending(const uint8_t frame_id);
     // keeps the newest frame of an ID for the next poll; with `replace` only while the previous one has not left yet
     bool store_telemetry_frame(const uint8_t frame_id, const char *line, const size_t length, const bool replace);
@@ -155,6 +156,7 @@ private:
     portMUX_TYPE frame_slot_lock = portMUX_INITIALIZER_UNLOCKED;
     std::atomic<uint8_t> coordinator_id{0};
     unsigned long last_slot_warning_millis = 0;
+    FrameSlot *find_frame_slot(const uint8_t frame_id) const; // 0 finds a free one
     void send_frame_slots(const uint8_t receiver);
 
     // --- telemetry, coordinator side (main task) ---------------------------
@@ -164,13 +166,12 @@ private:
         bool requested = false;
         unsigned long request_millis = 0;
     };
-    bool pass_all_telemetry = false;
-    std::vector<uint8_t> passed_peers;
+    std::bitset<256> passed_peers;
     std::map<uint8_t, PeerLayout> peer_layouts; // only of peers whose frames are passed on
     std::atomic<unsigned> dropped_frames{0};    // counted by the communication task
     Variable_ptr telemetry_errors;
     Variable_ptr telemetry_dropped;
-    bool passes_telemetry(const uint8_t peer_id) const;
+    bool passes_telemetry(const uint8_t peer_id) const { return this->passed_peers[peer_id]; }
     void handle_telemetry_frame(const IncomingMessage &message);
     void handle_telemetry_layout(const IncomingMessage &message);
     void request_layout(const uint8_t peer_id, PeerLayout &layout);
@@ -181,8 +182,9 @@ private:
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
-    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length,
-                                  const TickType_t wait = pdMS_TO_TICKS(50));
+    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
+    // without the checks of enqueue_outgoing_message; false if the queue stays full for `wait`
+    bool queue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, const TickType_t wait);
     bool send_outgoing_queue();
     size_t send_message(const uint8_t receiver, const char *payload, const size_t length) const;
 
