@@ -484,9 +484,11 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | `can.stop()`                                        | Stop the driver                |           |
 | `can.reset()`                                       | Reset the driver               |           |
 
-IDs above `0x7FF` are sent as extended (29-bit) frames.
-Received extended frames never reach modules that subscribed to an 11-bit ID.
-`output_extended(mask, code)` prints every extended frame with `(id & mask) == code` in the same format as the module's output, with an 8-digit hex ID; it can be called several times to add more filters.
+IDs above `0x7FF` are sent as extended (29-bit) frames, IDs above `0x1FFFFFFF` are rejected.
+An extended frame with an ID up to `0x7FF` cannot be sent; `send` puts such an ID into a standard frame.
+Received extended frames never reach other modules, which subscribe to 11-bit IDs only.
+`output_extended(mask, code)` prints every extended frame with `(id & mask) == code` in the same format as the module's output; it can be called several times to add more filters, and `code` must not have bits outside `mask`.
+Extended frames are always printed with an 8-digit hex ID, also after `unmute()`, so `can 00000123,…` is an extended and `can 123,…` a standard frame.
 
 The method `get_status()` prints the following information:
 
