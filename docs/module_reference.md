@@ -236,6 +236,9 @@ Frames and layout lines of a passed-on peer that are malformed, e.g. with a wron
 - Inbound queue: frames never take the last eight places of the coordinator's inbound queue, which keeps them for commands, echoes and update chunks.
   Frames dropped for that reason, e.g. while the coordinator runs its startup, are counted in `telemetry_dropped`.
 - Bus load: a frame of 20 floats takes 132 bytes on the bus, i.e. 2.9 ms at 460800 baud; one such frame every step would take almost a third of the bus.
+- Console load: the coordinator prints every frame it passes on, and printing blocks its loop until the line is on the wire (see [Console load](#core)).
+  At 460800 baud, a frame of five fields passed on every step stretched a 20-ms loop by about 2 ms, a frame of 45 floats every step to 130 ms.
+  A step handles only the messages that were waiting when it started, so frames that arrive faster than the console prints them are dropped and counted in `telemetry_dropped` instead of holding up the loop.
 - Compatibility: update the coordinator's firmware first, since an older coordinator tries to run the peer's frames and layout lines as Lizard code.
   Payloads starting with `~` or `__LAYOUT__` are reserved for telemetry.
 
