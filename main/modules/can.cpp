@@ -221,6 +221,9 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
         if (std::find(outputs.begin(), outputs.end(), filter) == outputs.end()) {
             outputs.push_back(filter);
         }
+    } else if (method_name == "mute") {
+        Module::call(method_name, arguments);
+        this->extended_outputs.clear();
     } else if (method_name == "get_status") {
         Module::expect(arguments, 0);
         echo("state:            %s", this->properties.at("state")->string_value().c_str());
