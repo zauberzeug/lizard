@@ -164,6 +164,7 @@ private:
         std::map<uint8_t, std::vector<char>> frames; // type letter per field index, 0 until its layout line arrived
         bool other_version = false;                  // the peer sends a format this node does not read, until its Ready.
         bool requested = false;
+        bool awaiting = false; // requested, but no layout line arrived yet
         unsigned long request_millis = 0;
     };
     std::bitset<256> passed_peers;

@@ -181,21 +181,26 @@ static bool send_layout_line(SerialBus *const bus, const uint8_t id, const Frame
     return bus->send_telemetry_layout(line, length);
 }
 
-static void send_layout_lines(SerialBus *const bus, const unsigned long now) {
+// true once all layout lines are out
+static bool send_layout_lines(SerialBus *const bus, const unsigned long now) {
     size_t budget = LAYOUT_LINES_PER_STEP;
-    for (size_t i = 0; i < frames.size() && budget > 0; ++i) {
+    for (size_t i = 0; i < frames.size(); ++i) {
         Frame &frame = frames[i];
         for (; frame.layout_lines_sent < frame.fields.size() && budget > 0; --budget) {
             if (!send_layout_line(bus, i + 1, frame, frame.layout_lines_sent)) {
-                return; // the queue empties with the next poll
+                return false; // the queue empties with the next poll
             }
             ++frame.layout_lines_sent;
         }
-        if (!frame.announced && frame.layout_lines_sent == frame.fields.size()) {
+        if (frame.layout_lines_sent < frame.fields.size()) {
+            return false;
+        }
+        if (!frame.announced) {
             frame.announced = true;
             frame.last_millis = now - frame.interval; // due right away, however long the layout took
         }
     }
+    return true;
 }
 
 // body = frame ID, sequence number, millis, payload, CRC; multi-byte values are little-endian like the ESP32
@@ -268,7 +273,9 @@ void step() {
         }
     }
     const unsigned long now = millis();
-    send_layout_lines(bus, now);
+    if (!send_layout_lines(bus, now) && bus) {
+        return; // frames would crowd the layout lines out of the coordinator's inbound queue
+    }
     for (size_t i = 0; i < frames.size(); ++i) {
         Frame &frame = frames[i];
         if (frame.announced && now - frame.last_millis >= frame.interval) {

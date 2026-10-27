@@ -118,7 +118,7 @@ The frame body `01 07 40e20100 b6f39d3f 08000000 01 c017` holds frame ID 1, sequ
 
 Layout lines go out when a frame is defined and on `core.telemetry_info()`, four per step in the order of the frames.
 A new frame is sent for the first time once all of its layout lines are out.
-Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines.
+Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines, except on a serial bus peer, see [Serial Bus](#serial-bus).
 There is no timer for them: a host that connects later or logs for hours calls `core.telemetry_info()` itself.
 On a serial bus peer, frames and layout lines go to the coordinator once it polls the peer, see [Serial Bus](#serial-bus).
 Only the prefix `~` and the word `__LAYOUT__` stay the same in future versions of the format; the version is part of each layout line.
@@ -175,7 +175,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
 | `bus.telemetry_errors`     | Malformed telemetry frames and layout lines of passed-on peers, e.g. with a wrong CRC                         | `int`     |
-| `bus.telemetry_dropped`    | Telemetry frames of any peer dropped to keep places free in the inbound queue                                 | `int`     |
+| `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for places in the inbound queue, e.g. while layout lines are awaited     | `int`     |
 
 | Methods                             | Description                                                                                                                                 | Arguments         |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -209,6 +209,7 @@ This is intended for timestamping sensor data (e.g. wheel odometry) received fro
 **Telemetry Frames:**
 A peer that defines [telemetry frames](#core) with `core.telemetry(...)` sends them to its own console until a coordinator polls it, and from then on to the coordinator until the peer restarts.
 With the first poll the peer sends their layout lines again, this time to the coordinator.
+While layout lines go to the coordinator, the peer holds back all of its frames.
 Then it keeps the newest frame of each ID in a slot and sends the slots with the next poll, so a poll delivers the current values and no backlog, and a frame ID arrives at most once per poll of its peer.
 A frame that is replaced before it was sent does not count in the sequence number, so a gap is still a loss.
 A peer has eight slots; a frame beyond them is not sent, and the peer warns on its own console and through the coordinator, at most every 10 s.
@@ -233,7 +234,8 @@ Peers send their frames over the bus whether they are passed on or not; the coor
 Frames and layout lines of a passed-on peer that are malformed, e.g. no valid Base64 or with a wrong CRC, are dropped and counted in `telemetry_errors`.
 
 - Recovery: when a frame arrives whose layout the coordinator does not have or that does not match the frame, e.g. because `pass_telemetry` came after the peer sent its layout lines or the coordinator booted after the peer, it asks the peer for its layout lines with `core.telemetry_info()`, at most every 2 s.
-  Until they arrive, the frames are passed on anyway, so a reader skips frames whose layout it has not seen yet.
+  Until the first of them arrives, at most for 2 s, it drops the peer's frames and counts them in `telemetry_dropped`, since printing the frames queued ahead of the layout lines would keep the inbound queue full and drop those.
+  Frames from before the request are passed on anyway, so a reader skips frames whose layout it has not seen yet.
   When the peer reports `Ready.`, the coordinator forgets its layouts; the peer sends them again with the first poll.
 - Late hosts: `core.telemetry_info()` on the coordinator also asks every passed-on peer of its `make_coordinator` list for its layout lines, so a host that connects later gets them too.
 - Queues: frames never take the last eight places of the coordinator's inbound queue, and layout lines never the last eight of the peer's outbound queue, which keeps them for commands, echoes and update chunks.

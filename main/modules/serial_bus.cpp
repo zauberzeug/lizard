@@ -801,6 +801,12 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
     if (!this->passes_telemetry(message.sender)) {
         return;
     }
+    PeerLayout &layout = this->peer_layouts[message.sender];
+    if (layout.awaiting && millis_since(layout.request_millis) <= LAYOUT_REQUEST_INTERVAL_MS) {
+        // printing the frames queued ahead of the requested layout lines would keep the queue full and drop those
+        this->telemetry_dropped->set_integer_value(this->telemetry_dropped->integer_value() + 1);
+        return;
+    }
     uint8_t body[telemetry::MAX_BODY];
     const size_t length = telemetry::decode_frame(message.payload, message.length, body);
     if (length == 0) {
@@ -809,7 +815,6 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
     }
     echo("bus[%u]: %s", message.sender, message.payload);
 
-    PeerLayout &layout = this->peer_layouts[message.sender];
     const auto frame = layout.frames.find(body[0]);
     const bool known = frame != layout.frames.end() &&
                        std::find(frame->second.begin(), frame->second.end(), 0) == frame->second.end() &&
@@ -832,6 +837,7 @@ void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
     echo("bus[%u]: %s", message.sender, message.payload);
 
     PeerLayout &layout = this->peer_layouts[message.sender];
+    layout.awaiting = false;
     if (line.version != telemetry::LAYOUT_VERSION) {
         layout.other_version = true; // only the host may read it; the peer may be updated, so until its Ready.
         return;
@@ -850,6 +856,7 @@ void SerialBus::request_layout(const uint8_t peer_id, PeerLayout &layout) {
     // while the queue is full, the next frame asks again
     if (this->queue_outgoing_message(peer_id, LAYOUT_REQUEST, sizeof(LAYOUT_REQUEST) - 1, 0)) {
         layout.requested = true;
+        layout.awaiting = true;
         layout.request_millis = millis();
     }
 }
