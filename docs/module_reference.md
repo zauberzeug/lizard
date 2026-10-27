@@ -91,7 +91,7 @@ A phone bonded under older firmware gets its subscription restored on connection
 The client then writes `AUTH <pin>` and receives `POST /notification Connected` or `AUTH_FAIL`.
 Until then, Lizard answers every other line with `AUTH_REQUIRED` and does not execute it.
 `bluetooth.send(data)` does not reach the client before it has entered the PIN either.
-After three wrong PINs or 30 seconds without a valid one, Lizard closes the connection.
+After three wrong PINs or 30 seconds without a PIN attempt, Lizard closes the connection.
 The PIN is the user PIN set with `bluetooth.set_pin(pin)` or, without one, the PIN configured at build time; Lizard prints it on every connection.
 After `bluetooth.deactivate_pin()`, every client is accepted without a PIN until the next restart.
 Note that the PIN is sent unencrypted, so it keeps out accidental connections but not someone listening in.

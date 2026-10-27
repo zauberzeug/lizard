@@ -92,6 +92,12 @@ static void send_notification(uint16_t conn_handle, const char *msg) {
         ble_gattc_notify_custom(conn_handle, send_chr_val_handle, om);
 }
 
+// The user PIN from NVS or, without one, the PIN configured at build time
+static uint32_t expected_pin() {
+    uint32_t user_pin = 0;
+    return Storage::get_user_pin(user_pin) ? user_pin : CONFIG_ZZ_BLE_DEV_PIN;
+}
+
 static bool check_pin(const char *buf, uint16_t len) {
     // Expect "AUTH <pin>" where pin is up to 6 digits
     if (len < 5 || strncmp(buf, "AUTH ", 5) != 0) {
@@ -117,20 +123,17 @@ static bool check_pin(const char *buf, uint16_t len) {
         received_pin = received_pin * 10 + (pin_str[i] - '0');
     }
 
-    // Check against stored or default PIN
-    uint32_t user_pin = 0;
-    const uint32_t dev_pin = CONFIG_ZZ_BLE_DEV_PIN;
-    const bool has_user_pin = Storage::get_user_pin(user_pin);
-    const uint32_t expected_pin = has_user_pin ? user_pin : dev_pin;
-
-    return received_pin == expected_pin;
+    return received_pin == expected_pin();
 }
 
 // Runs in the FreeRTOS timer task, whose small stack cannot hold echo(); the kick is logged on disconnect instead
 static void on_idle_timeout(TimerHandle_t /* timer */) {
-    if (current_con != BLE_HS_CONN_HANDLE_NONE && !authenticated) {
+    const uint16_t con = current_con;
+    if (con != BLE_HS_CONN_HANDLE_NONE && !authenticated) {
         kicked_by_idle_timer = true;
-        ble_gap_terminate(current_con, BLE_ERR_REM_USER_CONN_TERM);
+        if (ble_gap_terminate(con, BLE_ERR_REM_USER_CONN_TERM) != 0) {
+            kicked_by_idle_timer = false; // the client left on its own, so no later disconnect is logged as a kick
+        }
     }
 }
 
@@ -217,11 +220,7 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
             }
 
             if (!pin_deactivated) {
-                uint32_t user_pin = 0;
-                const uint32_t dev_pin = CONFIG_ZZ_BLE_DEV_PIN;
-                const bool has_user_pin = Storage::get_user_pin(user_pin);
-                const uint32_t pin = has_user_pin ? user_pin : dev_pin;
-                echo("BLE PIN: %06lu", (unsigned long)pin);
+                echo("BLE PIN: %06lu", (unsigned long)expected_pin());
             }
 
             if (idle_timer) {
