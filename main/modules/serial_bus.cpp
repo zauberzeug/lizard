@@ -295,8 +295,9 @@ void SerialBus::communication_loop(void *param) {
                     char done[sizeof(DONE_CMD) + DONE_STAMP_FIELDS * (MAX_STAMP_DIGITS + 1)];
                     int done_len = std::snprintf(done, sizeof(done), "%s", DONE_CMD);
                     if (bus->time_sync_enabled) {
-                        // T3 is stamped as late as possible; the elapsed time since T2 lets the
-                        // coordinator cancel everything that happened on this side in between
+                        // T3 is stamped as late as possible, once the frames before it have left; the elapsed
+                        // time since T2 lets the coordinator cancel everything that happened on this side in between
+                        uart_wait_tx_done(bus->serial->uart_num, pdMS_TO_TICKS(POLL_TIMEOUT_MS));
                         const int64_t t3 = esp_timer_get_time();
                         done_len += std::snprintf(done + done_len, sizeof(done) - done_len, "%lld,%lld,%lu",
                                                   (long long)t3, (long long)(t3 - bus->poll_received_us),
