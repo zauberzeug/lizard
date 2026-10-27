@@ -288,6 +288,9 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
 
             // Handle AUTH command
             if (len >= 5 && strncmp(buf.get(), "AUTH ", 5) == 0) {
+                if (pin_failures >= MAX_PIN_FAILURES) {
+                    return 0; // the connection is already closing, so queued guesses are not checked anymore
+                }
                 if (pin_deactivated || check_pin(buf.get(), len)) {
                     authenticated = true;
                     if (idle_timer) {
