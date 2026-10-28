@@ -138,23 +138,28 @@ Clients uploading many lines at once should therefore pace their writes or wait 
 | `bluetooth.connected`        | Whether a device is currently connected                  | `bool`    |
 | `bluetooth.last_message_age` | Time since the last line was received via Bluetooth (ms) | `int`     |
 
-| Methods                      | Description                                             | Arguments |
-| ---------------------------- | ------------------------------------------------------- | --------- |
-| `bluetooth.send(data)`       | send `data` via notification                            | `str`     |
-| `bluetooth.set_pin(pin)`     | set 6-digit user PIN (000000-999999)                    | `int`     |
-| `bluetooth.get_pin()`        | print current user PIN or "No user PIN set"             |           |
-| `bluetooth.reset_pin()`      | remove the user PIN                                     |           |
-| `bluetooth.reset_bonds()`    | forget all bonded devices saved in NVS (BLE bond store) |           |
-| `bluetooth.deactivate_pin()` | Disables PIN enforcement                                |           |
+| Methods                      | Description                                 | Arguments |
+| ---------------------------- | ------------------------------------------- | --------- |
+| `bluetooth.send(data)`       | send `data` via notification                | `str`     |
+| `bluetooth.set_pin(pin)`     | set 6-digit user PIN (000000-999999)        | `int`     |
+| `bluetooth.get_pin()`        | print current user PIN or "No user PIN set" |           |
+| `bluetooth.reset_pin()`      | remove the user PIN                         |           |
+| `bluetooth.deactivate_pin()` | Disables PIN enforcement                    |           |
 
 Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0
 that allows writing Lizard statements like on the command line.
 On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
 
-The Bluetooth module stores up to four devices.
-When a fifth connects, the oldest entry is removed.
-
-To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
+Access is guarded by a PIN on application level; connections are neither encrypted nor bonded.
+When a client enables notifications, Lizard sends `AUTH_REQUIRED` if a PIN is needed and an empty line otherwise.
+A phone bonded under older firmware gets its subscription restored on connection and can miss this greeting; it can write an empty line instead, which Lizard answers with `AUTH_REQUIRED` if a PIN is needed.
+The client then writes `AUTH <pin>` and receives `POST /notification Connected` or `AUTH_FAIL`.
+Until then, Lizard answers every other line with `AUTH_REQUIRED` and does not execute it.
+`bluetooth.send(data)` does not reach the client before it has entered the PIN either.
+After three wrong PINs or 30 seconds without a PIN attempt, Lizard closes the connection.
+The PIN is the user PIN set with `bluetooth.set_pin(pin)` or, without one, the PIN configured at build time; Lizard prints it on every connection.
+After `bluetooth.deactivate_pin()`, every client is accepted without a PIN until the next restart.
+Note that the PIN is sent unencrypted, so it keeps out accidental connections but not someone listening in.
 
 Unlike `core.last_message_age`, which any input channel resets, `bluetooth.last_message_age` only counts lines received via Bluetooth.
 Together with `connected`, it lets rules and the host tell a silent or disconnected app apart from a host that keeps talking on UART0.
