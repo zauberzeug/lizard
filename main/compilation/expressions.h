@@ -41,10 +41,9 @@ public:
 };
 
 class VariableExpression : public Expression {
-private:
+public:
     const ConstVariable_ptr variable;
 
-public:
     VariableExpression(const ConstVariable_ptr variable);
     bool evaluate_boolean() const override;
     int64_t evaluate_integer() const override;
@@ -54,11 +53,10 @@ public:
 };
 
 class PropertyExpression : public Expression {
-private:
+public:
     const ConstModule_ptr module;
     const std::string property_name;
 
-public:
     PropertyExpression(const ConstModule_ptr module, const std::string property_name);
     bool evaluate_boolean() const override;
     int64_t evaluate_integer() const override;

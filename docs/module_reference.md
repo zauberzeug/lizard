@@ -13,6 +13,12 @@ Shadows are useful if multiple modules should behave exactly the same, e.g. two 
 
 The `broadcast` method is used internally with [port expanders](#expander).
 
+A module reserves the pins and peripherals it uses on its microcontroller, i.e. GPIO pins, UART ports, the CAN controller and ADC units, until the core restarts.
+I2C modules on the same port share its SDA and SCL pins, which stay reserved for that port.
+Creating a module on a reserved pin or peripheral fails with an error that names the owner, e.g. `pin 15 is already used by module "led"`.
+In the startup script, such an error stops the script like any other error (see [Startup Script](getting_started.md#startup-script)).
+The console UART with its pins and the pins of the SPI flash are reserved from the start.
+
 ## Core
 
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
@@ -42,6 +48,9 @@ It is automatically created right after the boot sequence.
 | `core.resume_broadcasts()`       | Resume property broadcasts                                                                         |              |
 | `core.clear_schedule()`          | Discard all pending scheduled blocks                                                               |              |
 | `core.keep_alive()`              | Reset `last_message_age` without producing output                                                  |              |
+| `core.telemetry(...)`            | Define a telemetry frame of properties and variables                                               | see below    |
+| `core.telemetry_info()`          | Send the layout lines of all telemetry frames again                                                |              |
+| `core.clear_telemetry()`         | Clear all telemetry frames frames                                                                  |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -55,6 +64,62 @@ The console (UART0) defaults to 115200 baud.
 After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with the host tools at the new rate, e.g. `./monitor.py /dev/ttyUSB0 --baud 921600` (`monitor.py`, `configure.py` and `otb_update.py` all accept `--baud`, defaulting to 115200).
 Supported rates are 115200, 230400, 460800 and 921600.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
+
+**Console load:**
+Sending a line blocks the main loop until its bytes are on the wire, so at 115200 baud only about 115 bytes fit into one 10 ms cycle.
+When printing is what stretches at least half of the cycles well past their 10 ms for three seconds in a row, Lizard warns, e.g. `warning: printing stretched the loop to 83 ms, the console baud rate is too low for its output`, at most once a minute.
+Print less, for example by broadcasting fewer proxies, or raise the baud rate.
+On an expander the console is its serial link to the core: the warning arrives there with the expander's name in front, e.g. `p: warning: …`, and the rate in question is that of the link, not the core's UART0.
+
+**Telemetry frames:**
+`core.telemetry(...)` sends properties and variables in binary form, as one line per frame next to the text lines on the console.
+Layout lines name and type the fields, so a reader needs no configuration.
+
+```
+core.telemetry(imu.yaw, imu.pitch, imu.temp)                   # frame 1, every step
+core.telemetry(wheels.linear_speed, wheels.angular_speed, 20)  # frame 2, every 20 ms
+```
+
+Each call defines one frame; frame IDs count up from 1 in the order of definition.
+The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames.
+An integer literal as last argument is the interval in milliseconds (0 to 3600000); an `int` variable or property in that place is a field.
+Without an interval or with 0, the frame is sent every step.
+Frames go out with the 10 ms steps, so the gaps between them vary, e.g. 10 and 20 ms for an interval of 15 ms, but match the interval on average.
+Frames are built at the end of the step, after modules, rules and routines, so all fields of a frame come from the same step.
+The values of one frame take at most 180 bytes, e.g. 45 floats.
+`core.clear_telemetry()` removes all frames and frees their IDs.
+
+A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (standard alphabet with `=` padding) and the usual [checksum](machine_safety.md#checksums).
+
+| Bytes | Content                                                           |
+| ----- | ----------------------------------------------------------------- |
+| 1     | frame ID                                                          |
+| 1     | sequence number per frame ID, modulo 256; a gap means lost frames |
+| 4     | time since booting (ms) when the frame was built                  |
+| n     | values of the fields                                              |
+| 2     | CRC-16/CCITT-FALSE over all preceding bytes                       |
+
+The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as int32, clamped to its range.
+The `bool` fields follow as bits in their order, least significant bit first, padded to a full byte.
+All multi-byte numbers, including the time and the CRC, are little-endian.
+
+A layout line `__LAYOUT__v1 <frame>.<index>/<count> <name>:<type>` describes one field: its frame ID, its position from 0, the number of fields in the frame, its name and its type: `f` for `float`, `i` for `int` or `?` for `bool`.
+For example, `core.telemetry(motor.position, motor.axis_state, motor.enabled)` yields:
+
+```
+__LAYOUT__v1 1.0/3 motor.position:f@6e
+__LAYOUT__v1 1.1/3 motor.axis_state:i@52
+__LAYOUT__v1 1.2/3 motor.enabled:?@49
+~AQdA4gEAtvOdPwgAAAABwBc=@5c
+```
+
+The frame body `01 07 40e20100 b6f39d3f 08000000 01 c017` holds frame ID 1, sequence number 7, millis 123456, the values 1.234, 8 and true, and the CRC.
+
+Layout lines go out when a frame is defined and on `core.telemetry_info()`, four per step in the order of the frames.
+A new frame is sent for the first time once all of its layout lines are out.
+Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines.
+There is no timer for them: a host that connects later or logs for hours calls `core.telemetry_info()` itself.
+Only the prefix `~` and the word `__LAYOUT__` stay the same in future versions of the format; the version is part of each layout line.
 
 ## Bluetooth
 
@@ -219,20 +284,34 @@ The PWM output module is associated with a digital output pin that is connected 
 
 The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
 When using multiple PWM outputs, set different channel IDs to avoid conflicts.
-Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
+Channels sharing a timer also share its frequency: a new output adopts the timer's frequency, and setting `frequency` on one output changes it for all of them.
+Use different timers to run outputs at independent frequencies.
+The lowest reachable frequency is about 4 Hz on the ESP32 and about 70 Hz on the ESP32-S3; lower values are rejected with an error.
+On the ESP32-S3 all timers share one clock source, so the 70 Hz are only reachable while no other timer is in use, also none of a `StepperMotor`.
+With a second timer running, all frequencies must fit the same source, in practice all above about 306 Hz or all on one timer; a value that needs another source is rejected with an error.
 
-| Properties         | Description                              | Data type |
-| ------------------ | ---------------------------------------- | --------- |
-| `output.duty`      | Duty cycle (8 bit: 0..256, default: 128) | `int`     |
-| `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
-| `output.enabled`   | Whether the output is enabled            | `bool`    |
+| Properties      | Description                              | Data type |
+| --------------- | ---------------------------------------- | --------- |
+| `pwm.duty`      | Duty cycle (0..256, default: 128)        | `int`     |
+| `pwm.frequency` | Frequency (Hz, 1..312500, default: 1000) | `int`     |
+| `pwm.enabled`   | Whether the output is enabled            | `bool`    |
 
-| Methods            | Description             | Arguments |
-| ------------------ | ----------------------- | --------- |
-| `output.on()`      | Turn on the PWM signal  |           |
-| `output.off()`     | Turn off the PWM signal |           |
-| `output.enable()`  | Enable the PWM output   |           |
-| `output.disable()` | Disable the PWM output  |           |
+A PWM period is divided into 256 steps, and `duty` sets for how many of them the pin stays high.
+That makes 257 settings, one more than an 8 bit value holds:
+
+| `duty` | Output                                  |
+| ------ | --------------------------------------- |
+| 0      | always low                              |
+| 128    | high for half of the period             |
+| 255    | high for 255 of 256 steps, not fully on |
+| 256    | always high                             |
+
+| Methods         | Description             | Arguments |
+| --------------- | ----------------------- | --------- |
+| `pwm.on()`      | Turn on the PWM signal  |           |
+| `pwm.off()`     | Turn off the PWM signal |           |
+| `pwm.enable()`  | Enable the PWM output   |           |
+| `pwm.disable()` | Disable the PWM output  |           |
 
 When the output is disabled, it will turn off the PWM signal and ignore on/off commands.
 
@@ -462,10 +541,18 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | Methods                                             | Description                    | Arguments |
 | --------------------------------------------------- | ------------------------------ | --------- |
 | `can.send(node_id, d0, d1, d2, d3, d4, d5, d6, d7)` | Send a frame with 8 data bytes | 9x `int`  |
+| `can.output_extended(mask, code)`                   | Print matching 29-bit frames   | 2x `int`  |
 | `can.get_status()`                                  | Print the driver status        |           |
 | `can.start()`                                       | Start the driver               |           |
 | `can.stop()`                                        | Stop the driver                |           |
 | `can.reset()`                                       | Reset the driver               |           |
+
+IDs above `0x7FF` are sent as extended (29-bit) frames, IDs above `0x1FFFFFFF` are rejected.
+An extended frame with an ID up to `0x7FF` cannot be sent; `send` puts such an ID into a standard frame.
+Received extended frames never reach other modules, which subscribe to 11-bit IDs only.
+`output_extended(mask, code)` prints every extended frame with `(id & mask) == code` in the same format as the module's output; it can be called several times to add more filters, and `code` must not have bits outside `mask`.
+`can.mute()` also removes all `output_extended` filters; `unmute()` does not bring them back.
+Extended frames are always printed with an 8-digit hex ID, also after `unmute()`, so `can 00000123,…` is an extended and `can 123,…` a standard frame.
 
 The method `get_status()` prints the following information:
 
@@ -504,8 +591,7 @@ You can, however, unmute the serial module to have incoming messages printed to 
 An unmuted module prints one line per batch of bytes the hardware hands over, so a sender that pauses between its messages gets one line per message.
 A line carries at most 85 bytes; the rest of a longer batch follows on the next line.
 
-A UART number and its pins can be used by one serial module at a time.
-They stay reserved for that module until the core restarts, also after `Expander.disconnect()`.
+The UART number and its pins stay reserved for the serial module until the core restarts, also after `Expander.disconnect()`.
 
 ## Linear motor
 
@@ -591,6 +677,7 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
@@ -610,6 +697,15 @@ When the wheels are disabled, they will stop and ignore movement commands.
 This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
 
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+`power()` is not limited.
+
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; any other `speed()`, `power()` or `off()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second, so call `wheels.off()` rather than `off()` on each motor to idle them right after a stop.
+
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
@@ -617,7 +713,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -753,6 +849,7 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.m_per_tick`            | Meters per encoder tick                                       | `float`   |
@@ -771,6 +868,15 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 
 When the wheels are disabled, they will stop and ignore movement commands.
 
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+`power()` is not limited.
+
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; any other `speed()`, `power()` or `off()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second.
+
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
@@ -778,7 +884,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -1105,6 +1211,7 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
@@ -1120,13 +1227,21 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
 
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; a non-zero `speed()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second.
+
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
 The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -1257,3 +1372,7 @@ Declare the depending module on the same microcontroller instead.
 
 `is_ready` turns `false` again when the other microcontroller restarts or the connection is lost,
 because the main microcontroller cannot tell whether the remote module still exists (see [Expander](#expander)).
+
+A proxy accepts [property declarations](language.md) without nesting, e.g. `float x.level = 0.5`, so rules can use a property before the remote module broadcasts it.
+An unknown property is added, a known one of the same type is set to the declared value, and a known one of another type is an error.
+Nothing is sent to the remote module; its broadcasts overwrite the declared values.

@@ -9,6 +9,7 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
+#include "esp_timer.h"
 #include "global.h"
 #include "main.h"
 #include "modules/bluetooth.h"
@@ -23,11 +24,14 @@
 #include "utils/boot_guard.h"
 #include "utils/bus_backup.h"
 #include "utils/interpreter_lock.h"
+#include "utils/resources.h"
 #include "utils/scheduler.h"
+#include "utils/telemetry.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include "utils/uart_driver.h"
+#include <cctype>
 #include <chrono>
 #include <functional>
 #include <math.h>
@@ -59,6 +63,27 @@ void process_lizard(const char *line, bool trigger_keep_alive = true, bool from_
 std::string identifier_to_string(const struct owl_ref ref) {
     const struct parsed_identifier identifier = parsed_identifier_get(ref);
     return std::string(identifier.identifier, identifier.length);
+}
+
+std::string property_name_to_string(const struct owl_ref property_name, const struct owl_ref subproperty_name) {
+    const std::string name = identifier_to_string(property_name);
+    return subproperty_name.empty ? name : name + "." + identifier_to_string(subproperty_name);
+}
+
+Variable_ptr create_variable(const struct owl_ref ref) {
+    const struct parsed_datatype datatype = parsed_datatype_get(ref);
+    switch (datatype.type) {
+    case PARSED_BOOLEAN:
+        return std::make_shared<BooleanVariable>();
+    case PARSED_INTEGER:
+        return std::make_shared<IntegerVariable>();
+    case PARSED_NUMBER:
+        return std::make_shared<NumberVariable>();
+    case PARSED_STRING:
+        return std::make_shared<StringVariable>();
+    default:
+        throw std::runtime_error("invalid data type for declaration");
+    }
 }
 
 Expression_ptr compile_expression(const struct owl_ref ref);
@@ -94,7 +119,7 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
         return std::make_shared<VariableExpression>(Global::get_variable(identifier_to_string(expression.identifier)));
     case PARSED_PROPERTY:
         return std::make_shared<PropertyExpression>(Global::get_module(identifier_to_string(expression.module_name)),
-                                                    identifier_to_string(expression.property_name));
+                                                    property_name_to_string(expression.property_name, expression.subproperty_name));
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
@@ -277,28 +302,23 @@ void process_tree(owl_tree *const tree, bool from_expander) {
             variable->assign(expression);
         } else if (!statement.variable_declaration.empty) {
             const struct parsed_variable_declaration variable_declaration = parsed_variable_declaration_get(statement.variable_declaration);
-            const struct parsed_datatype datatype = parsed_datatype_get(variable_declaration.datatype);
             const std::string variable_name = identifier_to_string(variable_declaration.variable_name);
-            switch (datatype.type) {
-            case PARSED_BOOLEAN:
-                Global::add_variable(variable_name, std::make_shared<BooleanVariable>());
-                break;
-            case PARSED_INTEGER:
-                Global::add_variable(variable_name, std::make_shared<IntegerVariable>());
-                break;
-            case PARSED_NUMBER:
-                Global::add_variable(variable_name, std::make_shared<NumberVariable>());
-                break;
-            case PARSED_STRING:
-                Global::add_variable(variable_name, std::make_shared<StringVariable>());
-                break;
-            default:
-                throw std::runtime_error("invalid data type for variable declaration");
-            }
+            Global::add_variable(variable_name, create_variable(variable_declaration.datatype));
             if (!variable_declaration.expression.empty) {
                 const ConstExpression_ptr expression = compile_expression(variable_declaration.expression);
                 Global::get_variable(variable_name)->assign(expression);
             }
+        } else if (!statement.property_declaration.empty) {
+            const struct parsed_property_declaration property_declaration = parsed_property_declaration_get(statement.property_declaration);
+            const std::string module_name = identifier_to_string(property_declaration.module_name);
+            const Module_ptr module = Global::get_module(module_name);
+            const std::string property_name = property_name_to_string(property_declaration.property_name, property_declaration.subproperty_name);
+            const Variable_ptr variable = create_variable(property_declaration.datatype);
+            if (!property_declaration.expression.empty) {
+                const ConstExpression_ptr expression = compile_expression(property_declaration.expression);
+                variable->assign(expression);
+            }
+            module->declare_property(property_name, variable);
         } else if (!statement.routine_definition.empty) {
             const struct parsed_routine_definition routine_definition = parsed_routine_definition_get(statement.routine_definition);
             const std::string routine_name = identifier_to_string(routine_definition.routine_name);
@@ -429,6 +449,44 @@ static bool process_literal_assignments(const char *line, const bool from_expand
     return true;
 }
 
+// Reports a parse error of `text`; `offset` is where `text` starts in a longer script, so positions refer to that script.
+static bool check_parse(owl_tree *tree, const char *text, const size_t offset) {
+    if (!tree) {
+        echo("error: allocation failure while parsing");
+        return false;
+    }
+    struct source_range range;
+    switch (owl_tree_get_error(tree, &range)) {
+    case ERROR_NONE:
+        return true;
+    case ERROR_INVALID_FILE:
+        echo("error: invalid file");
+        break;
+    case ERROR_INVALID_OPTIONS:
+        echo("error: invalid options");
+        break;
+    case ERROR_INVALID_TOKEN:
+        echo("error: invalid token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
+             std::string(text, range.start, range.end - range.start).c_str());
+        break;
+    case ERROR_UNEXPECTED_TOKEN:
+        echo("error: unexpected token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
+             std::string(text, range.start, range.end - range.start).c_str());
+        break;
+    case ERROR_MORE_INPUT_NEEDED:
+        echo("error: more input needed at range %zu %zu", offset + range.start, offset + range.end);
+        break;
+    case ERROR_ALLOCATION_FAILURE:
+        echo("error: allocation failure while parsing");
+        break;
+    default:
+        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
+        echo("error: unknown parse error");
+        break;
+    }
+    return false;
+}
+
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     InterpreterLock lock;
     if (trigger_keep_alive) {
@@ -447,46 +505,95 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     if (debug) {
         toc("Tree creation");
     }
-    if (!tree) {
-        echo("error: allocation failure while parsing");
+    if (!check_parse(tree.get(), line, 0)) {
         return;
     }
-    struct source_range range;
-    switch (owl_tree_get_error(tree.get(), &range)) {
-    case ERROR_INVALID_FILE:
-        echo("error: invalid file");
-        break;
-    case ERROR_INVALID_OPTIONS:
-        echo("error: invalid options");
-        break;
-    case ERROR_INVALID_TOKEN:
-        echo("error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(line, range.start, range.end - range.start).c_str());
-        break;
-    case ERROR_UNEXPECTED_TOKEN:
-        echo("error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(line, range.start, range.end - range.start).c_str());
-        break;
-    case ERROR_MORE_INPUT_NEEDED:
-        echo("error: more input needed at range %zu %zu", range.start, range.end);
-        break;
-    case ERROR_ALLOCATION_FAILURE:
-        echo("error: allocation failure while parsing");
-        break;
-    case ERROR_NONE:
-        if (debug) {
-            owl_tree_print(tree.get());
-            tic();
+    if (debug) {
+        owl_tree_print(tree.get());
+        tic();
+    }
+    process_tree(tree.get(), from_expander);
+    if (debug) {
+        toc("Tree traversal");
+    }
+}
+
+// Whether `line` holds the word "end", which can close a rule, routine or schedule.
+static bool has_end_word(const std::string &line) {
+    const auto is_word = [](const char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (size_t i = line.find("end"); i != std::string::npos; i = line.find("end", i + 1)) {
+        if ((i == 0 || !is_word(line[i - 1])) && (i + 3 >= line.size() || !is_word(line[i + 3]))) {
+            return true;
         }
-        process_tree(tree.get(), from_expander);
-        if (debug) {
-            toc("Tree traversal");
+    }
+    return false;
+}
+
+// Goes through the startup script statement by statement, straight from NVS, so that neither the script nor one parse
+// tree for all of it has to fit into the heap. A statement ends where owl stops asking for more input, so rules and
+// routines may still span lines. Error positions refer to the whole script, as with the former single parse.
+// Returns false after reporting the first syntax error; with `run`, each statement runs right after its parse and an
+// exception aborts the rest.
+static bool walk_startup(const bool run) {
+    std::string statement;
+    size_t statement_offset = 0;
+    size_t offset = 0;
+    bool ok = true;
+    Storage::read_startup_lines([&](const std::string &line) {
+        if (!ok) {
+            return;
         }
-        break;
-    default:
-        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
-        echo("error: unknown parse error");
-        break;
+        const bool continued = !statement.empty();
+        if (!continued) {
+            statement_offset = offset;
+        }
+        statement += line;
+        statement += '\n';
+        offset += line.size() + 1;
+        // an open block ends only with "end", so other lines need no new parse
+        if (continued && !has_end_word(line)) {
+            return;
+        }
+        auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
+        struct source_range range;
+        if (tree && owl_tree_get_error(tree.get(), &range) == ERROR_MORE_INPUT_NEEDED) {
+            return; // a rule or routine continues on the next line
+        }
+        if (!check_parse(tree.get(), statement.c_str(), statement_offset)) {
+            ok = false;
+            return;
+        }
+        if (run) {
+            process_tree(tree.get(), false);
+        }
+        statement.clear();
+    });
+    if (ok && !statement.empty()) {
+        // the script ends inside a statement
+        auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
+        ok = check_parse(tree.get(), statement.c_str(), statement_offset);
+        if (ok && run) {
+            process_tree(tree.get(), false);
+        }
+    }
+    return ok;
+}
+
+// Like the former single parse of the whole script: a syntax error anywhere means that nothing runs, and a script that
+// cannot be read from storage is reported and skipped. A statement that fails to parse while running (only a lack of
+// heap can cause that after the check pass) aborts the startup through the boot guard, so that no half of it runs.
+static void run_startup() {
+    InterpreterLock lock;
+    core_module->keep_alive();
+    bool valid = false;
+    try {
+        valid = walk_startup(false);
+    } catch (const std::exception &e) {
+        echo("error while reading startup script from storage: %s", e.what());
+        return;
+    }
+    if (valid && !walk_startup(true)) {
+        throw std::runtime_error("a statement of the startup script could not be parsed while running");
     }
 }
 
@@ -495,7 +602,7 @@ void process_line(const char *line, const int len, const bool trigger_keep_alive
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
         case '+':
-            Storage::append_to_startup(line + 2);
+            Storage::append_to_startup(std::string(line + 2));
             break;
         case '-':
             Storage::remove_from_startup(line + 2);
@@ -593,8 +700,7 @@ void run_step(Module_ptr module) {
 void app_main() {
     vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
-    // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be
-    // initialized first; Storage::init() below calls nvs_flash_init() again, which is safe.
+    // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be initialized first.
     // Note: the ROM bootloader and early boot log always use 115200 regardless of this value.
     nvs_flash_init();
     uint32_t baud_rate = 115200;
@@ -616,6 +722,7 @@ void app_main() {
     uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
 
     try {
+        resources::reserve_boot_resources();
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
         scheduler::init();
     } catch (const std::runtime_error &e) {
@@ -623,16 +730,9 @@ void app_main() {
         exit(1);
     }
 
-    // a storage error is not a failed startup: report it and continue with an empty script so the console stays reachable
-    try {
-        Storage::init();
-    } catch (const std::exception &e) {
-        echo("error while reading startup script from storage: %s", e.what());
-    }
-
     try {
         if (boot_guard::should_run_startup()) {
-            process_lizard(Storage::startup.c_str());
+            run_startup();
         }
     } catch (const std::exception &e) {
         boot_guard::startup_failed(e.what());
@@ -645,11 +745,13 @@ void app_main() {
 
     printf("\nReady.\n");
 
+    constexpr int LOOP_PERIOD_MS = 10;
     // Anchor for the deadline loop below: xTaskDelayUntil advances this by one period
     // each iteration, giving a drift-free 10 ms cadence (no millis() re-read per loop).
     TickType_t last_wake = xTaskGetTickCount();
 
     while (true) {
+        const int64_t cycle_start_us = esp_timer_get_time();
         boot_guard::step();
 
         try {
@@ -658,7 +760,7 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
-        for (auto const &[module_name, module] : Global::modules) {
+        for (auto const &module : Global::ordered_modules) {
             if (module != core_module) {
                 run_step(module);
             }
@@ -686,11 +788,15 @@ void app_main() {
             }
         }
 
+        telemetry::step();
+
+        check_console_load(esp_timer_get_time() - cycle_start_us, LOOP_PERIOD_MS * 1000);
+
         // Sleep until the next 10 ms period boundary instead of a full vTaskDelay(10) after
         // work, so the period is max(10 ms, work) and drift-free (#213). On overrun
         // xTaskDelayUntil returns pdFALSE without blocking; floor at 1 tick so the idle task
         // still runs to feed the watchdog (vTaskDelay(0) only yields to equal-prio tasks).
-        if (xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10)) == pdFALSE) {
+        if (xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(LOOP_PERIOD_MS)) == pdFALSE) {
             last_wake = xTaskGetTickCount();
             delay(1);
         }

@@ -1,7 +1,6 @@
 #include "storage.h"
 #include "esp_check.h"
 #include "nvs.h"
-#include "nvs_flash.h"
 #include "utils/string_utils.h"
 #include "utils/uart.h"
 #include <algorithm>
@@ -10,19 +9,16 @@
 #include <string>
 
 #define NAMESPACE "storage"
+
 // NVS stores a string as one header entry plus one 32-byte entry per 32 bytes of text and terminator, all on the same
 // page of 126 entries. A chunk of 959 bytes takes 31 entries, so four chunks fill a page, and a single chunk still finds
 // room on a page that holds other keys. The former 0xf00 bytes took 122 entries and needed an almost empty page.
 // Reading does not depend on this size: a script stored in larger chunks still loads.
-#define MAX_CHUNK_SIZE 959
+static constexpr size_t CHUNK_SIZE = 959;
 
-std::string Storage::startup;
+bool Storage::editing = false;
 std::string Storage::save_error;
-
-void Storage::init() {
-    nvs_flash_init();
-    Storage::startup = Storage::get();
-}
+std::vector<std::string> Storage::edit_pieces;
 
 // the start of a value for an error message: a message with a whole chunk would exceed the console line and be dropped
 static std::string preview(const std::string &value) {
@@ -35,7 +31,7 @@ static std::string preview(const std::string &value) {
     return shown;
 }
 
-void write(const std::string ns, const std::string key, const std::string value) {
+void write(const std::string &ns, const std::string &key, const std::string &value) {
     esp_err_t err;
     nvs_handle handle;
     if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
@@ -53,7 +49,7 @@ void write(const std::string ns, const std::string key, const std::string value)
 }
 
 // false only if the namespace or the key does not exist; any other error is left for read() to report
-static bool exists(const std::string ns, const std::string key) {
+static bool exists(const std::string &ns, const std::string &key) {
     nvs_handle handle;
     esp_err_t err = nvs_open(ns.c_str(), NVS_READONLY, &handle);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
@@ -68,7 +64,7 @@ static bool exists(const std::string ns, const std::string key) {
     return err != ESP_ERR_NVS_NOT_FOUND;
 }
 
-std::string read(const std::string ns, const std::string key) {
+std::string read(const std::string &ns, const std::string &key) {
     esp_err_t err;
     nvs_handle handle;
     if ((err = nvs_open(ns.c_str(), NVS_READWRITE, &handle)) != ESP_OK) {
@@ -130,7 +126,184 @@ bool read_u32(const std::string ns, const std::string key, std::uint32_t &out) {
     return false;
 }
 
-void Storage::put(const std::string value) {
+void Storage::read_startup(const std::function<void(const std::string &piece)> &piece) {
+    if (Storage::editing) {
+        for (const std::string &edit_piece : Storage::edit_pieces) {
+            piece(edit_piece);
+        }
+        return;
+    }
+    Storage::read_stored(piece);
+}
+
+void Storage::read_stored(const std::function<void(const std::string &piece)> &piece) {
+    if (!exists(NAMESPACE, "num_chunks")) {
+        return; // fresh or erased NVS: no startup script yet
+    }
+    const int num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
+    for (int i = 0; i < num_chunks; i++) {
+        piece(read(NAMESPACE, "chunk" + std::to_string(i)));
+    }
+}
+
+// Collects pieces of text and calls `line` for every complete line (without its '\n'); `finish` delivers a last line
+// that lacks one. A line may span pieces.
+class LineSplitter {
+private:
+    const std::function<void(const std::string &line)> &line;
+    std::string carry;
+
+public:
+    explicit LineSplitter(const std::function<void(const std::string &line)> &line) : line(line) {
+    }
+
+    void feed(const std::string &piece) {
+        size_t start = 0;
+        size_t end;
+        while ((end = piece.find('\n', start)) != std::string::npos) {
+            if (carry.empty()) {
+                line(piece.substr(start, end - start));
+            } else {
+                carry.append(piece, start, end - start);
+                line(carry);
+                carry.clear();
+            }
+            start = end + 1;
+        }
+        carry.append(piece, start, std::string::npos);
+    }
+
+    void finish() {
+        if (!carry.empty()) {
+            line(carry);
+            carry.clear();
+        }
+    }
+};
+
+void Storage::read_startup_lines(const std::function<void(const std::string &line)> &line) {
+    LineSplitter splitter(line);
+    Storage::read_startup([&splitter](const std::string &piece) { splitter.feed(piece); });
+    splitter.finish();
+}
+
+std::uint16_t Storage::startup_checksum() {
+    // of the edit while there is one (a host may check it before `!.`), else of the stored script; a read error or a
+    // failed `!.` gives no checksum at all
+    if (!Storage::save_error.empty()) {
+        throw std::runtime_error("the stored startup script is incomplete: " + Storage::save_error);
+    }
+    std::uint16_t checksum = 0;
+    Storage::read_startup([&checksum](const std::string &piece) {
+        for (const char c : piece) {
+            checksum += static_cast<std::uint8_t>(c);
+        }
+    });
+    return checksum;
+}
+
+void Storage::begin_edit(const bool keep_current) {
+    if (Storage::editing) {
+        return;
+    }
+    std::vector<std::string> pieces;
+    if (keep_current) {
+        // a read error ends the command: an empty edit would replace the stored script at `!.`; `!-` needs no read
+        Storage::read_stored([&pieces](const std::string &piece) { pieces.push_back(piece); });
+    }
+    Storage::edit_pieces.swap(pieces);
+    Storage::editing = true;
+}
+
+void Storage::append_to_edit(const char *text, size_t length) {
+    while (length > 0) {
+        if (Storage::edit_pieces.empty() || Storage::edit_pieces.back().size() >= CHUNK_SIZE) {
+            Storage::edit_pieces.emplace_back();
+        }
+        std::string &last = Storage::edit_pieces.back();
+        if (last.capacity() < CHUNK_SIZE) {
+            // exactly one chunk of room; growing the string itself would double its capacity
+            std::string roomy;
+            roomy.reserve(CHUNK_SIZE);
+            roomy.append(last);
+            last.swap(roomy);
+        }
+        const size_t take = std::min(length, CHUNK_SIZE - last.size());
+        last.append(text, take);
+        text += take;
+        length -= take;
+    }
+}
+
+void Storage::append_to_startup(const std::string &line) {
+    Storage::begin_edit(true);
+    // all or nothing: a line that does not fit into the heap leaves the script as it was
+    const size_t pieces = Storage::edit_pieces.size();
+    const size_t last_size = pieces ? Storage::edit_pieces.back().size() : 0;
+    try {
+        Storage::append_to_edit(line.data(), line.size());
+        Storage::append_to_edit("\n", 1);
+    } catch (...) {
+        Storage::edit_pieces.resize(pieces);
+        if (pieces) {
+            Storage::edit_pieces.back().resize(last_size);
+        }
+        throw;
+    }
+    Storage::save_error.clear(); // the edit changed: its checksum is reported again
+}
+
+void Storage::remove_from_startup(const std::string &prefix) {
+    if (prefix.empty()) {
+        // the usual start of a rewrite: every line goes, so the old script is not even read
+        std::vector<std::string>().swap(Storage::edit_pieces);
+        Storage::editing = true;
+        Storage::save_error.clear(); // the edit changed: its checksum is reported again
+        return;
+    }
+    Storage::begin_edit(true);
+    std::vector<std::string> old_pieces;
+    old_pieces.swap(Storage::edit_pieces);
+    bool changed = false;
+    const std::function<void(const std::string &line)> keep = [&prefix, &changed](const std::string &line) {
+        if (starts_with(line, prefix)) {
+            changed = true;
+        } else {
+            Storage::append_to_edit(line.data(), line.size());
+            Storage::append_to_edit("\n", 1);
+        }
+    };
+    try {
+        LineSplitter splitter(keep);
+        for (const std::string &piece : old_pieces) {
+            splitter.feed(piece);
+        }
+        splitter.finish();
+    } catch (...) {
+        Storage::edit_pieces.swap(old_pieces); // all or nothing, as with `!+`
+        throw;
+    }
+    if (changed) {
+        Storage::save_error.clear(); // the edit changed: its checksum is reported again
+    }
+}
+
+void Storage::print_startup(const std::string &prefix) {
+    try {
+        Storage::read_startup_lines([&prefix](const std::string &line) {
+            if (starts_with(line, prefix)) {
+                echo("%s", line.c_str());
+            }
+        });
+    } catch (const std::exception &e) {
+        echo("warning: %s", e.what());
+    }
+}
+
+void Storage::save_startup() {
+    if (!Storage::editing) {
+        return; // NVS already holds the script
+    }
     if (exists(NAMESPACE, "num_chunks")) {
         try {
             const int old_num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
@@ -141,64 +314,32 @@ void Storage::put(const std::string value) {
             echo("warning: could not delete old chunks before writing new ones");
         }
     }
-
-    write(NAMESPACE, "num_chunks", std::to_string((value.length() + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE));
-    for (size_t pos = 0; pos < value.length(); pos += MAX_CHUNK_SIZE) {
-        write(NAMESPACE, "chunk" + std::to_string(pos / MAX_CHUNK_SIZE), value.substr(pos, MAX_CHUNK_SIZE));
+    size_t num_chunks = 0;
+    for (const std::string &piece : Storage::edit_pieces) {
+        num_chunks += (piece.size() + CHUNK_SIZE - 1) / CHUNK_SIZE; // pieces read from larger chunks of older firmware
     }
-}
-
-std::string Storage::get() {
-    std::string result = "";
-    if (!exists(NAMESPACE, "num_chunks")) {
-        return result; // fresh or erased NVS: no startup script yet
-    }
-    const int num_chunks = std::stoi(read(NAMESPACE, "num_chunks"));
-    for (int i = 0; i < num_chunks; i++) {
-        result += read(NAMESPACE, "chunk" + std::to_string(i));
-    }
-    return result;
-}
-
-void Storage::append_to_startup(const std::string line) {
-    Storage::startup += line + '\n';
-    Storage::save_error.clear(); // the script changed: its checksum is reported again
-}
-
-void Storage::remove_from_startup(const std::string substring) {
-    std::string new_startup = "";
-    bool changed = false;
-    while (!Storage::startup.empty()) {
-        std::string line = cut_first_word(Storage::startup, '\n');
-        if (starts_with(line, substring)) {
-            changed = true;
-        } else {
-            new_startup += line + '\n';
-        }
-    }
-    Storage::startup = new_startup;
-    if (changed) {
-        Storage::save_error.clear(); // the script changed: its checksum is reported again
-    }
-}
-
-void Storage::print_startup(const std::string substring) {
-    std::string startup = Storage::startup;
-    while (!startup.empty()) {
-        std::string line = cut_first_word(startup, '\n');
-        if (starts_with(line, substring)) {
-            echo("%s", line.c_str());
-        }
-    }
-}
-
-void Storage::save_startup() {
     try {
-        Storage::put(Storage::startup);
+        write(NAMESPACE, "num_chunks", std::to_string(num_chunks));
+        size_t chunk = 0;
+        for (const std::string &piece : Storage::edit_pieces) {
+            if (piece.size() <= CHUNK_SIZE) {
+                write(NAMESPACE, "chunk" + std::to_string(chunk++), piece);
+                continue;
+            }
+            for (size_t pos = 0; pos < piece.size(); pos += CHUNK_SIZE) {
+                write(NAMESPACE, "chunk" + std::to_string(chunk++), piece.substr(pos, CHUNK_SIZE));
+            }
+        }
+    } catch (const std::runtime_error &e) {
+        // the old chunks are erased already, so NVS holds an incomplete script; the edit stays in RAM for another `!.`
+        Storage::save_error = e.what();
+        throw std::runtime_error(std::string(e.what()) + "; the stored startup script is incomplete");
     } catch (const std::exception &e) {
-        Storage::save_error = e.what(); // put() erases the stored script before writing the new one, so NVS holds an incomplete one
+        Storage::save_error = e.what();
         throw;
     }
+    std::vector<std::string>().swap(Storage::edit_pieces);
+    Storage::editing = false;
     Storage::save_error.clear();
 }
 

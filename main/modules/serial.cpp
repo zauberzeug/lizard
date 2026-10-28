@@ -10,11 +10,6 @@
 #define TX_BUF_SIZE 2048
 #define UART_PATTERN_QUEUE_SIZE 100
 
-// A UART number and its pins belong to a Serial for its whole lifetime, also after deinstall(),
-// so that a later Serial cannot be torn down by the earlier one's next deinstall().
-static const Serial *uart_owners[UART_NUM_MAX] = {};
-static const Serial *pin_owners[GPIO_NUM_MAX] = {};
-
 static Module_ptr create_serial(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 4, integer, integer, integer, integer);
     const gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
@@ -34,37 +29,16 @@ Serial::Serial(const std::string name,
     : Module(name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
     this->properties = Serial::get_defaults();
 
-    if (uart_num < 0 || uart_num >= UART_NUM_MAX) {
-        throw std::runtime_error("invalid uart number");
-    }
-    if (rx_pin < 0 || rx_pin >= GPIO_NUM_MAX || tx_pin < 0 || tx_pin >= GPIO_NUM_MAX) {
-        throw std::runtime_error("invalid pin");
-    }
-    if (uart_owners[uart_num]) {
-        throw std::runtime_error("uart " + std::to_string(uart_num) +
-                                 " is reserved by serial \"" + uart_owners[uart_num]->name + "\"");
-    }
-    if (uart_is_driver_installed(uart_num)) {
-        throw std::runtime_error("serial interface is already in use");
-    }
-    for (const gpio_num_t pin : {rx_pin, tx_pin}) {
-        if (pin_owners[pin]) {
-            throw std::runtime_error("pin " + std::to_string(pin) +
-                                     " is reserved by serial \"" + pin_owners[pin]->name + "\"");
-        }
-    }
+    // the claims outlive deinstall(), so a later Serial cannot be torn down by this one's next deinstall()
+    this->claims.uart(uart_num);
+    this->claims.pin(rx_pin);
+    this->claims.pin(tx_pin);
 
     this->initialize_uart();
-    uart_owners[uart_num] = this;
-    pin_owners[rx_pin] = this;
-    pin_owners[tx_pin] = this;
 }
 
 Serial::~Serial() {
     this->deinstall();
-    uart_owners[this->uart_num] = nullptr;
-    pin_owners[this->rx_pin] = nullptr;
-    pin_owners[this->tx_pin] = nullptr;
 }
 
 void Serial::initialize_uart() const {
@@ -171,12 +145,19 @@ bool Serial::has_buffered_lines() const {
     const int buffered = this->available();
     if (buffered > CONSOLE_LINE_SIZE && uart_pattern_get_pos(this->uart_num) == -1) {
         discard_uart_input(this->uart_num, buffered);
+        this->discarded_bytes += buffered;
     }
     return false;
 }
 
+size_t Serial::unterminated_bytes() const {
+    const bool has_lines = this->has_buffered_lines(); // first, because it may drop an oversized run into discarded_bytes
+    return this->discarded_bytes + (has_lines ? 0 : this->available());
+}
+
 void Serial::flush() const {
     this->pending_lines.clear();
+    this->discarded_bytes = 0;
     uart_flush(this->uart_num);
 }
 
