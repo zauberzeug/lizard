@@ -180,8 +180,13 @@ void MksServoMotor::send_speed_read() {
 
 void MksServoMotor::step() {
     this->sync_enabled();
-    this->send_position_read();
-    this->send_speed_read();
+    // one request per step: the motor answers on the request's ID, so a second request right behind could collide with it
+    if (this->read_speed_next) {
+        this->send_speed_read();
+    } else {
+        this->send_position_read();
+    }
+    this->read_speed_next = !this->read_speed_next;
     Module::step();
 }
 
