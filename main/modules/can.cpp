@@ -8,6 +8,7 @@
 
 static constexpr int64_t MAX_STANDARD_ID = 0x7FF;
 static constexpr int64_t MAX_EXTENDED_ID = 0x1FFFFFFF;
+static constexpr unsigned long RECOVERY_INTERVAL_MS = 1000;
 
 // Checks script integers before they are narrowed, so that e.g. 0x100000123 is rejected instead of becoming 0x123.
 static uint32_t to_29_bit(const int64_t value, const std::string &what) {
@@ -110,14 +111,23 @@ void Can::step() {
     this->properties.at("arb_lost_count")->set_integer_value(status_info.arb_lost_count);
     this->properties.at("bus_error_count")->set_integer_value(status_info.bus_error_count);
 
-    if (status_info.state == TWAI_STATE_BUS_OFF && this->previous_state != TWAI_STATE_BUS_OFF) {
+    // retry for as long as the bus stays off, but report only the first attempt of each outage
+    if (status_info.state == TWAI_STATE_BUS_OFF && millis_since(this->last_recovery_attempt) >= RECOVERY_INTERVAL_MS) {
+        const bool verbose = !this->in_bus_off;
+        this->in_bus_off = true;
+        this->last_recovery_attempt = millis();
         try {
-            this->reset_can_bus();
+            this->reset_can_bus(verbose);
         } catch (const std::exception &e) {
-            echo("CAN recovery failed: %s", e.what());
+            if (verbose) {
+                echo("CAN recovery failed: %s", e.what());
+            }
         }
+    } else if (status_info.state == TWAI_STATE_RUNNING && this->in_bus_off &&
+               millis_since(this->last_recovery_attempt) >= RECOVERY_INTERVAL_MS) {
+        this->in_bus_off = false;
+        echo("CAN bus running again");
     }
-    this->previous_state = status_info.state;
 
     Module::step();
 }
@@ -272,19 +282,21 @@ void Can::subscribe(const uint32_t id, const Module_ptr module) {
     this->subscribers[id] = module;
 }
 
-void Can::reset_can_bus() {
+void Can::reset_can_bus(const bool verbose) {
     twai_status_info_t status_info;
 
     if (twai_get_status_info(&status_info) != ESP_OK) {
         throw std::runtime_error("could not get TWAI status");
     }
 
-    echo("CAN bus state before reset: %s",
-         status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
-         : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
-         : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
-         : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
-                                                      : "UNKNOWN");
+    if (verbose) {
+        echo("CAN bus state before reset: %s",
+             status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
+             : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
+             : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+             : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                          : "UNKNOWN");
+    }
 
     if (status_info.state == TWAI_STATE_RUNNING) {
         if (twai_stop() != ESP_OK) {
@@ -326,5 +338,7 @@ void Can::reset_can_bus() {
         throw std::runtime_error("TWAI driver didn't start properly");
     }
 
-    echo("CAN bus reset successful, state: RUNNING");
+    if (verbose) {
+        echo("CAN bus reset successful, state: RUNNING");
+    }
 }
