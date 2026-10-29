@@ -951,8 +951,6 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.position_error`  | Last read position error (degrees)                              | `float`   |
 | `motor.set_mode_status` | Result of the last `set_mode` (0 = OK, 1 = failed, 2 = pending) | `int`     |
 
-The module reads `position` and `speed` in turns, one of them per step.
-
 | Methods                               | Description                                                                  | Arguments             |
 | ------------------------------------- | ---------------------------------------------------------------------------- | --------------------- |
 | `motor.enable()`                      | Enable the motor                                                             |                       |
@@ -980,6 +978,8 @@ If acceleration is 0, the motor stops immediately.
 
 The `read_position_error()` method requests the current position error from the motor via CAN.
 The result is available in the `position_error` property (in degrees) once the motor responds.
+
+The `position` and `speed` properties are read in turns, so each of them is updated every other step.
 
 The `set_bitrate()` method changes the CAN bitrate on the motor.
 The rate is given in Hz and must be one of the four supported values (125000, 250000, 500000 or 1000000);
