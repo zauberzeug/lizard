@@ -111,7 +111,7 @@ void Can::step() {
     this->properties.at("arb_lost_count")->set_integer_value(status_info.arb_lost_count);
     this->properties.at("bus_error_count")->set_integer_value(status_info.bus_error_count);
 
-    // retry for as long as the bus stays off, but report only the first attempt of each outage
+    // retry for as long as the bus stays off, but report only the first attempt of each outage and every failed one
     if (status_info.state == TWAI_STATE_BUS_OFF && millis_since(this->last_recovery_attempt) >= RECOVERY_INTERVAL_MS) {
         const bool verbose = !this->in_bus_off;
         this->in_bus_off = true;
@@ -119,9 +119,7 @@ void Can::step() {
         try {
             this->reset_can_bus(verbose);
         } catch (const std::exception &e) {
-            if (verbose) {
-                echo("CAN recovery failed: %s", e.what());
-            }
+            echo("CAN recovery failed: %s", e.what());
         }
     } else if (status_info.state == TWAI_STATE_RUNNING && this->in_bus_off &&
                millis_since(this->last_recovery_attempt) >= RECOVERY_INTERVAL_MS) {
