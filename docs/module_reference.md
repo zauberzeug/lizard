@@ -578,8 +578,8 @@ The `start()` and `stop()` methods are primarily for debugging purposes.
 The `reset()` method will stop the driver, try to recover it and then start it again.
 It can be used to recover the driver from a "BUS_OFF" state.
 The module does the same by itself while the bus is "BUS_OFF", at most once per second.
-It reports the first attempt of an outage and every failed one, and prints "CAN bus running again" once the bus has stayed out of "BUS_OFF" for a second.
-Each reset reinstalls the driver, which sets the counters of `get_status()` back to zero.
+It prints "CAN bus running again" once the bus has stayed out of "BUS_OFF" for a second.
+Each reset sets the counters of `get_status()` back to zero.
 
 ## Serial interface
 

@@ -111,7 +111,7 @@ void Can::step() {
     this->properties.at("arb_lost_count")->set_integer_value(status_info.arb_lost_count);
     this->properties.at("bus_error_count")->set_integer_value(status_info.bus_error_count);
 
-    // retry for as long as the bus stays off, but report only the first attempt of each outage and every failed one
+    // retry while the bus stays off; report only the first attempt of an outage and failures
     if (status_info.state == TWAI_STATE_BUS_OFF && millis_since(this->last_recovery_attempt) >= RECOVERY_INTERVAL_MS) {
         const bool verbose = !this->in_bus_off;
         this->in_bus_off = true;
