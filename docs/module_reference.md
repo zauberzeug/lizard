@@ -952,7 +952,6 @@ The MKS Servo Motor module controls an [MKS SERVO42D/57D](https://github.com/mak
 | `motor.set_mode_status` | Result of the last `set_mode` (0 = OK, 1 = failed, 2 = pending) | `int`     |
 
 The module reads `position` and `speed` in turns, one of them per step.
-The motor answers on the CAN ID of the request, so a second request sent right behind the first could collide with that answer.
 
 | Methods                               | Description                                                                  | Arguments             |
 | ------------------------------------- | ---------------------------------------------------------------------------- | --------------------- |
