@@ -1,7 +1,7 @@
 """Decoder for Lizard's telemetry frames (see "Telemetry frames" in docs/module_reference.md).
 
-A frame line is "~<base64>" with the body frame ID, sequence number, millis, payload and CRC-16;
-layout lines "__LAYOUT__v1 <frame>.<index>/<count> <name>:<type>" name and type its fields.
+A frame line is "~<base64>" with the body frame ID, layout ID, sequence number, millis, payload and CRC-16;
+layout lines "__LAYOUT__v1 <frame>.<index>/<count> <layout ID> <name>:<type>" name and type its fields.
 """
 import base64
 import binascii
@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from typing import Dict, Hashable, List, Optional, Tuple, Union, cast
 
 VERSION = 'v1'
-HEADER = struct.Struct('<BBI')  # frame ID, sequence number, millis
+HEADER = struct.Struct('<BBBI')  # frame ID, layout ID, sequence number, millis
 CRC_SIZE = 2
 LAYOUT_LINE = re.compile(r'__LAYOUT__(v\d+)(.*)')
-LAYOUT_FIELD = re.compile(r' (\d+)\.(\d+)/(\d+) (\S+):([fi?])')
+LAYOUT_FIELD = re.compile(r' (\d+)\.(\d+)/(\d+) ([0-9a-f]{2}) (\S+):([fi?])')
 BUS_LINE = re.compile(r'bus\[(\d+)\]: (.*)')  # a line that a serial bus coordinator passes on from peer N
 
 Value = Union[float, int, bool]
@@ -57,6 +57,7 @@ class Text:
 class Layout:
     sender: Hashable
     frame_id: int
+    layout_id: int
     index: int
     count: int
     name: str
@@ -67,6 +68,7 @@ class Layout:
 class Frame:
     sender: Hashable
     frame_id: int
+    layout_id: int
     seq: int
     millis: int
     status: str  # ok, no_layout, layout_incomplete, layout_mismatch or unknown_version
@@ -88,9 +90,7 @@ class Decoder:
 
     def __init__(self) -> None:
         self._versions: Dict[Hashable, str] = {}  # format version of the sender's last layout line
-        self._layouts: Dict[Tuple[Hashable, int], List[Field]] = {}  # complete layouts that decode frames
-        self._incoming: Dict[Tuple[Hashable, int], List[Optional[Field]]] = {}  # layouts whose lines still arrive
-        self._seqs: Dict[Tuple[Hashable, int], int] = {}  # sequence number of the last frame
+        self._layouts: Dict[Tuple[Hashable, int], Tuple[int, List[Optional[Field]]]] = {}  # layout ID and fields
 
     def feed(self, line: str, sender: Hashable = None) -> Union[Text, Layout, Frame]:
         """Classify a line given without line end and checksum.
@@ -122,9 +122,8 @@ class Decoder:
     def _set_version(self, sender: Hashable, version: str) -> None:
         if self._versions.get(sender) != version:  # layouts of another format version must not decode frames
             self._versions[sender] = version
-            for table in (self._layouts, self._incoming):
-                for key in [key for key in table if key[0] == sender]:
-                    del table[key]
+            for key in [key for key in self._layouts if key[0] == sender]:
+                del self._layouts[key]
 
     def _layout(self, sender: Hashable, rest: str) -> Optional[Layout]:
         match = LAYOUT_FIELD.fullmatch(rest)
@@ -134,36 +133,30 @@ class Decoder:
         if index >= count:
             return None
         self._set_version(sender, VERSION)
-        field = (match.group(4), match.group(5))
+        layout_id = int(match.group(4), 16)
+        field = (match.group(5), match.group(6))
         key = (sender, frame_id)
-        incoming = self._incoming.get(key)
-        if index == 0 or incoming is None or len(incoming) != count:  # the layout lines of the frame start again
-            incoming = self._incoming[key] = [None] * count
-        incoming[index] = field
-        layout = self._layouts.get(key)
-        if layout is not None and (len(layout) != count or layout[index] != field):
-            del self._layouts[key]  # the frame got new fields, which must never be decoded with the old ones
-        if None not in incoming:
-            self._layouts[key] = cast(List[Field], self._incoming.pop(key))
-        return Layout(sender, frame_id, index, count, *field)
+        known_id, fields = self._layouts.get(key, (None, []))
+        if known_id != layout_id or len(fields) != count or fields[index] not in (None, field):
+            # another layout for the frame ID, or other fields that happen to get the same layout ID
+            fields = [None] * count
+            self._layouts[key] = (layout_id, fields)
+        fields[index] = field
+        return Layout(sender, frame_id, layout_id, index, count, *field)
 
     def _frame(self, sender: Hashable, body: bytes) -> Frame:
-        frame_id, seq, millis = HEADER.unpack_from(body)
+        frame_id, layout_id, seq, millis = HEADER.unpack_from(body)
         payload = body[HEADER.size:-CRC_SIZE]
         if self._versions.get(sender, VERSION) != VERSION:
-            return Frame(sender, frame_id, seq, millis, 'unknown_version', None, payload)
-        key = (sender, frame_id)
-        last_seq = self._seqs.get(key)
-        self._seqs[key] = seq
-        if key in self._incoming and (last_seq is None or seq != (last_seq + 1) % 256):
-            # a new definition starts its sequence anew, and a lost line may hide that its fields changed
-            self._layouts.pop(key, None)
-        layout = self._layouts.get(key)
-        if layout is None:
-            status = 'layout_incomplete' if key in self._incoming else 'no_layout'
-            return Frame(sender, frame_id, seq, millis, status, None, payload)
-        values = _decode(layout, payload)
-        return Frame(sender, frame_id, seq, millis, 'layout_mismatch' if values is None else 'ok', values, payload)
+            return Frame(sender, frame_id, layout_id, seq, millis, 'unknown_version', None, payload)
+        known_id, fields = self._layouts.get((sender, frame_id), (None, []))
+        if known_id != layout_id:  # also when the frame ID was reused for other fields
+            return Frame(sender, frame_id, layout_id, seq, millis, 'no_layout', None, payload)
+        if None in fields:
+            return Frame(sender, frame_id, layout_id, seq, millis, 'layout_incomplete', None, payload)
+        values = _decode(cast(List[Field], fields), payload)
+        status = 'layout_mismatch' if values is None else 'ok'
+        return Frame(sender, frame_id, layout_id, seq, millis, status, values, payload)
 
 
 def _frame_body(text: str) -> Optional[bytes]:

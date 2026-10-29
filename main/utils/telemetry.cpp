@@ -13,7 +13,7 @@
 
 namespace telemetry {
 
-constexpr size_t HEADER_SIZE = 6; // frame ID, sequence number, millis
+constexpr size_t HEADER_SIZE = 7; // frame ID, layout ID, sequence number, millis
 constexpr size_t MAX_PAYLOAD = 180;
 constexpr size_t CRC_SIZE = 2;
 constexpr size_t MAX_BODY = HEADER_SIZE + MAX_PAYLOAD + CRC_SIZE;
@@ -30,6 +30,7 @@ struct Frame {
     std::vector<Field> fields;
     size_t bits_offset = 0; // the bools follow the floats and ints as bits
     size_t payload_size = 0;
+    uint8_t layout_id = 0;
     unsigned long interval = 0;
     unsigned long last_millis = 0;
     uint8_t sequence = 0;
@@ -38,6 +39,10 @@ struct Frame {
 };
 
 static std::vector<Frame> frames; // frame ID = index + 1
+
+static uint16_t crc16(const void *data, const size_t length) {
+    return ~esp_rom_crc16_be(static_cast<uint16_t>(~0xffff), static_cast<const uint8_t *>(data), length); // CRC-16/CCITT-FALSE
+}
 
 static size_t encode_base64(const uint8_t *data, const size_t length, char *text) {
     static constexpr char ALPHABET[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -103,10 +108,14 @@ void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
     }
     frame.fields.reserve(field_count);
     size_t bools = 0;
+    std::string layout; // "name:type name:type ..."
     for (size_t i = 0; i < field_count; ++i) {
         frame.fields.push_back(to_field(arguments[i]));
-        bools += frame.fields.back().variable->type == boolean;
+        const Field &field = frame.fields.back();
+        bools += field.variable->type == boolean;
+        layout += (i ? " " : "") + field.name + ":" + type_letter(field.variable->type);
     }
+    frame.layout_id = crc16(layout.data(), layout.size()) & 0xff; // tells a reader which layout lines a frame needs
     frame.bits_offset = 4 * (field_count - bools);
     frame.payload_size = frame.bits_offset + (bools + 7) / 8;
     if (frame.payload_size > MAX_PAYLOAD) {
@@ -132,8 +141,8 @@ static void send_layout_lines(const unsigned long now) {
         for (; frame.layout_lines_sent < frame.fields.size() && budget > 0; --budget) {
             const size_t index = frame.layout_lines_sent++;
             const Field &field = frame.fields[index];
-            echo("__LAYOUT__v1 %d.%d/%d %s:%c", static_cast<int>(i + 1), static_cast<int>(index),
-                 static_cast<int>(frame.fields.size()), field.name.c_str(), type_letter(field.variable->type));
+            echo("__LAYOUT__v1 %d.%d/%d %02x %s:%c", static_cast<int>(i + 1), static_cast<int>(index),
+                 static_cast<int>(frame.fields.size()), static_cast<unsigned>(frame.layout_id), field.name.c_str(), type_letter(field.variable->type));
         }
         if (!frame.announced && frame.layout_lines_sent == frame.fields.size()) {
             frame.announced = true;
@@ -142,12 +151,13 @@ static void send_layout_lines(const unsigned long now) {
     }
 }
 
-// body = frame ID, sequence number, millis, payload, CRC; multi-byte values are little-endian like the ESP32
+// body = frame ID, layout ID, sequence number, millis, payload, CRC; multi-byte values are little-endian like the ESP32
 static void send_frame(const uint8_t id, Frame &frame, const uint32_t now) {
     uint8_t body[MAX_BODY];
     body[0] = id;
-    body[1] = frame.sequence++;
-    memcpy(&body[2], &now, 4);
+    body[1] = frame.layout_id;
+    body[2] = frame.sequence++;
+    memcpy(&body[3], &now, 4);
     uint8_t *const payload = &body[HEADER_SIZE];
     memset(&payload[frame.bits_offset], 0, frame.payload_size - frame.bits_offset);
     size_t offset = 0;
@@ -174,7 +184,7 @@ static void send_frame(const uint8_t id, Frame &frame, const uint32_t now) {
         }
     }
     const size_t length = HEADER_SIZE + frame.payload_size;
-    const uint16_t crc = ~esp_rom_crc16_be(static_cast<uint16_t>(~0xffff), body, length); // CRC-16/CCITT-FALSE
+    const uint16_t crc = crc16(body, length);
     memcpy(&body[length], &crc, CRC_SIZE);
 
     char text[(MAX_BODY + 2) / 3 * 4 + 1];

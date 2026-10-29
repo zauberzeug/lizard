@@ -100,15 +100,13 @@ A frame that cannot be decoded has `values = None` and one of these statuses:
 
 | Status              | Meaning                                                         |
 | ------------------- | --------------------------------------------------------------- |
-| `no_layout`         | no layout line of the frame has arrived                         |
+| `no_layout`         | no layout line with the frame's layout ID has arrived           |
 | `layout_incomplete` | layout lines of some fields are missing                         |
 | `layout_mismatch`   | the payload size does not match the layout                      |
 | `unknown_version`   | the sender's layout lines have a format version other than `v1` |
 
 A host that cannot decode a frame because of its layout, e.g. because the frames started before it, sends `core.telemetry_info()` like the monitor.
-When a frame gets new fields, e.g. after `core.clear_telemetry()`, the decoder waits until the new layout is complete.
-If the layout lines that differ from the old layout are lost, it notices the change by the sequence numbers, which start again at 0 with a new definition.
-It can decode the frame with its old layout only if all layout lines of the new definition are lost, or if the differing ones are lost and the new sequence numbers happen to continue the old ones, e.g. from 255 to 0.
+When a frame ID gets new fields, e.g. after `core.clear_telemetry()`, its frames carry a new layout ID, and the decoder waits for the layout lines with that ID instead of using the old ones.
 Logs should keep the raw lines and decode them when they are read.
 
 ### OTB Update
