@@ -8,7 +8,7 @@ import binascii
 import re
 import struct
 from dataclasses import dataclass
-from typing import Dict, Hashable, List, Optional, Tuple, Union, cast
+from typing import Dict, Hashable, List, Literal, Optional, Tuple, Union, cast
 
 VERSION = 'v1'
 HEADER = struct.Struct('<BBBI')  # frame ID, layout ID, sequence number, millis
@@ -19,6 +19,7 @@ BUS_LINE = re.compile(r'bus\[(\d+)\]: (.*)')  # a line that a serial bus coordin
 
 Value = Union[float, int, bool]
 Field = Tuple[str, str]  # name and type
+Status = Literal['ok', 'no_layout', 'layout_incomplete', 'layout_mismatch', 'unknown_version']
 
 
 def format_value(value: Value) -> str:
@@ -53,7 +54,7 @@ class Frame:
     layout_id: int
     seq: int
     millis: int
-    status: str  # ok, no_layout, layout_incomplete, layout_mismatch or unknown_version
+    status: Status
     values: Optional[Dict[str, Value]]  # in field order, None unless the status is ok
     payload: bytes
 
@@ -137,7 +138,7 @@ class Decoder:
         if None in fields:
             return Frame(sender, frame_id, layout_id, seq, millis, 'layout_incomplete', None, payload)
         values = _decode(cast(List[Field], fields), payload)
-        status = 'layout_mismatch' if values is None else 'ok'
+        status: Status = 'layout_mismatch' if values is None else 'ok'
         return Frame(sender, frame_id, layout_id, seq, millis, status, values, payload)
 
 
