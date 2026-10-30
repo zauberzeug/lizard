@@ -992,7 +992,7 @@ The result is available in the `position_error` property (in degrees) once the m
 The `position` and `speed` properties are read in turns, so each of them is updated every other step.
 
 On construction, the module switches off the motor's answers to speed and position commands (command `0x8C`),
-including the status the motor would otherwise send when it reaches a position.
+including the status the motor would otherwise send when a move or a stop completes.
 The motor keeps answering read and configuration commands.
 
 The `set_bitrate()` method changes the CAN bitrate on the motor.

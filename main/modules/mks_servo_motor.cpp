@@ -71,7 +71,8 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
 }
 
 void MksServoMotor::send_motion_answers_off() {
-    // nothing reads the motor's answers to 0xF5/0xF6, and they share the request's ID, so they could collide with the next frame
+    // nothing reads the motor's answers to 0xF5/0xF6,
+    // and they share the request's ID, so they could collide with the next frame
     uint8_t data[] = {0x8C, 0x00, 0x00}; // respond off, active off
     this->send(data, 3);
 }
