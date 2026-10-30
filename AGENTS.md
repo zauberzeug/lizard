@@ -102,6 +102,9 @@ lizard/
 ├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
 ├── monitor.py             # Serial monitor
 ├── serial_devices.py      # Serial device discovery shared by the host tools
+├── console_line.py        # Console line checksum shared by the host tools
+├── telemetry.py           # Telemetry frame decoder for the monitor and other host software
+├── tests/                 # Unit tests of the host tools (pytest)
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
 └── gen_parser.sh          # Regenerates parser.h from language.owl
 ```
@@ -144,6 +147,12 @@ python monitor.py
 
 # Or use idf.py directly
 idf.py flash monitor
+```
+
+### Host Tool Tests
+
+```bash
+pytest tests
 ```
 
 ### Parser Regeneration
