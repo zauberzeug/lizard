@@ -101,9 +101,10 @@ lizard/
 ├── build.py               # Build script (wraps idf.py)
 ├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
 ├── monitor.py             # Serial monitor
-├── serial_devices.py      # Serial device discovery shared by the host tools
-├── console_line.py        # Console line checksum shared by the host tools
-├── telemetry.py           # Telemetry frame decoder for the monitor and other host software
+├── lizard_host/           # Package shared by the host tools and other host software
+│   ├── serial_devices.py  # Serial device discovery
+│   ├── console_line.py    # Console line checksum
+│   └── telemetry.py       # Telemetry frame decoder
 ├── tests/                 # Unit tests of the host tools (pytest)
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
 └── gen_parser.sh          # Regenerates parser.h from language.owl
@@ -152,8 +153,11 @@ idf.py flash monitor
 ### Host Tool Tests
 
 ```bash
-pytest tests
+pytest
 ```
+
+The checks of the host tools (ruff, mypy) run with pre-commit; `pyproject.toml` holds their configuration.
+The host tools stay compatible with Python 3.8, the system Python of L4T 35 Robot Brains.
 
 ### Parser Regeneration
 

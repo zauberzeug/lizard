@@ -1,9 +1,4 @@
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from console_line import checksum, format_line, split_checksum  # noqa: E402
+from lizard_host import checksum, format_line, split_checksum
 
 
 def test_checksum():

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Callable, Dict, Generator, List, Optional, Tuple
 
-from serial_devices import IS_JETSON, resolve_device
+from lizard_host import IS_JETSON, resolve_device
 
 try:
     import gpiod
@@ -320,7 +320,7 @@ def remote_command(argv: List[str], parsed: argparse.Namespace, artifacts: Dict[
 
 def run_remote(host: str, command: List[str], *, artifacts: List[str],
                use_sudo: bool, dry_run: bool) -> None:
-    """rsync espresso.py + serial_devices.py (+ the needed build artifacts) to the host and run the command over SSH.
+    """rsync espresso.py + lizard_host (+ the needed build artifacts) to the host and run the command over SSH.
 
     Exactly the files the command uses are copied, with their relative paths preserved
     (rsync -R), so the remote command finds them below the target directory; ``artifacts``
@@ -346,11 +346,12 @@ def run_remote(host: str, command: List[str], *, artifacts: List[str],
             raise RuntimeError(f'Missing build artifacts: {", ".join(missing)}; run the ESP-IDF build first.')
         print_bold(f'Copying build artifacts to {target}:{path}...')
         runner(['rsync', '-zavR', *artifacts, f'{target}:{path}'])
-    print_bold(f'Copying espresso.py and serial_devices.py to {target}:{path}...')
+    print_bold(f'Copying espresso.py and lizard_host to {target}:{path}...')
     # -p restores the exec bit on a pre-existing non-executable remote copy, whose
     # permissions a plain rsync would keep forever ("./espresso.py: Permission denied").
-    runner(['rsync', '-zp', str(script_dir / 'espresso.py'), str(script_dir / 'serial_devices.py'),
-            f'{target}:{path}/'])
+    # -r copies the lizard_host package as a whole.
+    runner(['rsync', '-zpr', '--exclude', '__pycache__',
+            str(script_dir / 'espresso.py'), str(script_dir / 'lizard_host'), f'{target}:{path}/'])
 
     print_bold(f'Running "espresso.py {" ".join(command)}" on {target}...')
     sudo = 'sudo ' if use_sudo else ''

@@ -1,15 +1,10 @@
 import base64
 import binascii
 import struct
-import sys
-from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from console_line import checksum, split_checksum  # noqa: E402
-from telemetry import Decoder, Frame, Layout, Text  # noqa: E402
+from lizard_host import Frame, Layout, TelemetryDecoder, Text, checksum, split_checksum
 
 # Recorded from an ESP32 after
 #   float pos = 1.234, int state = 8, bool on = true, bool b0 = true ... bool b8 = false (true every third),
@@ -45,7 +40,7 @@ REDEFINED = [
 SHORTENED = ['__LAYOUT__v1 1.0/2 69 pos:f@70', '__LAYOUT__v1 1.1/2 69 state:i@65', '~AWkAdxkAALbznT8IAAAA+8U=@51']
 
 
-def feed(decoder: Decoder, lines: list, sender=None) -> list:
+def feed(decoder: TelemetryDecoder, lines: list, sender=None) -> list:
     results = []
     for line in lines:
         text, check = split_checksum(line)
@@ -83,7 +78,7 @@ def f32(value: float) -> float:
 
 
 def test_recorded_frame():
-    *layouts, frame = feed(Decoder(), LAYOUT_1 + FRAMES_1[:1])
+    *layouts, frame = feed(TelemetryDecoder(), LAYOUT_1 + FRAMES_1[:1])
     assert layouts == [Layout(None, 1, 0x09, 0, 3, 'pos', 'f'), Layout(None, 1, 0x09, 1, 3, 'state', 'i'),
                        Layout(None, 1, 0x09, 2, 3, 'on', '?')]
     assert (frame.frame_id, frame.layout_id, frame.seq, frame.millis, frame.status) == (1, 0x09, 0, 3475, 'ok')
@@ -92,7 +87,7 @@ def test_recorded_frame():
 
 
 def test_recorded_frame_with_nine_bools():
-    frame = feed(Decoder(), LAYOUT_2 + [FRAME_2])[-1]
+    frame = feed(TelemetryDecoder(), LAYOUT_2 + [FRAME_2])[-1]
     assert frame.status == 'ok'
     assert frame.values['core.millis'] == frame.millis
     assert frame.values['neg'] == f32(-1e30)
@@ -105,24 +100,24 @@ def test_recorded_frame_with_nine_bools():
 def test_documented_example():
     lines = ['__LAYOUT__v1 1.0/3 bf motor.position:f@4a', '__LAYOUT__v1 1.1/3 bf motor.axis_state:i@76',
              '__LAYOUT__v1 1.2/3 bf motor.enabled:?@6d', '~Ab8HQOIBALbznT8IAAAAAY/t@25']
-    assert str(feed(Decoder(), lines)[-1]) == \
+    assert str(feed(TelemetryDecoder(), lines)[-1]) == \
         '[frame 1 seq=7 millis=123456] motor.position=1.234 motor.axis_state=8 motor.enabled=true'
 
 
 @pytest.mark.parametrize('lines', [LAYOUT_1, LAYOUT_2, REDEFINED[:3], SHORTENED[:2]])
 def test_layout_id_is_a_hash_of_the_fields(lines):
-    layouts = feed(Decoder(), lines)
+    layouts = feed(TelemetryDecoder(), lines)
     fields = ' '.join(f'{layout.name}:{layout.type}' for layout in layouts)
     assert {layout.layout_id for layout in layouts} == {binascii.crc_hqx(fields.encode(), 0xffff) & 0xff}
 
 
 def test_frames_keep_decoding_while_layout_lines_repeat():
-    results = feed(Decoder(), LAYOUT_1 + LAYOUT_2 + BEFORE_REPEAT + REPEAT)
+    results = feed(TelemetryDecoder(), LAYOUT_1 + LAYOUT_2 + BEFORE_REPEAT + REPEAT)
     assert [result.status for result in results if isinstance(result, Frame)] == ['ok'] * 5
 
 
 def test_reused_frame_id():
-    results = feed(Decoder(), LAYOUT_1 + FRAMES_1 + REDEFINED + SHORTENED)
+    results = feed(TelemetryDecoder(), LAYOUT_1 + FRAMES_1 + REDEFINED + SHORTENED)
     assert list(results[-4].values) == ['pos', 'on', 'state']
     assert results[-1].values == {'pos': f32(1.234), 'state': 8}
 
@@ -132,7 +127,7 @@ def test_reused_frame_id():
     (REDEFINED[:1], 'layout_incomplete'),  # the lines that differ from the old layout are lost
 ])
 def test_reused_frame_id_is_never_decoded_with_the_old_layout(layout_lines, status):
-    decoder = Decoder()
+    decoder = TelemetryDecoder()
     feed(decoder, LAYOUT_1 + FRAMES_1 + layout_lines)
     assert decoder.feed(with_seq(REDEFINED[-1], 2)).status == status  # although the sequence continues the old one
     assert feed(decoder, REDEFINED)[-1].status == 'ok'
@@ -143,7 +138,7 @@ def test_reused_frame_id_is_never_decoded_with_the_old_layout(layout_lines, stat
     '__LAYOUT__v1 1.0/2 09 pos:f',  # a differing count
 ])
 def test_other_fields_with_the_same_layout_id_drop_the_old_layout(line):
-    decoder = Decoder()  # the new fields get the same layout ID by chance
+    decoder = TelemetryDecoder()  # the new fields get the same layout ID by chance
     feed(decoder, LAYOUT_1)
     decoder.feed(line)
     assert decoder.feed(strip(FRAMES_1[0])).status == 'layout_incomplete'
@@ -154,35 +149,35 @@ def test_other_fields_with_the_same_layout_id_drop_the_old_layout(line):
     SHORTENED[1:2] + REDEFINED[1:],  # lines of a layout with another count
 ])
 def test_lines_of_an_older_layout_are_not_mixed_into_a_new_one(lines):
-    assert feed(Decoder(), lines)[-1].status == 'layout_incomplete'
+    assert feed(TelemetryDecoder(), lines)[-1].status == 'layout_incomplete'
 
 
 def test_lost_last_layout_line():
-    decoder = Decoder()
+    decoder = TelemetryDecoder()
     assert feed(decoder, LAYOUT_2[:-1] + [FRAME_2])[-1].status == 'layout_incomplete'
     assert feed(decoder, LAYOUT_2[-1:] + [FRAME_2])[-1].status == 'ok'
 
 
 def test_lost_last_bool_layout_line_sharing_its_byte():
-    decoder = Decoder()
+    decoder = TelemetryDecoder()
     decoder.feed('__LAYOUT__v1 1.0/2 5a a:?')  # the line of b is lost; a and b share one byte of the payload
     frame = decoder.feed(encode(1, 0x5a, 0, 0, bytes([0b11])))
     assert (frame.status, frame.values) == ('layout_incomplete', None)
 
 
 def test_no_layout():
-    frame = Decoder().feed(strip(FRAMES_1[0]))
+    frame = TelemetryDecoder().feed(strip(FRAMES_1[0]))
     assert (frame.status, frame.values) == ('no_layout', None)
     assert str(frame) == '[frame 1 seq=0 millis=3475 no_layout] b6f39d3f0800000001'
 
 
 def test_layout_mismatch():
     lines = ['__LAYOUT__v1 1.0/2 09 pos:f', '__LAYOUT__v1 1.1/2 09 state:i', FRAMES_1[0]]  # payload has the bool
-    assert feed(Decoder(), lines)[-1].status == 'layout_mismatch'
+    assert feed(TelemetryDecoder(), lines)[-1].status == 'layout_mismatch'
 
 
 def test_unknown_version():
-    decoder = Decoder()
+    decoder = TelemetryDecoder()
     feed(decoder, LAYOUT_1)
     assert decoder.feed('__LAYOUT__v2 1:pos:f32') == Text(None, '__LAYOUT__v2 1:pos:f32')
     assert feed(decoder, FRAMES_1)[-1].status == 'unknown_version'
@@ -191,14 +186,14 @@ def test_unknown_version():
 
 
 def test_another_version_drops_the_layouts():
-    decoder = Decoder()
+    decoder = TelemetryDecoder()
     feed(decoder, LAYOUT_1 + FRAMES_1[:1])
     decoder.feed('__LAYOUT__v2 1:pos:f32')
     assert feed(decoder, LAYOUT_1[:1] + FRAMES_1[1:])[-1].status == 'layout_incomplete'
 
 
 def test_bus_prefix():
-    decoder = Decoder()
+    decoder = TelemetryDecoder()
     results = [decoder.feed(f'bus[2]: {strip(line)}') for line in LAYOUT_1 + FRAMES_1]
     assert results[0] == Layout(2, 1, 0x09, 0, 3, 'pos', 'f')
     assert (results[-1].sender, results[-1].status) == (2, 'ok')
@@ -222,6 +217,6 @@ def test_bus_prefix():
     '__LAYOUT__v1 1.0/3 pos:f',  # no layout ID
 ])
 def test_lines_that_are_not_telemetry_stay_text(line):
-    decoder = Decoder()
+    decoder = TelemetryDecoder()
     feed(decoder, LAYOUT_1)
     assert decoder.feed(line) == Text(None, line)

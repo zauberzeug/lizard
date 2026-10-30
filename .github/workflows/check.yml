@@ -17,10 +17,14 @@ jobs:
 
   pytest:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 3.8 is the system Python of L4T 35 Robot Brains, where monitor.py and espresso.py also run
+        python-version: ["3.8", "3.x"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.x"
+          python-version: ${{ matrix.python-version }}
       - run: pip install pytest
-      - run: pytest tests
+      - run: pytest

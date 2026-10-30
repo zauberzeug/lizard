@@ -126,7 +126,7 @@ A new frame is sent for the first time once all of its layout lines are out.
 Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines.
 There is no timer for them: a host that connects later or logs for hours calls `core.telemetry_info()` itself.
 Only the prefix `~` and the word `__LAYOUT__` stay the same in future versions of the format; the version is part of each layout line.
-On the host, [`telemetry.py`](tools.md#telemetry-decoder) decodes these lines.
+On the host, the [`lizard_host`](tools.md#telemetry-decoder) package decodes these lines.
 
 ## Bluetooth
 

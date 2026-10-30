@@ -6,6 +6,7 @@ import serial
 class SerialConnection:
 
     def __init__(self, port: str = '/dev/tty.SLAB_USBtoUART', baudrate: int = 115200, timeout: float = 1.0) -> None:
+        self.port: Optional[serial.Serial]
         try:
             self.port = serial.Serial(port, baudrate=baudrate, timeout=timeout)
         except serial.SerialException:
@@ -16,9 +17,7 @@ class SerialConnection:
     def read(self) -> Optional[str]:
         if not self.port:
             return None
-        s = self.port.read_all()
-        s = s.decode()
-        self.buffer += s
+        self.buffer += self.port.read_all().decode()
         if '\n' in self.buffer:
             line, self.buffer = self.buffer.split('\n', 1)
             line = line.rstrip('\r')

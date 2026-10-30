@@ -26,7 +26,7 @@ def format_value(value: Value) -> str:
     if isinstance(value, bool):
         return 'true' if value else 'false'
     if isinstance(value, float):
-        return '%.7g' % value  # the significant digits of a float32, without noise
+        return f'{value:.7g}'  # the significant digits of a float32, without noise
     return str(value)
 
 
@@ -65,7 +65,7 @@ class Frame:
         return f'[{head}] ' + ' '.join(f'{name}={format_value(value)}' for name, value in self.values.items())
 
 
-class Decoder:
+class TelemetryDecoder:
     """Turns console lines into Text, Layout and Frame results and keeps the layouts of each sender.
 
     The sender is the device on the console, or serial bus peer N for a line starting with "bus[N]: ".
