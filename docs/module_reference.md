@@ -50,7 +50,7 @@ It is automatically created right after the boot sequence.
 | `core.keep_alive()`              | Reset `last_message_age` without producing output                                                  |              |
 | `core.telemetry(...)`            | Define a telemetry frame of properties and variables                                               | see below    |
 | `core.telemetry_info()`          | Send the layout lines of all telemetry frames again                                                |              |
-| `core.clear_telemetry()`         | Clear all telemetry frames frames                                                                  |              |
+| `core.clear_telemetry()`         | Clear all telemetry frames                                                                         |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
