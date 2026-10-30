@@ -16,7 +16,11 @@ def format_line(text: str) -> str:
 
 
 def split_checksum(line: str) -> Tuple[str, Optional[int]]:
-    """Split a line into its text and its "@xx" checksum, which is None if the line has none."""
+    """Split a line into its text and its "@xx" checksum, which is None if the line has none.
+
+    A line end is cut off first, so the line can come straight from readline().
+    """
+    line = line.rstrip('\r\n')
     if line[-3:-2] == '@':
         try:
             return line[:-3], int(line[-2:], 16)

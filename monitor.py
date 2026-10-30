@@ -51,7 +51,7 @@ def receive() -> None:
     layout_activity = 0.0  # time of the last layout request or layout line
     while True:
         # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
-        line, check = split_checksum(line_reader.readline().decode(errors='replace').strip('\r\n'))
+        line, check = split_checksum(line_reader.readline().decode(errors='replace'))
         if check is not None and (actual := checksum(line)) != check:
             print(f'ERROR: CHECKSUM MISMATCH ({actual} vs. {check} for "{line}")')
             print(line)  # never taken as a frame or a layout line
