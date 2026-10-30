@@ -138,8 +138,9 @@ __attribute__((noinline)) static Expression_ptr compile_binary(const struct owl_
 
 Expression_ptr compile_expression(const struct owl_ref ref) {
     // each level takes up to 336 B of the 32 kB main task stack (256 B here plus 80 B in compile_binary, IDF 5.3);
-    // an ESP32 crashed at 95 levels, so 64 leaves ~9 kB for deeper entry paths and for throwing
-    static const int MAX_EXPRESSION_DEPTH = 64;
+    // an ESP32 crashed at 95 levels, but an "at" block runs and is torn down on the 8 kB scheduler stack,
+    // where a sum of 47 terms crashed, so 40 leaves some headroom there
+    static const int MAX_EXPRESSION_DEPTH = 40;
     static int depth = 0; // a plain static is fine: compilation only runs under the InterpreterLock
     if (depth >= MAX_EXPRESSION_DEPTH) {
         throw std::runtime_error("expression is nested too deeply");
