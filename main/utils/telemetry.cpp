@@ -110,7 +110,13 @@ void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
     size_t bools = 0;
     std::string layout; // "name:type name:type ..."
     for (size_t i = 0; i < field_count; ++i) {
-        frame.fields.push_back(to_field(arguments[i]));
+        Field new_field = to_field(arguments[i]);
+        for (const Field &other : frame.fields) {
+            if (other.name == new_field.name) { // a reader keys the values by name, and a second copy adds no information
+                throw std::runtime_error("telemetry field \"" + new_field.name + "\" appears twice in the frame");
+            }
+        }
+        frame.fields.push_back(std::move(new_field));
         const Field &field = frame.fields.back();
         bools += field.variable->type == boolean;
         layout += (i ? " " : "") + field.name + ":" + type_letter(field.variable->type);

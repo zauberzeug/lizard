@@ -81,7 +81,7 @@ core.telemetry(wheels.linear_speed, wheels.angular_speed, 20)  # frame 2, every 
 ```
 
 Each call defines one frame; frame IDs count up from 1 in the order of definition.
-The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames.
+The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames, but only once per frame.
 An integer literal as last argument is the interval in milliseconds (0 to 3600000); an `int` variable or property in that place is a field.
 Without an interval or with 0, the frame is sent every step.
 Frames go out with the 10 ms steps, so the gaps between them vary, e.g. 10 and 20 ms for an interval of 15 ms, but match the interval on average.
