@@ -23,6 +23,7 @@ private:
     void do_enable() override;
     void do_disable() override;
     void send_set_mode(uint8_t mode);
+    void send_motion_answers_off();
     void send_set_bitrate(int64_t hz);
     void send_set_can_id(int64_t new_id);
     void send_working_current(int64_t ma);
