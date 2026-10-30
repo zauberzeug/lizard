@@ -8,6 +8,7 @@ from typing import Iterator
 
 import serial
 
+from console_line import format_line, split_checksum
 from serial_devices import resolve_device
 
 parser = argparse.ArgumentParser(description='Configure an ESP32 running Lizard firmware')
@@ -30,10 +31,7 @@ def send(payload: str) -> None:
     else:
         line_ = payload
     print(f'Sending: {line_}')
-    checksum_ = 0
-    for byte in line_.encode():
-        checksum_ ^= byte
-    port.write((f'{line_}@{checksum_:02x}\n').encode())
+    port.write(format_line(line_).encode())
 
 
 def read(*, timeout: float) -> Iterator[str]:
@@ -41,8 +39,7 @@ def read(*, timeout: float) -> Iterator[str]:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            # strip() so the match also catches the un-checksummed boot banner "Ready.\r\n"
-            yield port.read_until(b'\r\n').decode().rsplit('@', 1)[0].strip()
+            yield split_checksum(port.read_until(b'\r\n').decode())[0]
         except UnicodeDecodeError:
             continue
 

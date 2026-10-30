@@ -14,7 +14,7 @@ namespace telemetry {
 constexpr char FRAME_PREFIX = '~';
 constexpr char LAYOUT_PREFIX[] = "__LAYOUT__";
 constexpr int LAYOUT_VERSION = 1;
-constexpr size_t HEADER_SIZE = 6; // frame ID, sequence number, millis
+constexpr size_t HEADER_SIZE = 7; // frame ID, layout ID, sequence number, millis
 constexpr size_t MAX_PAYLOAD = 180;
 constexpr size_t CRC_SIZE = 2;
 constexpr size_t MAX_BODY = HEADER_SIZE + MAX_PAYLOAD + CRC_SIZE;
@@ -34,6 +34,7 @@ size_t decode_frame(const char *line, size_t length, uint8_t *body);
 struct LayoutLine {
     int version;
     uint8_t frame_id;
+    uint8_t layout_id;
     size_t index;
     size_t count;
     std::string_view name; // points into the parsed line

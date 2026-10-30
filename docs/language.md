@@ -22,6 +22,9 @@ button.level
 
 Expressions can be assigned to variables, used in conditions and passed to constructors, method calls or routine calls.
 Plain expression statements print their result to the command line.
+Expressions can be nested up to 39 levels deep, where every operator and every pair of parentheses adds a level.
+A chain like `a + b + c + ...` can therefore have up to 40 terms.
+Deeper expressions are rejected with "expression is nested too deeply".
 
 **Variables: declaration and assignment**
 
@@ -203,6 +206,14 @@ when button.level == 0 then
     core.print("Done.")
 end
 ```
+
+**Failing actions**
+
+If an action fails, for example because a module reports an error, the error is printed and the remaining actions are skipped.
+The rule or routine has then finished: a rule fires again the next time its condition is true and starts again from its first action, and a routine can be called again.
+A rule that uses a flag to fire only once should therefore set the flag after its actions; otherwise a failed action is never attempted again.
+If an awaited routine fails, the `await` fails as well and the actions after it are skipped.
+A routine started without `await` runs on its own, so its failure does not affect the rule or routine that started it.
 
 ## Data types
 

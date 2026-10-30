@@ -50,7 +50,7 @@ It is automatically created right after the boot sequence.
 | `core.keep_alive()`              | Reset `last_message_age` without producing output                                                  |              |
 | `core.telemetry(...)`            | Define a telemetry frame of properties and variables                                               | see below    |
 | `core.telemetry_info()`          | Send the layout lines of all telemetry frames again and ask passed-on bus peers for theirs         |              |
-| `core.clear_telemetry()`         | Clear all telemetry frames frames                                                                  |              |
+| `core.clear_telemetry()`         | Clear all telemetry frames                                                                         |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
@@ -81,7 +81,7 @@ core.telemetry(wheels.linear_speed, wheels.angular_speed, 20)  # frame 2, every 
 ```
 
 Each call defines one frame; frame IDs count up from 1 in the order of definition.
-The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames.
+The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames, but only once per frame.
 A field's name, `<module>.<property>` or the variable's name, has at most 200 characters.
 An integer literal as last argument is the interval in milliseconds (0 to 3600000); an `int` variable or property in that place is a field.
 Without an interval or with 0, the frame is sent every step.
@@ -95,26 +95,32 @@ A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (
 | Bytes | Content                                                           |
 | ----- | ----------------------------------------------------------------- |
 | 1     | frame ID                                                          |
+| 1     | layout ID, see below                                              |
 | 1     | sequence number per frame ID, modulo 256; a gap means lost frames |
 | 4     | time since booting (ms) when the frame was built                  |
 | n     | values of the fields                                              |
 | 2     | CRC-16/CCITT-FALSE over all preceding bytes                       |
 
+The sequence number starts at 0 when a frame is defined, also when its ID is reused after `core.clear_telemetry()`.
 The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as int32, clamped to its range.
 The `bool` fields follow as bits in their order, least significant bit first, padded to a full byte.
 All multi-byte numbers, including the time and the CRC, are little-endian.
 
-A layout line `__LAYOUT__v1 <frame>.<index>/<count> <name>:<type>` describes one field: its frame ID, its position from 0, the number of fields in the frame, its name and its type: `f` for `float`, `i` for `int` or `?` for `bool`.
+A layout line `__LAYOUT__v1 <frame>.<index>/<count> <layout ID> <name>:<type>` describes one field: its frame ID, its position from 0, the number of fields in the frame, the layout ID in two hex digits, its name and its type: `f` for `float`, `i` for `int` or `?` for `bool`.
 For example, `core.telemetry(motor.position, motor.axis_state, motor.enabled)` yields:
 
 ```
-__LAYOUT__v1 1.0/3 motor.position:f@6e
-__LAYOUT__v1 1.1/3 motor.axis_state:i@52
-__LAYOUT__v1 1.2/3 motor.enabled:?@49
-~AQdA4gEAtvOdPwgAAAABwBc=@5c
+__LAYOUT__v1 1.0/3 bf motor.position:f@4a
+__LAYOUT__v1 1.1/3 bf motor.axis_state:i@76
+__LAYOUT__v1 1.2/3 bf motor.enabled:?@6d
+~Ab8HQOIBALbznT8IAAAAAY/t@25
 ```
 
-The frame body `01 07 40e20100 b6f39d3f 08000000 01 c017` holds frame ID 1, sequence number 7, millis 123456, the values 1.234, 8 and true, and the CRC.
+The frame body `01 bf 07 40e20100 b6f39d3f 08000000 01 8fed` holds frame ID 1, layout ID `bf`, sequence number 7, millis 123456, the values 1.234, 8 and true, and the CRC.
+
+The layout ID is the low byte of the CRC-16/CCITT-FALSE over the fields as `<name>:<type>`, separated by spaces, here `motor.position:f motor.axis_state:i motor.enabled:?`.
+A reader decodes a frame only with layout lines of the same frame ID and layout ID, so a frame ID that `core.clear_telemetry()` frees and a new frame reuses is not decoded with the old fields.
+Different fields get the same layout ID with a chance of 1 in 256.
 
 Layout lines go out when a frame is defined and on `core.telemetry_info()`, four per step in the order of the frames.
 A new frame is sent for the first time once all of its layout lines are out.
@@ -122,6 +128,7 @@ Frames that are already running keep coming while `core.telemetry_info()` repeat
 There is no timer for them: a host that connects later or logs for hours calls `core.telemetry_info()` itself.
 On a serial bus peer, frames and layout lines go to the coordinator once it polls the peer, see [Serial Bus](#serial-bus).
 Only the prefix `~` and the word `__LAYOUT__` stay the same in future versions of the format; the version is part of each layout line.
+On the host, [`telemetry.py`](tools.md#telemetry-decoder) decodes these lines.
 
 ## Bluetooth
 
@@ -140,23 +147,28 @@ Clients uploading many lines at once should therefore pace their writes or wait 
 | `bluetooth.connected`        | Whether a device is currently connected                  | `bool`    |
 | `bluetooth.last_message_age` | Time since the last line was received via Bluetooth (ms) | `int`     |
 
-| Methods                      | Description                                             | Arguments |
-| ---------------------------- | ------------------------------------------------------- | --------- |
-| `bluetooth.send(data)`       | send `data` via notification                            | `str`     |
-| `bluetooth.set_pin(pin)`     | set 6-digit user PIN (000000-999999)                    | `int`     |
-| `bluetooth.get_pin()`        | print current user PIN or "No user PIN set"             |           |
-| `bluetooth.reset_pin()`      | remove the user PIN                                     |           |
-| `bluetooth.reset_bonds()`    | forget all bonded devices saved in NVS (BLE bond store) |           |
-| `bluetooth.deactivate_pin()` | Disables PIN enforcement                                |           |
+| Methods                      | Description                                 | Arguments |
+| ---------------------------- | ------------------------------------------- | --------- |
+| `bluetooth.send(data)`       | send `data` via notification                | `str`     |
+| `bluetooth.set_pin(pin)`     | set 6-digit user PIN (000000-999999)        | `int`     |
+| `bluetooth.get_pin()`        | print current user PIN or "No user PIN set" |           |
+| `bluetooth.reset_pin()`      | remove the user PIN                         |           |
+| `bluetooth.deactivate_pin()` | Disables PIN enforcement                    |           |
 
 Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0
 that allows writing Lizard statements like on the command line.
 On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
 
-The Bluetooth module stores up to four devices.
-When a fifth connects, the oldest entry is removed.
-
-To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
+Access is guarded by a PIN on application level; connections are neither encrypted nor bonded.
+When a client enables notifications, Lizard sends `AUTH_REQUIRED` if a PIN is needed and an empty line otherwise.
+A phone bonded under older firmware gets its subscription restored on connection and can miss this greeting; it can write an empty line instead, which Lizard answers with `AUTH_REQUIRED` if a PIN is needed.
+The client then writes `AUTH <pin>` and receives `POST /notification Connected` or `AUTH_FAIL`.
+Until then, Lizard answers every other line with `AUTH_REQUIRED` and does not execute it.
+`bluetooth.send(data)` does not reach the client before it has entered the PIN either.
+After three wrong PINs or 30 seconds without a PIN attempt, Lizard closes the connection.
+The PIN is the user PIN set with `bluetooth.set_pin(pin)` or, without one, the PIN configured at build time; Lizard prints it on every connection.
+After `bluetooth.deactivate_pin()`, every client is accepted without a PIN until the next restart.
+Note that the PIN is sent unencrypted, so it keeps out accidental connections but not someone listening in.
 
 Unlike `core.last_message_age`, which any input channel resets, `bluetooth.last_message_age` only counts lines received via Bluetooth.
 Together with `connected`, it lets rules and the host tell a silent or disconnected app apart from a host that keeps talking on UART0.
@@ -224,9 +236,9 @@ bus.pass_telemetry(2)
 ```
 
 ```
-bus[2]: __LAYOUT__v1 1.0/2 motor.position:f@25
-bus[2]: __LAYOUT__v1 1.1/2 motor.enabled:?@01
-bus[2]: ~AQdA4gEAtvOdPwFT0A==@3b
+bus[2]: __LAYOUT__v1 1.0/2 d3 motor.position:f@52
+bus[2]: __LAYOUT__v1 1.1/2 d3 motor.enabled:?@76
+bus[2]: ~AdMHQOIBALbznT8BIbs=@31
 ```
 
 Each call replaces the selection of the previous one; without a call nothing is passed on.
@@ -588,10 +600,18 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | Methods                                             | Description                    | Arguments |
 | --------------------------------------------------- | ------------------------------ | --------- |
 | `can.send(node_id, d0, d1, d2, d3, d4, d5, d6, d7)` | Send a frame with 8 data bytes | 9x `int`  |
+| `can.output_extended(mask, code)`                   | Print matching 29-bit frames   | 2x `int`  |
 | `can.get_status()`                                  | Print the driver status        |           |
 | `can.start()`                                       | Start the driver               |           |
 | `can.stop()`                                        | Stop the driver                |           |
 | `can.reset()`                                       | Reset the driver               |           |
+
+IDs above `0x7FF` are sent as extended (29-bit) frames, IDs above `0x1FFFFFFF` are rejected.
+An extended frame with an ID up to `0x7FF` cannot be sent; `send` puts such an ID into a standard frame.
+Received extended frames never reach other modules, which subscribe to 11-bit IDs only.
+`output_extended(mask, code)` prints every extended frame with `(id & mask) == code` in the same format as the module's output; it can be called several times to add more filters, and `code` must not have bits outside `mask`.
+`can.mute()` also removes all `output_extended` filters; `unmute()` does not bring them back.
+Extended frames are always printed with an 8-digit hex ID, also after `unmute()`, so `can 00000123,…` is an extended and `can 123,…` a standard frame.
 
 The method `get_status()` prints the following information:
 
@@ -611,6 +631,9 @@ The `start()` and `stop()` methods are primarily for debugging purposes.
 
 The `reset()` method will stop the driver, try to recover it and then start it again.
 It can be used to recover the driver from a "BUS_OFF" state.
+The module does the same by itself while the bus is "BUS_OFF", at most once per second.
+It prints "CAN bus running again" once the bus has stayed out of "BUS_OFF" for a second.
+Each reset sets the counters of `get_status()` back to zero.
 
 ## Serial interface
 

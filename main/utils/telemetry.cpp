@@ -21,7 +21,7 @@ constexpr size_t MAX_FRAMES = 255;
 constexpr size_t MAX_FIELDS = 8 * MAX_PAYLOAD; // all of them bools
 constexpr size_t MAX_NAME = 200;               // keeps every layout line within one serial bus payload
 constexpr size_t LAYOUT_LINES_PER_STEP = 4;    // spread, so announcing a large frame does not stall one step
-static_assert(sizeof("__LAYOUT__v1 255.1439/1440 :f") + MAX_NAME <= SerialBus::PAYLOAD_CAPACITY);
+static_assert(sizeof("__LAYOUT__v1 255.1439/1440 ff :f") + MAX_NAME <= SerialBus::PAYLOAD_CAPACITY);
 constexpr size_t MAX_LINE = 1 + (MAX_BODY + 2) / 3 * 4; // "~" and the Base64 text, without terminator
 static_assert(MAX_LINE < SerialBus::PAYLOAD_CAPACITY);
 
@@ -34,6 +34,7 @@ struct Frame {
     std::vector<Field> fields;
     size_t bits_offset = 0; // the bools follow the floats and ints as bits
     size_t payload_size = 0;
+    uint8_t layout_id = 0;
     unsigned long interval = 0;
     unsigned long last_millis = 0;
     uint8_t sequence = 0;
@@ -44,6 +45,10 @@ struct Frame {
 static std::vector<Frame> frames; // frame ID = index + 1
 static std::vector<SerialBus *> buses;
 static uint8_t coordinator = 0; // the node the layout lines went to, 0 for the console
+
+static uint16_t crc16(const void *data, const size_t length) {
+    return ~esp_rom_crc16_be(static_cast<uint16_t>(~0xffff), static_cast<const uint8_t *>(data), length); // CRC-16/CCITT-FALSE
+}
 
 static size_t encode_base64(const uint8_t *data, const size_t length, char *text) {
     static constexpr char ALPHABET[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -56,10 +61,6 @@ static size_t encode_base64(const uint8_t *data, const size_t length, char *text
         text[pos++] = i + 2 < length ? ALPHABET[chunk & 0x3f] : '=';
     }
     return pos;
-}
-
-static uint16_t crc16(const uint8_t *data, const size_t length) {
-    return ~esp_rom_crc16_be(static_cast<uint16_t>(~0xffff), data, length); // CRC-16/CCITT-FALSE
 }
 
 // 4 bytes per float or int, then the bools as bits
@@ -121,10 +122,20 @@ void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
     }
     frame.fields.reserve(field_count);
     size_t bools = 0;
+    std::string layout; // "name:type name:type ..."
     for (size_t i = 0; i < field_count; ++i) {
-        frame.fields.push_back(to_field(arguments[i]));
-        bools += frame.fields.back().variable->type == boolean;
+        Field new_field = to_field(arguments[i]);
+        for (const Field &other : frame.fields) {
+            if (other.name == new_field.name) { // a reader keys the values by name, and a second copy adds no information
+                throw std::runtime_error("telemetry field \"" + new_field.name + "\" appears twice in the frame");
+            }
+        }
+        frame.fields.push_back(std::move(new_field));
+        const Field &field = frame.fields.back();
+        bools += field.variable->type == boolean;
+        layout += (i ? " " : "") + field.name + ":" + type_letter(field.variable->type);
     }
+    frame.layout_id = crc16(layout.data(), layout.size()) & 0xff; // tells a reader which layout lines a frame needs
     frame.bits_offset = 4 * (field_count - bools);
     frame.payload_size = payload_size(field_count, bools);
     if (frame.payload_size > MAX_PAYLOAD) {
@@ -171,9 +182,9 @@ static SerialBus *polled_bus() {
 static bool send_layout_line(SerialBus *const bus, const uint8_t id, const Frame &frame, const size_t index) {
     const Field &field = frame.fields[index];
     char line[SerialBus::PAYLOAD_CAPACITY];
-    const int length = std::snprintf(line, sizeof(line), "%sv%d %d.%d/%d %s:%c", LAYOUT_PREFIX, LAYOUT_VERSION, id,
-                                     static_cast<int>(index), static_cast<int>(frame.fields.size()), field.name.c_str(),
-                                     type_letter(field.variable->type));
+    const int length = std::snprintf(line, sizeof(line), "%sv%d %d.%d/%d %02x %s:%c", LAYOUT_PREFIX, LAYOUT_VERSION, id,
+                                     static_cast<int>(index), static_cast<int>(frame.fields.size()),
+                                     static_cast<unsigned>(frame.layout_id), field.name.c_str(), type_letter(field.variable->type));
     if (!bus) {
         echo("%s", line);
         return true;
@@ -203,12 +214,13 @@ static bool send_layout_lines(SerialBus *const bus, const unsigned long now) {
     return true;
 }
 
-// body = frame ID, sequence number, millis, payload, CRC; multi-byte values are little-endian like the ESP32
+// body = frame ID, layout ID, sequence number, millis, payload, CRC; multi-byte values are little-endian like the ESP32
 static size_t encode_frame(const uint8_t id, const Frame &frame, const uint8_t sequence, const uint32_t now, char *text) {
     uint8_t body[MAX_BODY];
     body[0] = id;
-    body[1] = sequence;
-    memcpy(&body[2], &now, 4);
+    body[1] = frame.layout_id;
+    body[2] = sequence;
+    memcpy(&body[3], &now, 4);
     uint8_t *const payload = &body[HEADER_SIZE];
     memset(&payload[frame.bits_offset], 0, frame.payload_size - frame.bits_offset);
     size_t offset = 0;
@@ -308,7 +320,22 @@ static bool read_number(const char *&c, size_t &value) {
     return c > start && !std::isdigit(static_cast<unsigned char>(*c));
 }
 
-// "__LAYOUT__v<version> <frame>.<index>/<count> <name>:<type>"
+// reads 2 lowercase hex digits
+static bool read_hex_byte(const char *&c, uint8_t &value) {
+    value = 0;
+    for (int i = 0; i < 2; ++i, ++c) {
+        if ('0' <= *c && *c <= '9') {
+            value = value << 4 | (*c - '0');
+        } else if ('a' <= *c && *c <= 'f') {
+            value = value << 4 | (*c - 'a' + 10);
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+// "__LAYOUT__v<version> <frame>.<index>/<count> <layout ID> <name>:<type>"
 bool parse_layout(const char *line, LayoutLine &layout) {
     const char *c = line + sizeof(LAYOUT_PREFIX) - 1;
     size_t version, frame_id, index, count;
@@ -320,7 +347,7 @@ bool parse_layout(const char *line, LayoutLine &layout) {
         return true;
     }
     if (*c++ != ' ' || !read_number(c, frame_id) || *c++ != '.' || !read_number(c, index) || *c++ != '/' ||
-        !read_number(c, count) || *c++ != ' ') {
+        !read_number(c, count) || *c++ != ' ' || !read_hex_byte(c, layout.layout_id) || *c++ != ' ') {
         return false;
     }
     const char *const colon = std::strrchr(c, ':');

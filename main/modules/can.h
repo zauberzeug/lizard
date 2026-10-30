@@ -4,6 +4,8 @@
 #include "driver/twai.h"
 #include "module.h"
 #include <memory>
+#include <utility>
+#include <vector>
 
 class Can;
 using Can_ptr = std::shared_ptr<Can>;
@@ -11,10 +13,12 @@ using Can_ptr = std::shared_ptr<Can>;
 class Can : public Module {
 private:
     std::map<uint32_t, Module_ptr> subscribers;
+    std::vector<std::pair<uint32_t, uint32_t>> extended_outputs; // (mask, code) pairs for 29-bit frames
     twai_general_config_t g_config;
     twai_timing_config_t t_config;
     twai_filter_config_t f_config;
-    twai_state_t previous_state = TWAI_STATE_RUNNING;
+    unsigned long last_recovery_attempt = 0;
+    bool in_bus_off = false;
 
 public:
     static inline constexpr const char *TYPE = "Can";
@@ -31,5 +35,5 @@ public:
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
               const bool rtr = false) const;
     void subscribe(const uint32_t id, const Module_ptr module);
-    void reset_can_bus();
+    void reset_can_bus(const bool verbose = true);
 };
