@@ -816,9 +816,9 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
     echo("bus[%u]: %s", message.sender, message.payload);
 
     const auto frame = layout.frames.find(body[0]);
-    const bool known = frame != layout.frames.end() &&
-                       std::find(frame->second.begin(), frame->second.end(), 0) == frame->second.end() &&
-                       telemetry::payload_size(frame->second) == length - telemetry::HEADER_SIZE - telemetry::CRC_SIZE;
+    const bool known = frame != layout.frames.end() && frame->second.layout_id == body[1] &&
+                       std::find(frame->second.types.begin(), frame->second.types.end(), 0) == frame->second.types.end() &&
+                       telemetry::payload_size(frame->second.types) == length - telemetry::HEADER_SIZE - telemetry::CRC_SIZE;
     if (!known && !layout.other_version) {
         // e.g. because this node booted after the peer, a layout line got lost or the peer redefined the frame
         this->request_layout(message.sender, layout);
@@ -842,11 +842,12 @@ void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
         layout.other_version = true; // only the host may read it; the peer may be updated, so until its Ready.
         return;
     }
-    std::vector<char> &types = layout.frames[line.frame_id];
-    if (types.size() != line.count) {
-        types.assign(line.count, 0);
+    FrameLayout &frame = layout.frames[line.frame_id];
+    if (frame.layout_id != line.layout_id || frame.types.size() != line.count) {
+        frame.layout_id = line.layout_id; // e.g. the peer cleared its frames and reused the frame ID
+        frame.types.assign(line.count, 0);
     }
-    types[line.index] = line.type;
+    frame.types[line.index] = line.type;
 }
 
 void SerialBus::request_layout(const uint8_t peer_id, PeerLayout &layout) {

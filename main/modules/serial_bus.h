@@ -160,9 +160,13 @@ private:
     void send_frame_slots(const uint8_t receiver);
 
     // --- telemetry, coordinator side (main task) ---------------------------
+    struct FrameLayout {
+        uint8_t layout_id = 0;
+        std::vector<char> types; // type letter per field index, 0 until its layout line arrived
+    };
     struct PeerLayout {
-        std::map<uint8_t, std::vector<char>> frames; // type letter per field index, 0 until its layout line arrived
-        bool other_version = false;                  // the peer sends a format this node does not read, until its Ready.
+        std::map<uint8_t, FrameLayout> frames; // by frame ID
+        bool other_version = false;            // the peer sends a format this node does not read, until its Ready.
         bool requested = false;
         bool awaiting = false; // requested, but no layout line arrived yet
         unsigned long request_millis = 0;
