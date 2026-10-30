@@ -96,8 +96,9 @@ std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
     return arguments;
 }
 
-Expression_ptr compile_expression(const struct owl_ref ref) {
-    const struct parsed_expression expression = parsed_expression_get(ref);
+// compile_leaf, compile_unary and compile_binary are kept out of line
+// so that compile_expression's recursive frame does not hold the temporaries of every case (256 instead of 1056 B)
+__attribute__((noinline)) static Expression_ptr compile_leaf(const struct parsed_expression &expression) {
     switch (expression.type) {
     case PARSED_TRUE:
         return std::make_shared<BooleanExpression>(true);
@@ -120,54 +121,84 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
     case PARSED_PROPERTY:
         return std::make_shared<PropertyExpression>(Global::get_module(identifier_to_string(expression.module_name)),
                                                     property_name_to_string(expression.property_name, expression.subproperty_name));
+    default:
+        throw std::runtime_error("invalid expression");
+    }
+}
+
+template <typename T>
+__attribute__((noinline)) static Expression_ptr compile_unary(const struct owl_ref operand) {
+    return std::make_shared<T>(compile_expression(operand));
+}
+
+template <typename T>
+__attribute__((noinline)) static Expression_ptr compile_binary(const struct owl_ref left, const struct owl_ref right) {
+    return std::make_shared<T>(compile_expression(left), compile_expression(right));
+}
+
+Expression_ptr compile_expression(const struct owl_ref ref) {
+    // each level takes up to 336 B of the 32 kB main task stack (256 B here plus 80 B in compile_binary, IDF 5.3);
+    // an ESP32 crashed at 95 levels, but an "at" block runs and is torn down on the 8 kB scheduler stack,
+    // where a sum of 47 terms crashed, so 40 leaves some headroom there
+    static const int MAX_EXPRESSION_DEPTH = 40;
+    static int depth = 0; // a plain static is fine: compilation only runs under the InterpreterLock
+    if (depth >= MAX_EXPRESSION_DEPTH) {
+        throw std::runtime_error("expression is nested too deeply");
+    }
+    struct DepthGuard {
+        DepthGuard() { ++depth; }
+        ~DepthGuard() { --depth; }
+    } depth_guard;
+    const struct parsed_expression expression = parsed_expression_get(ref);
+    switch (expression.type) {
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
-        return std::make_shared<PowerExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<PowerExpression>(expression.left, expression.right);
     case PARSED_NEGATE:
-        return std::make_shared<NegateExpression>(compile_expression(expression.operand));
+        return compile_unary<NegateExpression>(expression.operand);
     case PARSED_MULTIPLY:
-        return std::make_shared<MultiplyExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<MultiplyExpression>(expression.left, expression.right);
     case PARSED_DIVIDE:
-        return std::make_shared<DivideExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<DivideExpression>(expression.left, expression.right);
     case PARSED_MODULO:
-        return std::make_shared<ModuloExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<ModuloExpression>(expression.left, expression.right);
     case PARSED_FLOOR_DIVIDE:
-        return std::make_shared<FloorDivideExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<FloorDivideExpression>(expression.left, expression.right);
     case PARSED_ADD:
-        return std::make_shared<AddExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<AddExpression>(expression.left, expression.right);
     case PARSED_SUBTRACT:
-        return std::make_shared<SubtractExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<SubtractExpression>(expression.left, expression.right);
     case PARSED_SHIFT_LEFT:
-        return std::make_shared<ShiftLeftExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<ShiftLeftExpression>(expression.left, expression.right);
     case PARSED_SHIFT_RIGHT:
-        return std::make_shared<ShiftRightExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<ShiftRightExpression>(expression.left, expression.right);
     case PARSED_BIT_AND:
-        return std::make_shared<BitAndExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<BitAndExpression>(expression.left, expression.right);
     case PARSED_BIT_XOR:
-        return std::make_shared<BitXorExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<BitXorExpression>(expression.left, expression.right);
     case PARSED_BIT_OR:
-        return std::make_shared<BitOrExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<BitOrExpression>(expression.left, expression.right);
     case PARSED_GREATER:
-        return std::make_shared<GreaterExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<GreaterExpression>(expression.left, expression.right);
     case PARSED_LESS:
-        return std::make_shared<LessExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<LessExpression>(expression.left, expression.right);
     case PARSED_GREATER_EQUAL:
-        return std::make_shared<GreaterEqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<GreaterEqualExpression>(expression.left, expression.right);
     case PARSED_LESS_EQUAL:
-        return std::make_shared<LessEqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<LessEqualExpression>(expression.left, expression.right);
     case PARSED_EQUAL:
-        return std::make_shared<EqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<EqualExpression>(expression.left, expression.right);
     case PARSED_UNEQUAL:
-        return std::make_shared<UnequalExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<UnequalExpression>(expression.left, expression.right);
     case PARSED_NOT:
-        return std::make_shared<NotExpression>(compile_expression(expression.operand));
+        return compile_unary<NotExpression>(expression.operand);
     case PARSED_AND:
-        return std::make_shared<AndExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<AndExpression>(expression.left, expression.right);
     case PARSED_OR:
-        return std::make_shared<OrExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<OrExpression>(expression.left, expression.right);
     default:
-        throw std::runtime_error("invalid expression");
+        return compile_leaf(expression);
     }
 }
 
