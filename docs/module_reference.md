@@ -186,7 +186,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
 | `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
-| `bus.telemetry_errors`     | Malformed telemetry frames and layout lines of passed-on peers, e.g. with a wrong CRC                         | `int`     |
+| `bus.telemetry_errors`     | Malformed telemetry frames and layout lines of passed-on or mirrored peers, e.g. with a wrong CRC             | `int`     |
 | `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for places in the inbound queue, e.g. while layout lines are awaited     | `int`     |
 
 | Methods                             | Description                                                                                                                                 | Arguments         |
@@ -242,11 +242,11 @@ bus[2]: ~AdMHQOIBALbznT8BIbs=@31
 ```
 
 Each call replaces the selection of the previous one; without a call nothing is passed on.
-Peers send their frames over the bus whether they are passed on or not; the coordinator drops the others unchecked.
-Frames and layout lines of a passed-on peer that are malformed, e.g. no valid Base64 or with a wrong CRC, are dropped and counted in `telemetry_errors`.
+Peers send their frames over the bus whether they are passed on or not; the coordinator drops those of peers it neither passes on nor mirrors with a [BusTelemetry](#bus-telemetry) unchecked.
+Malformed frames and layout lines of passed-on or mirrored peers, e.g. no valid Base64 or with a wrong CRC, are dropped and counted in `telemetry_errors`.
 
 - Recovery: when a frame arrives whose layout the coordinator does not have or that does not match the frame, e.g. because `pass_telemetry` came after the peer sent its layout lines or the coordinator booted after the peer, it asks the peer for its layout lines with `core.telemetry_info()`, at most every 2 s.
-  Until the first of them arrives, at most for 2 s, it drops the peer's frames and counts them in `telemetry_dropped`, since printing the frames queued ahead of the layout lines would keep the inbound queue full and drop those.
+  Until the first of them arrives, at most for 2 s, it does not pass the peer's frames on and counts them in `telemetry_dropped`, since printing the frames queued ahead of the layout lines would keep the inbound queue full and drop those; a [BusTelemetry](#bus-telemetry) still gets them.
   Frames from before the request are passed on anyway, so a reader skips frames whose layout it has not seen yet.
   When the peer reports `Ready.`, the coordinator forgets its layouts; the peer sends them again with the first poll.
 - Late hosts: `core.telemetry_info()` on the coordinator also asks every passed-on peer of its `make_coordinator` list for its layout lines, so a host that connects later gets them too.
@@ -275,6 +275,47 @@ To remove the saved configuration, call `core.forget_serial_bus()`.
 Peers on the serial bus can be updated remotely via the coordinator.
 Use the `otb_update.py` tool to push new firmware to any peer node.
 See [OTB Update](tools.md#otb-update) for details.
+
+## Bus Telemetry
+
+On a serial bus coordinator, a BusTelemetry module mirrors values of one peer, so that rules, `core.output` and the coordinator's own telemetry frames can use them.
+The peer sends these values in its own [telemetry frames](#core); the module copies the declared fields out of every frame of that peer, without processing it as Lizard code.
+
+| Constructor                        | Description                     | Arguments          |
+| ---------------------------------- | ------------------------------- | ------------------ |
+| `arm = BusTelemetry(bus, peer_id)` | Mirror values of peer `peer_id` | `SerialBus`, `int` |
+
+The module has no properties of its own.
+Each value it mirrors is a [property declaration](language.md) with the name the peer gives the field:
+
+```
+bus = SerialBus(serial, 1)
+bus.make_coordinator(2)
+arm = BusTelemetry(bus, 2)
+bool arm.motor.enabled = false    # property motor.enabled of peer 2
+float arm.motor.position = 0.0
+bool arm.parked = false           # variable parked of peer 2
+when arm.motor.enabled then wheels.locked = true end
+core.telemetry(wheels.l_speed, arm.motor.position, 100)
+```
+
+Peer 2 has to send these values in one of its frames, e.g. with `core.telemetry(motor.position, motor.enabled, parked, 100)` in its startup; nothing is ordered from it.
+Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `arm2 = BusTelemetry(bus, 3)`.
+
+- Declarations: only `bool`, `int` and `float` can be declared.
+  Declaring a name again with the same type keeps the property and sets the declared value only while no frame has delivered one; with another type it is an error.
+  The same name of the same peer in two modules is an error, e.g. `"motor.position" of peer 2 is already declared by arm`.
+- Read-only: assigning a declared property is an error, since it mirrors the peer.
+- Values: until a frame with the value arrives, a property keeps its declared value.
+  When the peer stops sending or restarts, it keeps the last value it received.
+- Layouts: the module maps the fields by the peer's layout lines, which the coordinator keeps for every peer with a BusTelemetry, whether it passes the peer's frames on or not (see [Serial Bus](#serial-bus)).
+  A new layout ID for a frame, or a layout line that puts another field where a mirrored one was, drops the old mapping of that frame, so a property never takes a foreign value.
+  When the peer reports `Ready.`, the mapping starts over with the layout lines the peer sends with its first poll.
+  A declaration after the peer's layout lines have passed, e.g. at the console, asks the peer for them again 200 ms after the last declaration.
+- Warnings: a layout line whose type does not match the declaration yields e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`; that field is never written to the property, the rest of the frame is.
+  When frames of the peer arrive but none of them delivers a declared name for 5 s, the module warns once per name, e.g. `warning: arm: no frame of peer 2 carries "parked"`.
+- Cost: each declared value costs one property on the coordinator.
+  Rules over many mirrored values are expensive on their own, so a peer should compute a predicate like `parked` itself and the coordinator mirror one bool.
 
 ## Input
 

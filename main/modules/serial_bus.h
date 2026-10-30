@@ -14,6 +14,7 @@
 
 class SerialBus;
 using SerialBus_ptr = std::shared_ptr<SerialBus>;
+class BusTelemetry;
 
 class SerialBus : public Module {
 public:
@@ -41,6 +42,11 @@ public:
     void clear_telemetry_slots();
     // coordinator side
     void request_passed_layouts(); // asks the peers whose frames are passed on for their layout lines
+    void add_telemetry_listener(BusTelemetry *listener);
+    void remove_telemetry_listener(BusTelemetry *listener);
+    const BusTelemetry *find_telemetry_listener(const uint8_t peer_id, const std::string &property_name) const; // the one declaring it
+    bool has_telemetry_layout(const uint8_t peer_id) const;
+    bool request_telemetry_layout(const uint8_t peer_id); // however recently a frame asked; false while the queue is full
 
 private:
     struct IncomingMessage {
@@ -173,11 +179,13 @@ private:
         unsigned long request_millis = 0;
     };
     std::bitset<256> passed_peers;
-    std::map<uint8_t, PeerLayout> peer_layouts; // only of peers whose frames are passed on
+    std::vector<BusTelemetry *> telemetry_listeners;
+    std::map<uint8_t, PeerLayout> peer_layouts; // only of peers whose frames are passed on or listened to
     std::atomic<unsigned> dropped_frames{0};    // counted by the communication task
     Variable_ptr telemetry_errors;
     Variable_ptr telemetry_dropped;
     bool passes_telemetry(const uint8_t peer_id) const { return this->passed_peers[peer_id]; }
+    bool is_listened_to(const uint8_t peer_id) const;
     void handle_telemetry_frame(const IncomingMessage &message);
     void handle_telemetry_layout(const IncomingMessage &message);
     void request_layout(const uint8_t peer_id, PeerLayout &layout);
