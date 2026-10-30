@@ -8,8 +8,7 @@ from typing import Iterator
 
 import serial
 
-from console_line import format_line, split_checksum
-from serial_devices import resolve_device
+from lizard_host import format_line, resolve_device, split_checksum
 
 parser = argparse.ArgumentParser(description='Configure an ESP32 running Lizard firmware')
 parser.add_argument('config_file', help='Path to the .liz configuration file')

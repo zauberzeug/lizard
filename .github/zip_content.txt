@@ -3,11 +3,9 @@ build/partition_table/partition-table.bin
 build/lizard.elf
 build/lizard.bin
 configure.py
-console_line.py
 espresso.py
+lizard_host
 monitor.py
-serial_devices.py
-telemetry.py
 upload_ssh.py
 README.md
 requirements.txt

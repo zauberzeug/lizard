@@ -38,7 +38,7 @@ jobs:
           target: ${{ matrix.target }}
           command: python3 build.py ${{ matrix.target }}
       - name: Zip bins and tools for ${{ matrix.target }}
-        run: "zip lizard_${{ matrix.target }}.zip -@ < .github/zip_content.txt"
+        run: "zip -r lizard_${{ matrix.target }}.zip -@ -x '*/__pycache__/*' < .github/zip_content.txt"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

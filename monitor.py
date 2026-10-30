@@ -9,9 +9,7 @@ import serial
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
-import telemetry
-from console_line import checksum, format_line, split_checksum
-from serial_devices import resolve_device
+from lizard_host import Frame, Layout, TelemetryDecoder, checksum, format_line, resolve_device, split_checksum
 
 parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
 parser.add_argument('device', nargs='?', help='Serial device path (default: auto-detected, asks if ambiguous)')
@@ -46,7 +44,7 @@ class LineReader:
 
 def receive() -> None:
     line_reader = LineReader(port)
-    decoder = telemetry.Decoder()
+    decoder = TelemetryDecoder()
     unknown_versions = set()
     layout_activity = 0.0  # time of the last layout request or layout line
     while True:
@@ -57,9 +55,9 @@ def receive() -> None:
             print(line)  # never taken as a frame or a layout line
             continue
         result = decoder.feed(line)
-        if isinstance(result, telemetry.Layout):
+        if isinstance(result, Layout):
             layout_activity = time.monotonic()  # a new request would restart the layout lines still coming
-        if not isinstance(result, telemetry.Frame):
+        if not isinstance(result, Frame):
             print(line)
             continue
         if result.status == 'unknown_version':

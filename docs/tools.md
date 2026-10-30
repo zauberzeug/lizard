@@ -29,7 +29,7 @@ This requires a Jetson Orin (L4T 35 or 36);
 for Nano/Xavier Robot Brains use release 0.12.x or earlier, which still ships `flash.py`.
 
 To flash a Robot Brain over the network from a development machine, pass `--host`.
-This rsyncs the binaries, `espresso.py` and `serial_devices.py` to the target and runs the command there over SSH:
+This rsyncs the binaries, `espresso.py` and the `lizard_host` package to the target and runs the command there over SSH:
 
 ```bash
 ./espresso.py flash --host user@robot-brain[:path]
@@ -72,29 +72,30 @@ You can also use an SSH monitor to access a microcontroller via SSH:
 ./monitor_ssh.sh <user@host>
 ```
 
-This copies `monitor.py`, `serial_devices.py`, `console_line.py` and `telemetry.py` from this checkout to `~/lizard` on the target and starts the monitor there,
+This copies `monitor.py` and the `lizard_host` package from this checkout to `~/lizard` on the target and starts the monitor there,
 so which device it detects does not depend on the age of the target's own checkout.
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
 
 ### Telemetry Decoder
 
-`telemetry.py` decodes [telemetry frames](module_reference.md#core) for the serial monitor and for other host software.
-`console_line.py` splits off and computes the [line checksum](machine_safety.md#checksums) first:
+The `lizard_host` package next to the scripts decodes [telemetry frames](module_reference.md#core) for the serial monitor and for other host software.
+It also splits off and computes the [line checksum](machine_safety.md#checksums) first:
 
 ```python
-import telemetry
-from console_line import checksum, split_checksum
+import lizard_host as lh
 
-decoder = telemetry.Decoder()
+decoder = lh.TelemetryDecoder()
 for line in lines:
-    text, check = split_checksum(line)
-    if check is not None and checksum(text) != check:
+    text, check = lh.split_checksum(line)
+    if check is not None and lh.checksum(text) != check:
         continue  # a damaged line
     result = decoder.feed(text)
-    if isinstance(result, telemetry.Frame) and result.status == 'ok':
+    if isinstance(result, lh.Frame) and result.status == 'ok':
         print(result.frame_id, result.seq, result.millis, result.values)
 ```
+
+The package is not installable, so a script outside the Lizard folder needs that folder on its `PYTHONPATH`.
 
 `feed` returns a `Text`, a `Layout` or a `Frame` and keeps the layouts of each sender.
 `str()` of a frame gives the line the monitor shows, with floats rounded to the seven significant digits of a float32.
