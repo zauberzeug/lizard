@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import telemetry  # noqa: E402
+from console_line import checksum, split_checksum  # noqa: E402
 from telemetry import Decoder, Frame, Layout, Text  # noqa: E402
 
 # Recorded from an ESP32 after
@@ -48,14 +48,14 @@ SHORTENED = ['__LAYOUT__v1 1.0/2 69 pos:f@70', '__LAYOUT__v1 1.1/2 69 state:i@65
 def feed(decoder: Decoder, lines: list, sender=None) -> list:
     results = []
     for line in lines:
-        text, check = telemetry.split_checksum(line)
-        assert check is None or check == telemetry.checksum(text)
+        text, check = split_checksum(line)
+        assert check is None or check == checksum(text)
         results.append(decoder.feed(text, sender))
     return results
 
 
 def strip(line: str) -> str:
-    return telemetry.split_checksum(line)[0]
+    return split_checksum(line)[0]
 
 
 def with_crc(body: bytes) -> str:
@@ -225,10 +225,3 @@ def test_lines_that_are_not_telemetry_stay_text(line):
     decoder = Decoder()
     feed(decoder, LAYOUT_1)
     assert decoder.feed(line) == Text(None, line)
-
-
-def test_checksum():
-    assert telemetry.split_checksum(FRAMES_1[0]) == (FRAMES_1[0][:-3], 0x6d)
-    assert telemetry.checksum(FRAMES_1[0][:-3]) == 0x6d
-    assert telemetry.split_checksum('Ready.') == ('Ready.', None)
-    assert telemetry.split_checksum('mail me@zz') == ('mail me@zz', None)

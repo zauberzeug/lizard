@@ -3,6 +3,7 @@ build/partition_table/partition-table.bin
 build/lizard.elf
 build/lizard.bin
 configure.py
+console_line.py
 espresso.py
 monitor.py
 serial_devices.py

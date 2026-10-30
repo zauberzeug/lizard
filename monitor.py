@@ -10,6 +10,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
 import telemetry
+from console_line import checksum, format_line, split_checksum
 from serial_devices import resolve_device
 
 parser = argparse.ArgumentParser(description='Monitor an ESP32 running Lizard firmware')
@@ -50,8 +51,8 @@ def receive() -> None:
     layout_activity = 0.0  # time of the last layout request or layout line
     while True:
         # decode tolerantly so invalid bytes (e.g. noise or a baud mismatch) never crash the reader
-        line, check = telemetry.split_checksum(line_reader.readline().decode(errors='replace').strip('\r\n'))
-        if check is not None and (actual := telemetry.checksum(line)) != check:
+        line, check = split_checksum(line_reader.readline().decode(errors='replace').strip('\r\n'))
+        if check is not None and (actual := checksum(line)) != check:
             print(f'ERROR: CHECKSUM MISMATCH ({actual} vs. {check} for "{line}")')
             print(line)  # never taken as a frame or a layout line
             continue
@@ -76,7 +77,7 @@ def receive() -> None:
 
 def write_line(text: str) -> None:
     with port_lock:
-        port.write(f'{text}@{telemetry.checksum(text):02x}\n'.encode())
+        port.write(format_line(text).encode())
 
 
 async def send() -> None:

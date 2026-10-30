@@ -21,24 +21,6 @@ Value = Union[float, int, bool]
 Field = Tuple[str, str]  # name and type
 
 
-def checksum(text: str) -> int:
-    """Lizard's line checksum: the XOR of all bytes of the line."""
-    result = 0
-    for byte in text.encode():
-        result ^= byte
-    return result
-
-
-def split_checksum(line: str) -> Tuple[str, Optional[int]]:
-    """Split a line into its text and its "@xx" checksum, which is None if the line has none."""
-    if line[-3:-2] == '@':
-        try:
-            return line[:-3], int(line[-2:], 16)
-        except ValueError:
-            pass
-    return line, None
-
-
 def format_value(value: Value) -> str:
     if isinstance(value, bool):
         return 'true' if value else 'false'

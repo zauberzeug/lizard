@@ -8,6 +8,7 @@ from typing import Iterator
 
 import serial
 
+from console_line import format_line
 from serial_devices import resolve_device
 
 parser = argparse.ArgumentParser(description='Configure an ESP32 running Lizard firmware')
@@ -30,10 +31,7 @@ def send(payload: str) -> None:
     else:
         line_ = payload
     print(f'Sending: {line_}')
-    checksum_ = 0
-    for byte in line_.encode():
-        checksum_ ^= byte
-    port.write((f'{line_}@{checksum_:02x}\n').encode())
+    port.write(format_line(line_).encode())
 
 
 def read(*, timeout: float) -> Iterator[str]:
