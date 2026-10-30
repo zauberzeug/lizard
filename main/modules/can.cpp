@@ -320,9 +320,6 @@ void Can::reset_can_bus(const bool verbose) {
         }
     }
 
-    // Tear down and rebuild the driver instead of calling twai_initiate_recovery():
-    // ESP-IDF v5.3.1 asserts tx_msg_count >= 0 in the TX ISR while leaving BUS_OFF,
-    // which would call abort() from interrupt context.
     if (twai_driver_uninstall() != ESP_OK) {
         throw std::runtime_error("could not uninstall TWAI driver");
     }

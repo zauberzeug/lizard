@@ -34,7 +34,7 @@ jobs:
       - name: Build firmware for ${{ matrix.target }}
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3.1
+          esp_idf_version: v5.3.6
           target: ${{ matrix.target }}
           command: python3 build.py ${{ matrix.target }}
       - name: Zip bins and tools for ${{ matrix.target }}
