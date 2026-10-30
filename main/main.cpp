@@ -127,12 +127,12 @@ __attribute__((noinline)) static Expression_ptr compile_leaf(const struct parsed
 }
 
 template <typename T>
-__attribute__((noinline)) Expression_ptr compile_unary(const struct owl_ref operand) {
+__attribute__((noinline)) static Expression_ptr compile_unary(const struct owl_ref operand) {
     return std::make_shared<T>(compile_expression(operand));
 }
 
 template <typename T>
-__attribute__((noinline)) Expression_ptr compile_binary(const struct owl_ref left, const struct owl_ref right) {
+__attribute__((noinline)) static Expression_ptr compile_binary(const struct owl_ref left, const struct owl_ref right) {
     return std::make_shared<T>(compile_expression(left), compile_expression(right));
 }
 
