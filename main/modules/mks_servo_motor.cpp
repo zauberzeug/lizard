@@ -33,6 +33,7 @@ void MksServoMotor::subscribe_to_can() {
     this->can->subscribe(this->can_id, std::static_pointer_cast<Module>(this->shared_from_this()));
     // Send the initial configuration only after the subscription is in place,
     // so the 0x82 acknowledgement is observed and reflected in "set_mode_status".
+    this->send_motion_answers_off();
     this->send_working_current(this->properties.at("working_current")->integer_value());
     this->send_set_mode(MODE_SR_vFOC); // required for 0xF5/0xF6 bus motion commands
 }
@@ -67,6 +68,13 @@ void MksServoMotor::send_set_mode(uint8_t mode) {
     uint8_t data[] = {0x82, mode};
     this->send(data, 2);
     this->properties.at("set_mode_status")->set_integer_value(STATUS_SET_MODE_PENDING);
+}
+
+void MksServoMotor::send_motion_answers_off() {
+    // nothing reads the motor's answers to 0xF5/0xF6,
+    // and they share the request's ID, so they could collide with the next frame
+    uint8_t data[] = {0x8C, 0x00, 0x00}; // respond off, active off
+    this->send(data, 3);
 }
 
 void MksServoMotor::send_set_bitrate(int64_t hz) {
