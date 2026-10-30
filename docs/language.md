@@ -22,6 +22,9 @@ button.level
 
 Expressions can be assigned to variables, used in conditions and passed to constructors, method calls or routine calls.
 Plain expression statements print their result to the command line.
+Expressions can be nested up to 64 levels deep, where every operator and every pair of parentheses adds a level.
+A chain like `a + b + c + ...` can therefore have up to 64 terms.
+Deeper expressions are rejected with "expression is nested too deeply".
 
 **Variables: declaration and assignment**
 
