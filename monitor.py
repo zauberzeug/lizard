@@ -65,6 +65,8 @@ def receive() -> None:
             if result.sender in unknown_versions:
                 continue
             unknown_versions.add(result.sender)
+        else:
+            unknown_versions.discard(result.sender)  # a later switch to an unknown version shows its first frame again
         print(result if result.sender is None else f'bus[{result.sender}]: {result}')
         now = time.monotonic()
         if result.status in ('no_layout', 'layout_incomplete', 'layout_mismatch') and now > layout_activity + 2.0:
