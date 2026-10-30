@@ -95,6 +95,8 @@ for line in lines:
         print(result.frame_id, result.seq, result.millis, result.values)
 ```
 
+The package is not installable, so a script outside the Lizard folder needs that folder on its `PYTHONPATH`.
+
 `feed` returns a `Text`, a `Layout` or a `Frame` and keeps the layouts of each sender.
 `str()` of a frame gives the line the monitor shows, with floats rounded to the seven significant digits of a float32.
 A frame that cannot be decoded has `values = None` and one of these statuses:

@@ -14,10 +14,14 @@ select = [
     "B",  # bugbear
     "E",  # pycodestyle errors
     "F",  # pyflakes
+    "FA102", # list[int] or int | None in annotations break the scripts on Python 3.8
     "I",  # isort
     "UP", # pyupgrade
     "W",  # pycodestyle warnings
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/**" = ["FA102"] # the examples run on newer host Pythons, not on L4T 35
 
 [tool.mypy]
 ignore_missing_imports = true
