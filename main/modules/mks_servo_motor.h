@@ -11,6 +11,7 @@ class MksServoMotor : public Module, public std::enable_shared_from_this<MksServ
 private:
     Can_ptr can;
     const uint16_t can_id;
+    bool read_speed_next = false;
 
     void send(const uint8_t *data, uint8_t len);
     bool crc_ok(const uint8_t *data, int count) const;

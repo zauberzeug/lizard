@@ -989,6 +989,8 @@ If acceleration is 0, the motor stops immediately.
 The `read_position_error()` method requests the current position error from the motor via CAN.
 The result is available in the `position_error` property (in degrees) once the motor responds.
 
+The `position` and `speed` properties are read in turns, so each of them is updated every other step.
+
 The `set_bitrate()` method changes the CAN bitrate on the motor.
 The rate is given in Hz and must be one of the four supported values (125000, 250000, 500000 or 1000000);
 any other value is rejected with a log message and no command is sent.
