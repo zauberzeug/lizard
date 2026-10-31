@@ -24,8 +24,12 @@ public:
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
+    // boot and enable pins of the peer at the other end of a point-to-point link, to flash and restart it
+    const gpio_num_t boot_pin;
+    const gpio_num_t enable_pin;
 
-    SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id);
+    SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id,
+              const gpio_num_t boot_pin = GPIO_NUM_NC, const gpio_num_t enable_pin = GPIO_NUM_NC);
     ~SerialBus() override;
 
     void step() override;
@@ -119,6 +123,10 @@ private:
     TaskHandle_t communication_task = nullptr;
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> stopped{false};
+    std::atomic<bool> pause_requested{false}; // the main task uses the UART, e.g. to flash the peer
+    std::atomic<bool> paused{false};
+    std::atomic<bool> peer_restarted{false}; // poll timeouts are no news while a restarted peer boots
+    std::atomic<unsigned long> peer_restart_millis{0};
     int echo_callback_handle = 0;
     bool owns_console = false; // the serial is the console UART, so everything this node prints goes to its coordinator
     std::atomic<unsigned> dropped_output{0};
@@ -223,4 +231,12 @@ private:
     void handle_echo(const char *line);
     void relay_console_line(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
+
+    // --- peer on a point-to-point link with boot and enable pins (main task) -----
+    bool has_peer_pins() const { return this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC; }
+    void drive_peer_pins_high() const;
+    void restart_peer();
+    void pause_communication();
+    void flash_peer(const uint8_t peer_id);
+    void configure_flashed_peer(const uint8_t peer_id);
 };

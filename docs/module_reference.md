@@ -179,9 +179,10 @@ Neither property stops anything by itself; use the wheels' `drive_command_timeou
 
 The serial bus module lets multiple ESP32s share a UART link with a coordinator that polls peers in turn.
 
-| Constructor                   | Description                                    | Arguments       |
-| ----------------------------- | ---------------------------------------------- | --------------- |
-| `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
+| Constructor                                 | Description                                                                         | Arguments          |
+| ------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------ |
+| `bus = SerialBus(serial, id)`               | Attach to a serial module with local node `id`                                      | `Serial`, `int`    |
+| `bus = SerialBus(serial, id, boot, enable)` | Same, with the boot and enable pins of the peer at the other end of the serial link | `Serial`, 3x `int` |
 
 | Properties                 | Description                                                                                                   | Data type |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
@@ -197,6 +198,8 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
 | `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
 | `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s            |
+| `bus.flash_peer(id)`                | Flash the peer at the other end with this node's firmware and make it bus node `id` on its console (needs the pins)                         | `int`             |
+| `bus.restart_peer()`                | Restart the peer at the other end via its enable pin (needs the pins)                                                                       |                   |
 
 **Time Synchronization:**
 Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle.
@@ -274,6 +277,7 @@ On boot, if the startup script does not create a SerialBus but a backup config e
 Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
 This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
 A bus on the console is restored the same way and takes over the console again, see [Console as Link](#serial-bus).
+The boot and enable pins of a peer are not part of the backup.
 To remove the saved configuration, call `core.forget_serial_bus()`.
 
 **Console as Link:**
@@ -294,6 +298,24 @@ ESP-IDF log and ROM output is dropped while the bus has the console, but the boo
 The coordinator drops lines that do not start with `$$` without a warning and counts them in `ignored_lines`.
 Put the two lines at the top of the startup script, so that its later errors reach the coordinator.
 A startup script that keeps failing is skipped after two failed boots (see [Startup Script](getting_started.md#startup-script)); the bus backup then takes over the console again, and the boot lines tell the coordinator why.
+
+**Flashing and Restarting a Peer:**
+With the boot and enable pins of the peer at the other end of a point-to-point link, i.e. the GPIO this node wires to the peer's GPIO0 and EN, the coordinator can flash and restart that peer like an [expander](#expander):
+
+```
+serial = Serial(26, 27, 115200, 1)
+p0 = SerialBus(serial, 1, 25, 14)
+p0.make_coordinator(2)
+```
+
+The bus drives both pins high without restarting the peer, unlike an expander, which restarts the other microcontroller when it is created.
+`p0.restart_peer()` pulls the enable pin low for 100 ms.
+`p0.flash_peer(2)` copies this node's firmware onto the peer like `expander.flash()` at 921600 baud, which erases the peer's NVS, i.e. its startup script, its bus backup and a persisted console baud rate.
+The copy boots with its console at 115200 baud, and the coordinator writes it a startup script that takes the console as a bus link with node ID 2, `serial = Serial(3, 1, <baud>, 0)` and `bus = SerialBus(serial, 2)` with the baud rate of the coordinator's serial, and restarts it.
+The rest of the peer's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
+`flash_peer()` blocks the main loop for the whole transfer like `expander.flash()` and fails if another module uses the serial.
+It does not check the strapping pins; a peer that does not enter its bootloader fails the transfer before anything is erased.
+For 5 s after a restart, while the peer boots, poll timeouts are not reported.
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.
