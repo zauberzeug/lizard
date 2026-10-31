@@ -17,7 +17,6 @@
 #include <cstring>
 #include <stdexcept>
 
-static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
 static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
 static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
@@ -362,9 +361,9 @@ static bool parse_stamp(const char *stamp, int64_t *fields, const size_t count) 
 }
 
 void SerialBus::process_uart() {
-    static char buffer[FRAME_BUFFER_SIZE];
+    char *const buffer = this->rx_frame;
     while (this->serial->has_buffered_lines()) {
-        const int len = this->serial->read_line(buffer, sizeof(buffer));
+        const int len = this->serial->read_line(buffer, FRAME_BUFFER_SIZE);
         if (len < 0) {
             this->print_to_incoming_queue("warning: serial bus %s error while processing uart: %s", this->name.c_str(), Serial::read_line_error(len));
             continue;
@@ -670,12 +669,12 @@ bool SerialBus::send_outgoing_queue() {
 }
 
 size_t SerialBus::send_message(const uint8_t receiver, const char *payload, const size_t length) const {
-    static char buffer[FRAME_BUFFER_SIZE];
-    const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver);
+    char *const buffer = this->tx_frame;
+    const int header_len = csprintf(buffer, FRAME_BUFFER_SIZE, "$$%u:%u$$", this->node_id, receiver);
     if (header_len < 0) {
         throw std::runtime_error("serial bus: could not format bus header");
     }
-    if (header_len + length >= sizeof(buffer)) {
+    if (header_len + length >= FRAME_BUFFER_SIZE) {
         throw std::runtime_error("serial bus: payload is too large");
     }
     memcpy(buffer + header_len, payload, length);
@@ -781,7 +780,7 @@ void SerialBus::clear_telemetry_slots() {
 
 void SerialBus::send_frame_slots(const uint8_t receiver) {
     FrameSlot *const slots = this->frame_slots;
-    static char line[PAYLOAD_CAPACITY];
+    char *const line = this->slot_line;
     for (size_t i = 0; slots && i < FRAME_SLOTS; ++i) {
         size_t length = 0;
         taskENTER_CRITICAL(&this->frame_slot_lock);

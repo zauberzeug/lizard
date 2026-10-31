@@ -20,6 +20,7 @@ public:
     static inline constexpr const char *TYPE = "SerialBus";
 
     static constexpr size_t PAYLOAD_CAPACITY = 256;
+    static constexpr size_t FRAME_BUFFER_SIZE = 512;
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
@@ -159,6 +160,7 @@ private:
     unsigned long last_slot_warning_millis = 0;
     FrameSlot *find_frame_slot(const uint8_t frame_id) const; // 0 finds a free one
     void send_frame_slots(const uint8_t receiver);
+    char slot_line[PAYLOAD_CAPACITY]; // the frame being sent, copied out of its slot
 
     // --- telemetry, coordinator side (main task) ---------------------------
     struct FrameLayout {
@@ -185,6 +187,9 @@ private:
     static void communication_loop(void *param);
     void adopt_config(const Config &config);
     void process_uart();
+    // per bus, since the communication tasks of several buses run at the same time
+    char rx_frame[FRAME_BUFFER_SIZE];
+    mutable char tx_frame[FRAME_BUFFER_SIZE];
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
