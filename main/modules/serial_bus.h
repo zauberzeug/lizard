@@ -155,6 +155,7 @@ private:
     std::atomic<FrameSlot *> frame_slots{nullptr}; // allocated by the main task with the first frame
     portMUX_TYPE frame_slot_lock = portMUX_INITIALIZER_UNLOCKED;
     std::atomic<uint8_t> coordinator_id{0};
+    bool slot_warning_sent = false; // the first warning comes right away, not only 10 s after boot
     unsigned long last_slot_warning_millis = 0;
     FrameSlot *find_frame_slot(const uint8_t frame_id) const; // 0 finds a free one
     void send_frame_slots(const uint8_t receiver);

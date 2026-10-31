@@ -747,7 +747,8 @@ bool SerialBus::store_telemetry_frame(const uint8_t frame_id, const char *line, 
         slot = this->find_frame_slot(0); // a free one
     }
     if (!slot) {
-        if (millis_since(this->last_slot_warning_millis) > SLOT_WARNING_INTERVAL_MS) {
+        if (!this->slot_warning_sent || millis_since(this->last_slot_warning_millis) > SLOT_WARNING_INTERVAL_MS) {
+            this->slot_warning_sent = true;
             this->last_slot_warning_millis = millis();
             this->echo_target_id = this->coordinator_id; // relayed by handle_echo, printed as bus[<id>]: there
             echo("warning: serial bus %s has no slot for telemetry frame %u (at most %u frames)", this->name.c_str(),
