@@ -120,6 +120,11 @@ private:
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> stopped{false};
     int echo_callback_handle = 0;
+    bool owns_console = false; // the serial is the console UART, so everything this node prints goes to its coordinator
+    std::atomic<unsigned> dropped_output{0};
+    unsigned long last_output_drop_report_millis = 0;
+    std::atomic<unsigned> ignored_lines{0}; // counted by the communication task
+    Variable_ptr ignored_lines_property;
 
     // --- owned by the main task --------------------------------------------
     Config config{};
@@ -216,5 +221,6 @@ private:
 
     void print_to_incoming_queue(const char *format, ...);
     void handle_echo(const char *line);
+    void relay_console_line(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
 };

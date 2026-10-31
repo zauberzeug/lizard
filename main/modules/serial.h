@@ -28,6 +28,7 @@ public:
     const gpio_num_t tx_pin;
     const long baud_rate;
     const uart_port_t uart_num;
+    const bool on_console; // UART0 on the console pins, only for a SerialBus, which takes over the console's driver
 
     Serial(const std::string name,
            const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num);

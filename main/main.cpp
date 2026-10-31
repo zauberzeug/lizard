@@ -436,7 +436,9 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
         return;
     }
     if (debug) {
-        owl_tree_print(tree.get());
+        if (!console_handed_over()) {
+            owl_tree_print(tree.get()); // prints to stdout directly
+        }
         tic();
     }
     process_tree(tree.get(), from_expander);
@@ -572,6 +574,9 @@ static void process_uart_line(char *line, const int len) {
 void process_uart() {
     static char input[CONSOLE_LINE_SIZE];
     static bool discarding = false; // an unterminated run exceeded a line: drop everything up to its line end
+    if (console_handed_over()) {
+        return; // a serial bus reads UART0
+    }
     while (true) {
         const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
@@ -669,8 +674,11 @@ void app_main() {
 
     bus_backup::save_if_present();
     bus_backup::restore_if_needed();
+    forget_boot_lines();
 
-    printf("\nReady.\n");
+    if (!console_handed_over()) {
+        printf("\nReady.\n"); // a serial bus that took over the console reports "Ready." with its first answer
+    }
 
     constexpr int LOOP_PERIOD_MS = 10;
     // Anchor for the deadline loop below: xTaskDelayUntil advances this by one period
