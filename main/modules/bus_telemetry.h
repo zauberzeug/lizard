@@ -16,7 +16,8 @@ private:
         const std::string *name; // key in the property map
         Variable *variable;
         bool received = false; // a frame delivered a value since the peer's last restart
-        bool warned = false;
+        bool warned = false;   // that no frame carries it
+        bool mismatch = false; // the peer sends it with another type
     };
     struct Field {
         uint16_t index;    // in the frame
@@ -32,15 +33,18 @@ private:
     };
 
     std::vector<Mirror> mirrors;
-    std::map<uint8_t, FrameMap> frames; // by frame ID, only frames with mirrored fields
-    bool layout_request_pending = false;
-    unsigned long declared_millis = 0;
+    std::map<uint8_t, FrameMap> frames;  // by frame ID, only frames with mirrored fields
+    bool layout_request_pending = false; // sent once the declarations or layout lines settle
+    unsigned long layout_request_millis = 0;
+    bool layout_awaited = false; // requested, but no layout line arrived since
+    unsigned layout_retries = 0;
     bool frames_arriving = false; // since the last declaration or restart of the peer
     unsigned long frames_since_millis = 0;
     bool missing_checked = false;
 
     int find_mirror(const std::string_view name) const;
     void restart_missing_check();
+    void request_layout();
 
 public:
     static inline constexpr const char *TYPE = "BusTelemetry";

@@ -202,11 +202,15 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         for (const auto &argument : arguments) {
             peers.set(to_peer_id(argument));
         }
-        this->passed_peers = arguments.empty() ? peers.set() : peers;
-        // a peer that is passed on anew is asked for its layout lines with its first frame
-        for (auto it = this->peer_layouts.begin(); it != this->peer_layouts.end();) {
-            it = this->passes_telemetry(it->first) || this->is_listened_to(it->first) ? std::next(it) : this->peer_layouts.erase(it);
+        if (arguments.empty()) {
+            peers.set();
         }
+        // a peer that is passed on anew is asked for its layout lines with its first frame, also if a BusTelemetry kept them
+        for (auto it = this->peer_layouts.begin(); it != this->peer_layouts.end();) {
+            const bool keep = peers[it->first] ? this->passes_telemetry(it->first) : this->is_listened_to(it->first);
+            it = keep ? std::next(it) : this->peer_layouts.erase(it);
+        }
+        this->passed_peers = peers;
     } else {
         Module::call(method_name, arguments);
     }

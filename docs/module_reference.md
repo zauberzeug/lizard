@@ -303,16 +303,18 @@ Peer 2 has to send these values in one of its frames, e.g. with `core.telemetry(
 Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `arm2 = BusTelemetry(bus, 3)`.
 
 - Declarations: only `bool`, `int` and `float` can be declared.
-  Declaring a name again with the same type keeps the property and sets the declared value only while no frame has delivered one; with another type it is an error.
+  Declaring a name again with the same type keeps the property and sets the declared value only while no frame has delivered one since the peer last restarted; with another type it is an error.
   The same name of the same peer in two modules is an error, e.g. `"motor.position" of peer 2 is already declared by arm`.
 - Read-only: assigning a declared property is an error, since it mirrors the peer.
 - Values: until a frame with the value arrives, a property keeps its declared value.
   When the peer stops sending or restarts, it keeps the last value it received.
 - Layouts: the module maps the fields by the peer's layout lines, which the coordinator keeps for every peer with a BusTelemetry, whether it passes the peer's frames on or not (see [Serial Bus](#serial-bus)).
-  A new layout ID for a frame, or a layout line that puts another field where a mirrored one was, drops the old mapping of that frame, so a property never takes a foreign value.
+  A new layout ID for a frame, or a layout line that puts another field where a mirrored one was, drops the old mapping of that frame, so a property does not take a foreign value; the latter also asks the peer for its layout lines again.
+  Only when a reused frame ID gets a layout with the same layout ID (a chance of 1 in 256) and one of its layout lines is lost, a mirrored field can keep its old place.
   When the peer reports `Ready.`, the mapping starts over with the layout lines the peer sends with its first poll.
-  A declaration after the peer's layout lines have passed, e.g. at the console, asks the peer for them again 200 ms after the last declaration.
-- Warnings: a layout line whose type does not match the declaration yields e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`; that field is never written to the property, the rest of the frame is.
+  A declaration after the peer's layout lines have passed, e.g. at the console, asks the peer for them again 200 ms after the last declaration, and up to three more times every 2 s while no layout line arrives.
+  When the coordinator starts to pass the peer's frames on, it asks for them again as well, so that the host gets them too.
+- Warnings: a layout line whose type does not match the declaration yields e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`, once per name; that field is never written to the property, the rest of the frame is.
   When frames of the peer arrive but none of them delivers a declared name for 5 s, the module warns once per name, e.g. `warning: arm: no frame of peer 2 carries "parked"`.
 - Cost: each declared value costs one property on the coordinator.
   Rules over many mirrored values are expensive on their own, so a peer should compute a predicate like `parked` itself and the coordinator mirror one bool.

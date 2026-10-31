@@ -8,6 +8,8 @@
 #include <stdexcept>
 
 static constexpr unsigned long DECLARATIONS_SETTLE_MS = 200;
+static constexpr unsigned long LAYOUT_RETRY_MS = 2000;
+static constexpr unsigned LAYOUT_RETRIES = 3;
 static constexpr unsigned long MISSING_WARNING_MS = 5000;
 
 static Module_ptr create_bus_telemetry(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
@@ -49,13 +51,23 @@ BusTelemetry::~BusTelemetry() {
 }
 
 void BusTelemetry::step() {
-    if (this->layout_request_pending && millis_since(this->declared_millis) >= DECLARATIONS_SETTLE_MS) {
-        this->layout_request_pending = !this->bus->request_telemetry_layout(this->peer_id); // again while the queue is full
+    if (this->layout_request_pending && millis_since(this->layout_request_millis) >= DECLARATIONS_SETTLE_MS &&
+        this->bus->request_telemetry_layout(this->peer_id)) { // again while the queue is full
+        this->layout_request_pending = false;
+        this->layout_awaited = true;
+        this->layout_request_millis = millis();
+    }
+    if (this->layout_awaited && millis_since(this->layout_request_millis) >= LAYOUT_RETRY_MS) {
+        this->layout_awaited = false;
+        if (this->layout_retries < LAYOUT_RETRIES) { // the request or its answer got lost
+            ++this->layout_retries;
+            this->request_layout();
+        }
     }
     if (this->frames_arriving && !this->missing_checked && millis_since(this->frames_since_millis) >= MISSING_WARNING_MS) {
         this->missing_checked = true;
         for (Mirror &mirror : this->mirrors) {
-            if (!mirror.received && !mirror.warned) {
+            if (!mirror.received && !mirror.warned && !mirror.mismatch) {
                 mirror.warned = true;
                 echo("warning: %s: no frame of peer %u carries \"%s\"", this->name.c_str(), this->peer_id, mirror.name->c_str());
             }
@@ -96,9 +108,14 @@ void BusTelemetry::declare_property(const std::string &property_name, const Vari
     this->restart_missing_check();
     if (this->bus->has_telemetry_layout(this->peer_id)) {
         // the layout lines with this name may have passed already, so ask for them again once the declarations settle
-        this->layout_request_pending = true;
-        this->declared_millis = millis();
+        this->layout_retries = 0;
+        this->request_layout();
     }
+}
+
+void BusTelemetry::request_layout() {
+    this->layout_request_pending = true;
+    this->layout_request_millis = millis();
 }
 
 int BusTelemetry::find_mirror(const std::string_view name) const {
@@ -116,12 +133,15 @@ void BusTelemetry::restart_missing_check() {
 }
 
 void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line) {
+    this->layout_awaited = false;
     int mirror = this->find_mirror(line.name);
     if (mirror >= 0 && to_type(line.type) != this->mirrors[mirror].variable->type) {
         // the field keeps out of the property, the rest of the frame is still mapped
-        echo("warning: %s: peer %u sends \"%s\" as %s, not %s", this->name.c_str(), this->peer_id, this->mirrors[mirror].name->c_str(),
-             describe(to_type(line.type)), describe(this->mirrors[mirror].variable->type));
-        this->mirrors[mirror].warned = true;
+        if (!this->mirrors[mirror].mismatch) {
+            echo("warning: %s: peer %u sends \"%s\" as %s, not %s", this->name.c_str(), this->peer_id,
+                 this->mirrors[mirror].name->c_str(), describe(to_type(line.type)), describe(this->mirrors[mirror].variable->type));
+            this->mirrors[mirror].mismatch = true;
+        }
         mirror = -1;
     }
     auto frame = this->frames.find(line.frame_id);
@@ -134,6 +154,11 @@ void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line) {
             // the peer gave the frame ID to other fields, so no mirror of the old mapping may take their values
             this->frames.erase(frame);
             frame = this->frames.end();
+            if (!other_layout) {
+                // a new layout with the same layout ID: lines of it that came before this one were dropped with the mapping
+                this->layout_retries = 0;
+                this->request_layout();
+            }
         } else {
             frame->second.positioned = false; // the positions follow from the types of all fields
         }
