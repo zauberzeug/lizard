@@ -134,7 +134,7 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
                                                 : "failed to create serial bus queues");
     }
     // claim last: a claim is never released, so it must not outlive a constructor that throws
-    this->serial->claim(name);
+    this->serial->claim(name, true);
     telemetry::add_bus(this);
     if (this->has_peer_pins()) {
         this->drive_peer_pins_high();
@@ -905,7 +905,7 @@ void SerialBus::relay_console_line(const char *line) {
                             static_cast<int>(sizeof(payload) - sizeof(ECHO_CMD)));
     }
     // the reserve stays free for command replies and OTB acks
-    if (len < 0 || uxQueueSpacesAvailable(this->outbound_queue) <= TELEMETRY_QUEUE_RESERVE ||
+    if (len < 0 || len >= static_cast<int>(sizeof(payload)) || uxQueueSpacesAvailable(this->outbound_queue) <= TELEMETRY_QUEUE_RESERVE ||
         !this->queue_outgoing_message(this->coordinator_id, payload, len, 0)) {
         this->dropped_output++;
     }

@@ -35,7 +35,7 @@ public:
     ~Serial();
     void initialize_uart() const;
     void enable_line_detection() const;
-    void claim(const std::string &user) const;
+    void claim(const std::string &user, const bool serial_bus = false) const; // a console serial only carries a bus
     void require_sole_user(const std::string &user) const;
     void deinstall() const;
     void reinitialize_after_flash() const;
