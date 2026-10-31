@@ -255,7 +255,7 @@ Frames and layout lines of a passed-on peer that are malformed, e.g. no valid Ba
 - Bus load: a frame of 20 floats takes 132 bytes on the bus, i.e. 2.9 ms at 460800 baud; 100 such frames per second would take almost a third of the bus.
   At 115200 baud, eight frames of 45 floats take about 180 ms per poll, close to the coordinator's poll timeout of 250 ms.
 - Console load: the coordinator prints every frame it passes on, and printing blocks its loop until the line is on the wire (see [Console load](#core)).
-  A frame of 45 floats is a line of 265 bytes, i.e. 5.8 ms at 460800 baud.
+  A frame of 45 floats is a line of 266 bytes, i.e. 5.8 ms at 460800 baud.
   A step handles only the messages that were waiting when it started, so frames that arrive faster than the console prints them slow the loop down instead of stalling it; those that no longer fit into the inbound queue are dropped and counted in `telemetry_dropped`.
 - Compatibility: update the coordinator's firmware first, since an older coordinator tries to run the peer's frames and layout lines as Lizard code.
   Payloads starting with `~` or `__LAYOUT__` are reserved for telemetry.
