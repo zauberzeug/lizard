@@ -250,12 +250,15 @@ Frames and layout lines of a passed-on peer that are malformed, e.g. no valid Ba
   Frames from before the request are passed on anyway, so a reader skips frames whose layout it has not seen yet.
   When the peer reports `Ready.`, the coordinator forgets its layouts; the peer sends them again with the first poll.
 - Late hosts: `core.telemetry_info()` on the coordinator also asks every passed-on peer of its `make_coordinator` list for its layout lines, so a host that connects later gets them too.
-- Queues: frames never take the last eight places of the coordinator's inbound queue, and layout lines never the last eight of the peer's outbound queue, which keeps them for commands, echoes and update chunks.
-  Frames dropped for that reason, e.g. while long prints or the startup block the coordinator, are counted in `telemetry_dropped`.
-- Bus load: a frame of 20 floats takes 132 bytes on the bus, i.e. 2.9 ms at 460800 baud; 100 such frames per second would take almost a third of the bus.
-  At 115200 baud, eight frames of 45 floats take about 180 ms per poll, close to the coordinator's poll timeout of 250 ms.
+- Queues: telemetry leaves the last eight places of the bus queues free (frames on the coordinator, layout lines on the peer), so commands, their replies and update chunks still get through while frames pile up, e.g. while long prints or the startup block the coordinator.
+  Lost telemetry recovers by itself: the next frame replaces a lost one, and missing layout lines are requested again.
+  Frames dropped this way are counted in `telemetry_dropped`.
+- Bus load: a frame of n floats or ints is a line of about 5.3·n + 25 bytes, on the bus as well as on the coordinator's console.
+  A frame of 20 floats takes 132 bytes, i.e. 2.9 ms at 460800 baud; 100 such frames per second would take almost a third of the bus.
+  The most one poll can carry is all eight slots with the largest frame of 45 floats, about 2.1 KB:
+  46 ms at 460800 baud, but 180 ms at 115200 baud, close to the coordinator's poll timeout of 250 ms.
 - Console load: the coordinator prints every frame it passes on, and printing blocks its loop until the line is on the wire (see [Console load](#core)).
-  A frame of 45 floats is a line of 266 bytes, i.e. 5.8 ms at 460800 baud.
+  So every passed-on frame adds its line's time to the coordinator's loop: a frame of 45 floats takes 5.8 ms at 460800 baud, and one of them every 10 ms already needs more than half of the loop.
   A step handles only the messages that were waiting when it started, so frames that arrive faster than the console prints them slow the loop down instead of stalling it; those that no longer fit into the inbound queue are dropped and counted in `telemetry_dropped`.
 - Compatibility: update the coordinator's firmware first, since an older coordinator tries to run the peer's frames and layout lines as Lizard code.
   Payloads starting with `~` or `__LAYOUT__` are reserved for telemetry.
