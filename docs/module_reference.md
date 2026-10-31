@@ -49,7 +49,7 @@ It is automatically created right after the boot sequence.
 | `core.clear_schedule()`          | Discard all pending scheduled blocks                                                               |              |
 | `core.keep_alive()`              | Reset `last_message_age` without producing output                                                  |              |
 | `core.telemetry(...)`            | Define a telemetry frame of properties and variables                                               | see below    |
-| `core.telemetry_info()`          | Send the layout lines of all telemetry frames again                                                |              |
+| `core.telemetry_info()`          | Send the layout lines of all telemetry frames again and ask passed-on bus peers for theirs         |              |
 | `core.clear_telemetry()`         | Clear all telemetry frames                                                                         |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
@@ -82,6 +82,7 @@ core.telemetry(wheels.linear_speed, wheels.angular_speed, 20)  # frame 2, every 
 
 Each call defines one frame; frame IDs count up from 1 in the order of definition.
 The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames, but only once per frame.
+A field's name, `<module>.<property>` or the variable's name, has at most 200 characters.
 An integer literal as last argument is the interval in milliseconds (0 to 3600000); an `int` variable or property in that place is a field.
 Without an interval or with 0, the frame is sent every step.
 Frames go out with the 10 ms steps, so the gaps between them vary, e.g. 10 and 20 ms for an interval of 15 ms, but match the interval on average.
@@ -123,8 +124,9 @@ Different fields get the same layout ID with a chance of 1 in 256.
 
 Layout lines go out when a frame is defined and on `core.telemetry_info()`, four per step in the order of the frames.
 A new frame is sent for the first time once all of its layout lines are out.
-Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines.
+Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines, except on a serial bus peer, see [Serial Bus](#serial-bus).
 There is no timer for them: a host that connects later or logs for hours calls `core.telemetry_info()` itself.
+On a serial bus peer, frames and layout lines go to the coordinator once it polls the peer, see [Serial Bus](#serial-bus).
 Only the prefix `~` and the word `__LAYOUT__` stay the same in future versions of the format; the version is part of each layout line.
 On the host, the [`lizard_host`](tools.md#telemetry-decoder) package decodes these lines.
 
@@ -184,12 +186,15 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
 | `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
+| `bus.telemetry_errors`     | Malformed telemetry frames and layout lines of passed-on peers, e.g. with a wrong CRC                         | `int`     |
+| `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for places in the inbound queue, e.g. while layout lines are awaited     | `int`     |
 
 | Methods                             | Description                                                                                                                                 | Arguments         |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
 | `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
+| `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s            |
 
 **Time Synchronization:**
 Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle.
@@ -212,6 +217,51 @@ This is intended for timestamping sensor data (e.g. wheel odometry) received fro
 - Convergence: the first sample after enabling or after a timeout locks the estimate, whatever its bound, within two poll rounds; while polling pauses (e.g. during an OTB update), the estimate freezes and drifts with the crystals until polling resumes.
 - Compatibility: update the coordinator's firmware first, and treat `__POLL__<digits>` and `__DONE__<digits>,<digits>,<digits>` payloads as reserved for this protocol.
   A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.
+
+**Telemetry Frames:**
+A peer that defines [telemetry frames](#core) with `core.telemetry(...)` sends them to its own console until a coordinator polls it, and from then on to the coordinator until the peer restarts.
+With the first poll the peer sends their layout lines again, this time to the coordinator.
+While layout lines go to the coordinator, the peer holds back all of its frames.
+Then it keeps the newest frame of each ID in a slot and sends the slots with the next poll, so a poll delivers the current values and no backlog, and a frame ID arrives at most once per poll of its peer.
+A frame that is replaced before it was sent does not count in the sequence number, so a gap is still a loss.
+A peer has eight slots; a frame beyond them is not sent, and the peer warns on its own console and through the coordinator, at most every 10 s.
+
+The coordinator checks payloads starting with `~` or `__LAYOUT__` and never processes them as Lizard code.
+`bus.pass_telemetry()` passes the frames and layout lines of all peers on to the console with `bus[<id>]: ` in front, `bus.pass_telemetry(2)` only those of peer 2:
+
+```
+bus = SerialBus(serial, 1)
+bus.make_coordinator(2, 3)
+bus.pass_telemetry(2)
+```
+
+```
+bus[2]: __LAYOUT__v1 1.0/2 d3 motor.position:f@52
+bus[2]: __LAYOUT__v1 1.1/2 d3 motor.enabled:?@76
+bus[2]: ~AdMHQOIBALbznT8BIbs=@31
+```
+
+Each call replaces the selection of the previous one; without a call nothing is passed on.
+Peers send their frames over the bus whether they are passed on or not; the coordinator drops the others unchecked.
+Frames and layout lines of a passed-on peer that are malformed, e.g. no valid Base64 or with a wrong CRC, are dropped and counted in `telemetry_errors`.
+
+- Recovery: when a frame arrives whose layout the coordinator does not have or that does not match the frame, e.g. because `pass_telemetry` came after the peer sent its layout lines or the coordinator booted after the peer, it asks the peer for its layout lines with `core.telemetry_info()`, at most every 2 s.
+  Until the first of them arrives, at most for 2 s, it drops the peer's frames and counts them in `telemetry_dropped`, since printing the frames queued ahead of the layout lines would keep the inbound queue full and drop those.
+  Frames from before the request are passed on anyway, so a reader skips frames whose layout it has not seen yet.
+  When the peer reports `Ready.`, the coordinator forgets its layouts; the peer sends them again with the first poll.
+- Late hosts: `core.telemetry_info()` on the coordinator also asks every passed-on peer of its `make_coordinator` list for its layout lines, so a host that connects later gets them too.
+- Queues: telemetry leaves the last eight places of the bus queues free (frames on the coordinator, layout lines on the peer), so commands, their replies and update chunks still get through while frames pile up, e.g. while long prints or the startup block the coordinator.
+  Lost telemetry recovers by itself: the next frame replaces a lost one, and missing layout lines are requested again.
+  Frames dropped this way are counted in `telemetry_dropped`.
+- Bus load: a frame of n floats or ints is a line of about 5.3·n + 25 bytes, on the bus as well as on the coordinator's console.
+  A frame of 20 floats takes 132 bytes, i.e. 2.9 ms at 460800 baud; 100 such frames per second would take almost a third of the bus.
+  The most one poll can carry is all eight slots with the largest frame of 45 floats, about 2.1 KB:
+  46 ms at 460800 baud, but 180 ms at 115200 baud, close to the coordinator's poll timeout of 250 ms.
+- Console load: the coordinator prints every frame it passes on, and printing blocks its loop until the line is on the wire (see [Console load](#core)).
+  So every passed-on frame adds its line's time to the coordinator's loop: a frame of 45 floats takes 5.8 ms at 460800 baud, and one of them every 10 ms already needs more than half of the loop.
+  A step handles only the messages that were waiting when it started, so frames that arrive faster than the console prints them slow the loop down instead of stalling it; those that no longer fit into the inbound queue are dropped and counted in `telemetry_dropped`.
+- Compatibility: update the coordinator's firmware first, since an older coordinator tries to run the peer's frames and layout lines as Lizard code.
+  Payloads starting with `~` or `__LAYOUT__` are reserved for telemetry.
 
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.

@@ -1,11 +1,14 @@
 #include "telemetry.h"
 #include "../compilation/expressions.h"
 #include "../global.h"
+#include "../modules/serial_bus.h"
 #include "interpreter_lock.h"
 #include "timing.h"
 #include "uart.h"
 #include "esp_rom_crc.h"
+#include "mbedtls/base64.h"
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -13,13 +16,14 @@
 
 namespace telemetry {
 
-constexpr size_t HEADER_SIZE = 7; // frame ID, layout ID, sequence number, millis
-constexpr size_t MAX_PAYLOAD = 180;
-constexpr size_t CRC_SIZE = 2;
-constexpr size_t MAX_BODY = HEADER_SIZE + MAX_PAYLOAD + CRC_SIZE;
 constexpr int64_t MAX_INTERVAL = 3600000;
 constexpr size_t MAX_FRAMES = 255;
-constexpr size_t LAYOUT_LINES_PER_STEP = 4; // spread, so announcing a large frame does not stall one step
+constexpr size_t MAX_FIELDS = 8 * MAX_PAYLOAD; // all of them bools
+constexpr size_t MAX_NAME = 200;               // keeps every layout line within one serial bus payload
+constexpr size_t LAYOUT_LINES_PER_STEP = 4;    // spread, so announcing a large frame does not stall one step
+static_assert(sizeof("__LAYOUT__v1 255.1439/1440 ff :f") + MAX_NAME <= SerialBus::PAYLOAD_CAPACITY);
+constexpr size_t MAX_LINE = 1 + (MAX_BODY + 2) / 3 * 4; // "~" and the Base64 text, without terminator
+static_assert(MAX_LINE < SerialBus::PAYLOAD_CAPACITY);
 
 struct Field {
     ConstVariable_ptr variable;
@@ -39,6 +43,8 @@ struct Frame {
 };
 
 static std::vector<Frame> frames; // frame ID = index + 1
+static std::vector<SerialBus *> buses;
+static uint8_t coordinator = 0; // the node the layout lines went to, 0 for the console
 
 static uint16_t crc16(const void *data, const size_t length) {
     return ~esp_rom_crc16_be(static_cast<uint16_t>(~0xffff), static_cast<const uint8_t *>(data), length); // CRC-16/CCITT-FALSE
@@ -55,6 +61,11 @@ static size_t encode_base64(const uint8_t *data, const size_t length, char *text
         text[pos++] = i + 2 < length ? ALPHABET[chunk & 0x3f] : '=';
     }
     return pos;
+}
+
+// 4 bytes per float or int, then the bools as bits
+static size_t payload_size(const size_t fields, const size_t bools) {
+    return 4 * (fields - bools) + (bools + 7) / 8;
 }
 
 static char type_letter(const Type type) {
@@ -85,6 +96,9 @@ static Field to_field(const ConstExpression_ptr &argument) {
     }
     if (!argument->is_numbery()) {
         throw std::runtime_error("telemetry field \"" + field.name + "\" is not a bool, int or float");
+    }
+    if (field.name.size() > MAX_NAME) {
+        throw std::runtime_error("telemetry field \"" + field.name + "\" has a name longer than " + std::to_string(MAX_NAME) + " characters");
     }
     return field;
 }
@@ -123,7 +137,7 @@ void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
     }
     frame.layout_id = crc16(layout.data(), layout.size()) & 0xff; // tells a reader which layout lines a frame needs
     frame.bits_offset = 4 * (field_count - bools);
-    frame.payload_size = frame.bits_offset + (bools + 7) / 8;
+    frame.payload_size = payload_size(field_count, bools);
     if (frame.payload_size > MAX_PAYLOAD) {
         throw std::runtime_error("too many fields for one frame");
     }
@@ -134,35 +148,78 @@ void announce() {
     for (Frame &frame : frames) {
         frame.layout_lines_sent = 0;
     }
+    // a host that reads peers through this node gets their layout lines the same way
+    for (SerialBus *const bus : buses) {
+        bus->request_passed_layouts();
+    }
 }
 
 void clear() {
     frames.clear();
+    for (SerialBus *const bus : buses) {
+        bus->clear_telemetry_slots();
+    }
 }
 
-static void send_layout_lines(const unsigned long now) {
+void add_bus(SerialBus *const bus) {
+    buses.push_back(bus);
+}
+
+void remove_bus(SerialBus *const bus) {
+    buses.erase(std::remove(buses.begin(), buses.end(), bus), buses.end());
+}
+
+static SerialBus *polled_bus() {
+    for (SerialBus *const bus : buses) {
+        if (bus->coordinator() != 0) {
+            return bus;
+        }
+    }
+    return nullptr;
+}
+
+// false while the bus queue is full
+static bool send_layout_line(SerialBus *const bus, const uint8_t id, const Frame &frame, const size_t index) {
+    const Field &field = frame.fields[index];
+    char line[SerialBus::PAYLOAD_CAPACITY];
+    const int length = std::snprintf(line, sizeof(line), "%sv%d %d.%d/%d %02x %s:%c", LAYOUT_PREFIX, LAYOUT_VERSION, id,
+                                     static_cast<int>(index), static_cast<int>(frame.fields.size()),
+                                     static_cast<unsigned>(frame.layout_id), field.name.c_str(), type_letter(field.variable->type));
+    if (!bus) {
+        echo("%s", line);
+        return true;
+    }
+    return bus->send_telemetry_layout(line, length);
+}
+
+// true once all layout lines are out
+static bool send_layout_lines(SerialBus *const bus, const unsigned long now) {
     size_t budget = LAYOUT_LINES_PER_STEP;
-    for (size_t i = 0; i < frames.size() && budget > 0; ++i) {
+    for (size_t i = 0; i < frames.size(); ++i) {
         Frame &frame = frames[i];
         for (; frame.layout_lines_sent < frame.fields.size() && budget > 0; --budget) {
-            const size_t index = frame.layout_lines_sent++;
-            const Field &field = frame.fields[index];
-            echo("__LAYOUT__v1 %d.%d/%d %02x %s:%c", static_cast<int>(i + 1), static_cast<int>(index),
-                 static_cast<int>(frame.fields.size()), static_cast<unsigned>(frame.layout_id), field.name.c_str(), type_letter(field.variable->type));
+            if (!send_layout_line(bus, i + 1, frame, frame.layout_lines_sent)) {
+                return false; // the queue empties with the next poll
+            }
+            ++frame.layout_lines_sent;
         }
-        if (!frame.announced && frame.layout_lines_sent == frame.fields.size()) {
+        if (frame.layout_lines_sent < frame.fields.size()) {
+            return false;
+        }
+        if (!frame.announced) {
             frame.announced = true;
             frame.last_millis = now - frame.interval; // due right away, however long the layout took
         }
     }
+    return true;
 }
 
 // body = frame ID, layout ID, sequence number, millis, payload, CRC; multi-byte values are little-endian like the ESP32
-static void send_frame(const uint8_t id, Frame &frame, const uint32_t now) {
+static size_t encode_frame(const uint8_t id, const Frame &frame, const uint8_t sequence, const uint32_t now, char *text) {
     uint8_t body[MAX_BODY];
     body[0] = id;
     body[1] = frame.layout_id;
-    body[2] = frame.sequence++;
+    body[2] = sequence;
     memcpy(&body[3], &now, 4);
     uint8_t *const payload = &body[HEADER_SIZE];
     memset(&payload[frame.bits_offset], 0, frame.payload_size - frame.bits_offset);
@@ -193,23 +250,124 @@ static void send_frame(const uint8_t id, Frame &frame, const uint32_t now) {
     const uint16_t crc = crc16(body, length);
     memcpy(&body[length], &crc, CRC_SIZE);
 
-    char text[(MAX_BODY + 2) / 3 * 4 + 1];
-    text[encode_base64(body, length + CRC_SIZE, text)] = '\0';
-    echo("~%s", text);
+    text[0] = FRAME_PREFIX;
+    const size_t text_length = 1 + encode_base64(body, length + CRC_SIZE, &text[1]);
+    text[text_length] = '\0';
+    return text_length;
+}
+
+static void send_frame(SerialBus *const bus, const uint8_t id, Frame &frame, const uint32_t now) {
+    char text[MAX_LINE + 1];
+    if (!bus) {
+        encode_frame(id, frame, frame.sequence++, now, text);
+        echo("%s", text);
+        return;
+    }
+    // the newest frame waits in its slot for the next poll; a replaced frame keeps its sequence number, so a gap is a loss
+    const bool replace = bus->telemetry_frame_pending(id);
+    const uint8_t sequence = replace ? static_cast<uint8_t>(frame.sequence - 1) : frame.sequence;
+    const size_t length = encode_frame(id, frame, sequence, now, text);
+    if (bus->store_telemetry_frame(id, text, length, replace) && !replace) {
+        ++frame.sequence;
+    }
 }
 
 void step() {
     InterpreterLock lock;
+    SerialBus *const bus = polled_bus();
+    const uint8_t polling = bus ? bus->coordinator() : 0;
+    if (polling != coordinator) {
+        // a coordinator started polling this node: it has not seen the layout lines, which went to the console
+        coordinator = polling;
+        for (Frame &frame : frames) {
+            frame.layout_lines_sent = 0;
+            frame.announced = false;
+        }
+    }
     const unsigned long now = millis();
-    send_layout_lines(now);
+    if (!send_layout_lines(bus, now) && bus) {
+        return; // frames would crowd the layout lines out of the coordinator's inbound queue
+    }
     for (size_t i = 0; i < frames.size(); ++i) {
         Frame &frame = frames[i];
         if (frame.announced && now - frame.last_millis >= frame.interval) {
             // keep the rate when steps run late, catching up at most one interval
             frame.last_millis = now - frame.last_millis < 2 * frame.interval ? frame.last_millis + frame.interval : now - frame.interval;
-            send_frame(i + 1, frame, now);
+            send_frame(bus, i + 1, frame, now);
         }
     }
+}
+
+size_t decode_frame(const char *line, const size_t length, uint8_t *body) {
+    size_t body_length = 0;
+    if (length < 1 || line[0] != FRAME_PREFIX ||
+        mbedtls_base64_decode(body, MAX_BODY, &body_length, reinterpret_cast<const unsigned char *>(&line[1]), length - 1) != 0 ||
+        body_length < HEADER_SIZE + CRC_SIZE) {
+        return 0;
+    }
+    uint16_t crc;
+    memcpy(&crc, &body[body_length - CRC_SIZE], CRC_SIZE);
+    return crc == crc16(body, body_length - CRC_SIZE) ? body_length : 0;
+}
+
+// reads 1 to 5 decimal digits
+static bool read_number(const char *&c, size_t &value) {
+    const char *const start = c;
+    value = 0;
+    while (std::isdigit(static_cast<unsigned char>(*c)) && c - start < 5) {
+        value = 10 * value + (*c++ - '0');
+    }
+    return c > start && !std::isdigit(static_cast<unsigned char>(*c));
+}
+
+// reads 2 lowercase hex digits
+static bool read_hex_byte(const char *&c, uint8_t &value) {
+    value = 0;
+    for (int i = 0; i < 2; ++i, ++c) {
+        if ('0' <= *c && *c <= '9') {
+            value = value << 4 | (*c - '0');
+        } else if ('a' <= *c && *c <= 'f') {
+            value = value << 4 | (*c - 'a' + 10);
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+// "__LAYOUT__v<version> <frame>.<index>/<count> <layout ID> <name>:<type>"
+bool parse_layout(const char *line, LayoutLine &layout) {
+    const char *c = line + sizeof(LAYOUT_PREFIX) - 1;
+    size_t version, frame_id, index, count;
+    if (*c++ != 'v' || !read_number(c, version)) {
+        return false;
+    }
+    layout.version = version;
+    if (version != LAYOUT_VERSION) {
+        return true;
+    }
+    if (*c++ != ' ' || !read_number(c, frame_id) || *c++ != '.' || !read_number(c, index) || *c++ != '/' ||
+        !read_number(c, count) || *c++ != ' ' || !read_hex_byte(c, layout.layout_id) || *c++ != ' ') {
+        return false;
+    }
+    const char *const colon = std::strrchr(c, ':');
+    if (frame_id == 0 || frame_id > MAX_FRAMES || count > MAX_FIELDS || index >= count || !colon || colon == c ||
+        colon[1] == '\0' || colon[2] != '\0') {
+        return false;
+    }
+    layout.type = colon[1];
+    if (layout.type != 'f' && layout.type != 'i' && layout.type != '?') {
+        return false;
+    }
+    layout.frame_id = frame_id;
+    layout.index = index;
+    layout.count = count;
+    layout.name = std::string_view(c, colon - c);
+    return true;
+}
+
+size_t payload_size(const std::vector<char> &types) {
+    return payload_size(types.size(), std::count(types.begin(), types.end(), '?'));
 }
 
 } // namespace telemetry
