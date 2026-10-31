@@ -67,14 +67,14 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
                 // variable[:precision]
                 std::string variable_name = cut_first_word(element, ':');
                 const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
-                this->output_list.push_back({nullptr, variable_name, precision});
+                this->output_list.push_back({nullptr, variable_name, precision, nullptr});
             } else {
                 // module.property[:precision]
                 std::string module_name = cut_first_word(element, '.');
                 const ConstModule_ptr module = Global::get_module(module_name);
                 const std::string property_name = cut_first_word(element, ':');
                 const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
-                this->output_list.push_back({module, property_name, precision});
+                this->output_list.push_back({module, property_name, precision, nullptr});
             }
         }
         this->output_on = true;
@@ -235,8 +235,11 @@ std::string Core::get_output() const {
             if (pos > 0) {
                 pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, " ");
             }
-            const Variable_ptr variable =
-                element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
+            if (!element.variable) {
+                element.variable =
+                    element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
+            }
+            const ConstVariable_ptr &variable = element.variable;
             switch (variable->type) {
             case boolean:
                 pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value() ? "true" : "false");

@@ -56,6 +56,7 @@ class PropertyExpression : public Expression {
 public:
     const ConstModule_ptr module;
     const std::string property_name;
+    const ConstVariable_ptr variable; // looked up once, since a module never replaces the variable of a property
 
     PropertyExpression(const ConstModule_ptr module, const std::string property_name);
     bool evaluate_boolean() const override;

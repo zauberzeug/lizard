@@ -141,11 +141,12 @@ std::string Module::get_output() const {
     return "";
 }
 
-Variable_ptr Module::get_property(const std::string property_name) const {
-    if (!this->properties.count(property_name)) {
+Variable_ptr Module::get_property(const std::string &property_name) const {
+    const auto it = this->properties.find(property_name);
+    if (it == this->properties.end()) {
         throw std::runtime_error("unknown property \"" + property_name + "\"");
     }
-    return this->properties.at(property_name);
+    return it->second;
 }
 
 void Module::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
