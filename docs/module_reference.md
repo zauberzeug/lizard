@@ -62,7 +62,8 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 The console (UART0) defaults to 115200 baud.
 `core.set_baudrate(baud)` persists a new rate to non-volatile storage; it takes effect on the next restart, so the change is not a breaking one for hosts that are not updated yet.
 After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with the host tools at the new rate, e.g. `./monitor.py /dev/ttyUSB0 --baud 921600` (`monitor.py`, `configure.py` and `otb_update.py` all accept `--baud`, defaulting to 115200).
-Supported rates are 115200, 230400, 460800 and 921600.
+Supported rates are 115200, 230400, 460800, 921600, 1000000, 1500000, 2000000 and 3000000.
+Above 921600 the host's UART has to hit the rate closely: a Jetson Orin, for example, produces 1500000 and 3000000 exactly, but 2000000 about 2 % too slow.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
 
 **Console load:**
