@@ -20,7 +20,6 @@ public:
     static inline constexpr const char *TYPE = "SerialBus";
 
     static constexpr size_t PAYLOAD_CAPACITY = 256;
-    static constexpr size_t FRAME_BUFFER_SIZE = 512;
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
@@ -142,6 +141,10 @@ private:
     bool ready_pending = true;
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;
+    // frame buffers, kept off the task's stack and not shared with the tasks of other buses
+    static constexpr size_t FRAME_BUFFER_SIZE = 512;
+    char rx_frame[FRAME_BUFFER_SIZE];
+    char tx_frame[FRAME_BUFFER_SIZE];
 
     // --- telemetry, peer side ----------------------------------------------
     // The main task leaves the newest frame of each ID in a slot and the communication task sends the slots with the
@@ -158,9 +161,9 @@ private:
     std::atomic<uint8_t> coordinator_id{0};
     bool slot_warning_sent = false; // the first warning comes right away, not only 10 s after boot
     unsigned long last_slot_warning_millis = 0;
+    char slot_line[PAYLOAD_CAPACITY];                         // the frame being sent, copied out of its slot
     FrameSlot *find_frame_slot(const uint8_t frame_id) const; // 0 finds a free one
     void send_frame_slots(const uint8_t receiver);
-    char slot_line[PAYLOAD_CAPACITY]; // the frame being sent, copied out of its slot
 
     // --- telemetry, coordinator side (main task) ---------------------------
     struct FrameLayout {
@@ -187,9 +190,6 @@ private:
     static void communication_loop(void *param);
     void adopt_config(const Config &config);
     void process_uart();
-    // per bus, since the communication tasks of several buses run at the same time
-    char rx_frame[FRAME_BUFFER_SIZE];
-    mutable char tx_frame[FRAME_BUFFER_SIZE];
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
@@ -197,7 +197,7 @@ private:
     // without the checks of enqueue_outgoing_message; false if the queue stays full for `wait`
     bool queue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, const TickType_t wait);
     bool send_outgoing_queue();
-    size_t send_message(const uint8_t receiver, const char *payload, const size_t length) const;
+    size_t send_message(const uint8_t receiver, const char *payload, const size_t length);
 
     void send_poll();
     void handle_done(const uint8_t sender, const int64_t *stamp, const int64_t t4, const size_t done_frame_len);
