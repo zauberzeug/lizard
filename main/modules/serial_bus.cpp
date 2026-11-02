@@ -281,6 +281,10 @@ void SerialBus::restart_peer() {
     gpio_set_level(this->enable_pin, 0);
     delay(100);
     gpio_set_level(this->enable_pin, 1);
+    this->expect_peer_boot();
+}
+
+void SerialBus::expect_peer_boot() {
     this->peer_restart_millis = millis();
     this->peer_restarted = true;
 }

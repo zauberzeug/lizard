@@ -57,6 +57,7 @@ protected:
     void set_peers(const uint8_t *peer_ids, const uint8_t peer_count); // makes this node the coordinator
     void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
     void restart_peer();
+    void expect_peer_boot(); // poll timeouts are not reported while the peer boots
     void flash_peer(const uint8_t peer_id);
 
 private:

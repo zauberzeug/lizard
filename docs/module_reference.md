@@ -381,7 +381,7 @@ core.telemetry(battery_control_status.level, vdp_status.level)
   The rest of the expander's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
   `flash()` blocks the main loop for the whole transfer like `expander.flash()` and fails if another module uses the serial.
   It does not check the strapping pins; an expander that does not enter its bootloader fails the transfer before anything is erased.
-  For 5 s after a restart, while the expander boots, poll timeouts are not reported.
+  For 5 s after a restart and after the bus is created, while the expander boots, poll timeouts are not reported, since on some boards a reset of the core restarts the expander as well.
 - Mirrors: each value of the expander is a property declaration as in a [bus telemetry](#bus-telemetry) module, with the same rules for types, read-only values and warnings.
 - Queues: the bus keeps 8 places in its queues instead of 32, since the expander is not updated over the bus; `p0.send()` refuses OTB messages, so `flash()` is the way to update it.
 - Backup: an expander bus is not saved as the core's [bus backup](#serial-bus).

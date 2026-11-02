@@ -21,6 +21,7 @@ ExpanderBus::ExpanderBus(const std::string &name, const ConstSerial_ptr serial, 
     : SerialBus(name, serial, NODE_ID, boot_pin, enable_pin, QUEUE_LENGTH, TELEMETRY_QUEUE_RESERVE) {
     // the mirrors live as long as this bus, so they get a pointer that does not own it
     this->telemetry = std::make_unique<BusTelemetry>(name, SerialBus_ptr(SerialBus_ptr(), this), PEER_ID);
+    this->expect_peer_boot(); // the reset of this node may have restarted the expander as well
     const uint8_t peer_id = PEER_ID;
     this->set_peers(&peer_id, 1);
 }
