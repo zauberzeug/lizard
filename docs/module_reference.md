@@ -295,7 +295,7 @@ The node does not print `Ready.` on its console; the coordinator prints `bus[<id
 Telemetry frames and their layout lines wait for the first poll.
 While the bus has the console, ESP-IDF log and ROM output is dropped, but a panic still reaches the wire.
 The coordinator drops lines that do not start with `$$`, e.g. the boot log or a panic of its peer, without a warning and counts them in `ignored_lines`.
-Put the two lines at the top of the startup script, so that its later errors reach the coordinator.
+Put the two lines at the top of the startup script, so that the output of the lines below reaches the coordinator, including an error that stops the script.
 A startup script that keeps failing is skipped after two failed boots (see [Startup Script](getting_started.md#startup-script)); the bus backup then takes over the console again, and the boot lines tell the coordinator why.
 
 **Firmware Updates:**
