@@ -663,6 +663,50 @@ A line carries at most 85 bytes; the rest of a longer batch follows on the next 
 
 The UART number and its pins stay reserved for the serial module until the core restarts, also after `Expander.disconnect()`.
 
+## JBD BMS
+
+The JBD BMS module reads a battery management system with the JBD protocol (frames from `0xDD` to `0x77`) over a [serial](#serial-interface), usually at 9600 baud.
+
+| Constructor            | Description                    | Arguments |
+| ---------------------- | ------------------------------ | --------- |
+| `bms = JbdBms(serial)` | Serial module wired to the BMS | `Serial`  |
+
+| Properties              | Description                                                | Data type |
+| ----------------------- | ---------------------------------------------------------- | --------- |
+| `bms.voltage`           | Total voltage (V)                                          | `float`   |
+| `bms.current`           | Current (A), positive while charging                       | `float`   |
+| `bms.residual_capacity` | Remaining capacity (Ah)                                    | `float`   |
+| `bms.nominal_capacity`  | Nominal capacity (Ah)                                      | `float`   |
+| `bms.percentage`        | State of charge (%)                                        | `int`     |
+| `bms.cycles`            | Charge cycles                                              | `int`     |
+| `bms.temperature`       | Mean of the temperature sensors (°C)                       | `float`   |
+| `bms.protections`       | Protection flags (see below)                               | `int`     |
+| `bms.fets`              | MOSFETs that are on: charging (bit 0), discharging (bit 1) | `int`     |
+| `bms.cells`             | Number of cells                                            | `int`     |
+| `bms.interval`          | Time between requests (s), 0 to stop them                  | `float`   |
+| `bms.last_message_age`  | Time since the last valid answer (ms)                      | `int`     |
+| `bms.errors`            | Answers that were missing, late or invalid                 | `int`     |
+
+| Methods                  | Description                                  | Arguments |
+| ------------------------ | -------------------------------------------- | --------- |
+| `bms.cell_voltages()`    | Ask for the cell voltages and print them (V) |           |
+| `bms.hardware_version()` | Ask for the hardware version and print it    |           |
+
+The module asks for the basic information every `interval` seconds, 1 s by default, and updates the properties with each valid answer.
+An answer may arrive in pieces; the module collects it across steps.
+An answer that is missing after 500 ms, comes later, has a wrong checksum or an error status counts in `errors`, and the properties keep their last values.
+Keep the serial muted, since the module reads its bytes.
+
+The bits of `protections` are, from bit 0: cell over-voltage, cell under-voltage, battery over-voltage, battery under-voltage, charging over-temperature, charging under-temperature, discharging over-temperature, discharging under-temperature, charging over-current, discharging over-current, short circuit, front-end IC error and MOSFET software lock.
+
+On a port expander, the values can travel to the core in its telemetry frames:
+
+```
+bms_serial = Serial(26, 27, 9600, 2)
+bms = JbdBms(bms_serial)
+core.telemetry(bms.voltage, bms.current, bms.percentage, bms.temperature, bms.protections, 1000)
+```
+
 ## Linear motor
 
 This module controls a linear actuator via two output pins (move in, move out) and two input pins reading two limit switches (end in, end out).
