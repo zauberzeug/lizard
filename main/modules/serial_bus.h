@@ -50,15 +50,16 @@ public:
     void forget_telemetry_layout(const uint8_t peer_id);
 
 protected:
-    // a bus to the peer at the other end of a point-to-point link, with the boot and enable pins to flash and restart it
+    static constexpr unsigned long PEER_BOOT_MS = 5000; // a restarted peer answers within this
+
+    // a bus that also claims `pins`, e.g. those wired to its peer, and keeps fewer messages to send
     SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id,
-              const gpio_num_t boot_pin, const gpio_num_t enable_pin, const size_t queue_length, const size_t telemetry_reserve);
+              const std::initializer_list<gpio_num_t> pins, const size_t outgoing_queue_length);
 
     void set_peers(const uint8_t *peer_ids, const uint8_t peer_count); // makes this node the coordinator
-    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
-    void restart_peer();
-    void expect_peer_boot(); // poll timeouts are not reported while the peer boots
-    void flash_peer(const uint8_t peer_id);
+    void expect_peer_boot();                                           // poll timeouts are not reported for PEER_BOOT_MS
+    void pause_communication();                                        // so that the main task can use the UART
+    void resume_communication() { this->pause_requested = false; }
 
 private:
     struct IncomingMessage {
@@ -124,6 +125,7 @@ private:
     QueueHandle_t offset_queue = nullptr;
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
+    const size_t outgoing_queue_length; // too short for an OTB update if not longer than its window
     // written by the communication task, drained and reported by step() on the main task
     std::atomic<unsigned> dropped_inbound{0};
     unsigned long last_drop_report_millis = 0;
@@ -132,11 +134,10 @@ private:
     std::atomic<bool> stopped{false};
     std::atomic<bool> pause_requested{false}; // the main task uses the UART, e.g. to flash the peer
     std::atomic<bool> paused{false};
-    std::atomic<bool> peer_restarted{false}; // poll timeouts are no news while a restarted peer boots
-    std::atomic<unsigned long> peer_restart_millis{0};
+    std::atomic<bool> peer_booting{false};
+    std::atomic<unsigned long> peer_boot_millis{0};
     int echo_callback_handle = 0;
-    bool owns_console = false; // the serial is the console UART, so everything this node prints goes to its coordinator
-    std::atomic<unsigned> dropped_output{0};
+    std::atomic<unsigned> dropped_output{0}; // console lines of this node that found no place in the outbound queue
     unsigned long last_output_drop_report_millis = 0;
     std::atomic<unsigned> ignored_lines{0}; // counted by the communication task
     Variable_ptr ignored_lines_property;
@@ -217,6 +218,7 @@ private:
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
+    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
     // without the checks of enqueue_outgoing_message; false if the queue stays full for `wait`
     bool queue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, const TickType_t wait);
     bool send_outgoing_queue();
@@ -237,14 +239,4 @@ private:
     void handle_echo(const char *line);
     void relay_console_line(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
-
-    // --- peer on a point-to-point link with boot and enable pins (main task) -----
-    const gpio_num_t boot_pin;
-    const gpio_num_t enable_pin;
-    const size_t queue_length;      // places in the inbound and in the outbound queue
-    const size_t telemetry_reserve; // places in both queues that telemetry never takes
-    bool has_peer_pins() const { return this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC; }
-    void drive_peer_pins_high() const;
-    void pause_communication();
-    void configure_flashed_peer(const uint8_t peer_id);
 };

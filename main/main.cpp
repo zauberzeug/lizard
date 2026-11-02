@@ -635,7 +635,7 @@ void app_main() {
     // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be initialized first.
     // Note: the ROM bootloader and early boot log always use 115200 regardless of this value.
     nvs_flash_init();
-    uint32_t baud_rate = 115200;
+    uint32_t baud_rate = CONSOLE_DEFAULT_BAUD_RATE;
     Storage::get_baudrate(baud_rate);
 
     const uart_config_t uart_config = {
@@ -674,7 +674,7 @@ void app_main() {
 
     bus_backup::save_if_present();
     bus_backup::restore_if_needed();
-    forget_boot_lines();
+    take_boot_lines(); // ends their record, also when no serial bus took over the console
 
     if (!console_handed_over()) {
         printf("\nReady.\n"); // a serial bus that took over the console reports "Ready." with its first answer

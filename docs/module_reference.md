@@ -18,7 +18,7 @@ I2C modules on the same port share its SDA and SCL pins, which stay reserved for
 Creating a module on a reserved pin or peripheral fails with an error that names the owner, e.g. `pin 15 is already used by module "led"`.
 In the startup script, such an error stops the script like any other error (see [Startup Script](getting_started.md#startup-script)).
 The console UART with its pins and the pins of the SPI flash are reserved from the start.
-Only a [serial bus](#serial-bus) can take over the console UART, see [Console as Link](#serial-bus).
+Only a serial bus can take over the console UART (see [Console as Link](#serial-bus)).
 
 ## Core
 
@@ -189,7 +189,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
 | `bus.telemetry_errors`     | Malformed telemetry frames and layout lines of passed-on or mirrored peers, e.g. with a wrong CRC             | `int`     |
 | `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for places in the inbound queue, e.g. while layout lines are awaited     | `int`     |
-| `bus.ignored_lines`        | Received lines that are no bus messages, e.g. the boot output of a peer on its console, dropped silently      | `int`     |
+| `bus.ignored_lines`        | Received lines that are not bus messages, dropped without a warning, e.g. the boot output of a peer           | `int`     |
 
 | Methods                             | Description                                                                                                                                 | Arguments         |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -222,6 +222,7 @@ This is intended for timestamping sensor data (e.g. wheel odometry) received fro
 
 **Telemetry Frames:**
 A peer that defines [telemetry frames](#core) with `core.telemetry(...)` sends them to its own console until a coordinator polls it, and from then on to the coordinator until the peer restarts.
+A peer whose console is the bus link holds them back until then (see [Console as Link](#serial-bus)).
 With the first poll the peer sends their layout lines again, this time to the coordinator.
 While layout lines go to the coordinator, the peer holds back all of its frames.
 Then it keeps the newest frame of each ID in a slot and sends the slots with the next poll, so a poll delivers the current values and no backlog, and a frame ID arrives at most once per poll of its peer.
@@ -273,8 +274,8 @@ If multiple SerialBus modules exist, only the first one is backed up.
 On boot, if the startup script does not create a SerialBus but a backup config exists,
 Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
 This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
-A bus on the console is restored the same way and takes over the console again, see [Console as Link](#serial-bus).
-An [expander bus](#expander-bus) is not backed up.
+A bus on the console is restored the same way and takes over the console again (see [Console as Link](#serial-bus)).
+An [expander bus](#expander-bus) is neither backed up nor replaced by a backup.
 To remove the saved configuration, call `core.forget_serial_bus()`.
 
 **Console as Link:**
@@ -287,12 +288,13 @@ bus = SerialBus(serial, 2)
 
 A serial on UART0 with the console's RX and TX pins (3 and 1 on an ESP32, 44 and 43 on an ESP32-S3) leaves the console alone until a serial bus is created on it.
 From then on, only the bus reads and writes UART0, at the serial's baud rate, and the node runs no console lines, only commands from the bus.
-Everything the node prints goes to the node that polls it, which prints it as `bus[<id>]: ...`: replies, warnings, the output of unmuted modules and up to 16 lines that the boot printed before the bus took over the console.
+Everything the node prints goes to the node that polls it, which prints it as `bus[<id>]: ...`.
+That includes replies, warnings, the output of unmuted modules and up to 16 lines that the boot printed before the bus took over the console.
 Lines printed before the first poll wait in the bus queue; when only its last eight places are free, further lines are dropped and a warning with their number follows.
 The node does not print `Ready.` on its console; the coordinator prints `bus[<id>]: Ready.` with the first answer.
 Telemetry frames and their layout lines wait for the first poll.
-ESP-IDF log and ROM output is dropped while the bus has the console, but the boot output up to the startup script and a panic still reach the wire.
-The coordinator drops lines that do not start with `$$` without a warning and counts them in `ignored_lines`.
+While the bus has the console, ESP-IDF log and ROM output is dropped, but a panic still reaches the wire.
+The coordinator drops lines that do not start with `$$`, e.g. the boot log or a panic of its peer, without a warning and counts them in `ignored_lines`.
 Put the two lines at the top of the startup script, so that its later errors reach the coordinator.
 A startup script that keeps failing is skipped after two failed boots (see [Startup Script](getting_started.md#startup-script)); the bus backup then takes over the console again, and the boot lines tell the coordinator why.
 
@@ -342,7 +344,7 @@ Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `
 ## Expander Bus
 
 An expander bus connects the core to a port expander that is wired like an [expander](#expander), i.e. by its console pins and its boot and enable pins.
-The two form a [serial bus](#serial-bus) with the expander as the only peer, so the expander sends its values as telemetry frames instead of text broadcasts, and the core mirrors them like a [bus telemetry](#bus-telemetry) module.
+The two form a [serial bus](#serial-bus) with the expander as the only peer, so the expander sends its values as telemetry frames instead of text broadcasts, and the core mirrors them like a [BusTelemetry](#bus-telemetry) module.
 
 | Constructor                              | Description                                                     | Arguments          |
 | ---------------------------------------- | --------------------------------------------------------------- | ------------------ |
@@ -350,18 +352,18 @@ The two form a [serial bus](#serial-bus) with the expander as the only peer, so 
 
 | Methods                 | Description                                                                          | Arguments  |
 | ----------------------- | ------------------------------------------------------------------------------------ | ---------- |
-| `p0.send(fmt, args...)` | Send a printf-formatted line to the expander, like `bus.send` (`p0.send(2, …)` too)  | `str`, ... |
+| `p0.send(fmt, args...)` | Send a printf-formatted line to the expander like `bus.send`, with or without ID 2   | `str`, ... |
 | `p0.flash()`            | Flash the expander with this node's firmware and make it the bus peer on its console |            |
 | `p0.restart()`          | Restart the expander via its enable pin                                              |            |
 
-The properties and the methods `enable_time_sync()` and `pass_telemetry()` are those of a [serial bus](#serial-bus).
+Its properties and the methods `enable_time_sync()` and `pass_telemetry()` are those of a [serial bus](#serial-bus); `make_coordinator()` fails, since the bus polls only the expander.
 The core is bus node 1 and polls the expander as node 2:
 
 ```
 serial = Serial(26, 27, 460800, 1)
 p0 = ExpanderBus(serial, 25, 14)
-int p0.battery_control_status.level = 0
-int p0.vdp_status.level = 0
+int p0.button.level = 0
+int p0.endstop.level = 0
 ```
 
 The expander's startup script defines its modules and sends their values:
@@ -369,22 +371,24 @@ The expander's startup script defines its modules and sends their values:
 ```
 serial = Serial(3, 1, 460800, 0)
 bus = SerialBus(serial, 2)
-battery_control_status = Input(13)
-vdp_status = Input(39)
-core.telemetry(battery_control_status.level, vdp_status.level)
+button = Input(13)
+endstop = Input(39)
+core.telemetry(button.level, endstop.level)
 ```
 
 - Pins: the bus drives both pins high without restarting the expander, unlike an [expander](#expander) module, which restarts the other microcontroller when it is created.
   `p0.restart()` pulls the enable pin low for 100 ms.
+  For 5 s after the bus is created and after `p0.restart()`, `p0.flash()` or `p0.send("core.restart()")`, the last line of `configure.py`, poll timeouts are not reported while the expander boots.
+  On some boards a reset of the core restarts the expander as well.
 - Flashing: `p0.flash()` copies this node's firmware onto the expander like `expander.flash()` at 921600 baud, which erases the expander's NVS, i.e. its startup script, its bus backup and a persisted console baud rate.
-  The copy boots with its console at 115200 baud, and the core writes it the first two lines above with the baud rate of the core's serial and restarts it, so it comes back as bus node 2 on its console (see Console as Link in [Serial Bus](#serial-bus)).
+  The copy boots with its console at 115200 baud; the core writes the first two lines of the example above as its startup script, with the baud rate of the core's serial, and restarts it, so that it comes back as bus node 2 on its console (see [Console as Link](#serial-bus)).
   The rest of the expander's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
-  `flash()` blocks the main loop for the whole transfer like `expander.flash()` and fails if another module uses the serial.
+  `flash()` blocks the main loop for the whole transfer like `expander.flash()`; it fails if another module uses the serial or the copy does not report `Ready.` within 5 s.
   It does not check the strapping pins; an expander that does not enter its bootloader fails the transfer before anything is erased.
-  For 5 s after a restart and after the bus is created, while the expander boots, poll timeouts are not reported, since on some boards a reset of the core restarts the expander as well.
-- Mirrors: each value of the expander is a property declaration as in a [bus telemetry](#bus-telemetry) module, with the same rules for types, read-only values and warnings.
-- Queues: the bus keeps 8 places in its queues instead of 32, since the expander is not updated over the bus; `p0.send()` refuses OTB messages, so `flash()` is the way to update it.
-- Backup: an expander bus is not saved as the core's [bus backup](#serial-bus).
+- Mirrors: each value of the expander is a property declaration as in a [BusTelemetry](#bus-telemetry) module, with the same rules for types, read-only values and warnings; a name of one of the bus's own properties, e.g. `ignored_lines`, is refused.
+- Updates: the bus keeps 8 places for messages to the expander instead of 32, too few for an update over the bus, so `p0.send()` refuses OTB messages and `flash()` is the way to update the expander.
+  The expander's answers keep 32 places, since they come in bursts, e.g. the lines of `p0.send("!?")`.
+- Cost: an expander bus takes about 26 KB of the core's heap, an [expander](#expander) about 10 KB.
 
 ## Input
 
@@ -768,7 +772,7 @@ A line carries at most 85 bytes; the rest of a longer batch follows on the next 
 
 The UART number and its pins stay reserved for the serial module until the core restarts, also after `Expander.disconnect()`.
 
-A serial on UART0 with the console's pins is only meant for a [serial bus](#serial-bus) that takes over the console (see Console as Link).
+A serial on UART0 with the console's pins can only carry a [serial bus](#serial-bus), which takes over the console (see [Console as Link](#serial-bus)); its own methods fail.
 
 ## Linear motor
 

@@ -3,7 +3,6 @@
 #include "../main.h"
 #include "../utils/format.h"
 #include "../utils/otb.h"
-#include "../utils/serial-replicator.h"
 #include "../utils/string_utils.h"
 #include "../utils/telemetry.h"
 #include "../utils/timing.h"
@@ -11,7 +10,6 @@
 #include "bus_telemetry.h"
 #include "module_helpers.h"
 #include "serial.h"
-#include "soc/uart_channel.h"
 #include <esp_timer.h>
 #include <algorithm>
 #include <cctype>
@@ -22,23 +20,25 @@
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
-static constexpr size_t QUEUE_LENGTH = 32;         // inbound and outbound
-static constexpr size_t OFFSET_QUEUE_LENGTH = 8;   // full-state snapshots; a full queue only delays one
-static_assert(QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update, a stalled step() not drop a chunk
+static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
+static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
+static constexpr size_t OFFSET_QUEUE_LENGTH = 8;            // full-state snapshots; a full queue only delays one
+static_assert(OUTGOING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update
+static_assert(INCOMING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled step() must not drop an OTB chunk
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static_assert(otb::BUS_OTB_CHUNK_LINE_SIZE < SerialBus::PAYLOAD_CAPACITY, "OTB chunk lines must fit the bus payload");
 static constexpr const char DONE_CMD[] = "__DONE__";
 static constexpr size_t MAX_STAMP_DIGITS = 18; // beyond this strtoll saturates and skews the offset
 static constexpr size_t DONE_STAMP_FIELDS = 3; // T3, T3-T2, sequence number of the answered POLL
-// places in the bus queues that telemetry never takes: frames coming in, layout lines and relayed console output going out
+// places in the bus queues that telemetry never takes: frames coming in, layout lines going out; relayed console output
+// leaves them free as well
 static constexpr size_t TELEMETRY_QUEUE_RESERVE = otb::BUS_OTB_WINDOW;
 static constexpr unsigned long LAYOUT_REQUEST_INTERVAL_MS = 2000;
 static constexpr unsigned long SLOT_WARNING_INTERVAL_MS = 10000;
 static constexpr const char LAYOUT_REQUEST[] = "core.telemetry_info()";
-static constexpr unsigned long PAUSE_TIMEOUT_MS = 500;      // a full TX buffer at 115200 baud takes 180 ms
-static constexpr unsigned long PEER_BOOT_TIMEOUT_MS = 5000; // a flashed peer reports "Ready." on its console
-static constexpr unsigned long OUTPUT_DROP_REPORT_INTERVAL_MS = 1000;
+static constexpr unsigned long PAUSE_TIMEOUT_MS = 500; // a full TX buffer at 115200 baud takes 180 ms
+static constexpr unsigned long DROP_REPORT_INTERVAL_MS = 1000;
 
 // Estimator tunables: an unlocked estimate takes the first sample; from then on a sample whose accuracy
 // bound is at most SYNC_ACCEPT_ACCURACY_US replaces the estimate immediately, otherwise the best sample
@@ -79,26 +79,18 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
 }
 
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
-    : SerialBus(name, serial, node_id, GPIO_NUM_NC, GPIO_NUM_NC, QUEUE_LENGTH, TELEMETRY_QUEUE_RESERVE) {
+    : SerialBus(name, serial, node_id, {}, OUTGOING_QUEUE_LENGTH) {
 }
 
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id,
-                     const gpio_num_t boot_pin, const gpio_num_t enable_pin, const size_t queue_length, const size_t telemetry_reserve)
-    : Module(name), serial(serial), node_id(node_id), boot_pin(boot_pin), enable_pin(enable_pin), queue_length(queue_length),
-      telemetry_reserve(telemetry_reserve) {
+                     const std::initializer_list<gpio_num_t> pins, const size_t outgoing_queue_length)
+    : Module(name), serial(serial), node_id(node_id), outgoing_queue_length(outgoing_queue_length) {
     this->properties = SerialBus::get_defaults();
     this->telemetry_errors = this->properties.at("telemetry_errors");
     this->telemetry_dropped = this->properties.at("telemetry_dropped");
     this->ignored_lines_property = this->properties.at("ignored_lines");
-    if ((boot_pin == GPIO_NUM_NC) != (enable_pin == GPIO_NUM_NC)) {
-        throw std::runtime_error("serial bus needs both the boot and the enable pin of its peer");
-    }
-    if (this->has_peer_pins()) {
-        if (serial->on_console) {
-            throw std::runtime_error("serial bus on the console cannot flash a peer");
-        }
-        this->claims.pin(boot_pin);
-        this->claims.pin(enable_pin);
+    for (const gpio_num_t pin : pins) {
+        this->claims.pin(pin); // here, since a refused pin in a subclass could not undo the claim of the serial below
     }
     if (serial->on_console && console_handed_over()) {
         throw std::runtime_error("the console is already taken over by another serial bus");
@@ -115,8 +107,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 
     this->config_queue = xQueueCreate(1, sizeof(Config));
     this->offset_queue = xQueueCreate(OFFSET_QUEUE_LENGTH, sizeof(OffsetUpdate));
-    this->outbound_queue = xQueueCreate(queue_length, sizeof(OutgoingMessage));
-    this->inbound_queue = xQueueCreate(queue_length, sizeof(IncomingMessage));
+    this->outbound_queue = xQueueCreate(outgoing_queue_length, sizeof(OutgoingMessage));
+    this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage));
     const bool queues_created = this->config_queue && this->offset_queue && this->outbound_queue && this->inbound_queue;
     if (!queues_created ||
         xTaskCreatePinnedToCore(
@@ -131,21 +123,18 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
         throw std::runtime_error(queues_created ? "failed to create serial bus communication task"
                                                 : "failed to create serial bus queues");
     }
-    // claim last: a claim is never released, so it must not outlive a constructor that throws
-    this->serial->claim(name, true);
-    telemetry::add_bus(this);
-    if (this->has_peer_pins()) {
-        this->drive_peer_pins_high();
-    }
     if (serial->on_console) {
         // from now on, only this bus reads and writes UART0, and everything this node prints goes to its coordinator,
         // including what the boot printed before
         hand_over_console(serial->baud_rate);
-        this->owns_console = true;
         for (const std::string &line : take_boot_lines()) {
             this->relay_console_line(line.c_str());
         }
+    } else {
+        // last: a claim is never released, so it must not outlive a constructor that throws
+        this->serial->claim(name);
     }
+    telemetry::add_bus(this);
 }
 
 // only reached when a constructed bus is dropped again, e.g. because Global::add_module() throws; the task must be gone
@@ -159,7 +148,7 @@ SerialBus::~SerialBus() {
     }
     // the task parks itself once it has left its loop, so this is the only delete and cannot collide with a self-delete
     vTaskDelete(this->communication_task);
-    if (this->owns_console) {
+    if (this->serial->on_console) {
         take_back_console();
     }
     for (const QueueHandle_t queue : {this->config_queue, this->offset_queue, this->outbound_queue, this->inbound_queue}) {
@@ -182,7 +171,7 @@ void SerialBus::step() {
     }
 
     // the communication task must not echo() itself, so drops are counted there and reported here, at most once per second
-    if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > 1000) {
+    if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > DROP_REPORT_INTERVAL_MS) {
         const unsigned dropped = this->dropped_inbound.exchange(0);
         this->last_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u inbound messages (queue full)", this->name.c_str(), dropped);
@@ -194,8 +183,8 @@ void SerialBus::step() {
         this->ignored_lines_property->set_integer_value(this->ignored_lines_property->integer_value() + this->ignored_lines.exchange(0));
     }
     // reported once the queue has room again, e.g. when a coordinator polls after a restart
-    if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > OUTPUT_DROP_REPORT_INTERVAL_MS &&
-        uxQueueSpacesAvailable(this->outbound_queue) > this->telemetry_reserve) {
+    if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > DROP_REPORT_INTERVAL_MS &&
+        uxQueueSpacesAvailable(this->outbound_queue) > TELEMETRY_QUEUE_RESERVE) {
         this->last_output_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u lines of output (queue full)", this->name.c_str(), this->dropped_output.exchange(0));
     }
@@ -225,6 +214,9 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             throw std::runtime_error("receiver ID must be between 0 and 255");
         }
         const std::string payload = format_args(arguments[1]->evaluate_string(), arguments, 2);
+        if (this->outgoing_queue_length <= otb::BUS_OTB_WINDOW && payload.rfind(otb::OTB_MSG_PREFIX, 0) == 0) {
+            throw std::runtime_error("serial bus \"" + this->name + "\" queues too few messages for an update over the bus");
+        }
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "make_coordinator") {
         if (arguments.empty()) {
@@ -268,25 +260,9 @@ void SerialBus::set_peers(const uint8_t *peer_ids, const uint8_t peer_count) {
     this->send_config();
 }
 
-void SerialBus::drive_peer_pins_high() const {
-    // high before they turn into outputs, so that the peer does not restart when this node boots
-    for (const gpio_num_t pin : {this->boot_pin, this->enable_pin}) {
-        gpio_reset_pin(pin);
-        gpio_set_level(pin, 1);
-        gpio_set_direction(pin, GPIO_MODE_OUTPUT);
-    }
-}
-
-void SerialBus::restart_peer() {
-    gpio_set_level(this->enable_pin, 0);
-    delay(100);
-    gpio_set_level(this->enable_pin, 1);
-    this->expect_peer_boot();
-}
-
 void SerialBus::expect_peer_boot() {
-    this->peer_restart_millis = millis();
-    this->peer_restarted = true;
+    this->peer_boot_millis = millis();
+    this->peer_booting = true;
 }
 
 void SerialBus::pause_communication() {
@@ -300,70 +276,6 @@ void SerialBus::pause_communication() {
         }
         delay(1);
     }
-}
-
-void SerialBus::flash_peer(const uint8_t peer_id) {
-    if (!this->has_peer_pins()) {
-        throw std::runtime_error("serial bus \"" + this->name + "\" has no boot and enable pins of a peer");
-    }
-    this->serial->require_sole_user(this->name);
-    this->pause_communication();
-    struct Resume {
-        SerialBus *const bus;
-        ~Resume() { bus->pause_requested = false; }
-    } resume{this};
-    this->serial->deinstall();
-    // the replicator raises the rate eightfold to 921600 baud, as from an expander at the usual 115200 baud
-    const bool success = ZZ::Replicator::flash_replica(this->serial->uart_num, this->enable_pin, this->boot_pin,
-                                                       this->serial->rx_pin, this->serial->tx_pin, CONSOLE_DEFAULT_BAUD_RATE);
-    delay(100);
-    this->serial->reinitialize_after_flash();
-    this->drive_peer_pins_high();
-    if (!success) {
-        throw std::runtime_error("could not flash the peer of serial bus \"" + this->name + "\"");
-    }
-    this->configure_flashed_peer(peer_id);
-}
-
-void SerialBus::configure_flashed_peer(const uint8_t peer_id) {
-    // The copy boots with an empty NVS, i.e. with its console at the default baud rate and without a startup script.
-    // Through its console, the startup script gets a serial bus on that console, which the peer takes over after
-    // a restart and keeps in its bus backup.
-    const uart_port_t uart_num = this->serial->uart_num;
-    uart_set_baudrate(uart_num, CONSOLE_DEFAULT_BAUD_RATE);
-    this->restart_peer();
-    this->serial->flush();
-    bool ready = false;
-    const unsigned long start = millis();
-    while (!ready && millis_since(start) < PEER_BOOT_TIMEOUT_MS) {
-        char line[128]; // longer boot log lines are discarded by read_line()
-        while (!ready && this->serial->has_buffered_lines()) {
-            const int len = this->serial->read_line(line, sizeof(line));
-            bool checksum_ok = false;
-            ready = len > 0 && (check(line, len, &checksum_ok), checksum_ok) && std::strcmp(line, "Ready.") == 0;
-        }
-        delay(10);
-    }
-    if (ready) {
-        char command[64];
-        const int rx_pin = UART_NUM_0_RXD_DIRECT_GPIO_NUM; // a copy of this firmware runs on the same chip
-        const int tx_pin = UART_NUM_0_TXD_DIRECT_GPIO_NUM;
-        this->serial->write_checked_line("!-");
-        this->serial->write_checked_line(command, csprintf(command, sizeof(command), "!+serial = Serial(%d, %d, %ld, 0)",
-                                                           rx_pin, tx_pin, this->serial->baud_rate));
-        this->serial->write_checked_line(command, csprintf(command, sizeof(command), "!+bus = SerialBus(serial, %u)", peer_id));
-        this->serial->write_checked_line("!.");
-        this->serial->write_checked_line("core.restart()");
-        uart_wait_tx_done(uart_num, pdMS_TO_TICKS(500));
-        delay(100); // before polls at another baud rate could garble the lines
-        this->peer_restart_millis = millis();
-    }
-    uart_set_baudrate(uart_num, this->serial->baud_rate);
-    this->serial->flush();
-    if (!ready) {
-        throw std::runtime_error("the peer flashed by serial bus \"" + this->name + "\" did not report \"Ready.\"");
-    }
-    echo("serial bus %s flashed its peer, which restarts as bus node %u", this->name.c_str(), peer_id);
 }
 
 void SerialBus::send_config() {
@@ -417,12 +329,11 @@ void SerialBus::communication_loop(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
     while (!bus->stop_requested) {
         if (bus->pause_requested) {
-            bus->is_polling = false; // the main task flashes or restarts the peer, so an outstanding poll is void
+            bus->is_polling = false; // the main task uses the UART, e.g. to flash the peer, so an outstanding poll is void
             bus->paused = true;
             vTaskDelay(pdMS_TO_TICKS(1));
             continue;
         }
-        bus->paused = false;
         if (xQueueReceive(bus->config_queue, &bus->received_config, 0) == pdTRUE) {
             bus->adopt_config(bus->received_config);
         }
@@ -435,7 +346,7 @@ void SerialBus::communication_loop(void *param) {
             }
             // handle poll timeout
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                if (!bus->peer_restarted || millis_since(bus->peer_restart_millis) > PEER_BOOT_TIMEOUT_MS) {
+                if (!bus->peer_booting || millis_since(bus->peer_boot_millis) > PEER_BOOT_MS) {
                     bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out",
                                                  bus->name.c_str(), bus->polled_peer_id);
                 }
@@ -576,7 +487,7 @@ void SerialBus::process_uart() {
 
         // telemetry frames never take the last slots of the inbound queue, so that a flood of them, e.g. while the main
         // task runs the startup, cannot crowd out commands, echoes and OTB chunks
-        if (message.payload[0] == telemetry::FRAME_PREFIX && uxQueueSpacesAvailable(this->inbound_queue) <= this->telemetry_reserve) {
+        if (message.payload[0] == telemetry::FRAME_PREFIX && uxQueueSpacesAvailable(this->inbound_queue) <= TELEMETRY_QUEUE_RESERVE) {
             this->dropped_frames++;
             continue;
         }
@@ -869,7 +780,7 @@ void SerialBus::print_to_incoming_queue(const char *format, ...) {
 
 void SerialBus::handle_echo(const char *line) {
     if (!this->echo_target_id) {
-        if (this->owns_console) {
+        if (this->serial->on_console) {
             this->relay_console_line(line);
         }
         return;
@@ -899,7 +810,7 @@ void SerialBus::relay_console_line(const char *line) {
                             static_cast<int>(sizeof(payload) - sizeof(ECHO_CMD)));
     }
     // the reserve stays free for command replies and OTB acks
-    if (len < 0 || len >= static_cast<int>(sizeof(payload)) || uxQueueSpacesAvailable(this->outbound_queue) <= this->telemetry_reserve ||
+    if (len < 0 || len >= static_cast<int>(sizeof(payload)) || uxQueueSpacesAvailable(this->outbound_queue) <= TELEMETRY_QUEUE_RESERVE ||
         !this->queue_outgoing_message(this->coordinator_id, payload, len, 0)) {
         this->dropped_output++;
     }
@@ -907,7 +818,7 @@ void SerialBus::relay_console_line(const char *line) {
 
 bool SerialBus::send_telemetry_layout(const char *line, const size_t length) {
     // the reserve stays free for commands, echoes and OTB acks
-    return uxQueueSpacesAvailable(this->outbound_queue) > this->telemetry_reserve &&
+    return uxQueueSpacesAvailable(this->outbound_queue) > TELEMETRY_QUEUE_RESERVE &&
            this->queue_outgoing_message(this->coordinator_id, line, length, 0);
 }
 

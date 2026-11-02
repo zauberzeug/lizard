@@ -58,9 +58,6 @@ Serial::~Serial() {
 }
 
 void Serial::initialize_uart() const {
-    if (this->on_console) {
-        return;
-    }
     const uart_config_t uart_config = {
         .baud_rate = baud_rate,
         .data_bits = UART_DATA_8_BITS,
@@ -93,8 +90,8 @@ void Serial::enable_line_detection() const {
     uart_pattern_queue_reset(this->uart_num, UART_PATTERN_QUEUE_SIZE);
 }
 
-void Serial::claim(const std::string &user, const bool serial_bus) const {
-    if (this->on_console && !serial_bus) {
+void Serial::claim(const std::string &user) const {
+    if (this->on_console) {
         throw std::runtime_error("serial \"" + this->name + "\" on the console pins can only carry a serial bus");
     }
     this->users.push_back(user);
@@ -246,7 +243,7 @@ std::string Serial::get_output() const {
 }
 
 void Serial::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
-    if (this->on_console && (method_name == "send" || method_name == "read" || method_name == "mute" || method_name == "unmute")) {
+    if (this->on_console) {
         throw std::runtime_error("serial \"" + this->name + "\" on the console pins can only carry a serial bus");
     }
     if (method_name == "send") {

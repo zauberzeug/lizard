@@ -33,19 +33,14 @@ void hand_over_console(const long baud_rate) {
     uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
     uart_get_baudrate(UART_NUM_0, &console_baud_rate);
     uart_set_baudrate(UART_NUM_0, baud_rate);
-    if (baud_rate != static_cast<long>(console_baud_rate)) {
-        // the coordinator read the boot output at the wrong rate; a line end keeps that garbage out of the first frame
-        uart_write_bytes(UART_NUM_0, "\n", 1);
-    }
+    // a coordinator at another rate read the boot output as garbage; a line end keeps it out of the first bus message
+    uart_write_bytes(UART_NUM_0, "\n", 1);
     console_log_vprintf = esp_log_set_vprintf(drop_log);
     esp_rom_install_channel_putc(1, nullptr);
     handed_over = true;
 }
 
 void take_back_console() {
-    if (!handed_over) {
-        return;
-    }
     handed_over = false;
     uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
     uart_set_baudrate(UART_NUM_0, console_baud_rate);
@@ -58,11 +53,6 @@ std::vector<std::string> take_boot_lines() {
     lines.swap(boot_lines);
     keeping_boot_lines = false;
     return lines;
-}
-
-void forget_boot_lines() {
-    std::vector<std::string>().swap(boot_lines);
-    keeping_boot_lines = false;
 }
 
 // printf() returns once the bytes are on the wire, so a console too slow for its output stretches the loop (#258)
