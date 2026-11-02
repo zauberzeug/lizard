@@ -525,11 +525,8 @@ void SerialBus::process_uart() {
     static char buffer[FRAME_BUFFER_SIZE];
     while (this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
-        if (len < 0) {
-            this->print_to_incoming_queue("warning: serial bus %s error while processing uart: %s", this->name.c_str(), Serial::read_line_error(len));
-            continue;
-        }
-        // e.g. the boot output of a peer whose console is the bus
+        // e.g. the boot output of a peer whose console is the bus, garbage if it boots at another baud rate; longer than
+        // the buffer, it is no bus message either
         if (len < 2 || buffer[0] != '$' || buffer[1] != '$') {
             this->ignored_lines++;
             continue;

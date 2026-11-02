@@ -33,6 +33,10 @@ void hand_over_console(const long baud_rate) {
     uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
     uart_get_baudrate(UART_NUM_0, &console_baud_rate);
     uart_set_baudrate(UART_NUM_0, baud_rate);
+    if (baud_rate != static_cast<long>(console_baud_rate)) {
+        // the coordinator read the boot output at the wrong rate; a line end keeps that garbage out of the first frame
+        uart_write_bytes(UART_NUM_0, "\n", 1);
+    }
     console_log_vprintf = esp_log_set_vprintf(drop_log);
     esp_rom_install_channel_putc(1, nullptr);
     handed_over = true;
