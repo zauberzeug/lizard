@@ -29,8 +29,8 @@ public:
     static const std::map<std::string, Variable_ptr> get_defaults();
 
     bool receive();
-    void send(const uint32_t id, const uint8_t data[8], const bool rtr = false, const uint8_t dlc = 8) const;
-    void send(const uint32_t id,
+    bool send(const uint32_t id, const uint8_t data[8], const bool rtr = false, const uint8_t dlc = 8) const;
+    bool send(const uint32_t id,
               const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
               const bool rtr = false) const;

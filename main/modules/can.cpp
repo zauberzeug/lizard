@@ -173,7 +173,7 @@ bool Can::receive() {
     return true;
 }
 
-void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
+bool Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
     if (id > MAX_EXTENDED_ID) {
         throw std::runtime_error("CAN ID does not fit into 29 bits");
     }
@@ -185,7 +185,7 @@ void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t
             echo("CAN send dropped: bus not RUNNING");
             last_drop_log = millis();
         }
-        return;
+        return false;
     }
 
     twai_message_t message;
@@ -197,15 +197,15 @@ void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t
         message.data[i] = data[i];
     }
 
-    twai_transmit(&message, pdMS_TO_TICKS(0));
+    return twai_transmit(&message, pdMS_TO_TICKS(0)) == ESP_OK;
 }
 
-void Can::send(uint32_t id,
+bool Can::send(uint32_t id,
                uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
                uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
                bool rtr) const {
     uint8_t data[8] = {d0, d1, d2, d3, d4, d5, d6, d7};
-    this->send(id, data, rtr);
+    return this->send(id, data, rtr);
 }
 
 void Can::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
