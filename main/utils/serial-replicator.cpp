@@ -17,6 +17,12 @@ namespace ZZ::Replicator {
 
 static constexpr char TAG[]{"replicator"};
 
+// The target sits in its ROM bootloader while it is flashed, so its console rate and the link's rate do not apply:
+// connect at the ROM's default and raise to the rate esptool flashes with. A multiple of the link rate would exceed
+// what the UARTs reach once the link runs above 921600.
+static constexpr uint32_t CONNECT_BAUD_RATE{115200};
+static constexpr uint32_t FLASH_BAUD_RATE{921600};
+
 static constexpr char const *ERROR_STRINGS[]{
     "SUCCESS",          /*!< Success */
     "FAIL",             /*!< Unspecified error */
@@ -50,11 +56,9 @@ static auto init_connection(const uart_port_t uart_num,
                             const gpio_num_t enable_pin,
                             const gpio_num_t boot_pin,
                             const gpio_num_t rx_pin,
-                            const gpio_num_t tx_pin,
-                            const uint32_t baud_rate,
-                            const uint32_t block_size) -> bool {
+                            const gpio_num_t tx_pin) -> bool {
     loader_esp32_config_t conf{};
-    conf.baud_rate = baud_rate;
+    conf.baud_rate = CONNECT_BAUD_RATE;
     conf.uart_port = uart_num;
     conf.uart_rx_pin = rx_pin;
     conf.uart_tx_pin = tx_pin;
@@ -91,14 +95,13 @@ static auto connect() -> bool {
     return true;
 }
 
-static auto up_baudrate(uart_port_t uart_num, uint32_t base_baud_rate) -> bool {
-    const uint32_t higher_rate{base_baud_rate * 8};
-    esp_loader_error_t status{esp_loader_change_baudrate(higher_rate)};
+static auto up_baudrate(uart_port_t uart_num) -> bool {
+    esp_loader_error_t status{esp_loader_change_baudrate(FLASH_BAUD_RATE)};
 
-    ESP_LOGD(TAG, "esp_loader_change_baudrate(%lu)", higher_rate);
+    ESP_LOGD(TAG, "esp_loader_change_baudrate(%lu)", FLASH_BAUD_RATE);
     HANDLE_ERROR(status, "raising target baudrate");
 
-    esp_err_t ec{uart_set_baudrate(uart_num, higher_rate)};
+    esp_err_t ec{uart_set_baudrate(uart_num, FLASH_BAUD_RATE)};
 
     HANDLE_ESP_ERROR(ec, "raising host baudrate");
 
@@ -182,10 +185,9 @@ auto flash_replica(const uart_port_t uart_num,
                    const gpio_num_t boot_pin,
                    const gpio_num_t rx_pin,
                    const gpio_num_t tx_pin,
-                   const uint32_t baud_rate,
                    const uint32_t block_size) -> bool {
     ESP_LOGI(TAG, "Initializing pins..");
-    if (!init_connection(uart_num, enable_pin, boot_pin, rx_pin, tx_pin, baud_rate, block_size)) {
+    if (!init_connection(uart_num, enable_pin, boot_pin, rx_pin, tx_pin)) {
         return false;
     }
 
@@ -197,7 +199,7 @@ auto flash_replica(const uart_port_t uart_num,
     }
 
     ESP_LOGI(TAG, "Raising baudrate..");
-    if (!up_baudrate(uart_num, baud_rate)) {
+    if (!up_baudrate(uart_num)) {
         return false;
     }
 
