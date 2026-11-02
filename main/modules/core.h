@@ -8,7 +8,7 @@ struct output_element_t {
     const ConstModule_ptr module;
     const std::string property_name;
     const unsigned int precision;
-    mutable ConstVariable_ptr variable; // looked up until it exists, then kept, since it is never replaced
+    mutable ConstVariable_ptr variable; // nullptr until a loop finds it, then kept, since it is never replaced
 };
 
 class Core;

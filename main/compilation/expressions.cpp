@@ -114,44 +114,7 @@ std::string VariableExpression::evaluate_identifier() const {
 }
 
 PropertyExpression::PropertyExpression(const ConstModule_ptr module, const std::string property_name)
-    : Expression(module->get_property(property_name)->type), module(module), property_name(property_name),
-      variable(module->get_property(property_name)) {
-}
-
-bool PropertyExpression::evaluate_boolean() const {
-    if (this->type == boolean)
-        return this->variable->boolean_value();
-    throw std::runtime_error("property is not a boolean");
-}
-
-int64_t PropertyExpression::evaluate_integer() const {
-    if (this->type == integer)
-        return this->variable->integer_value();
-    if (this->type == boolean)
-        return this->variable->boolean_value() ? 1 : 0;
-    throw std::runtime_error("property cannot evaluate to an integer");
-}
-
-double PropertyExpression::evaluate_number() const {
-    if (this->type == number)
-        return this->variable->number_value();
-    if (this->type == integer)
-        return this->variable->integer_value();
-    if (this->type == boolean)
-        return this->variable->boolean_value() ? 1.0 : 0.0;
-    throw std::runtime_error("property cannot evaluate to a number");
-}
-
-std::string PropertyExpression::evaluate_string() const {
-    if (this->type == string)
-        return this->variable->string_value();
-    throw std::runtime_error("property is not a string");
-}
-
-std::string PropertyExpression::evaluate_identifier() const {
-    if (this->type == identifier)
-        return this->variable->identifier_value();
-    throw std::runtime_error("property is not an identifier");
+    : VariableExpression(module->get_property(property_name)), module(module), property_name(property_name) {
 }
 
 PowerExpression::PowerExpression(const ConstExpression_ptr left, const ConstExpression_ptr right)
