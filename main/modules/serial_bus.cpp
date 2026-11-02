@@ -56,7 +56,7 @@ static Module_ptr create_serial_bus(const std::string &name, const std::vector<C
 }
 REGISTER_MODULE(SerialBus, &create_serial_bus)
 
-static uint8_t to_peer_id(const ConstExpression_ptr &argument) {
+uint8_t SerialBus::to_peer_id(const ConstExpression_ptr &argument) {
     if ((argument->type & integer) == 0) {
         throw std::runtime_error("peer IDs must be integers");
     }
@@ -869,14 +869,15 @@ void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
         return;
     }
     FrameLayout &frame = layout.frames[line.frame_id];
-    if (frame.layout_id != line.layout_id || frame.types.size() != line.count) {
+    const bool redefined = frame.layout_id != line.layout_id || frame.types.size() != line.count;
+    if (redefined) {
         frame.layout_id = line.layout_id; // e.g. the peer cleared its frames and reused the frame ID
         frame.types.assign(line.count, 0);
     }
     frame.types[line.index] = line.type;
     for (BusTelemetry *const listener : this->telemetry_listeners) {
         if (listener->peer_id == message.sender) {
-            listener->handle_layout_line(line);
+            listener->handle_layout_line(line, redefined);
         }
     }
 }
@@ -897,16 +898,11 @@ void SerialBus::request_passed_layouts() {
     for (size_t i = 0; i < this->config.peer_count; ++i) {
         const uint8_t peer_id = this->config.peer_ids[i];
         if (this->passes_telemetry(peer_id)) {
-            this->request_telemetry_layout(peer_id);
+            PeerLayout &layout = this->peer_layouts[peer_id];
+            layout.requested = false; // asked for on purpose, however recently a frame asked
+            this->request_layout(peer_id, layout);
         }
     }
-}
-
-bool SerialBus::request_telemetry_layout(const uint8_t peer_id) {
-    PeerLayout &layout = this->peer_layouts[peer_id];
-    layout.requested = false; // asked for on purpose, however recently a frame asked
-    this->request_layout(peer_id, layout);
-    return layout.requested;
 }
 
 void SerialBus::add_telemetry_listener(BusTelemetry *const listener) {
@@ -922,8 +918,12 @@ void SerialBus::remove_telemetry_listener(BusTelemetry *const listener) {
 }
 
 bool SerialBus::is_listened_to(const uint8_t peer_id) const {
-    return std::any_of(this->telemetry_listeners.begin(), this->telemetry_listeners.end(),
-                       [&](const BusTelemetry *const listener) { return listener->peer_id == peer_id; });
+    for (const BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == peer_id) {
+            return true;
+        }
+    }
+    return false;
 }
 
 const BusTelemetry *SerialBus::find_telemetry_listener(const uint8_t peer_id, const std::string &property_name) const {
@@ -935,7 +935,9 @@ const BusTelemetry *SerialBus::find_telemetry_listener(const uint8_t peer_id, co
     return nullptr;
 }
 
-bool SerialBus::has_telemetry_layout(const uint8_t peer_id) const {
+void SerialBus::forget_telemetry_layout(const uint8_t peer_id) {
     const auto layout = this->peer_layouts.find(peer_id);
-    return layout != this->peer_layouts.end() && !layout->second.frames.empty();
+    if (layout != this->peer_layouts.end()) {
+        layout->second.frames.clear(); // keeps the time of the last request, so a burst of calls asks once
+    }
 }

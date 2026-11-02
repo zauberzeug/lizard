@@ -25,26 +25,20 @@ private:
         uint16_t position; // byte offset in the payload, for bools the bit after the numbers
     };
     struct FrameMap {
-        uint8_t layout_id;
-        size_t count;
         std::vector<Field> fields; // only the mirrored ones
         bool positioned = false;   // the positions follow from the types of all fields, known with the first frame
         size_t bits_offset = 0;
     };
 
     std::vector<Mirror> mirrors;
-    std::map<uint8_t, FrameMap> frames;  // by frame ID, only frames with mirrored fields
-    bool layout_request_pending = false; // sent once the declarations or layout lines settle
-    unsigned long layout_request_millis = 0;
-    bool layout_awaited = false; // requested, but no layout line arrived since
-    unsigned layout_retries = 0;
-    bool frames_arriving = false; // since the last declaration or restart of the peer
+    std::map<uint8_t, FrameMap> frames; // by frame ID, only frames with mirrored fields, dropped with each new layout of the ID
+    bool frames_arriving = false;       // since the last declaration or restart of the peer
     unsigned long frames_since_millis = 0;
     bool missing_checked = false;
 
     int find_mirror(const std::string_view name) const;
+    bool is_mapped(const size_t mirror) const;
     void restart_missing_check();
-    void request_layout();
 
 public:
     static inline constexpr const char *TYPE = "BusTelemetry";
@@ -54,14 +48,13 @@ public:
 
     BusTelemetry(const std::string &name, const SerialBus_ptr bus, const uint8_t peer_id);
     ~BusTelemetry() override;
-    void step() override;
     void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) override;
     void declare_property(const std::string &property_name, const Variable_ptr &variable) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 
     // called by the bus on the main task
     bool declares(const std::string &property_name) const { return this->properties.count(property_name) > 0; }
-    void handle_layout_line(const telemetry::LayoutLine &line);
+    void handle_layout_line(const telemetry::LayoutLine &line, const bool redefined);
     void handle_frame(const uint8_t *body, const std::vector<char> *types); // without types while the bus lacks the frame's layout
     void reset();                                                           // the peer restarted and announces its layouts anew
 };

@@ -31,6 +31,7 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+    static uint8_t to_peer_id(const ConstExpression_ptr &argument);
 
     // --- telemetry frames (see utils/telemetry.h) ---------------------------
     // peer side, main task: the node that polls this one, 0 before the first poll
@@ -45,8 +46,8 @@ public:
     void add_telemetry_listener(BusTelemetry *listener);
     void remove_telemetry_listener(BusTelemetry *listener);
     const BusTelemetry *find_telemetry_listener(const uint8_t peer_id, const std::string &property_name) const; // the one declaring it
-    bool has_telemetry_layout(const uint8_t peer_id) const;
-    bool request_telemetry_layout(const uint8_t peer_id); // however recently a frame asked; false while the queue is full
+    // the peer's next frame asks for its layout lines again
+    void forget_telemetry_layout(const uint8_t peer_id);
 
 private:
     struct IncomingMessage {

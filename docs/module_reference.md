@@ -242,11 +242,13 @@ bus[2]: ~AdMHQOIBALbznT8BIbs=@31
 ```
 
 Each call replaces the selection of the previous one; without a call nothing is passed on.
-Peers send their frames over the bus whether they are passed on or not; the coordinator drops those of peers it neither passes on nor mirrors with a [BusTelemetry](#bus-telemetry) unchecked.
+Peers send their frames over the bus whether they are passed on or not.
+The coordinator drops the frames of a peer it neither passes on nor mirrors with a [BusTelemetry](#bus-telemetry) without checking them.
 Malformed frames and layout lines of passed-on or mirrored peers, e.g. no valid Base64 or with a wrong CRC, are dropped and counted in `telemetry_errors`.
 
 - Recovery: when a frame arrives whose layout the coordinator does not have or that does not match the frame, e.g. because `pass_telemetry` came after the peer sent its layout lines or the coordinator booted after the peer, it asks the peer for its layout lines with `core.telemetry_info()`, at most every 2 s.
-  Until the first of them arrives, at most for 2 s, it does not pass the peer's frames on and counts them in `telemetry_dropped`, since printing the frames queued ahead of the layout lines would keep the inbound queue full and drop those; a [BusTelemetry](#bus-telemetry) still gets them.
+  Until the first of them arrives, at most for 2 s, it does not pass the peer's frames on and counts them in `telemetry_dropped`, since printing the frames queued ahead of the layout lines would keep the inbound queue full and drop those.
+  A [BusTelemetry](#bus-telemetry) of the peer still gets them.
   Frames from before the request are passed on anyway, so a reader skips frames whose layout it has not seen yet.
   When the peer reports `Ready.`, the coordinator forgets its layouts; the peer sends them again with the first poll.
 - Late hosts: `core.telemetry_info()` on the coordinator also asks every passed-on peer of its `make_coordinator` list for its layout lines, so a host that connects later gets them too.
@@ -278,8 +280,7 @@ See [OTB Update](tools.md#otb-update) for details.
 
 ## Bus Telemetry
 
-On a serial bus coordinator, a BusTelemetry module mirrors values of one peer, so that rules, `core.output` and the coordinator's own telemetry frames can use them.
-The peer sends these values in its own [telemetry frames](#core); the module copies the declared fields out of every frame of that peer, without processing it as Lizard code.
+On a serial bus coordinator, a BusTelemetry module mirrors values that one peer sends in its [telemetry frames](#core), so that rules, `core.output` and the coordinator's own frames can use them.
 
 | Constructor                        | Description                     | Arguments          |
 | ---------------------------------- | ------------------------------- | ------------------ |
@@ -296,27 +297,23 @@ bool arm.motor.enabled = false    # property motor.enabled of peer 2
 float arm.motor.position = 0.0
 bool arm.parked = false           # variable parked of peer 2
 when arm.motor.enabled then wheels.locked = true end
-core.telemetry(wheels.l_speed, arm.motor.position, 100)
+core.telemetry(wheels.linear_speed, arm.motor.position, 100)
 ```
 
-Peer 2 has to send these values in one of its frames, e.g. with `core.telemetry(motor.position, motor.enabled, parked, 100)` in its startup; nothing is ordered from it.
+Peer 2 has to send these values in one of its frames, e.g. with `core.telemetry(motor.position, motor.enabled, parked, 100)` in its startup.
 Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `arm2 = BusTelemetry(bus, 3)`.
 
 - Declarations: only `bool`, `int` and `float` can be declared.
-  Declaring a name again with the same type keeps the property and sets the declared value only while no frame has delivered one since the peer last restarted; with another type it is an error.
-  The same name of the same peer in two modules is an error, e.g. `"motor.position" of peer 2 is already declared by arm`.
-- Read-only: assigning a declared property is an error, since it mirrors the peer.
-- Values: until a frame with the value arrives, a property keeps its declared value.
-  When the peer stops sending or restarts, it keeps the last value it received.
-- Layouts: the module maps the fields by the peer's layout lines, which the coordinator keeps for every peer with a BusTelemetry, whether it passes the peer's frames on or not (see [Serial Bus](#serial-bus)).
-  A new layout ID for a frame, or a layout line that puts another field where a mirrored one was, drops the old mapping of that frame, so a property does not take a foreign value; the latter also asks the peer for its layout lines again.
-  Only when a reused frame ID gets a layout with the same layout ID (a chance of 1 in 256) and one of its layout lines is lost, a mirrored field can keep its old place.
-  When the peer reports `Ready.`, the mapping starts over with the layout lines the peer sends with its first poll.
-  A declaration after the peer's layout lines have passed, e.g. at the console, asks the peer for them again 200 ms after the last declaration, and up to three more times every 2 s while no layout line arrives.
-  When the coordinator starts to pass the peer's frames on, it asks for them again as well, so that the host gets them too.
-- Warnings: a layout line whose type does not match the declaration yields e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`, once per name; that field is never written to the property, the rest of the frame is.
-  When frames of the peer arrive but none of them delivers a declared name for 5 s, the module warns once per name, e.g. `warning: arm: no frame of peer 2 carries "parked"`.
-- Cost: each declared value costs one property on the coordinator.
+  Declaring a name again with the same type only sets the value while no frame has delivered one yet.
+  Another type is an error, and so is the same name of the same peer in a second module, e.g. `"motor.position" of peer 2 is already declared by arm`.
+- Values: a declared property is read-only.
+  It keeps its declared value until a frame delivers one, and its last value when the peer stops sending or restarts.
+- Layouts: mirroring works whether or not the coordinator passes the peer's frames on.
+  A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after.
+  When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field.
+- Warnings: a field the peer sends with another type is not mirrored, and the module warns once, e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`.
+  When the peer's frames arrive but none carries a declared name within 5 s, the module warns once, e.g. `warning: arm: no frame of peer 2 carries "parked"`.
+- Cost: each mirrored value takes about 100 bytes of heap on the coordinator.
   Rules over many mirrored values are expensive on their own, so a peer should compute a predicate like `parked` itself and the coordinator mirror one bool.
 
 ## Input

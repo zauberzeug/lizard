@@ -3,26 +3,19 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "module_helpers.h"
-#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 
-static constexpr unsigned long DECLARATIONS_SETTLE_MS = 200;
-static constexpr unsigned long LAYOUT_RETRY_MS = 2000;
-static constexpr unsigned LAYOUT_RETRIES = 3;
 static constexpr unsigned long MISSING_WARNING_MS = 5000;
 
 static Module_ptr create_bus_telemetry(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 2, identifier, integer);
     const SerialBus_ptr bus = get_module_argument<SerialBus>(arguments[0]);
-    const long peer_id = arguments[1]->evaluate_integer();
-    if (peer_id <= 0 || peer_id >= 255) {
-        throw std::runtime_error("peer ID must be between 0 and 255");
-    }
+    const uint8_t peer_id = SerialBus::to_peer_id(arguments[1]);
     if (peer_id == bus->node_id) {
         throw std::runtime_error("peer ID must differ from the node ID of the bus");
     }
-    return std::make_shared<BusTelemetry>(name, bus, static_cast<uint8_t>(peer_id));
+    return std::make_shared<BusTelemetry>(name, bus, peer_id);
 }
 REGISTER_MODULE(BusTelemetry, &create_bus_telemetry)
 
@@ -48,32 +41,6 @@ BusTelemetry::BusTelemetry(const std::string &name, const SerialBus_ptr bus, con
 
 BusTelemetry::~BusTelemetry() {
     this->bus->remove_telemetry_listener(this);
-}
-
-void BusTelemetry::step() {
-    if (this->layout_request_pending && millis_since(this->layout_request_millis) >= DECLARATIONS_SETTLE_MS &&
-        this->bus->request_telemetry_layout(this->peer_id)) { // again while the queue is full
-        this->layout_request_pending = false;
-        this->layout_awaited = true;
-        this->layout_request_millis = millis();
-    }
-    if (this->layout_awaited && millis_since(this->layout_request_millis) >= LAYOUT_RETRY_MS) {
-        this->layout_awaited = false;
-        if (this->layout_retries < LAYOUT_RETRIES) { // the request or its answer got lost
-            ++this->layout_retries;
-            this->request_layout();
-        }
-    }
-    if (this->frames_arriving && !this->missing_checked && millis_since(this->frames_since_millis) >= MISSING_WARNING_MS) {
-        this->missing_checked = true;
-        for (Mirror &mirror : this->mirrors) {
-            if (!mirror.received && !mirror.warned && !mirror.mismatch) {
-                mirror.warned = true;
-                echo("warning: %s: no frame of peer %u carries \"%s\"", this->name.c_str(), this->peer_id, mirror.name->c_str());
-            }
-        }
-    }
-    Module::step();
 }
 
 void BusTelemetry::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
@@ -106,16 +73,8 @@ void BusTelemetry::declare_property(const std::string &property_name, const Vari
     const auto inserted = this->properties.emplace(property_name, variable).first;
     this->mirrors.push_back({&inserted->first, variable.get()});
     this->restart_missing_check();
-    if (this->bus->has_telemetry_layout(this->peer_id)) {
-        // the layout lines with this name may have passed already, so ask for them again once the declarations settle
-        this->layout_retries = 0;
-        this->request_layout();
-    }
-}
-
-void BusTelemetry::request_layout() {
-    this->layout_request_pending = true;
-    this->layout_request_millis = millis();
+    // the layout lines with this name may have passed already, e.g. for a declaration at the console
+    this->bus->forget_telemetry_layout(this->peer_id);
 }
 
 int BusTelemetry::find_mirror(const std::string_view name) const {
@@ -127,61 +86,70 @@ int BusTelemetry::find_mirror(const std::string_view name) const {
     return -1;
 }
 
+bool BusTelemetry::is_mapped(const size_t mirror) const {
+    for (const auto &[frame_id, frame] : this->frames) {
+        for (const Field &field : frame.fields) {
+            if (field.mirror == mirror) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void BusTelemetry::restart_missing_check() {
     this->frames_arriving = false;
     this->missing_checked = false;
 }
 
-void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line) {
-    this->layout_awaited = false;
-    int mirror = this->find_mirror(line.name);
-    if (mirror >= 0 && to_type(line.type) != this->mirrors[mirror].variable->type) {
+void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const bool redefined) {
+    const auto frame = this->frames.find(line.frame_id);
+    if (frame != this->frames.end()) {
+        if (redefined) {
+            this->frames.erase(frame); // the peer gave the frame ID to other fields, so no mirror may take their values
+        } else {
+            // the line describes the field at its index, which only changes if a reused frame ID got the same layout ID
+            std::vector<Field> &fields = frame->second.fields;
+            for (auto field = fields.begin(); field != fields.end();) {
+                field = field->index == line.index ? fields.erase(field) : std::next(field);
+            }
+            frame->second.positioned = false; // the positions follow from the types of all fields
+        }
+    }
+    const int mirror = this->find_mirror(line.name);
+    if (mirror < 0) {
+        return;
+    }
+    if (to_type(line.type) != this->mirrors[mirror].variable->type) {
         // the field keeps out of the property, the rest of the frame is still mapped
         if (!this->mirrors[mirror].mismatch) {
             echo("warning: %s: peer %u sends \"%s\" as %s, not %s", this->name.c_str(), this->peer_id,
                  this->mirrors[mirror].name->c_str(), describe(to_type(line.type)), describe(this->mirrors[mirror].variable->type));
             this->mirrors[mirror].mismatch = true;
         }
-        mirror = -1;
-    }
-    auto frame = this->frames.find(line.frame_id);
-    if (frame != this->frames.end()) {
-        const bool other_layout = frame->second.layout_id != line.layout_id || frame->second.count != line.count;
-        const bool other_field = std::any_of(frame->second.fields.begin(), frame->second.fields.end(), [&](const Field &field) {
-            return field.index == line.index && field.mirror != mirror;
-        });
-        if (other_layout || other_field) {
-            // the peer gave the frame ID to other fields, so no mirror of the old mapping may take their values
-            this->frames.erase(frame);
-            frame = this->frames.end();
-            if (!other_layout) {
-                // a new layout with the same layout ID: lines of it that came before this one were dropped with the mapping
-                this->layout_retries = 0;
-                this->request_layout();
-            }
-        } else {
-            frame->second.positioned = false; // the positions follow from the types of all fields
-        }
-    }
-    if (mirror < 0) {
         return;
     }
-    if (frame == this->frames.end()) {
-        frame = this->frames.emplace(line.frame_id, FrameMap{line.layout_id, line.count, {}}).first;
-    }
-    std::vector<Field> &fields = frame->second.fields;
-    if (std::none_of(fields.begin(), fields.end(), [&](const Field &field) { return field.index == line.index; })) {
-        fields.push_back({static_cast<uint16_t>(line.index), static_cast<uint16_t>(mirror), 0});
-    }
+    FrameMap &map = this->frames[line.frame_id];
+    map.fields.push_back({static_cast<uint16_t>(line.index), static_cast<uint16_t>(mirror), 0});
+    map.positioned = false;
 }
 
 void BusTelemetry::handle_frame(const uint8_t *body, const std::vector<char> *types) {
     if (!this->frames_arriving) {
         this->frames_arriving = true;
         this->frames_since_millis = millis();
+    } else if (!this->missing_checked && millis_since(this->frames_since_millis) >= MISSING_WARNING_MS) {
+        this->missing_checked = true;
+        for (size_t i = 0; i < this->mirrors.size(); ++i) {
+            Mirror &mirror = this->mirrors[i];
+            if (!mirror.warned && !mirror.mismatch && !this->is_mapped(i)) {
+                mirror.warned = true;
+                echo("warning: %s: no frame of peer %u carries \"%s\"", this->name.c_str(), this->peer_id, mirror.name->c_str());
+            }
+        }
     }
     const auto it = this->frames.find(body[0]);
-    if (!types || it == this->frames.end() || it->second.layout_id != body[1] || it->second.count != types->size()) {
+    if (!types || it == this->frames.end()) {
         return;
     }
     FrameMap &frame = it->second;
