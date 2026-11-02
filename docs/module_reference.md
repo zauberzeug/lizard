@@ -684,8 +684,8 @@ The JBD BMS module reads a battery management system with the JBD protocol (fram
 | `bms.fets`              | MOSFETs that are on: charging (bit 0), discharging (bit 1) | `int`     |
 | `bms.cells`             | Number of cells                                            | `int`     |
 | `bms.interval`          | Time between requests (s), 0 to stop them                  | `float`   |
-| `bms.last_message_age`  | Time since the last valid answer (ms)                      | `int`     |
-| `bms.errors`            | Answers that were missing, late or invalid                 | `int`     |
+| `bms.last_message_age`  | Time since the values were last updated (ms)               | `int`     |
+| `bms.errors`            | Answers that were missing or invalid                       | `int`     |
 
 | Methods                  | Description                                  | Arguments |
 | ------------------------ | -------------------------------------------- | --------- |
@@ -693,13 +693,26 @@ The JBD BMS module reads a battery management system with the JBD protocol (fram
 | `bms.hardware_version()` | Ask for the hardware version and print it    |           |
 
 The module asks for the basic information every `interval` seconds, 1 s by default, and updates the properties with each valid answer.
-An answer may arrive in pieces; the module collects it across steps.
-An answer that is missing after 500 ms, comes later, has a wrong checksum or an error status counts in `errors`, and the properties keep their last values.
+An answer that is missing after 500 ms or invalid, e.g. with a wrong checksum or an error status, counts in `errors`, and the properties keep their last values.
 Keep the serial muted, since the module reads its bytes.
 
-The bits of `protections` are, from bit 0: cell over-voltage, cell under-voltage, battery over-voltage, battery under-voltage, charging over-temperature, charging under-temperature, discharging over-temperature, discharging under-temperature, charging over-current, discharging over-current, short circuit, front-end IC error and MOSFET software lock.
+The bits of `protections` are:
 
-On a port expander, the values can travel to the core in its telemetry frames:
+- bit 0: cell over-voltage,
+- bit 1: cell under-voltage,
+- bit 2: battery over-voltage,
+- bit 3: battery under-voltage,
+- bit 4: charging over-temperature,
+- bit 5: charging under-temperature,
+- bit 6: discharging over-temperature,
+- bit 7: discharging under-temperature,
+- bit 8: charging over-current,
+- bit 9: discharging over-current,
+- bit 10: short circuit,
+- bit 11: front-end IC error and
+- bit 12: MOSFET software lock.
+
+On a [serial bus](#serial-bus) peer, the values can travel to the coordinator in [telemetry frames](#core):
 
 ```
 bms_serial = Serial(26, 27, 9600, 2)
