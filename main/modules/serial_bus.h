@@ -24,12 +24,8 @@ public:
 
     const ConstSerial_ptr serial;
     const uint8_t node_id;
-    // boot and enable pins of the peer at the other end of a point-to-point link, to flash and restart it
-    const gpio_num_t boot_pin;
-    const gpio_num_t enable_pin;
 
-    SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id,
-              const gpio_num_t boot_pin = GPIO_NUM_NC, const gpio_num_t enable_pin = GPIO_NUM_NC);
+    SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id);
     ~SerialBus() override;
 
     void step() override;
@@ -52,6 +48,16 @@ public:
     const BusTelemetry *find_telemetry_listener(const uint8_t peer_id, const std::string &property_name) const; // the one declaring it
     // the peer's next frame asks for its layout lines again
     void forget_telemetry_layout(const uint8_t peer_id);
+
+protected:
+    // a bus to the peer at the other end of a point-to-point link, with the boot and enable pins to flash and restart it
+    SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id,
+              const gpio_num_t boot_pin, const gpio_num_t enable_pin, const size_t queue_length, const size_t telemetry_reserve);
+
+    void set_peers(const uint8_t *peer_ids, const uint8_t peer_count); // makes this node the coordinator
+    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
+    void restart_peer();
+    void flash_peer(const uint8_t peer_id);
 
 private:
     struct IncomingMessage {
@@ -210,7 +216,6 @@ private:
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
-    void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
     // without the checks of enqueue_outgoing_message; false if the queue stays full for `wait`
     bool queue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, const TickType_t wait);
     bool send_outgoing_queue();
@@ -233,10 +238,12 @@ private:
     bool is_coordinator() const { return !this->peer_ids.empty(); }
 
     // --- peer on a point-to-point link with boot and enable pins (main task) -----
+    const gpio_num_t boot_pin;
+    const gpio_num_t enable_pin;
+    const size_t queue_length;      // places in the inbound and in the outbound queue
+    const size_t telemetry_reserve; // places in both queues that telemetry never takes
     bool has_peer_pins() const { return this->boot_pin != GPIO_NUM_NC && this->enable_pin != GPIO_NUM_NC; }
     void drive_peer_pins_high() const;
-    void restart_peer();
     void pause_communication();
-    void flash_peer(const uint8_t peer_id);
     void configure_flashed_peer(const uint8_t peer_id);
 };

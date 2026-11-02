@@ -22,11 +22,9 @@
 
 static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
-static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
-static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
-static constexpr size_t OFFSET_QUEUE_LENGTH = 8;            // full-state snapshots; a full queue only delays one
-static_assert(OUTGOING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update
-static_assert(INCOMING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled step() must not drop an OTB chunk
+static constexpr size_t QUEUE_LENGTH = 32;         // inbound and outbound
+static constexpr size_t OFFSET_QUEUE_LENGTH = 8;   // full-state snapshots; a full queue only delays one
+static_assert(QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update, a stalled step() not drop a chunk
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static_assert(otb::BUS_OTB_CHUNK_LINE_SIZE < SerialBus::PAYLOAD_CAPACITY, "OTB chunk lines must fit the bus payload");
@@ -51,18 +49,13 @@ static constexpr int64_t SYNC_ACCEPT_ACCURACY_US = 500;
 static constexpr unsigned long SYNC_WINDOW_MS = 2000;
 
 static Module_ptr create_serial_bus(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
-    if (arguments.size() != 2 && arguments.size() != 4) {
-        throw std::runtime_error("unexpected number of arguments");
-    }
-    Module::expect(arguments, -1, identifier, integer, integer, integer);
+    Module::expect(arguments, 2, identifier, integer);
     const ConstSerial_ptr serial = get_module_argument<const Serial>(arguments[0]);
     const long node_id = arguments[1]->evaluate_integer();
     if (node_id <= 0 || node_id >= 255) {
         throw std::runtime_error("node ID must be between 0 and 255");
     }
-    const gpio_num_t boot_pin = arguments.size() > 2 ? (gpio_num_t)arguments[2]->evaluate_integer() : GPIO_NUM_NC;
-    const gpio_num_t enable_pin = arguments.size() > 3 ? (gpio_num_t)arguments[3]->evaluate_integer() : GPIO_NUM_NC;
-    return std::make_shared<SerialBus>(name, serial, node_id, boot_pin, enable_pin);
+    return std::make_shared<SerialBus>(name, serial, node_id);
 }
 REGISTER_MODULE(SerialBus, &create_serial_bus)
 
@@ -85,9 +78,14 @@ const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
     };
 }
 
+SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
+    : SerialBus(name, serial, node_id, GPIO_NUM_NC, GPIO_NUM_NC, QUEUE_LENGTH, TELEMETRY_QUEUE_RESERVE) {
+}
+
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id,
-                     const gpio_num_t boot_pin, const gpio_num_t enable_pin)
-    : Module(name), serial(serial), node_id(node_id), boot_pin(boot_pin), enable_pin(enable_pin) {
+                     const gpio_num_t boot_pin, const gpio_num_t enable_pin, const size_t queue_length, const size_t telemetry_reserve)
+    : Module(name), serial(serial), node_id(node_id), boot_pin(boot_pin), enable_pin(enable_pin), queue_length(queue_length),
+      telemetry_reserve(telemetry_reserve) {
     this->properties = SerialBus::get_defaults();
     this->telemetry_errors = this->properties.at("telemetry_errors");
     this->telemetry_dropped = this->properties.at("telemetry_dropped");
@@ -117,8 +115,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 
     this->config_queue = xQueueCreate(1, sizeof(Config));
     this->offset_queue = xQueueCreate(OFFSET_QUEUE_LENGTH, sizeof(OffsetUpdate));
-    this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage));
-    this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage));
+    this->outbound_queue = xQueueCreate(queue_length, sizeof(OutgoingMessage));
+    this->inbound_queue = xQueueCreate(queue_length, sizeof(IncomingMessage));
     const bool queues_created = this->config_queue && this->offset_queue && this->outbound_queue && this->inbound_queue;
     if (!queues_created ||
         xTaskCreatePinnedToCore(
@@ -197,7 +195,7 @@ void SerialBus::step() {
     }
     // reported once the queue has room again, e.g. when a coordinator polls after a restart
     if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > OUTPUT_DROP_REPORT_INTERVAL_MS &&
-        uxQueueSpacesAvailable(this->outbound_queue) > TELEMETRY_QUEUE_RESERVE) {
+        uxQueueSpacesAvailable(this->outbound_queue) > this->telemetry_reserve) {
         this->last_output_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u lines of output (queue full)", this->name.c_str(), this->dropped_output.exchange(0));
     }
@@ -240,9 +238,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         for (const auto &argument : arguments) {
             peer_ids[peer_count++] = to_peer_id(argument);
         }
-        std::memcpy(this->config.peer_ids, peer_ids, peer_count);
-        this->config.peer_count = peer_count;
-        this->send_config();
+        this->set_peers(peer_ids, peer_count);
     } else if (method_name == "enable_time_sync") {
         Module::expect(arguments, 0);
         this->config.time_sync_enabled = true;
@@ -261,18 +257,15 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             it = keep ? std::next(it) : this->peer_layouts.erase(it);
         }
         this->passed_peers = peers;
-    } else if (method_name == "flash_peer") {
-        Module::expect(arguments, 1, integer);
-        this->flash_peer(to_peer_id(arguments[0]));
-    } else if (method_name == "restart_peer") {
-        Module::expect(arguments, 0);
-        if (!this->has_peer_pins()) {
-            throw std::runtime_error("serial bus \"" + this->name + "\" has no boot and enable pins of a peer");
-        }
-        this->restart_peer();
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void SerialBus::set_peers(const uint8_t *peer_ids, const uint8_t peer_count) {
+    std::memcpy(this->config.peer_ids, peer_ids, peer_count);
+    this->config.peer_count = peer_count;
+    this->send_config();
 }
 
 void SerialBus::drive_peer_pins_high() const {
@@ -582,7 +575,7 @@ void SerialBus::process_uart() {
 
         // telemetry frames never take the last slots of the inbound queue, so that a flood of them, e.g. while the main
         // task runs the startup, cannot crowd out commands, echoes and OTB chunks
-        if (message.payload[0] == telemetry::FRAME_PREFIX && uxQueueSpacesAvailable(this->inbound_queue) <= TELEMETRY_QUEUE_RESERVE) {
+        if (message.payload[0] == telemetry::FRAME_PREFIX && uxQueueSpacesAvailable(this->inbound_queue) <= this->telemetry_reserve) {
             this->dropped_frames++;
             continue;
         }
@@ -905,7 +898,7 @@ void SerialBus::relay_console_line(const char *line) {
                             static_cast<int>(sizeof(payload) - sizeof(ECHO_CMD)));
     }
     // the reserve stays free for command replies and OTB acks
-    if (len < 0 || len >= static_cast<int>(sizeof(payload)) || uxQueueSpacesAvailable(this->outbound_queue) <= TELEMETRY_QUEUE_RESERVE ||
+    if (len < 0 || len >= static_cast<int>(sizeof(payload)) || uxQueueSpacesAvailable(this->outbound_queue) <= this->telemetry_reserve ||
         !this->queue_outgoing_message(this->coordinator_id, payload, len, 0)) {
         this->dropped_output++;
     }
@@ -913,7 +906,7 @@ void SerialBus::relay_console_line(const char *line) {
 
 bool SerialBus::send_telemetry_layout(const char *line, const size_t length) {
     // the reserve stays free for commands, echoes and OTB acks
-    return uxQueueSpacesAvailable(this->outbound_queue) > TELEMETRY_QUEUE_RESERVE &&
+    return uxQueueSpacesAvailable(this->outbound_queue) > this->telemetry_reserve &&
            this->queue_outgoing_message(this->coordinator_id, line, length, 0);
 }
 

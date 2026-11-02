@@ -179,10 +179,9 @@ Neither property stops anything by itself; use the wheels' `drive_command_timeou
 
 The serial bus module lets multiple ESP32s share a UART link with a coordinator that polls peers in turn.
 
-| Constructor                                 | Description                                                                         | Arguments          |
-| ------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------ |
-| `bus = SerialBus(serial, id)`               | Attach to a serial module with local node `id`                                      | `Serial`, `int`    |
-| `bus = SerialBus(serial, id, boot, enable)` | Same, with the boot and enable pins of the peer at the other end of the serial link | `Serial`, 3x `int` |
+| Constructor                   | Description                                    | Arguments       |
+| ----------------------------- | ---------------------------------------------- | --------------- |
+| `bus = SerialBus(serial, id)` | Attach to a serial module with local node `id` | `Serial`, `int` |
 
 | Properties                 | Description                                                                                                   | Data type |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
@@ -198,8 +197,6 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
 | `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
 | `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s            |
-| `bus.flash_peer(id)`                | Flash the peer at the other end with this node's firmware and make it bus node `id` on its console (needs the pins)                         | `int`             |
-| `bus.restart_peer()`                | Restart the peer at the other end via its enable pin (needs the pins)                                                                       |                   |
 
 **Time Synchronization:**
 Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle.
@@ -277,11 +274,11 @@ On boot, if the startup script does not create a SerialBus but a backup config e
 Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
 This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
 A bus on the console is restored the same way and takes over the console again, see [Console as Link](#serial-bus).
-The boot and enable pins of a peer are not part of the backup.
+An [expander bus](#expander-bus) is not backed up.
 To remove the saved configuration, call `core.forget_serial_bus()`.
 
 **Console as Link:**
-A node can use its console UART as a bus link, e.g. a port expander that is wired to the core only by its console pins:
+A node can use its console UART as a bus link, e.g. a port expander that is wired to the core by its console pins (see [Expander Bus](#expander-bus)):
 
 ```
 serial = Serial(3, 1, 115200, 0)
@@ -298,24 +295,6 @@ ESP-IDF log and ROM output is dropped while the bus has the console, but the boo
 The coordinator drops lines that do not start with `$$` without a warning and counts them in `ignored_lines`.
 Put the two lines at the top of the startup script, so that its later errors reach the coordinator.
 A startup script that keeps failing is skipped after two failed boots (see [Startup Script](getting_started.md#startup-script)); the bus backup then takes over the console again, and the boot lines tell the coordinator why.
-
-**Flashing and Restarting a Peer:**
-With the boot and enable pins of the peer at the other end of a point-to-point link, i.e. the GPIO this node wires to the peer's GPIO0 and EN, the coordinator can flash and restart that peer like an [expander](#expander):
-
-```
-serial = Serial(26, 27, 115200, 1)
-p0 = SerialBus(serial, 1, 25, 14)
-p0.make_coordinator(2)
-```
-
-The bus drives both pins high without restarting the peer, unlike an expander, which restarts the other microcontroller when it is created.
-`p0.restart_peer()` pulls the enable pin low for 100 ms.
-`p0.flash_peer(2)` copies this node's firmware onto the peer like `expander.flash()` at 921600 baud, which erases the peer's NVS, i.e. its startup script, its bus backup and a persisted console baud rate.
-The copy boots with its console at 115200 baud, and the coordinator writes it a startup script that takes the console as a bus link with node ID 2, `serial = Serial(3, 1, <baud>, 0)` and `bus = SerialBus(serial, 2)` with the baud rate of the coordinator's serial, and restarts it.
-The rest of the peer's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
-`flash_peer()` blocks the main loop for the whole transfer like `expander.flash()` and fails if another module uses the serial.
-It does not check the strapping pins; a peer that does not enter its bootloader fails the transfer before anything is erased.
-For 5 s after a restart, while the peer boots, poll timeouts are not reported.
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.
@@ -359,6 +338,53 @@ Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `
   When the peer's frames arrive but none carries a declared name within 5 s, the module warns once, e.g. `warning: arm: no frame of peer 2 carries "parked"`.
 - Cost: each mirrored value takes about 100 bytes of heap on the coordinator.
   Rules over many mirrored values are expensive on their own, so a peer should compute a predicate like `parked` itself and the coordinator mirror one bool.
+
+## Expander Bus
+
+An expander bus connects the core to a port expander that is wired like an [expander](#expander), i.e. by its console pins and its boot and enable pins.
+The two form a [serial bus](#serial-bus) with the expander as the only peer, so the expander sends its values as telemetry frames instead of text broadcasts, and the core mirrors them like a [bus telemetry](#bus-telemetry) module.
+
+| Constructor                              | Description                                                     | Arguments          |
+| ---------------------------------------- | --------------------------------------------------------------- | ------------------ |
+| `p0 = ExpanderBus(serial, boot, enable)` | Serial module and the pins wired to the expander's GPIO0 and EN | `Serial`, 2x `int` |
+
+| Methods                 | Description                                                                          | Arguments  |
+| ----------------------- | ------------------------------------------------------------------------------------ | ---------- |
+| `p0.send(fmt, args...)` | Send a printf-formatted line to the expander, like `bus.send` (`p0.send(2, …)` too)  | `str`, ... |
+| `p0.flash()`            | Flash the expander with this node's firmware and make it the bus peer on its console |            |
+| `p0.restart()`          | Restart the expander via its enable pin                                              |            |
+
+The properties and the methods `enable_time_sync()` and `pass_telemetry()` are those of a [serial bus](#serial-bus).
+The core is bus node 1 and polls the expander as node 2:
+
+```
+serial = Serial(26, 27, 460800, 1)
+p0 = ExpanderBus(serial, 25, 14)
+int p0.battery_control_status.level = 0
+int p0.vdp_status.level = 0
+```
+
+The expander's startup script defines its modules and sends their values:
+
+```
+serial = Serial(3, 1, 460800, 0)
+bus = SerialBus(serial, 2)
+battery_control_status = Input(13)
+vdp_status = Input(39)
+core.telemetry(battery_control_status.level, vdp_status.level)
+```
+
+- Pins: the bus drives both pins high without restarting the expander, unlike an [expander](#expander) module, which restarts the other microcontroller when it is created.
+  `p0.restart()` pulls the enable pin low for 100 ms.
+- Flashing: `p0.flash()` copies this node's firmware onto the expander like `expander.flash()` at 921600 baud, which erases the expander's NVS, i.e. its startup script, its bus backup and a persisted console baud rate.
+  The copy boots with its console at 115200 baud, and the core writes it the first two lines above with the baud rate of the core's serial and restarts it, so it comes back as bus node 2 on its console (see Console as Link in [Serial Bus](#serial-bus)).
+  The rest of the expander's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
+  `flash()` blocks the main loop for the whole transfer like `expander.flash()` and fails if another module uses the serial.
+  It does not check the strapping pins; an expander that does not enter its bootloader fails the transfer before anything is erased.
+  For 5 s after a restart, while the expander boots, poll timeouts are not reported.
+- Mirrors: each value of the expander is a property declaration as in a [bus telemetry](#bus-telemetry) module, with the same rules for types, read-only values and warnings.
+- Queues: the bus keeps 8 places in its queues instead of 32, since the expander is not updated over the bus; `p0.send()` refuses OTB messages, so `flash()` is the way to update it.
+- Backup: an expander bus is not saved as the core's [bus backup](#serial-bus).
 
 ## Input
 
@@ -1466,7 +1492,7 @@ The computed temperature is calculated based on the following assumptions:
 ## Expander
 
 The expander module allows communication with another microcontroller connected via [serial](#serial-interface).
-The other microcontroller can also be a [serial bus](#serial-bus) peer on its console, which sends its values as telemetry frames instead of text broadcasts (see Console as Link).
+An [expander bus](#expander-bus) connects such a microcontroller as a serial bus peer, which sends its values as telemetry frames instead of text broadcasts.
 
 | Constructor                                   | Description                        | Arguments               |
 | --------------------------------------------- | ---------------------------------- | ----------------------- |

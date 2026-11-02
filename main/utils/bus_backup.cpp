@@ -1,6 +1,7 @@
 #include "bus_backup.h"
 
 #include "../global.h"
+#include "../modules/expander_bus.h"
 #include "../modules/serial.h"
 #include "../modules/serial_bus.h"
 #include "uart.h"
@@ -14,8 +15,8 @@ namespace bus_backup {
 void save_if_present() {
     for (const auto &[name, module] : Global::modules) {
         const auto bus = std::dynamic_pointer_cast<SerialBus>(module);
-        if (!bus) {
-            continue;
+        if (!bus || std::dynamic_pointer_cast<ExpanderBus>(module)) {
+            continue; // an expander bus is the core's link to its expander, no way to reach this node
         }
         nvs_handle handle;
         if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
