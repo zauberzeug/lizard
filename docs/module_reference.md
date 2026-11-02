@@ -66,28 +66,6 @@ Supported rates are 115200, 230400, 460800, 921600, 1000000, 1500000, 2000000 an
 Above 921600, check which rates the host's UART actually produces: a Jetson Orin, for example, produces 1000000, 1500000 and 3000000 exactly, but 2000000 about 2 % too slow.
 Some USB-UART bridges stop below 3000000.
 The host's UART also has to keep up with the rate: a Jetson whose UART received without DMA lost 5 to 20 % of the core's lines at 1500000 to 3000000 (see [discussion #260](https://github.com/zauberzeug/lizard/discussions/260)), while with RX DMA enabled in its device tree it ran clean up to 3000000.
-As an example, this device-tree overlay enables DMA for `serial@3100000` (`/dev/ttyTHS1`) on a Jetson Orin Nano with L4T R36 (JetPack 6):
-
-```
-/dts-v1/;
-/plugin/;
-
-/ {
-    fragment@0 {
-        target = <&uarta>;
-        __overlay__ {
-            dmas = <&gpcdma 8>, <&gpcdma 8>;
-            dma-names = "rx", "tx";
-            iommus = <&smmu_niso0 4>;
-            dma-coherent;
-        };
-    };
-};
-```
-
-Without `iommus` and `dma-coherent`, the SMMU rejects the DMA transfers.
-The boot loader applies the overlay only if `extlinux.conf` names the base device tree in an `FDT` line next to the `OVERLAYS` line.
-Other modules and UARTs need other values, so check them against the board's device tree.
 If the host cannot talk to the core at the new rate, erase the chip with `./espresso.py erase` and flash it again.
 Erasing also clears the startup script and the other settings stored in non-volatile storage, so configure the core again afterwards.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
