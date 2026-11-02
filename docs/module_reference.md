@@ -65,7 +65,9 @@ After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with t
 Supported rates are 115200, 230400, 460800, 921600, 1000000, 1500000, 2000000 and 3000000.
 Above 921600, check which rates the host's UART actually produces: a Jetson Orin, for example, produces 1000000, 1500000 and 3000000 exactly, but 2000000 about 2 % too slow.
 Some USB-UART bridges stop below 3000000.
-If the host cannot open the port at the new rate, erase and reflash the chip with `./espresso.py`.
+The host's UART also has to keep up with the rate: a Jetson whose UART received without DMA lost 5 to 20 % of the core's lines at 1500000 to 3000000 (see [discussion #260](https://github.com/zauberzeug/lizard/discussions/260)), while with RX DMA enabled in its device tree it ran clean up to 3000000.
+If the host cannot talk to the core at the new rate, erase the chip with `./espresso.py erase` and flash it again.
+Erasing also clears the startup script and the other settings stored in non-volatile storage, so configure the core again afterwards.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
 
 **Console load:**
