@@ -107,7 +107,9 @@ A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (
 | 2     | CRC-16/CCITT-FALSE over all preceding bytes                       |
 
 The sequence number starts at 0 when a frame is defined, also when its ID is reused after `core.clear_telemetry()`.
-The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as int32, clamped to its range.
+The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as its low 32 bits, read as int32.
+So a value beyond the int32 range wraps around instead of being clamped.
+A counter like `core.millis` thus keeps counting: read as uint32, it wraps after 49.7 days like the time of the frame; read as int32, it turns negative after 24.9 days.
 The `bool` fields follow as bits in their order, least significant bit first, padded to a full byte.
 All multi-byte numbers, including the time and the CRC, are little-endian.
 

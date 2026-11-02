@@ -234,7 +234,8 @@ static size_t encode_frame(const uint8_t id, const Frame &frame, const uint8_t s
             break;
         }
         case integer: {
-            const int32_t value = std::clamp<int64_t>(field.variable->integer_value(), INT32_MIN, INT32_MAX);
+            // the low 32 bits, so that a counter like core.millis wraps around instead of sticking at INT32_MAX
+            const int32_t value = static_cast<int32_t>(field.variable->integer_value());
             memcpy(&payload[offset], &value, 4);
             offset += 4;
             break;
