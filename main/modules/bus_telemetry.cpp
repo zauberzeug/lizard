@@ -118,7 +118,8 @@ void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const b
     const auto frame = this->frames.find(line.frame_id);
     if (frame != this->frames.end()) {
         if (redefined) {
-            this->frames.erase(frame); // the peer gave the frame ID to other fields, so no mirror may take their values
+            this->frames.erase(frame);     // the peer gave the frame ID to other fields, so no mirror may take their values
+            this->restart_missing_check(); // a mirrored field may be gone for good
         } else {
             // the line describes the field at its index, which only changes if a reused frame ID got the same layout ID
             std::vector<Field> &fields = frame->second.fields;

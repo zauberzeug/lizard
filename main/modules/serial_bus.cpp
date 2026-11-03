@@ -925,6 +925,10 @@ void SerialBus::request_passed_layouts() {
 
 void SerialBus::add_telemetry_listener(BusTelemetry *const listener) {
     this->telemetry_listeners.push_back(listener);
+    const auto layout = this->peer_layouts.find(listener->peer_id);
+    if (layout != this->peer_layouts.end() && layout->second.other_version) {
+        listener->mark_layout_unreadable(); // the bus warned before this module existed
+    }
 }
 
 void SerialBus::remove_telemetry_listener(BusTelemetry *const listener) {
