@@ -252,8 +252,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
                                                      this->enable_pin,
                                                      this->boot_pin,
                                                      this->serial->rx_pin,
-                                                     this->serial->tx_pin,
-                                                     this->serial->baud_rate);
+                                                     this->serial->tx_pin);
         delay(100);
         this->serial->reinitialize_after_flash();
         this->disconnected = false;

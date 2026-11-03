@@ -46,8 +46,8 @@ public:
     void add_telemetry_listener(BusTelemetry *listener);
     void remove_telemetry_listener(BusTelemetry *listener);
     const BusTelemetry *find_telemetry_listener(const uint8_t peer_id, const std::string &property_name) const; // the one declaring it
-    // the peer's next frame asks for its layout lines again
-    void forget_telemetry_layout(const uint8_t peer_id);
+    // the peer's next frame asks for its layout lines again, while the layouts held so far stay in use
+    void refresh_telemetry_layout(const uint8_t peer_id);
 
 protected:
     static constexpr unsigned long PEER_BOOT_MS = 5000; // a restarted peer answers within this
@@ -169,6 +169,12 @@ private:
     bool ready_pending = true;
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;
+    // frame buffers, kept off the task's stack and not shared with the tasks of other buses
+    static constexpr size_t RX_FRAME_SIZE = 512;                   // any line of a peer; longer ones are discarded
+    static constexpr size_t TX_FRAME_SIZE = 16 + PAYLOAD_CAPACITY; // the header and a payload below PAYLOAD_CAPACITY
+    static_assert(sizeof("$$255:255$$") <= 16, "the longest bus header must fit the room before the payload");
+    char rx_frame[RX_FRAME_SIZE];
+    char tx_frame[TX_FRAME_SIZE];
 
     // --- telemetry, peer side ----------------------------------------------
     // The main task leaves the newest frame of each ID in a slot and the communication task sends the slots with the
@@ -185,6 +191,7 @@ private:
     std::atomic<uint8_t> coordinator_id{0};
     bool slot_warning_sent = false; // the first warning comes right away, not only 10 s after boot
     unsigned long last_slot_warning_millis = 0;
+    char slot_line[PAYLOAD_CAPACITY];                         // the frame being sent, copied out of its slot
     FrameSlot *find_frame_slot(const uint8_t frame_id) const; // 0 finds a free one
     void send_frame_slots(const uint8_t receiver);
 
@@ -198,6 +205,7 @@ private:
         bool other_version = false;            // the peer sends a format this node does not read, until its Ready.
         bool requested = false;
         bool awaiting = false; // requested, but no layout line arrived yet
+        bool stale = false;    // the layout lines are needed again, e.g. for a new declaration, however complete the layouts are
         unsigned long request_millis = 0;
     };
     std::bitset<256> passed_peers;
@@ -211,6 +219,7 @@ private:
     void handle_telemetry_frame(const IncomingMessage &message);
     void handle_telemetry_layout(const IncomingMessage &message);
     void request_layout(const uint8_t peer_id, PeerLayout &layout);
+    static void refresh_layout(PeerLayout &layout);
 
     static void communication_loop(void *param);
     void adopt_config(const Config &config);
@@ -222,7 +231,7 @@ private:
     // without the checks of enqueue_outgoing_message; false if the queue stays full for `wait`
     bool queue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, const TickType_t wait);
     bool send_outgoing_queue();
-    size_t send_message(const uint8_t receiver, const char *payload, const size_t length) const;
+    size_t send_message(const uint8_t receiver, const char *payload, const size_t length);
 
     void send_poll();
     void handle_done(const uint8_t sender, const int64_t *stamp, const int64_t t4, const size_t done_frame_len);

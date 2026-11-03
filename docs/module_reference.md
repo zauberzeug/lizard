@@ -63,7 +63,12 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 The console (UART0) defaults to 115200 baud.
 `core.set_baudrate(baud)` persists a new rate to non-volatile storage; it takes effect on the next restart, so the change is not a breaking one for hosts that are not updated yet.
 After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with the host tools at the new rate, e.g. `./monitor.py /dev/ttyUSB0 --baud 921600` (`monitor.py`, `configure.py` and `otb_update.py` all accept `--baud`, defaulting to 115200).
-Supported rates are 115200, 230400, 460800 and 921600.
+Supported rates are 115200, 230400, 460800, 921600, 1000000, 1500000, 2000000 and 3000000.
+Above 921600, check which rates the host's UART actually produces: a Jetson Orin, for example, produces 1000000, 1500000 and 3000000 exactly, but 2000000 about 2 % too slow.
+Some USB-UART bridges stop below 3000000.
+The host's UART also has to keep up with the rate: a Jetson whose UART received without DMA lost 5 to 20 % of the core's lines at 1500000 to 3000000 (see [discussion #260](https://github.com/zauberzeug/lizard/discussions/260)), while with RX DMA enabled in its device tree it ran clean up to 3000000.
+If the host cannot talk to the core at the new rate, erase the chip with `./espresso.py erase` and flash it again.
+Erasing also clears the startup script and the other settings stored in non-volatile storage, so configure the core again afterwards.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
 
 **Console load:**
@@ -334,10 +339,13 @@ Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `
 - Values: a declared property is read-only.
   It keeps its declared value until a frame delivers one, and its last value when the peer stops sending or restarts.
 - Layouts: mirroring works whether or not the coordinator passes the peer's frames on.
-  A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after.
-  When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field.
+  A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after; the other mirrored values keep following meanwhile.
+  When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field, and the check for missing names runs again.
 - Warnings: a field the peer sends with another type is not mirrored, and the module warns once, e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`.
   When the peer's frames arrive but none carries a declared name within 5 s, the module warns once, e.g. `warning: arm: no frame of peer 2 carries "parked"`.
+  Both warnings come once per run of the peer, i.e. again after its `Ready.`.
+  When no frame of the peer arrives within 5 s of a declaration or of the peer's `Ready.`, e.g. because its startup sends none, the peer ID is wrong or the peer is not polled, the module warns once, e.g. `warning: arm: no frame of peer 2 within 5 s`.
+  A peer whose layout lines have another version than this node reads is not mirrored; the bus warns once per run of the peer, e.g. `warning: serial bus bus does not read layout version 2 of peer 2, only version 1`, and the module does not report its names as missing.
 - Cost: each mirrored value takes about 100 bytes of heap on the coordinator.
   Rules over many mirrored values are expensive on their own, so a peer should compute a predicate like `parked` itself and the coordinator mirror one bool.
 

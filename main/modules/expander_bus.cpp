@@ -98,9 +98,9 @@ void ExpanderBus::flash() {
         ~Resume() { bus->resume_communication(); }
     } resume{this};
     this->serial->deinstall();
-    // the replicator raises the rate eightfold to 921600 baud, as from an expander at the usual 115200 baud
+    // the replicator connects at 115200 baud and flashes at 921600, whatever the link's rate
     const bool success = ZZ::Replicator::flash_replica(this->serial->uart_num, this->enable_pin, this->boot_pin,
-                                                       this->serial->rx_pin, this->serial->tx_pin, CONSOLE_DEFAULT_BAUD_RATE);
+                                                       this->serial->rx_pin, this->serial->tx_pin);
     delay(100);
     this->serial->reinitialize_after_flash();
     this->drive_pins_high();
