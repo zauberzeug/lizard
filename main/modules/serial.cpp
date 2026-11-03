@@ -114,7 +114,7 @@ void Serial::write_checked_line(const char *message) const {
 }
 
 void Serial::write_checked_line(const char *message, const int length) const {
-    static char checksum_buffer[16];
+    char checksum_buffer[CHECKSUM_TRAILER_LENGTH + 1]; // not static: several tasks write lines at the same time
     uint8_t checksum = 0;
     int start = 0;
     for (unsigned int i = 0; i < length + 1; ++i) {
