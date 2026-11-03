@@ -309,7 +309,7 @@ Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `
 - Values: a declared property is read-only.
   It keeps its declared value until a frame delivers one, and its last value when the peer stops sending or restarts.
 - Layouts: mirroring works whether or not the coordinator passes the peer's frames on.
-  A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after.
+  A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after; the other mirrored values keep following meanwhile.
   When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field.
 - Warnings: a field the peer sends with another type is not mirrored, and the module warns once, e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`.
   When the peer's frames arrive but none carries a declared name within 5 s, the module warns once, e.g. `warning: arm: no frame of peer 2 carries "parked"`.

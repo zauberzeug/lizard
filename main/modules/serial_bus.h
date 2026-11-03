@@ -46,8 +46,8 @@ public:
     void add_telemetry_listener(BusTelemetry *listener);
     void remove_telemetry_listener(BusTelemetry *listener);
     const BusTelemetry *find_telemetry_listener(const uint8_t peer_id, const std::string &property_name) const; // the one declaring it
-    // the peer's next frame asks for its layout lines again
-    void forget_telemetry_layout(const uint8_t peer_id);
+    // the peer's next frame asks for its layout lines again, while the layouts held so far stay in use
+    void refresh_telemetry_layout(const uint8_t peer_id);
 
 private:
     struct IncomingMessage {
@@ -177,6 +177,7 @@ private:
         bool other_version = false;            // the peer sends a format this node does not read, until its Ready.
         bool requested = false;
         bool awaiting = false; // requested, but no layout line arrived yet
+        bool stale = false;    // the layout lines are needed again, e.g. for a new declaration, however complete the layouts are
         unsigned long request_millis = 0;
     };
     std::bitset<256> passed_peers;
@@ -190,6 +191,7 @@ private:
     void handle_telemetry_frame(const IncomingMessage &message);
     void handle_telemetry_layout(const IncomingMessage &message);
     void request_layout(const uint8_t peer_id, PeerLayout &layout);
+    static void refresh_layout(PeerLayout &layout);
 
     static void communication_loop(void *param);
     void adopt_config(const Config &config);

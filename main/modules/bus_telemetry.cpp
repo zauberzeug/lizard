@@ -74,7 +74,7 @@ void BusTelemetry::declare_property(const std::string &property_name, const Vari
     this->mirrors.push_back({&inserted->first, variable.get()});
     this->restart_missing_check();
     // the layout lines with this name may have passed already, e.g. for a declaration at the console
-    this->bus->forget_telemetry_layout(this->peer_id);
+    this->bus->refresh_telemetry_layout(this->peer_id);
 }
 
 int BusTelemetry::find_mirror(const std::string_view name) const {
