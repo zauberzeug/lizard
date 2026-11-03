@@ -7,6 +7,7 @@
 #include "../utils/telemetry.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "bus_telemetry.h"
 #include "module_helpers.h"
 #include "serial.h"
 #include <esp_timer.h>
@@ -54,7 +55,7 @@ static Module_ptr create_serial_bus(const std::string &name, const std::vector<C
 }
 REGISTER_MODULE(SerialBus, &create_serial_bus)
 
-static uint8_t to_peer_id(const ConstExpression_ptr &argument) {
+uint8_t SerialBus::to_peer_id(const ConstExpression_ptr &argument) {
     if ((argument->type & integer) == 0) {
         throw std::runtime_error("peer IDs must be integers");
     }
@@ -200,11 +201,21 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         for (const auto &argument : arguments) {
             peers.set(to_peer_id(argument));
         }
-        this->passed_peers = arguments.empty() ? peers.set() : peers;
-        // a peer that is passed on anew is asked for its layout lines with its first frame
-        for (auto it = this->peer_layouts.begin(); it != this->peer_layouts.end();) {
-            it = this->passes_telemetry(it->first) ? std::next(it) : this->peer_layouts.erase(it);
+        if (arguments.empty()) {
+            peers.set();
         }
+        for (auto it = this->peer_layouts.begin(); it != this->peer_layouts.end();) {
+            if (!peers[it->first] && !this->is_listened_to(it->first)) {
+                it = this->peer_layouts.erase(it); // no longer passed on
+                continue;
+            }
+            if (peers[it->first] && !this->passes_telemetry(it->first)) {
+                // passed on anew: the host needs the layout lines a BusTelemetry kept, whose mirrors keep following meanwhile
+                this->refresh_layout(it->second);
+            }
+            ++it;
+        }
+        this->passed_peers = peers;
     } else {
         Module::call(method_name, arguments);
     }
@@ -616,6 +627,11 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         echo("bus[%u]: %s", message.sender, text);
         if (std::strcmp(text, "Ready.") == 0) {
             this->peer_layouts.erase(message.sender); // the peer booted and announces its layouts with the first poll
+            for (BusTelemetry *const listener : this->telemetry_listeners) {
+                if (listener->peer_id == message.sender) {
+                    listener->reset();
+                }
+            }
         }
         return;
     }
@@ -792,35 +808,48 @@ void SerialBus::send_frame_slots(const uint8_t receiver) {
 }
 
 void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
-    if (!this->passes_telemetry(message.sender)) {
+    const bool passed = this->passes_telemetry(message.sender);
+    const bool listened = this->is_listened_to(message.sender);
+    if (!passed && !listened) {
         return;
     }
     PeerLayout &layout = this->peer_layouts[message.sender];
-    if (layout.awaiting && millis_since(layout.request_millis) <= LAYOUT_REQUEST_INTERVAL_MS) {
-        // printing the frames queued ahead of the requested layout lines would keep the queue full and drop those
-        this->telemetry_dropped->set_integer_value(this->telemetry_dropped->integer_value() + 1);
-        return;
-    }
     uint8_t body[telemetry::MAX_BODY];
     const size_t length = telemetry::decode_frame(message.payload, message.length, body);
     if (length == 0) {
         this->telemetry_errors->set_integer_value(this->telemetry_errors->integer_value() + 1);
         return;
     }
-    echo("bus[%u]: %s", message.sender, message.payload);
+    const bool printed = passed && !(layout.awaiting && millis_since(layout.request_millis) <= LAYOUT_REQUEST_INTERVAL_MS);
+    if (passed && !printed) {
+        // printing the frames queued ahead of the requested layout lines would keep the queue full and drop those
+        this->telemetry_dropped->set_integer_value(this->telemetry_dropped->integer_value() + 1);
+        if (!listened) {
+            return;
+        }
+    }
+    if (printed) {
+        echo("bus[%u]: %s", message.sender, message.payload);
+    }
 
     const auto frame = layout.frames.find(body[0]);
     const bool known = frame != layout.frames.end() && frame->second.layout_id == body[1] &&
                        std::find(frame->second.types.begin(), frame->second.types.end(), 0) == frame->second.types.end() &&
                        telemetry::payload_size(frame->second.types) == length - telemetry::HEADER_SIZE - telemetry::CRC_SIZE;
-    if (!known && !layout.other_version) {
+    for (BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == message.sender) {
+            listener->handle_frame(body, known ? &frame->second.types : nullptr);
+        }
+    }
+    if ((!known || layout.stale) && !layout.other_version) {
         // e.g. because this node booted after the peer, a layout line got lost or the peer redefined the frame
         this->request_layout(message.sender, layout);
     }
 }
 
 void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
-    if (!this->passes_telemetry(message.sender)) {
+    const bool passed = this->passes_telemetry(message.sender);
+    if (!passed && !this->is_listened_to(message.sender)) {
         return;
     }
     telemetry::LayoutLine line;
@@ -828,20 +857,40 @@ void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
         this->telemetry_errors->set_integer_value(this->telemetry_errors->integer_value() + 1);
         return;
     }
-    echo("bus[%u]: %s", message.sender, message.payload);
+    if (passed) {
+        echo("bus[%u]: %s", message.sender, message.payload);
+    }
 
     PeerLayout &layout = this->peer_layouts[message.sender];
-    layout.awaiting = false;
+    if (layout.awaiting) {
+        layout.awaiting = false;
+        layout.stale = false; // the lines that follow a request cover every frame, also one declared while they were under way
+    }
     if (line.version != telemetry::LAYOUT_VERSION) {
-        layout.other_version = true; // only the host may read it; the peer may be updated, so until its Ready.
+        if (!layout.other_version) {
+            layout.other_version = true; // only the host may read it; the peer may be updated, so until its Ready.
+            echo("warning: serial bus %s does not read layout version %d of peer %u, only version %d", this->name.c_str(),
+                 line.version, message.sender, telemetry::LAYOUT_VERSION);
+            for (BusTelemetry *const listener : this->telemetry_listeners) {
+                if (listener->peer_id == message.sender) {
+                    listener->mark_layout_unreadable();
+                }
+            }
+        }
         return;
     }
     FrameLayout &frame = layout.frames[line.frame_id];
-    if (frame.layout_id != line.layout_id || frame.types.size() != line.count) {
+    const bool redefined = frame.layout_id != line.layout_id || frame.types.size() != line.count;
+    if (redefined) {
         frame.layout_id = line.layout_id; // e.g. the peer cleared its frames and reused the frame ID
         frame.types.assign(line.count, 0);
     }
     frame.types[line.index] = line.type;
+    for (BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == message.sender) {
+            listener->handle_layout_line(line, redefined);
+        }
+    }
 }
 
 void SerialBus::request_layout(const uint8_t peer_id, PeerLayout &layout) {
@@ -865,4 +914,52 @@ void SerialBus::request_passed_layouts() {
             this->request_layout(peer_id, layout);
         }
     }
+}
+
+void SerialBus::add_telemetry_listener(BusTelemetry *const listener) {
+    this->telemetry_listeners.push_back(listener);
+    const auto layout = this->peer_layouts.find(listener->peer_id);
+    if (layout != this->peer_layouts.end() && layout->second.other_version) {
+        listener->mark_layout_unreadable(); // the bus warned before this module existed
+    }
+}
+
+void SerialBus::remove_telemetry_listener(BusTelemetry *const listener) {
+    this->telemetry_listeners.erase(std::remove(this->telemetry_listeners.begin(), this->telemetry_listeners.end(), listener),
+                                    this->telemetry_listeners.end());
+    if (!this->passes_telemetry(listener->peer_id) && !this->is_listened_to(listener->peer_id)) {
+        this->peer_layouts.erase(listener->peer_id);
+    }
+}
+
+bool SerialBus::is_listened_to(const uint8_t peer_id) const {
+    for (const BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == peer_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const BusTelemetry *SerialBus::find_telemetry_listener(const uint8_t peer_id, const std::string &property_name) const {
+    for (const BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == peer_id && listener->declares(property_name)) {
+            return listener;
+        }
+    }
+    return nullptr;
+}
+
+void SerialBus::refresh_telemetry_layout(const uint8_t peer_id) {
+    const auto layout = this->peer_layouts.find(peer_id);
+    if (layout != this->peer_layouts.end()) {
+        this->refresh_layout(layout->second);
+    }
+}
+
+void SerialBus::refresh_layout(PeerLayout &layout) {
+    // the layouts stay, so the mirrors keep following; the next frame asks, however recently a frame asked, and a burst of
+    // calls before it asks once
+    layout.stale = true;
+    layout.requested = false;
 }

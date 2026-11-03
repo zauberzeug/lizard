@@ -14,6 +14,7 @@
 
 class SerialBus;
 using SerialBus_ptr = std::shared_ptr<SerialBus>;
+class BusTelemetry;
 
 class SerialBus : public Module {
 public:
@@ -30,6 +31,7 @@ public:
     void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
+    static uint8_t to_peer_id(const ConstExpression_ptr &argument);
 
     // --- telemetry frames (see utils/telemetry.h) ---------------------------
     // peer side, main task: the node that polls this one, 0 before the first poll
@@ -41,6 +43,11 @@ public:
     void clear_telemetry_slots();
     // coordinator side
     void request_passed_layouts(); // asks the peers whose frames are passed on for their layout lines
+    void add_telemetry_listener(BusTelemetry *listener);
+    void remove_telemetry_listener(BusTelemetry *listener);
+    const BusTelemetry *find_telemetry_listener(const uint8_t peer_id, const std::string &property_name) const; // the one declaring it
+    // the peer's next frame asks for its layout lines again, while the layouts held so far stay in use
+    void refresh_telemetry_layout(const uint8_t peer_id);
 
 private:
     struct IncomingMessage {
@@ -177,17 +184,21 @@ private:
         bool other_version = false;            // the peer sends a format this node does not read, until its Ready.
         bool requested = false;
         bool awaiting = false; // requested, but no layout line arrived yet
+        bool stale = false;    // the layout lines are needed again, e.g. for a new declaration, however complete the layouts are
         unsigned long request_millis = 0;
     };
     std::bitset<256> passed_peers;
-    std::map<uint8_t, PeerLayout> peer_layouts; // only of peers whose frames are passed on
+    std::vector<BusTelemetry *> telemetry_listeners;
+    std::map<uint8_t, PeerLayout> peer_layouts; // only of peers whose frames are passed on or listened to
     std::atomic<unsigned> dropped_frames{0};    // counted by the communication task
     Variable_ptr telemetry_errors;
     Variable_ptr telemetry_dropped;
     bool passes_telemetry(const uint8_t peer_id) const { return this->passed_peers[peer_id]; }
+    bool is_listened_to(const uint8_t peer_id) const;
     void handle_telemetry_frame(const IncomingMessage &message);
     void handle_telemetry_layout(const IncomingMessage &message);
     void request_layout(const uint8_t peer_id, PeerLayout &layout);
+    static void refresh_layout(PeerLayout &layout);
 
     static void communication_loop(void *param);
     void adopt_config(const Config &config);
