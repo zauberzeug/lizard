@@ -36,11 +36,21 @@ const std::map<std::string, Variable_ptr> BusTelemetry::get_defaults() {
 
 BusTelemetry::BusTelemetry(const std::string &name, const SerialBus_ptr bus, const uint8_t peer_id)
     : Module(name), bus(bus), peer_id(peer_id) {
+    this->restart_missing_check();
     this->bus->add_telemetry_listener(this);
 }
 
 BusTelemetry::~BusTelemetry() {
     this->bus->remove_telemetry_listener(this);
+}
+
+void BusTelemetry::step() {
+    if (!this->frames_arriving && !this->silence_warned && millis_since(this->silence_since_millis) >= MISSING_WARNING_MS) {
+        // e.g. the peer's startup sends no frames, the peer ID is wrong or the peer is not polled
+        this->silence_warned = true;
+        echo("warning: %s: no frame of peer %u within %lu s", this->name.c_str(), this->peer_id, MISSING_WARNING_MS / 1000);
+    }
+    Module::step();
 }
 
 void BusTelemetry::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
@@ -100,6 +110,8 @@ bool BusTelemetry::is_mapped(const size_t mirror) const {
 void BusTelemetry::restart_missing_check() {
     this->frames_arriving = false;
     this->missing_checked = false;
+    this->silence_since_millis = millis();
+    this->silence_warned = false;
 }
 
 void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const bool redefined) {
@@ -129,6 +141,7 @@ void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const b
         }
         return;
     }
+    this->mirrors[mirror].mismatch = false; // the peer sends it with the declared type again, so another type warns again
     FrameMap &map = this->frames[line.frame_id];
     map.fields.push_back({static_cast<uint16_t>(line.index), static_cast<uint16_t>(mirror), 0});
     map.positioned = false;
@@ -138,7 +151,8 @@ void BusTelemetry::handle_frame(const uint8_t *body, const std::vector<char> *ty
     if (!this->frames_arriving) {
         this->frames_arriving = true;
         this->frames_since_millis = millis();
-    } else if (!this->missing_checked && millis_since(this->frames_since_millis) >= MISSING_WARNING_MS) {
+    } else if (!this->missing_checked && !this->layout_unreadable &&
+               millis_since(this->frames_since_millis) >= MISSING_WARNING_MS) {
         this->missing_checked = true;
         for (size_t i = 0; i < this->mirrors.size(); ++i) {
             Mirror &mirror = this->mirrors[i];
@@ -196,10 +210,17 @@ void BusTelemetry::handle_frame(const uint8_t *body, const std::vector<char> *ty
     }
 }
 
+void BusTelemetry::mark_layout_unreadable() {
+    this->layout_unreadable = true; // the bus warned once; no layout line will map a name, so the missing check stays quiet
+}
+
 void BusTelemetry::reset() {
     this->frames.clear();
     for (Mirror &mirror : this->mirrors) {
         mirror.received = false;
+        mirror.warned = false; // the restarted peer may still lack the name or send it with another type
+        mirror.mismatch = false;
     }
+    this->layout_unreadable = false;
     this->restart_missing_check();
 }

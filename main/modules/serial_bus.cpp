@@ -874,7 +874,16 @@ void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
         layout.stale = false; // the lines that follow a request cover every frame, also one declared while they were under way
     }
     if (line.version != telemetry::LAYOUT_VERSION) {
-        layout.other_version = true; // only the host may read it; the peer may be updated, so until its Ready.
+        if (!layout.other_version) {
+            layout.other_version = true; // only the host may read it; the peer may be updated, so until its Ready.
+            echo("warning: serial bus %s does not read layout version %d of peer %u, only version %d", this->name.c_str(),
+                 line.version, message.sender, telemetry::LAYOUT_VERSION);
+            for (BusTelemetry *const listener : this->telemetry_listeners) {
+                if (listener->peer_id == message.sender) {
+                    listener->mark_layout_unreadable();
+                }
+            }
+        }
         return;
     }
     FrameLayout &frame = layout.frames[line.frame_id];

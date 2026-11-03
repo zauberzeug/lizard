@@ -313,6 +313,9 @@ Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `
   When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field.
 - Warnings: a field the peer sends with another type is not mirrored, and the module warns once, e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`.
   When the peer's frames arrive but none carries a declared name within 5 s, the module warns once, e.g. `warning: arm: no frame of peer 2 carries "parked"`.
+  Both warnings come once per run of the peer, i.e. again after its `Ready.`.
+  When no frame of the peer arrives within 5 s of a declaration or of the peer's `Ready.`, e.g. because its startup sends none, the peer ID is wrong or the peer is not polled, the module warns once, e.g. `warning: arm: no frame of peer 2 within 5 s`.
+  A peer whose layout lines have another version than this node reads is not mirrored; the bus warns once per run of the peer, e.g. `warning: serial bus bus does not read layout version 2 of peer 2, only version 1`, and the module does not report its names as missing.
 - Cost: each mirrored value takes about 100 bytes of heap on the coordinator.
   Rules over many mirrored values are expensive on their own, so a peer should compute a predicate like `parked` itself and the coordinator mirror one bool.
 
