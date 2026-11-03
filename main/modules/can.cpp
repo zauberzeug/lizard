@@ -18,6 +18,15 @@ static uint32_t to_29_bit(const int64_t value, const std::string &what) {
     return value;
 }
 
+// Lizard's own modules send in every step, so a stopped bus or a full TX queue would flood the console.
+static void log_dropped_frame(const char *reason) {
+    static unsigned long last_drop_log = 0;
+    if (millis_since(last_drop_log) > 1000) {
+        echo("CAN send dropped: %s", reason);
+        last_drop_log = millis();
+    }
+}
+
 static Module_ptr create_can(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 3, integer, integer, integer);
     const gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
@@ -173,18 +182,14 @@ bool Can::receive() {
     return true;
 }
 
-bool Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
+bool Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, const uint8_t dlc) const {
     if (id > MAX_EXTENDED_ID) {
         throw std::runtime_error("CAN ID does not fit into 29 bits");
     }
 
     twai_status_info_t status_info;
     if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
-        static unsigned long last_drop_log = 0;
-        if (millis_since(last_drop_log) > 1000) {
-            echo("CAN send dropped: bus not RUNNING");
-            last_drop_log = millis();
-        }
+        log_dropped_frame("bus not RUNNING");
         return false;
     }
 
@@ -197,13 +202,18 @@ bool Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t
         message.data[i] = data[i];
     }
 
-    return twai_transmit(&message, pdMS_TO_TICKS(0)) == ESP_OK;
+    const esp_err_t result = twai_transmit(&message, pdMS_TO_TICKS(0));
+    if (result != ESP_OK) {
+        log_dropped_frame(result == ESP_ERR_TIMEOUT ? "TX queue full" : esp_err_to_name(result));
+        return false;
+    }
+    return true;
 }
 
-bool Can::send(uint32_t id,
-               uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
-               uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
-               bool rtr) const {
+bool Can::send(const uint32_t id,
+               const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
+               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
+               const bool rtr) const {
     uint8_t data[8] = {d0, d1, d2, d3, d4, d5, d6, d7};
     return this->send(id, data, rtr);
 }

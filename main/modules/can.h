@@ -29,6 +29,8 @@ public:
     static const std::map<std::string, Variable_ptr> get_defaults();
 
     bool receive();
+    // Both overloads return whether the driver accepted the frame, not whether it was acknowledged on the bus.
+    // false means the frame was dropped, because the bus is not RUNNING or the TX queue is full.
     bool send(const uint32_t id, const uint8_t data[8], const bool rtr = false, const uint8_t dlc = 8) const;
     bool send(const uint32_t id,
               const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
