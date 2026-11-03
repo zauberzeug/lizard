@@ -250,6 +250,7 @@ bus[2]: ~AdMHQOIBALbznT8BIbs=@31
 ```
 
 Each call replaces the selection of the previous one; without a call nothing is passed on.
+An [expander bus](#expander-bus) puts its name in front instead, e.g. `p0: `.
 Peers send their frames over the bus whether they are passed on or not.
 The coordinator drops the frames of a peer it neither passes on nor mirrors with a [BusTelemetry](#bus-telemetry) without checking them.
 Malformed frames and layout lines of passed-on or mirrored peers, e.g. no valid Base64 or with a wrong CRC, are dropped and counted in `telemetry_errors`.
@@ -293,7 +294,7 @@ bus = SerialBus(serial, 2)
 
 A serial on UART0 with the console's RX and TX pins (3 and 1 on an ESP32, 44 and 43 on an ESP32-S3) leaves the console alone until a serial bus is created on it.
 From then on, only the bus reads and writes UART0, at the serial's baud rate, and the node runs no console lines, only commands from the bus.
-Everything the node prints goes to the node that polls it, which prints it as `bus[<id>]: ...`.
+Everything the node prints goes to the node that polls it, which prints it as `bus[<id>]: ...` (an [expander bus](#expander-bus) as `p0: ...`).
 That includes replies, warnings, the output of unmuted modules and up to 16 lines that the boot printed before the bus took over the console.
 Lines printed before the first poll wait in the bus queue; when only its last eight places are free, further lines are dropped and a warning with their number follows.
 The node does not print `Ready.` on its console; the coordinator prints `bus[<id>]: Ready.` with the first answer.
@@ -393,7 +394,10 @@ core.telemetry(button.level, endstop.level)
   The rest of the expander's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
   `flash()` blocks the main loop for the whole transfer like `expander.flash()`; it fails if another module uses the serial or the copy does not report `Ready.` within 5 s.
   It does not check the strapping pins; an expander that does not enter its bootloader fails the transfer before anything is erased.
+- Output: the core prints the expander's lines as `p0: ...` like an [expander](#expander) does, e.g. `p0: Ready.` when the expander booted, and also the frames and layout lines that `p0.pass_telemetry()` passes on.
+  A [serial bus](#serial-bus) prints the lines of its peers as `bus[<id>]: ...`, so the expander and a peer 2 of another bus on the core stay apart.
 - Mirrors: each value of the expander is a property declaration as in a [BusTelemetry](#bus-telemetry) module, with the same rules for types, read-only values and warnings; a name of one of the bus's own properties, e.g. `ignored_lines`, is refused.
+  The warnings of the mirrors name the expander, e.g. `warning: p0: no frame of the expander within 5 s`; those of the bus itself keep its node number, e.g. `warning: serial bus p0 poll to 2 timed out`.
 - Updates: the bus keeps 8 places for messages to the expander instead of 32, too few for an update over the bus, so `p0.send()` refuses OTB messages and `flash()` is the way to update the expander.
   The expander's answers keep 32 places, since they come in bursts, e.g. the lines of `p0.send("!?")`.
 - Cost: an expander bus takes about 26 KB of the core's heap, an [expander](#expander) about 10 KB.

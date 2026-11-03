@@ -34,8 +34,8 @@ const std::map<std::string, Variable_ptr> BusTelemetry::get_defaults() {
     return {};
 }
 
-BusTelemetry::BusTelemetry(const std::string &name, const SerialBus_ptr bus, const uint8_t peer_id)
-    : Module(name), bus(bus), peer_id(peer_id) {
+BusTelemetry::BusTelemetry(const std::string &name, const SerialBus_ptr bus, const uint8_t peer_id, const std::string &peer_label)
+    : Module(name), peer_label(peer_label.empty() ? "peer " + std::to_string(peer_id) : peer_label), bus(bus), peer_id(peer_id) {
     this->restart_missing_check();
     this->bus->add_telemetry_listener(this);
 }
@@ -49,7 +49,7 @@ void BusTelemetry::step() {
         millis_since(this->silence_since_millis) >= MISSING_WARNING_MS) {
         // e.g. the peer's startup sends no frames, the peer ID is wrong or the peer is not polled
         this->silence_warned = true;
-        echo("warning: %s: no frame of peer %u within %lu s", this->name.c_str(), this->peer_id, MISSING_WARNING_MS / 1000);
+        echo("warning: %s: no frame of %s within %lu s", this->name.c_str(), this->peer_label.c_str(), MISSING_WARNING_MS / 1000);
     }
     Module::step();
 }
@@ -137,7 +137,7 @@ void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const b
     if (to_type(line.type) != this->mirrors[mirror].variable->type) {
         // the field keeps out of the property, the rest of the frame is still mapped
         if (!this->mirrors[mirror].mismatch) {
-            echo("warning: %s: peer %u sends \"%s\" as %s, not %s", this->name.c_str(), this->peer_id,
+            echo("warning: %s: %s sends \"%s\" as %s, not %s", this->name.c_str(), this->peer_label.c_str(),
                  this->mirrors[mirror].name->c_str(), describe(to_type(line.type)), describe(this->mirrors[mirror].variable->type));
             this->mirrors[mirror].mismatch = true;
         }
@@ -160,7 +160,7 @@ void BusTelemetry::handle_frame(const uint8_t *body, const std::vector<char> *ty
             Mirror &mirror = this->mirrors[i];
             if (!mirror.warned && !mirror.mismatch && !this->is_mapped(i)) {
                 mirror.warned = true;
-                echo("warning: %s: no frame of peer %u carries \"%s\"", this->name.c_str(), this->peer_id, mirror.name->c_str());
+                echo("warning: %s: no frame of %s carries \"%s\"", this->name.c_str(), this->peer_label.c_str(), mirror.name->c_str());
             }
         }
     }

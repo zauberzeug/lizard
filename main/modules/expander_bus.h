@@ -16,6 +16,9 @@ private:
     void flash();
     void configure_flashed_expander();
 
+protected:
+    void echo_peer_line(const uint8_t sender, const char *text) const override;
+
 public:
     static inline constexpr const char *TYPE = "ExpanderBus";
 

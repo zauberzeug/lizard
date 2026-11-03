@@ -27,7 +27,8 @@ REGISTER_MODULE(ExpanderBus, &create_expander_bus)
 
 ExpanderBus::ExpanderBus(const std::string &name, const ConstSerial_ptr serial, const gpio_num_t boot_pin, const gpio_num_t enable_pin)
     : SerialBus(name, serial, NODE_ID, {boot_pin, enable_pin}, OUTGOING_QUEUE_LENGTH), boot_pin(boot_pin), enable_pin(enable_pin),
-      telemetry(name, SerialBus_ptr(SerialBus_ptr(), this), PEER_ID) { // the mirrors live as long as this bus, so they do not own it
+      // the mirrors live as long as this bus, so they do not own it
+      telemetry(name, SerialBus_ptr(SerialBus_ptr(), this), PEER_ID, "the expander") {
     this->drive_pins_high();
     this->expect_peer_boot(); // the reset of this node may have restarted the expander as well
     this->set_peers(&PEER_ID, 1);
@@ -36,6 +37,10 @@ ExpanderBus::ExpanderBus(const std::string &name, const ConstSerial_ptr serial, 
 void ExpanderBus::step() {
     this->telemetry.step(); // the mirrors are no module of their own, so their warning about a silent expander comes from here
     SerialBus::step();
+}
+
+void ExpanderBus::echo_peer_line(const uint8_t, const char *text) const {
+    echo("%s: %s", this->name.c_str(), text); // like an expander, since the only peer needs no ID
 }
 
 void ExpanderBus::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
@@ -153,5 +158,5 @@ void ExpanderBus::configure_flashed_expander() {
     if (!ready) {
         throw std::runtime_error("the expander flashed by expander bus \"" + this->name + "\" did not report \"Ready.\"");
     }
-    echo("expander bus %s flashed its expander, which restarts as bus node %u", this->name.c_str(), PEER_ID);
+    echo("expander bus %s flashed its expander, which restarts now", this->name.c_str());
 }

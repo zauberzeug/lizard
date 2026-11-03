@@ -60,6 +60,7 @@ protected:
     void expect_peer_boot();                                           // poll timeouts are not reported for PEER_BOOT_MS
     void pause_communication();                                        // so that the main task can use the UART
     void resume_communication() { this->pause_requested = false; }
+    virtual void echo_peer_line(const uint8_t sender, const char *text) const; // prints a line of a peer on this node's console
 
 private:
     struct IncomingMessage {
