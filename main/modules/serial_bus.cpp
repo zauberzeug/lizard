@@ -612,12 +612,9 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     // echo incoming messages from peers
     const size_t prefix_len = sizeof(ECHO_CMD) - 1;
     if (std::strncmp(message.payload, ECHO_CMD, prefix_len) == 0) {
-        static char buffer[PAYLOAD_CAPACITY];
-        const size_t copy_len = std::min(message.length - prefix_len, static_cast<size_t>(sizeof(buffer) - 1));
-        memcpy(buffer, message.payload + prefix_len, copy_len);
-        buffer[copy_len] = '\0';
-        echo("bus[%u]: %s", message.sender, buffer);
-        if (std::strcmp(buffer, "Ready.") == 0) {
+        const char *text = message.payload + prefix_len; // process_uart terminated the payload
+        echo("bus[%u]: %s", message.sender, text);
+        if (std::strcmp(text, "Ready.") == 0) {
             this->peer_layouts.erase(message.sender); // the peer booted and announces its layouts with the first poll
         }
         return;
@@ -670,10 +667,7 @@ bool SerialBus::send_outgoing_queue() {
 
 size_t SerialBus::send_message(const uint8_t receiver, const char *payload, const size_t length) {
     auto &buffer = this->tx_frame;
-    const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver);
-    if (header_len < 0) {
-        throw std::runtime_error("serial bus: could not format bus header");
-    }
+    const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver); // throws on failure
     if (header_len + length >= sizeof(buffer)) {
         throw std::runtime_error("serial bus: payload is too large");
     }

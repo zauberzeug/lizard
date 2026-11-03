@@ -142,9 +142,11 @@ private:
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;
     // frame buffers, kept off the task's stack and not shared with the tasks of other buses
-    static constexpr size_t FRAME_BUFFER_SIZE = 512;
-    char rx_frame[FRAME_BUFFER_SIZE];
-    char tx_frame[FRAME_BUFFER_SIZE];
+    static constexpr size_t RX_FRAME_SIZE = 512;                   // any line of a peer; longer ones are discarded
+    static constexpr size_t TX_FRAME_SIZE = 16 + PAYLOAD_CAPACITY; // the header and a payload below PAYLOAD_CAPACITY
+    static_assert(sizeof("$$255:255$$") <= 16, "the longest bus header must fit the room before the payload");
+    char rx_frame[RX_FRAME_SIZE];
+    char tx_frame[TX_FRAME_SIZE];
 
     // --- telemetry, peer side ----------------------------------------------
     // The main task leaves the newest frame of each ID in a slot and the communication task sends the slots with the
