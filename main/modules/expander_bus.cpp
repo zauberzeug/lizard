@@ -33,6 +33,11 @@ ExpanderBus::ExpanderBus(const std::string &name, const ConstSerial_ptr serial, 
     this->set_peers(&PEER_ID, 1);
 }
 
+void ExpanderBus::step() {
+    this->telemetry.step(); // the mirrors are no module of their own, so their warning about a silent expander comes from here
+    SerialBus::step();
+}
+
 void ExpanderBus::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "send") {
         // p0.send(fmt[, args...]) is bus.send(2, fmt[, args...]), which configure.py --serial-bus 2 sends as well

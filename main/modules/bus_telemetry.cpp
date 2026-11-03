@@ -45,7 +45,8 @@ BusTelemetry::~BusTelemetry() {
 }
 
 void BusTelemetry::step() {
-    if (!this->frames_arriving && !this->silence_warned && millis_since(this->silence_since_millis) >= MISSING_WARNING_MS) {
+    if (!this->mirrors.empty() && !this->frames_arriving && !this->silence_warned &&
+        millis_since(this->silence_since_millis) >= MISSING_WARNING_MS) {
         // e.g. the peer's startup sends no frames, the peer ID is wrong or the peer is not polled
         this->silence_warned = true;
         echo("warning: %s: no frame of peer %u within %lu s", this->name.c_str(), this->peer_id, MISSING_WARNING_MS / 1000);

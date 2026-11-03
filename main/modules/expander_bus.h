@@ -20,6 +20,7 @@ public:
     static inline constexpr const char *TYPE = "ExpanderBus";
 
     ExpanderBus(const std::string &name, const ConstSerial_ptr serial, const gpio_num_t boot_pin, const gpio_num_t enable_pin);
+    void step() override;
     void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
     void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) override;
     void declare_property(const std::string &property_name, const Variable_ptr &variable) override;
