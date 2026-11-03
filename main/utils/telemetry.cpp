@@ -81,8 +81,9 @@ static char type_letter(const Type type) {
 
 static Field to_field(const ConstExpression_ptr &argument) {
     Field field;
+    // a PropertyExpression is a VariableExpression too, so it must be tested first
     if (const auto property = std::dynamic_pointer_cast<const PropertyExpression>(argument)) {
-        field = {property->module->get_property(property->property_name), property->module->name + "." + property->property_name};
+        field = {property->variable, property->module->name + "." + property->property_name};
     } else if (const auto variable = std::dynamic_pointer_cast<const VariableExpression>(argument)) {
         for (auto const &[name, candidate] : Global::variables) {
             if (candidate == variable->variable) {
