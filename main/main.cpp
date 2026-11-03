@@ -379,6 +379,107 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
+static bool is_identifier_start(const char c) {
+    return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
+}
+
+static bool is_identifier_char(const char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+}
+
+// returns nullptr for anything but true, false, -?\d+ and -?\d+.\d+
+static ConstExpression_ptr parse_literal(const char *start, const char *end) {
+    const std::string text(start, end);
+    if (text == "true" || text == "false") {
+        return std::make_shared<BooleanExpression>(text == "true");
+    }
+    const char *p = text.c_str();
+    if (*p == '-') {
+        ++p;
+    }
+    const char *digits = p;
+    while (std::isdigit(static_cast<unsigned char>(*p))) {
+        ++p;
+    }
+    if (p == digits || p - digits > 18) {
+        return nullptr;
+    }
+    if (*p == '\0') {
+        return std::make_shared<IntegerExpression>(std::strtoll(text.c_str(), nullptr, 10));
+    }
+    if (*p++ != '.') {
+        return nullptr;
+    }
+    const char *decimals = p;
+    while (std::isdigit(static_cast<unsigned char>(*p))) {
+        ++p;
+    }
+    if (p == decimals || *p != '\0') {
+        return nullptr;
+    }
+    return std::make_shared<NumberExpression>(std::strtod(text.c_str(), nullptr));
+}
+
+// Applies a line of literal assignments ("a=1;m.p=true;...", as expander broadcasts and bus pushes send them)
+// without the owl parser; returns false without side effects for any other line, which then takes the full path.
+static bool process_literal_assignments(const char *line, const bool from_expander) {
+    struct Assignment {
+        std::string module_name; // empty for a variable
+        std::string name;
+        ConstExpression_ptr value;
+    };
+    std::vector<Assignment> assignments;
+    const char *p = line;
+    while (*p) {
+        Assignment assignment;
+        const char *start = p;
+        if (!is_identifier_start(*p)) {
+            return false;
+        }
+        while (is_identifier_char(*p)) {
+            ++p;
+        }
+        if (*p == '.') {
+            assignment.module_name = std::string(start, p);
+            start = ++p;
+            if (!is_identifier_start(*p)) {
+                return false;
+            }
+            while (is_identifier_char(*p)) {
+                ++p;
+            }
+        }
+        assignment.name = std::string(start, p);
+        if (*p++ != '=') {
+            return false;
+        }
+        const char *value_start = p;
+        while (*p && *p != ';') {
+            ++p;
+        }
+        assignment.value = parse_literal(value_start, p);
+        if (!assignment.value) {
+            return false;
+        }
+        assignments.push_back(assignment);
+        if (*p == ';') {
+            ++p;
+        }
+    }
+    if (assignments.empty()) {
+        return false;
+    }
+    // same calls and order as process_tree(), so errors and partial application match the full path
+    for (const Assignment &assignment : assignments) {
+        if (assignment.module_name.empty()) {
+            Global::get_variable(assignment.name)->assign(assignment.value);
+        } else {
+            Global::get_module(assignment.module_name)->write_property(assignment.name, assignment.value, from_expander);
+        }
+    }
+    return true;
+}
+
 // Reports a parse error of `text`; `offset` is where `text` starts in a longer script, so positions refer to that script.
 static bool check_parse(owl_tree *tree, const char *text, const size_t offset) {
     if (!tree) {
@@ -424,6 +525,9 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     }
 
     const bool debug = core_module->get_property("debug")->boolean_value();
+    if (!debug && process_literal_assignments(line, from_expander)) {
+        return;
+    }
     if (debug) {
         echo(">> %s", line);
         tic();
