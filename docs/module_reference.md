@@ -693,6 +693,7 @@ The JBD BMS module reads a battery management system with the JBD protocol (fram
 | `bms.hardware_version()` | Ask for the hardware version and print it    |           |
 
 The module asks for the basic information every `interval` seconds, 1 s by default, and updates the properties with each valid answer.
+Until the first valid answer with the basic information, the values of the BMS are 0 and `last_message_age` counts from the boot, like `core.last_message_age`.
 An answer that is missing after 500 ms or invalid, e.g. with a wrong checksum or an error status, counts in `errors`, and the properties keep their last values.
 Keep the serial muted, since the module reads its bytes.
 

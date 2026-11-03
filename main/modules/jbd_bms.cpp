@@ -47,7 +47,6 @@ const std::map<std::string, Variable_ptr> JbdBms::get_defaults() {
 
 JbdBms::JbdBms(const std::string &name, const ConstSerial_ptr serial) : Module(name), serial(serial) {
     this->properties = JbdBms::get_defaults();
-    this->last_message_millis = millis();
     this->serial->claim(name);
 }
 
