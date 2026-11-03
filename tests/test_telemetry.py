@@ -202,6 +202,16 @@ def test_bus_prefix():
     assert decoder.feed(f'bus[3]: {strip(FRAMES_1[0])}', sender='core').sender == ('core', 3)
 
 
+def test_expander_prefix():
+    decoder = TelemetryDecoder()
+    results = [decoder.feed(f'p0: {strip(line)}') for line in LAYOUT_1 + FRAMES_1]
+    assert results[0] == Layout('p0', 1, 0x09, 0, 3, 'pos', 'f')
+    assert (results[-1].sender, results[-1].status) == ('p0', 'ok')
+    assert decoder.feed(f'bus[2]: {strip(FRAMES_1[0])}').status == 'no_layout'  # not the layouts of p0
+    assert decoder.feed('p0: hello') == Text(None, 'p0: hello')
+    assert decoder.feed(f'p0: {strip(FRAMES_1[0])}', sender='core').sender == ('core', 'p0')
+
+
 @pytest.mark.parametrize('line', [
     '~hello',
     '"~hello"',  # what core.print("~hello") sends
@@ -212,6 +222,7 @@ def test_bus_prefix():
     '~AQkAkw0AALbznT8IAAAAAeQoä',
     with_crc(bytes([1, 9, 0, 0, 0])),  # valid CRC, but shorter than a header
     'bus[2]: ~hello',
+    'p0: ~hello',
     '__LAYOUT__v1 1.3/3 09 pos:f',  # index beyond the count
     '__LAYOUT__v1 1.0/3 09 pos:d',  # unknown type
     '__LAYOUT__v1 1.0/3 pos:f',  # no layout ID

@@ -38,6 +38,7 @@ private:
     unsigned long silence_since_millis = 0; // the last declaration or restart of the peer, while no frame arrived
     bool silence_warned = false;
     bool layout_unreadable = false; // the peer sends a layout version this node does not read, until its restart
+    const std::string peer_label;   // names the peer in warnings
 
     int find_mirror(const std::string_view name) const;
     bool is_mapped(const size_t mirror) const;
@@ -49,7 +50,8 @@ public:
     const SerialBus_ptr bus;
     const uint8_t peer_id;
 
-    BusTelemetry(const std::string &name, const SerialBus_ptr bus, const uint8_t peer_id);
+    // warnings name the peer "peer <id>" unless `peer_label` names it otherwise, e.g. "the expander"
+    BusTelemetry(const std::string &name, const SerialBus_ptr bus, const uint8_t peer_id, const std::string &peer_label = "");
     ~BusTelemetry() override;
     void step() override;
     void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) override;

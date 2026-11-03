@@ -49,6 +49,19 @@ public:
     // the peer's next frame asks for its layout lines again, while the layouts held so far stay in use
     void refresh_telemetry_layout(const uint8_t peer_id);
 
+protected:
+    static constexpr unsigned long PEER_BOOT_MS = 5000; // a restarted peer answers within this
+
+    // a bus that also claims `pins`, e.g. those wired to its peer, and keeps fewer messages to send
+    SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id,
+              const std::initializer_list<gpio_num_t> pins, const size_t outgoing_queue_length);
+
+    void set_peers(const uint8_t *peer_ids, const uint8_t peer_count); // makes this node the coordinator
+    void expect_peer_boot();                                           // poll timeouts are not reported for PEER_BOOT_MS
+    void pause_communication();                                        // so that the main task can use the UART
+    void resume_communication() { this->pause_requested = false; }
+    virtual void echo_peer_line(const uint8_t sender, const char *text) const; // prints a line of a peer on this node's console
+
 private:
     struct IncomingMessage {
         uint8_t sender;
@@ -113,13 +126,22 @@ private:
     QueueHandle_t offset_queue = nullptr;
     QueueHandle_t outbound_queue = nullptr;
     QueueHandle_t inbound_queue = nullptr;
+    const size_t outgoing_queue_length; // too short for an OTB update if not longer than its window
     // written by the communication task, drained and reported by step() on the main task
     std::atomic<unsigned> dropped_inbound{0};
     unsigned long last_drop_report_millis = 0;
     TaskHandle_t communication_task = nullptr;
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> stopped{false};
+    std::atomic<bool> pause_requested{false}; // the main task uses the UART, e.g. to flash the peer
+    std::atomic<bool> paused{false};
+    std::atomic<bool> peer_booting{false};
+    std::atomic<unsigned long> peer_boot_millis{0};
     int echo_callback_handle = 0;
+    std::atomic<unsigned> dropped_output{0}; // console lines of this node that found no place in the outbound queue
+    unsigned long last_output_drop_report_millis = 0;
+    std::atomic<unsigned> ignored_lines{0}; // counted by the communication task
+    Variable_ptr ignored_lines_property;
 
     // --- owned by the main task --------------------------------------------
     Config config{};
@@ -225,5 +247,6 @@ private:
 
     void print_to_incoming_queue(const char *format, ...);
     void handle_echo(const char *line);
+    void relay_console_line(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
 };
