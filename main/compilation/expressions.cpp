@@ -77,10 +77,14 @@ VariableExpression::VariableExpression(const ConstVariable_ptr variable)
     : Expression(variable->type), variable(variable) {
 }
 
+const char *VariableExpression::kind() const {
+    return "variable";
+}
+
 bool VariableExpression::evaluate_boolean() const {
     if (this->type == boolean)
         return this->variable->boolean_value();
-    throw std::runtime_error("variable is not a boolean");
+    throw std::runtime_error(std::string(this->kind()) + " is not a boolean");
 }
 
 int64_t VariableExpression::evaluate_integer() const {
@@ -88,7 +92,7 @@ int64_t VariableExpression::evaluate_integer() const {
         return this->variable->integer_value();
     if (this->type == boolean)
         return this->variable->boolean_value() ? 1 : 0;
-    throw std::runtime_error("variable cannot evaluate to an integer");
+    throw std::runtime_error(std::string(this->kind()) + " cannot evaluate to an integer");
 }
 
 double VariableExpression::evaluate_number() const {
@@ -98,23 +102,27 @@ double VariableExpression::evaluate_number() const {
         return this->variable->integer_value();
     if (this->type == boolean)
         return this->variable->boolean_value() ? 1.0 : 0.0;
-    throw std::runtime_error("variable cannot evaluate to a number");
+    throw std::runtime_error(std::string(this->kind()) + " cannot evaluate to a number");
 }
 
 std::string VariableExpression::evaluate_string() const {
     if (this->type == string)
         return this->variable->string_value();
-    throw std::runtime_error("variable is not a string");
+    throw std::runtime_error(std::string(this->kind()) + " is not a string");
 }
 
 std::string VariableExpression::evaluate_identifier() const {
     if (this->type == identifier)
         return this->variable->identifier_value();
-    throw std::runtime_error("variable is not an identifier");
+    throw std::runtime_error(std::string(this->kind()) + " is not an identifier");
 }
 
 PropertyExpression::PropertyExpression(const ConstModule_ptr module, const std::string property_name)
     : VariableExpression(module->get_property(property_name)), module(module), property_name(property_name) {
+}
+
+const char *PropertyExpression::kind() const {
+    return "property";
 }
 
 PowerExpression::PowerExpression(const ConstExpression_ptr left, const ConstExpression_ptr right)

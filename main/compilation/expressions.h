@@ -41,6 +41,9 @@ public:
 };
 
 class VariableExpression : public Expression {
+protected:
+    virtual const char *kind() const; // "variable" or "property", for error messages
+
 public:
     const ConstVariable_ptr variable;
 
@@ -54,6 +57,9 @@ public:
 
 // resolved once at compile time, since a module never replaces the variable of a property
 class PropertyExpression : public VariableExpression {
+protected:
+    const char *kind() const override;
+
 public:
     const ConstModule_ptr module;
     const std::string property_name;

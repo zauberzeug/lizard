@@ -141,7 +141,7 @@ std::string Module::get_output() const {
     return "";
 }
 
-Variable_ptr Module::get_property(const std::string &property_name) const {
+const Variable_ptr &Module::get_property(const std::string &property_name) const {
     const auto it = this->properties.find(property_name);
     if (it == this->properties.end()) {
         throw std::runtime_error("unknown property \"" + property_name + "\"");
