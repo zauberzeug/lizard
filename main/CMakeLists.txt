@@ -34,3 +34,5 @@ idf_component_register(
 add_compile_definitions(OWL_TOKEN_RUN_LENGTH=256)
 component_compile_options(-std=gnu++17 -Wsuggest-override)
 set_source_files_properties(parser.c PROPERTIES COMPILE_FLAGS -Wno-missing-field-initializers)
+# send the unwinder's table lookups through the cache in utils/fde_cache.cpp
+target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=_Unwind_Find_FDE")
