@@ -19,6 +19,19 @@ Creating a module on a reserved pin or peripheral fails with an error that names
 In the startup script, such an error stops the script like any other error (see [Startup Script](getting_started.md#startup-script)).
 The console UART with its pins and the pins of the SPI flash are reserved from the start.
 
+## State Counters
+
+Modules that run a state machine report its state as a counter, so a host that reads their properties less often than the state changes still sees every move.
+The counter's value modulo the number of states is the current state, and 0 is idle.
+It counts forward on every transition, including the states a transition skips, and wraps at the largest multiple of the number of states up to 255.
+A command the module accepts first counts up to the next idle, as if a running cycle had ended, and then on to its state; a refused command leaves the counter unchanged.
+So every accepted command takes the counter exactly as many steps as there are states, from the idle before it to its own end.
+
+A host can therefore count its own commands instead of waiting for each one to show:
+before a command, the counter will start it at the idle after all commands sent before;
+once the counter is past that base, the command was taken, and once it is that many states past it, it has ended.
+Commands that only stop or hold do not start a cycle and are not counted.
+
 ## Core
 
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
@@ -1023,12 +1036,13 @@ The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional
 When using multiple stepper motors, set different timer/channel pairs to avoid conflicts.
 The pulse counter used for position feedback is created internally.
 
-| Properties       | Description                    | Data type |
-| ---------------- | ------------------------------ | --------- |
-| `motor.position` | Motor position (steps)         | `int`     |
-| `motor.speed`    | Motor speed (steps per second) | `int`     |
-| `motor.idle`     | Motor idle state               | `bool`    |
-| `motor.enabled`  | Whether the motor is enabled   | `bool`    |
+| Properties       | Description                                                               | Data type |
+| ---------------- | ------------------------------------------------------------------------- | --------- |
+| `motor.position` | Motor position (steps)                                                    | `int`     |
+| `motor.speed`    | Motor speed (steps per second)                                            | `int`     |
+| `motor.idle`     | Motor idle state                                                          | `bool`    |
+| `motor.state`    | [State counter](#state-counters): 0 = idle, 1 = speeding, 2 = positioning | `int`     |
+| `motor.enabled`  | Whether the motor is enabled                                              | `bool`    |
 
 | Methods                                           | Description              | Arguments  |
 | ------------------------------------------------- | ------------------------ | ---------- |
