@@ -41,7 +41,6 @@ const std::map<std::string, Variable_ptr> StepperMotor::get_defaults() {
         {"position", std::make_shared<IntegerVariable>()},
         {"speed", std::make_shared<IntegerVariable>()},
         {"idle", std::make_shared<BooleanVariable>(true)},
-        {"state", std::make_shared<StateCounter>(3)},
         {"enabled", std::make_shared<BooleanVariable>(true)},
     };
 }
@@ -62,7 +61,6 @@ StepperMotor::StepperMotor(const std::string name,
     gpio_reset_pin(dir_pin);
 
     this->properties = StepperMotor::get_defaults();
-    this->state_counter = std::static_pointer_cast<StateCounter>(this->properties.at("state"));
 
     pcnt_unit_config_t unit_config = {
         .low_limit = -30000,
@@ -136,7 +134,6 @@ void StepperMotor::read_position() {
 
 void StepperMotor::set_state(StepperState new_state) {
     this->state = new_state;
-    this->state_counter->enter(new_state);
     this->properties.at("idle")->set_boolean_value((new_state == Idle));
 
     gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : SPEED_OUT_IDX + this->ledc_channel, 0, 0);
@@ -258,7 +255,6 @@ void StepperMotor::position(const double position, const double speed, const dou
     bool forward = this->target_position > this->properties.at("position")->integer_value();
     this->target_speed = static_cast<int32_t>(speed) * (forward ? 1 : -1);
     this->target_acceleration = static_cast<uint32_t>(acceleration);
-    this->state_counter->restart(Positioning);
     set_state(Positioning);
 }
 
@@ -269,9 +265,6 @@ double StepperMotor::get_speed() {
 void StepperMotor::speed(const double speed, const double acceleration) {
     this->target_speed = static_cast<int32_t>(speed);
     this->target_acceleration = static_cast<uint32_t>(acceleration);
-    if (this->target_speed != 0) {
-        this->state_counter->restart(Speeding);
-    }
     set_state(this->target_speed == 0 ? Idle : Speeding);
 }
 

@@ -5,7 +5,6 @@
 #include "driver/pulse_cnt.h"
 #include "module.h"
 #include "motor.h"
-#include "state_counter.h"
 
 enum StepperState {
     Idle,
@@ -30,7 +29,6 @@ private:
     int last_count = 0;
 
     StepperState state = Idle;
-    StateCounter_ptr state_counter;
     int32_t target_position = 0;
     int32_t target_speed = 0;
     uint32_t target_acceleration = 0;
