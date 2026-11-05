@@ -20,11 +20,8 @@ public:
 
     StateCounter(const int64_t states);
     int64_t state() const;
-    // A transition the state machine makes by itself; staying in `state` counts nothing.
-    void enter(const int64_t state);
+    // Counts forward to `state`; staying in `state` counts nothing.
+    void set(const int64_t state);
     // An accepted command that starts a cycle in `state` (not idle): counts up to the next idle first.
     void restart(const int64_t state);
-
-private:
-    void advance(const int64_t steps);
 };

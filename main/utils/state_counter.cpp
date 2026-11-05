@@ -2,6 +2,7 @@
 #include <stdexcept>
 
 static constexpr int64_t MAX_VALUE = 255;
+static constexpr int64_t IDLE = 0;
 
 // checked in the initializer of `states`, so `period` is never computed from an invalid count
 static int64_t checked_states(const int64_t states) {
@@ -19,20 +20,18 @@ int64_t StateCounter::state() const {
     return this->integer_slot % this->states;
 }
 
-void StateCounter::enter(const int64_t state) {
+void StateCounter::set(const int64_t state) {
     if (state < 0 || state >= this->states) {
         throw std::runtime_error("state out of range");
     }
-    this->advance((state - this->state() + this->states) % this->states);
+    const int64_t steps = (state - this->state() + this->states) % this->states;
+    this->integer_slot = (this->integer_slot + steps) % this->period;
 }
 
 void StateCounter::restart(const int64_t state) {
-    if (state < 1 || state >= this->states) {
-        throw std::runtime_error("state out of range");
+    if (state == IDLE) {
+        throw std::runtime_error("a cycle cannot start in idle");
     }
-    this->advance((this->states - this->state()) % this->states + state);
-}
-
-void StateCounter::advance(const int64_t steps) {
-    this->integer_slot = (this->integer_slot + steps) % this->period;
+    this->set(IDLE);
+    this->set(state);
 }
