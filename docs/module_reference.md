@@ -23,11 +23,12 @@ The console UART with its pins and the pins of the SPI flash are reserved from t
 
 Modules that run a state machine report its state as a counter, so a host that reads their properties less often than the state changes still sees every move.
 The counter is an 8-bit value.
-Its low bits hold the current state, 0 being idle, using as many bits as the number of states needs (2 bits for 3 states).
+Its low bits hold the current state, using as many bits as the number of states needs (2 bits for 3 states).
 The bits above hold the epoch, the number of completed cycles.
-A transition to a later state keeps the epoch, a transition back to idle or to an earlier state starts the next one, and staying in a state changes nothing.
+A transition to a later state keeps the epoch, a transition to an earlier state starts the next one, and staying in a state changes nothing.
 The value wraps at 256, so a host tells whether a value `a` came after a value `b` by `(a - b) % 256 < 128` with `a != b`, which holds as long as the two are less than 128 steps apart.
 
+The module's idle state is state 0.
 A command the module accepts first returns the counter to idle, as if a running cycle had ended, and then moves it on to its state; a refused command leaves the counter unchanged.
 So every accepted command takes exactly one epoch, from the idle before it to its own end, and a host can count its own commands instead of waiting for each one to show:
 the n-th command runs in epoch n - 1 (counting from the module's creation) and has ended once the epoch is n.
