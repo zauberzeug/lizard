@@ -16,7 +16,7 @@ StateCounter::StateCounter(const int64_t states)
 }
 
 int64_t StateCounter::state() const {
-    return this->integer_value() % this->states;
+    return this->integer_slot % this->states;
 }
 
 void StateCounter::enter(const int64_t state) {
@@ -34,5 +34,5 @@ void StateCounter::restart(const int64_t state) {
 }
 
 void StateCounter::advance(const int64_t steps) {
-    this->set_integer_value((this->integer_value() + steps) % this->period);
+    this->integer_slot = (this->integer_slot + steps) % this->period;
 }
