@@ -22,6 +22,4 @@ public:
     int64_t state() const;
     // Counts forward to `state`; staying in `state` counts nothing.
     void set(const int64_t state);
-    // An accepted command that starts a cycle in `state` (not idle): counts up to the next idle first.
-    void restart(const int64_t state);
 };
