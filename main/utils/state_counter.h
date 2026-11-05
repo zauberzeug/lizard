@@ -16,14 +16,25 @@ class StateCounter : public IntegerVariable {
 public:
     static constexpr int64_t MAX_VALUE = 255;
     static constexpr int64_t states = static_cast<int64_t>(State::COUNT);
-    static_assert(states >= 2 && states <= MAX_VALUE, "a state counter needs between 2 and 255 states");
     static constexpr int64_t period = MAX_VALUE / states * states;
+    static_assert(states >= 2 && 2 * states < period, "a full cycle has to fit in half a period");
 
     StateCounter() : IntegerVariable(0) {
     }
 
     State state() const {
         return static_cast<State>(this->integer_slot % states);
+    }
+
+    // Number of completed cycles, modulo `period / states`.
+    int64_t epoch() const {
+        return this->integer_slot / states;
+    }
+
+    // Whether counter value `a` was reached after `b`, for values less than half a period apart.
+    static bool is_after(const int64_t a, const int64_t b) {
+        const int64_t distance = (a - b + period) % period;
+        return distance > 0 && 2 * distance < period;
     }
 
     // Counts forward to `state`; staying in `state` counts nothing.
