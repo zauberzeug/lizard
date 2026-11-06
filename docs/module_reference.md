@@ -315,6 +315,7 @@ Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `
   Another type is an error, and so is the same name of the same peer in a second module, e.g. `"motor.position" of peer 2 is already declared by arm`.
 - Values: a declared property is read-only.
   It keeps its declared value until a frame delivers one, and its last value when the peer stops sending or restarts.
+  An `int` arrives as int32, as at every reader of the [frame format](#core), so a value beyond that range turns negative.
 - Layouts: mirroring works whether or not the coordinator passes the peer's frames on.
   A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after; the other mirrored values keep following meanwhile.
   When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field, and the check for missing names runs again.
