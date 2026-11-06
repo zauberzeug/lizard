@@ -120,8 +120,14 @@ void JbdBms::handle_frame() {
     for (size_t i = 0; i < length; ++i) {
         sum += data[i];
     }
-    if (data[length + 2] != FRAME_END || static_cast<uint16_t>(0x10000 - sum) != word(data, length) || status != 0 ||
-        reg != this->requested_register || (reg == BASIC_INFO && length < BASIC_INFO_LENGTH)) {
+    if (data[length + 2] != FRAME_END || static_cast<uint16_t>(0x10000 - sum) != word(data, length)) {
+        this->count_error();
+        return;
+    }
+    if (reg != this->requested_register) {
+        return; // e.g. a late answer, which counted at its timeout; the awaited one may still follow
+    }
+    if (status != 0 || (reg == BASIC_INFO && length < BASIC_INFO_LENGTH)) {
         this->count_error();
         return;
     }
