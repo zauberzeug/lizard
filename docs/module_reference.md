@@ -19,6 +19,15 @@ Creating a module on a reserved pin or peripheral fails with an error that names
 In the startup script, such an error stops the script like any other error (see [Startup Script](getting_started.md#startup-script)).
 The console UART with its pins and the pins of the SPI flash are reserved from the start.
 
+## State Counters
+
+Modules that run a state machine report its state as a counter, so a host that reads their properties less often than the state changes still sees every move.
+The counter is an 8-bit value.
+Its low bits hold the current state, using as many bits as the number of states needs (2 bits for 3 states).
+The bits above hold the epoch, the number of completed cycles.
+A transition to a later state keeps the epoch, a transition to an earlier state starts the next one, and staying in a state changes nothing.
+The value wraps at 256, so a host tells whether a value `a` came after a value `b` by `(a - b) % 256 < 128` with `a != b`, which holds as long as the two are less than 128 steps apart.
+
 ## Core
 
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
