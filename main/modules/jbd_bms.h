@@ -17,7 +17,8 @@ private:
     size_t frame_length = 0;
     uint8_t requested_register = 0;     // 0 while no answer is awaited
     std::set<uint8_t> queued_registers; // asked for by methods, requested once no answer is awaited
-    unsigned long request_millis = 0;
+    unsigned long request_millis = 0;   // of the awaited answer's request, for its timeout
+    unsigned long poll_millis = 0;      // of the last request for the basic information, for the interval
     unsigned long last_message_millis = 0;
 
     void request(const uint8_t reg);

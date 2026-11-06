@@ -61,7 +61,7 @@ void JbdBms::step() {
             const auto next = this->queued_registers.begin();
             this->request(*next);
             this->queued_registers.erase(next);
-        } else if (interval > 0 && millis_since(this->request_millis) >= interval * 1000) {
+        } else if (interval > 0 && millis_since(this->poll_millis) >= interval * 1000) {
             this->request(BASIC_INFO);
         }
     }
@@ -91,6 +91,9 @@ void JbdBms::request(const uint8_t reg) {
     this->frame_length = 0;
     this->requested_register = reg;
     this->request_millis = millis();
+    if (reg == BASIC_INFO) {
+        this->poll_millis = this->request_millis;
+    }
 }
 
 void JbdBms::receive() {
