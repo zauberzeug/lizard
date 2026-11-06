@@ -28,13 +28,6 @@ The bits above hold the epoch, the number of completed cycles.
 A transition to a later state keeps the epoch, a transition to an earlier state starts the next one, and staying in a state changes nothing.
 The value wraps at 256, so a host tells whether a value `a` came after a value `b` by `(a - b) % 256 < 128` with `a != b`, which holds as long as the two are less than 128 steps apart.
 
-The module's idle state is state 0.
-A command the module accepts first returns the counter to idle, as if a running cycle had ended, and then moves it on to its state; a refused command leaves the counter unchanged.
-So every accepted command takes exactly one epoch, from the idle before it to its own end, and a host can count its own commands instead of waiting for each one to show:
-the n-th command runs in epoch n - 1 (counting from the module's creation) and has ended once the epoch is n.
-Commands that only stop or hold do not start a cycle and are not counted.
-A host that sends several commands without waiting cannot tell which one was refused once a later one is accepted, so it waits until each command has moved the counter, or a timeout, before it sends the next.
-
 ## Core
 
 The core module encapsulates various properties and methods that are related to the microcontroller itself.

@@ -10,9 +10,7 @@ constexpr int64_t bits_for(const int64_t count) {
 
 // An integer property that counts the transitions of a state machine, so a host that misses frames still sees them.
 // The low `STATE_BITS` of the value are the current state, the bits above are the epoch, the number of completed
-// cycles. A module reports an accepted command as `set` of its idle state followed by `set` of the command's state,
-// so every command takes exactly one epoch; the host protocol is documented under "State Counters" in the module
-// reference.
+// cycles; how a host reads it is documented under "State Counters" in the module reference.
 // `State` is an enum with a sentinel enumerator `COUNT` one past the last state.
 template <typename State>
 class StateCounter : public IntegerVariable {
