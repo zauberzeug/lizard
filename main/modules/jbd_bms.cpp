@@ -163,7 +163,7 @@ void JbdBms::handle_basic_info(const uint8_t *data, const size_t length) {
     if (sensors > 0) {
         double sum = 0;
         for (size_t i = 0; i < sensors; ++i) {
-            sum += word(data, BASIC_INFO_LENGTH + 2 * i) / 10.0 - 273.15;
+            sum += (word(data, BASIC_INFO_LENGTH + 2 * i) - 2731) / 10.0; // 0.1 K, with 273.1 K for 0 °C by the protocol
         }
         this->properties.at("temperature")->set_number_value(sum / sensors);
     }
