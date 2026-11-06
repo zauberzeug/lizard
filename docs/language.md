@@ -85,7 +85,7 @@ float x.level = 0.5
 ```
 
 Modules that do not accept declarations report an error.
-[Proxies](module_reference.md#proxy) accept declarations.
+[Proxies](module_reference.md#proxy) and [BusTelemetry](module_reference.md#bus-telemetry) modules accept declarations.
 
 **Routines: definition and call**
 

@@ -37,6 +37,8 @@ private:
 
 protected:
     std::list<Module_ptr> shadow_modules;
+    // Only ever add to this map, never replace a variable under an existing name: compiled property expressions,
+    // core.output fields, telemetry frames and enabled_property keep the Variable_ptr they found once.
     std::map<std::string, Variable_ptr> properties;
     bool output_on = false;
     bool broadcast = false;
@@ -77,7 +79,7 @@ public:
     static const std::map<std::string, Variable_ptr> get_module_defaults(const std::string &type_name);
     void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
     virtual std::string get_output() const;
-    Variable_ptr get_property(const std::string property_name) const;
+    const Variable_ptr &get_property(const std::string &property_name) const;
     virtual void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander = false);
     /// Declare a property from Lizard code like `float arm.motor.position = 0.0`; the default implementation throws.
     virtual void declare_property(const std::string &property_name, const Variable_ptr &variable);
