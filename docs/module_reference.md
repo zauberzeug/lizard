@@ -107,8 +107,9 @@ A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (
 | 2     | CRC-16/CCITT-FALSE over all preceding bytes                       |
 
 The sequence number starts at 0 when a frame is defined, also when its ID is reused after `core.clear_telemetry()`.
-The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as int32, wrapping around beyond its range.
-Read as uint32, a counter like `core.millis` wraps after 49.7 days like the time of the frame instead of turning negative after 24.9 days.
+The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as its low 32 bits, so a value beyond the int32 range wraps around instead of sticking at the limit.
+Every reader, the host decoder included, reads them as int32.
+Send an age rather than a timestamp: a timestamp in µs like `last_heartbeat` of a CANopen motor wraps within 72 minutes, and the time of the sender is in the header anyway.
 The `bool` fields follow as bits in their order, least significant bit first, padded to a full byte.
 All multi-byte numbers, including the time and the CRC, are little-endian.
 

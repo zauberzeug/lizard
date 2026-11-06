@@ -234,8 +234,8 @@ static size_t encode_frame(const uint8_t id, const Frame &frame, const uint8_t s
             break;
         }
         case integer: {
-            // wraps beyond the int32 range, so that a counter like core.millis keeps counting
-            const int32_t value = static_cast<int32_t>(field.variable->integer_value());
+            // the low 32 bits: a value beyond the int32 range wraps around instead of sticking at the limit
+            const uint32_t value = static_cast<uint32_t>(field.variable->integer_value());
             memcpy(&payload[offset], &value, 4);
             offset += 4;
             break;
