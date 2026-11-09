@@ -171,6 +171,11 @@ void JbdBms::handle_basic_info(const uint8_t *data, const size_t length) {
 }
 
 void JbdBms::count_error() {
+    if (this->requested_register == CELL_VOLTAGES) {
+        echo("warning: %s got no cell voltages", this->name.c_str());
+    } else if (this->requested_register == HARDWARE_VERSION) {
+        echo("warning: %s got no hardware version", this->name.c_str());
+    }
     this->properties.at("errors")->set_integer_value(this->properties.at("errors")->integer_value() + 1);
     this->requested_register = 0;
     this->frame_length = 0;

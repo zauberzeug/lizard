@@ -695,6 +695,7 @@ The JBD BMS module reads a battery management system with the JBD protocol (fram
 The module asks for the basic information every `interval` seconds, 1 s by default, and updates the properties with each valid answer.
 Until the first valid answer with the basic information, the values of the BMS are 0 and `last_message_age` counts from the boot, like `core.last_message_age`.
 An answer that is missing after 500 ms or invalid, e.g. with a wrong checksum or an error status, counts in `errors`, and the properties keep their last values.
+If the answer to a method is missing or invalid, the module also prints a warning, e.g. `warning: bms got no cell voltages`.
 Keep the serial muted, since the module reads its bytes.
 
 The bits of `protections` are:
