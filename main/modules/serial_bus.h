@@ -119,6 +119,8 @@ private:
     TaskHandle_t communication_task = nullptr;
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> stopped{false};
+    std::atomic<bool> pause_requested{false}; // the main task uses the UART, e.g. to flash a peer
+    std::atomic<bool> paused{false};
     int echo_callback_handle = 0;
     std::atomic<unsigned> dropped_output{0}; // console lines of this node that found no place in the outbound queue
     unsigned long last_output_drop_report_millis = 0;
@@ -131,6 +133,9 @@ private:
     Config config{};
     std::vector<OffsetProperties> offset_properties;
     void send_config();
+    void pause_communication();
+    void flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin);
+    void configure_flashed_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin);
     void rebuild_offset_properties();
     void apply_offset_update(const OffsetUpdate &update);
 
