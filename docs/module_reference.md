@@ -203,7 +203,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
 | `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s            |
 
-The coordinator prints the lines that its peers print, e.g. replies to `bus.send()` and warnings, with the bus's name and the peer's ID in front, e.g. `bus[2]: Ready.` for peer 2 of a bus named `bus`.
+The coordinator prints the lines that reach it from its peers, e.g. `Ready.` and the output of commands sent with `bus.send()`, with the bus's name and the peer's ID in front, e.g. `bus[2]: Ready.` for peer 2 of a bus named `bus`.
 So two buses of a node, e.g. `plexus` and `p0`, keep their peers apart, also when both have a peer 2.
 
 **Time Synchronization:**
