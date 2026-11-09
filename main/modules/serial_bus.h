@@ -120,6 +120,12 @@ private:
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> stopped{false};
     int echo_callback_handle = 0;
+    std::atomic<unsigned> dropped_output{0}; // console lines of this node that found no place in the outbound queue
+    unsigned long last_output_drop_report_millis = 0;
+    std::atomic<unsigned> ignored_lines{0}; // received lines that are no bus messages and are not printed
+    std::atomic<unsigned> stray_lines{0};   // those of them that are reported
+    unsigned long last_stray_report_millis = 0;
+    Variable_ptr ignored_lines_property;
 
     // --- owned by the main task --------------------------------------------
     Config config{};
@@ -134,6 +140,7 @@ private:
     bool time_sync_enabled = false;
     uint32_t generation = 0;
     std::vector<PeerClock> peer_clocks;
+    std::vector<unsigned> missed_polls; // per entry of peer_ids: polls that timed out since the peer answered last
     size_t poll_index = 0;
     bool is_polling = false;
     uint8_t polled_peer_id = 0; // peer whose DONE is outstanding; survives a reconfiguration
@@ -203,6 +210,8 @@ private:
     static void communication_loop(void *param);
     void adopt_config(const Config &config);
     void process_uart();
+    void handle_foreign_line(char *line, const int length);
+    unsigned *find_missed_polls(const uint8_t peer_id);
     void push_incoming(const IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
@@ -225,5 +234,6 @@ private:
 
     void print_to_incoming_queue(const char *format, ...);
     void handle_echo(const char *line);
+    void relay_console_line(const char *line);
     bool is_coordinator() const { return !this->peer_ids.empty(); }
 };

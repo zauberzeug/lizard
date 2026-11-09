@@ -50,5 +50,6 @@ See [Tools](tools.md#configure) for more details.
 
 If loading the startup script fails, for example because a module cannot be created, the microcontroller prints the error and restarts to try again.
 After two failed attempts it boots without the startup script, prints `error: startup skipped after 2 failed boots (...)` with the last reason and stays reachable over the command-line interface, so the script can be fixed with `!-`, `!+` and `!.`.
+A node whose console is the link of a [serial bus](module_reference.md#serial-bus) stays reachable over the bus instead, through its coordinator.
 A crash or watchdog reset during the first seconds after boot counts as a failed attempt as well.
 A power cycle or a reset over the EN pin clears the counter.
