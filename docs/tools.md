@@ -251,6 +251,10 @@ The name is reported by `core.version()` and also names the build artifacts (`bu
 `espresso.py` picks them up automatically via `build/project_description.json`,
 other tools like `otb_update.py` or `addr2line` need the renamed paths passed explicitly.
 
+The ESP32 build reads its flash at 80 MHz, which the ESP32-WROOM-32E and similar modules are rated for.
+A board whose flash or layout cannot keep up crashes or does not boot at this speed;
+for such a board, set `CONFIG_ESPTOOLPY_FLASHFREQ_40M=y` and `CONFIG_ESPTOOLPY_FLASHFREQ="40m"` in `sdkconfig.defaults.esp32` and compile your own build.
+
 ### Backtrace
 
 In case Lizard terminates with a backtrace printed to the serial terminal,
