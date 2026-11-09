@@ -133,6 +133,7 @@ private:
     Config config{};
     std::vector<OffsetProperties> offset_properties;
     void send_config();
+    void drain_outbound(const unsigned long timeout_ms);
     void pause_communication();
     void flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin);
     void configure_flashed_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin);
@@ -150,13 +151,13 @@ private:
     bool is_polling = false;
     uint8_t polled_peer_id = 0; // peer whose DONE is outstanding; survives a reconfiguration
     unsigned long poll_start_millis = 0;
-    uint32_t poll_seq = 0;      // sequence number of the outstanding POLL, 0 for a bare POLL
-    uint32_t last_poll_seq = 0; // last sequence number handed out
-    int64_t poll_sent_us = 0;   // T1
-    size_t poll_frame_len = 0;  // bytes of the POLL frame on the wire
-    uint8_t requesting_node = 0;
-    int64_t poll_received_us = 0;   // T2 (peer side)
-    uint32_t poll_received_seq = 0; // sequence number of the POLL being answered (peer side)
+    uint32_t poll_seq = 0;                   // sequence number of the outstanding POLL, 0 for a bare POLL
+    uint32_t last_poll_seq = 0;              // last sequence number handed out
+    int64_t poll_sent_us = 0;                // T1
+    size_t poll_frame_len = 0;               // bytes of the POLL frame on the wire
+    std::atomic<uint8_t> requesting_node{0}; // read by the main task while it drains the console
+    int64_t poll_received_us = 0;            // T2 (peer side)
+    uint32_t poll_received_seq = 0;          // sequence number of the POLL being answered (peer side)
     bool ready_pending = true;
     uint8_t echo_target_id = 0; // node ID that should receive relayed echo output (0 = no relay)
     otb::BusOtbSession otb_session;

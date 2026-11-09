@@ -15,8 +15,10 @@ void echo(const char *fmt, ...);
 // Until it is taken back, nothing but that bus reads or writes UART0: echo() only reaches the echo callbacks,
 // and ESP_LOG and ROM output are dropped.
 bool console_handed_over();
-void hand_over_console(const long baud_rate);
+void hand_over_console(const long baud_rate, const std::function<void(unsigned long timeout_ms)> &drain);
 void take_back_console();
+// Waits until the bus that took over the console has sent what this node printed, at most `timeout_ms`.
+void drain_console(const unsigned long timeout_ms);
 // Lines echoed during the boot, for a serial bus that takes over the console before the main loop starts; recording
 // ends with the first call.
 std::vector<std::string> take_boot_lines();
