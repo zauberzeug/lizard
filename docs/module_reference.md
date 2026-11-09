@@ -198,13 +198,13 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for places in the inbound queue, e.g. while layout lines are awaited     | `int`     |
 | `bus.ignored_lines`        | Received lines that are no bus messages and were not printed, e.g. the boot output of a peer                  | `int`     |
 
-| Methods                             | Description                                                                                                                                 | Arguments         |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
-| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
-| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
-| `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s            |
-| `bus.flash_peer(id, boot, enable)`  | Flash peer `id` through its boot and enable pins with this node's firmware (see [Flashing a Peer](#serial-bus))                             | 3x `int`          |
+| Methods                             | Description                                                                                                                                 | Arguments          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ...  |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s             |
+| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                    |
+| `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s             |
+| `bus.flash_peer(id, boot, enable)`  | Flash peer `id` through its boot and enable outputs with this node's firmware (see [Flashing a Peer](#serial-bus))                          | `int`, 2x `Output` |
 
 **Polling:**
 The coordinator polls its peers in turn, and a peer answers with the messages it has queued.
@@ -318,14 +318,21 @@ The console stays silent on USB as long as the startup script or the bus backup 
 To get it back, send the node `!-`, `!.` and `core.forget_serial_bus()` over the bus and restart it, or erase its flash with `./espresso.py erase` and flash it again.
 
 **Flashing a Peer:**
-A coordinator can flash a peer that is wired to it by the bus's RX and TX pins and by two more pins to the peer's GPIO0 and EN, e.g. a port expander:
+A coordinator can flash a peer that is wired to it by the bus's RX and TX pins and by two outputs to the peer's GPIO0 and EN, e.g. a port expander:
 
 ```
 serial = Serial(26, 27, 460800, 1)
 p0 = SerialBus(serial, 1)
 p0.make_coordinator(2)
-p0.flash_peer(2, 25, 14)
+p0_boot = Output(25)
+p0_boot.on()
+p0_enable = Output(14)
+p0_enable.on()
+p0.flash_peer(2, p0_boot, p0_enable)
 ```
+
+Keep both outputs on while the peer runs, and turn the boot output on first, so that the peer starts its firmware and not its bootloader.
+A port expander on a Robot Brain does not run while its enable pin is not driven high.
 
 `flash_peer` copies this node's firmware onto the peer like `expander.flash()` at 921600 baud, whatever the link's rate, which erases the peer's NVS, i.e. its startup script, its bus backup and a persisted console baud rate.
 It needs no answer from the peer, so it also flashes a peer without firmware.
@@ -333,8 +340,8 @@ It does not check the strapping pins; a peer that does not enter its bootloader 
 The copy boots with its console at 115200 baud; the coordinator writes it the two lines of a bus on its console as its startup script, with the baud rate of the coordinator's serial and the ID `id`, and restarts it (see [Console as Link](#serial-bus)).
 The rest of the peer's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
 `flash_peer` blocks the main loop for the whole transfer like `expander.flash()`.
-It fails if another module uses the serial or one of the two pins, or if the copy does not report `Ready.` within 5 s.
-The two pins are used only while flashing; afterwards they are inputs with pull-ups again.
+It fails if another module uses the serial, if `boot` or `enable` is no output on a pin of this node, or if the copy does not report `Ready.` within 5 s.
+It drives the two pins itself while flashing; afterwards they are high and follow their outputs again.
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.

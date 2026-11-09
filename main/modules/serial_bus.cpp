@@ -3,7 +3,6 @@
 #include "../main.h"
 #include "../utils/format.h"
 #include "../utils/otb.h"
-#include "../utils/resources.h"
 #include "../utils/serial-replicator.h"
 #include "../utils/string_utils.h"
 #include "../utils/telemetry.h"
@@ -11,6 +10,7 @@
 #include "../utils/uart.h"
 #include "bus_telemetry.h"
 #include "module_helpers.h"
+#include "output.h"
 #include "serial.h"
 #include "soc/uart_channel.h"
 #include <esp_timer.h>
@@ -61,6 +61,14 @@ static Module_ptr create_serial_bus(const std::string &name, const std::vector<C
     return std::make_shared<SerialBus>(name, serial, node_id);
 }
 REGISTER_MODULE(SerialBus, &create_serial_bus)
+
+static gpio_num_t gpio_output_pin(const ConstExpression_ptr &argument) {
+    const auto gpio_output = std::dynamic_pointer_cast<GpioOutput>(get_module_argument<Output>(argument));
+    if (!gpio_output) {
+        throw std::runtime_error("output \"" + argument->evaluate_identifier() + "\" is no GPIO pin of this node");
+    }
+    return gpio_output->number;
+}
 
 uint8_t SerialBus::to_peer_id(const ConstExpression_ptr &argument) {
     if ((argument->type & integer) == 0) {
@@ -254,9 +262,8 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         }
         this->passed_peers = peers;
     } else if (method_name == "flash_peer") {
-        Module::expect(arguments, 3, integer, integer, integer);
-        this->flash_peer(to_peer_id(arguments[0]), static_cast<gpio_num_t>(arguments[1]->evaluate_integer()),
-                         static_cast<gpio_num_t>(arguments[2]->evaluate_integer()));
+        Module::expect(arguments, 3, integer, identifier, identifier);
+        this->flash_peer(to_peer_id(arguments[0]), gpio_output_pin(arguments[1]), gpio_output_pin(arguments[2]));
     } else {
         Module::call(method_name, arguments);
     }
@@ -280,16 +287,14 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
         throw std::runtime_error("serial bus \"" + this->name + "\" cannot flash a peer over this node's console");
     }
     this->serial->require_sole_user(this->name);
-    resources::Claims pins(this->name); // only while flashing: a module that holds a pin fails the call instead
-    pins.pin(boot_pin);
-    pins.pin(enable_pin);
     this->pause_communication();
     struct Resume {
         SerialBus *const bus;
         const gpio_num_t pins[2];
         ~Resume() {
             for (const gpio_num_t pin : this->pins) {
-                gpio_reset_pin(pin); // pulled up, so the peer neither restarts nor enters its bootloader
+                gpio_set_level(pin, 1); // high until the outputs' next step, since a peer's EN may be pulled low
+                gpio_set_direction(pin, GPIO_MODE_OUTPUT);
             }
             this->bus->pause_requested = false;
         }
