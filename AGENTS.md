@@ -77,7 +77,7 @@ end
 | **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander`                                                                                                            |
 | **Motor Controllers** | `LinearMotor`, `ODriveMotor`, `ODriveWheels`, `RmdMotor`, `RmdPair`, `StepperMotor`, `RoboClawMotor`, `RoboClawWheels`, `D1Motor`, `DunkerMotor`, `DunkerWheels` |
 | **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                  |
-| **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                       |
+| **Sensors**           | `Imu`, `ImuBno085`, `TemperatureSensor`, `JbdBms`                                                                                                                |
 | **Expanders**         | `Mcp23017` (I2C GPIO expander)                                                                                                                                   |
 | **Utilities**         | `MotorAxis`, `Proxy`                                                                                                                                             |
 
