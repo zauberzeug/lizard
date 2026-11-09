@@ -38,6 +38,8 @@ REDEFINED = [
 ]
 # core.clear_telemetry() and core.telemetry(pos, state, 100)
 SHORTENED = ['__LAYOUT__v1 1.0/2 69 pos:f@70', '__LAYOUT__v1 1.1/2 69 state:i@65', '~AWkAdxkAALbznT8IAAAA+8U=@51']
+# Recorded from an ESP32 after int big = 3000000000, int neg = -5 and core.telemetry(big, neg, 500)
+BEYOND_INT32 = ['__LAYOUT__v1 1.0/2 33 big:i@70', '__LAYOUT__v1 1.1/2 33 neg:i@71', '~ATMAzAsAAABe0LL7////Zcg=@2d']
 
 
 def feed(decoder: TelemetryDecoder, lines: list, sender=None) -> list:
@@ -95,6 +97,12 @@ def test_recorded_frame_with_nine_bools():
     assert [frame.values[f'b{i}'] for i in range(9)] == [i % 3 == 0 for i in range(9)]
     assert str(frame).endswith(' neg=-1e+30 low=-2147483648 b0=true b1=false b2=false b3=true b4=false b5=false '
                                'b6=true b7=false b8=false')
+
+
+def test_recorded_int_beyond_int32_carries_its_low_32_bits():
+    frame = feed(TelemetryDecoder(), BEYOND_INT32)[-1]
+    assert frame.status == 'ok'
+    assert frame.values == {'big': -1294967296, 'neg': -5}  # 3000000000 - 2**32, not stuck at 2147483647
 
 
 def test_documented_example():
