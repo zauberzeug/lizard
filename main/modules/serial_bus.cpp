@@ -35,10 +35,10 @@ static constexpr size_t footprint(const size_t payload_length) { // in the ring 
 }
 static constexpr size_t LONGEST_MESSAGE_FOOTPRINT = footprint(SerialBus::PAYLOAD_CAPACITY - 1);
 // room in the ring buffers that telemetry never takes: frames coming in, layout lines and relayed console output going
-// out; it holds an OTB window of the longest messages, so commands, their replies and update chunks still get through
-static constexpr size_t TELEMETRY_RESERVE = otb::BUS_OTB_WINDOW * LONGEST_MESSAGE_FOOTPRINT;
-// a whole OTB window fits, also behind the room an item leaves unused when it does not fit before the buffer wraps
-static_assert(MESSAGE_BUFFER_SIZE >= (otb::BUS_OTB_WINDOW + 1) * LONGEST_MESSAGE_FOOTPRINT);
+// out; it holds an OTB window of the longest messages, so commands, their replies and update chunks still get through,
+// also behind the room an item leaves unused when it does not fit before the buffer wraps
+static constexpr size_t TELEMETRY_RESERVE = (otb::BUS_OTB_WINDOW + 1) * LONGEST_MESSAGE_FOOTPRINT;
+static_assert(MESSAGE_BUFFER_SIZE >= TELEMETRY_RESERVE + LONGEST_MESSAGE_FOOTPRINT);
 static_assert(LONGEST_MESSAGE_FOOTPRINT <= MESSAGE_BUFFER_SIZE / 2); // the largest item of a no-split ring buffer
 
 // whether a message of this length leaves the reserve free in a buffer that holds `used` bytes
@@ -206,9 +206,9 @@ void SerialBus::step() {
         this->last_stray_report_millis = millis();
         echo("warning: serial bus %s ignored %u lines that are no bus messages", this->name.c_str(), this->stray_lines.exchange(0));
     }
-    // reported once the queue has room again, e.g. when a coordinator polls after a restart
+    // reported once the queue has room again, e.g. when a coordinator polls after a restart, also for the warning itself
     if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > DROP_REPORT_INTERVAL_MS &&
-        leaves_reserve(this->outbound_bytes, 0)) {
+        leaves_reserve(this->outbound_bytes, PAYLOAD_CAPACITY - 1)) {
         this->last_output_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u lines of output (queue full)", this->name.c_str(), this->dropped_output.exchange(0));
     }

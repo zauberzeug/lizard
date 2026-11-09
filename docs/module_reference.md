@@ -274,13 +274,14 @@ Malformed frames and layout lines of passed-on or mirrored peers, e.g. no valid 
   When the peer reports `Ready.`, the coordinator forgets its layouts; the peer sends them again with the first poll.
 - Late hosts: `core.telemetry_info()` on the coordinator also asks every passed-on peer of its `make_coordinator` list for its layout lines, so a host that connects later gets them too.
 - Queues: a bus keeps the messages of each direction at their length in a queue of 4 KB, and telemetry leaves room for eight of the longest messages free (frames on the coordinator, layout lines on the peer), so commands, their replies and update chunks still get through while frames pile up, e.g. while long prints or the startup block the coordinator.
-  A message takes its length plus 11 to 14 bytes, so the room left to telemetry holds about 30 frames of 4 floats or 13 frames of 20 floats.
+  A message takes its length plus 11 to 14 bytes, and a frame is stored without its bus header and checksum, so the room left to telemetry holds 35 frames of 4 floats or 12 frames of 20 floats.
   Lost telemetry recovers by itself: the next frame replaces a lost one, and missing layout lines are requested again.
   Frames dropped this way are counted in `telemetry_dropped`.
 - Bus load: a frame of n floats or ints is a line of about 5.3·n + 25 bytes, on the bus as well as on the coordinator's console.
   A frame of 20 floats takes 132 bytes, i.e. 2.9 ms at 460800 baud; 100 such frames per second would take almost a third of the bus.
   The most one poll can carry is all eight slots with the largest frame of 45 floats, about 2.1 KB:
   46 ms at 460800 baud, but 180 ms at 115200 baud, close to the coordinator's poll timeout of 250 ms.
+  The room left to telemetry in the coordinator's queue holds six of these frames, so its loop has to take them while they arrive.
 - Console load: the coordinator prints every frame it passes on, and printing blocks its loop until the line is on the wire (see [Console load](#core)).
   So every passed-on frame adds its line's time to the coordinator's loop: a frame of 45 floats takes 5.8 ms at 460800 baud, and one of them every 10 ms already needs more than half of the loop.
   A step handles only the messages that were waiting when it started, so frames that arrive faster than the console prints them slow the loop down instead of stalling it; those that no longer fit into the inbound queue are dropped and counted in `telemetry_dropped`.
