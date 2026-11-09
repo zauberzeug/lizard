@@ -107,7 +107,9 @@ A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (
 | 2     | CRC-16/CCITT-FALSE over all preceding bytes                       |
 
 The sequence number starts at 0 when a frame is defined, also when its ID is reused after `core.clear_telemetry()`.
-The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as int32, clamped to its range.
+The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as its low 32 bits, so a value beyond the int32 range wraps around instead of sticking at the limit.
+Every reader, the host decoder included, reads them as int32.
+Send an age rather than a timestamp: a timestamp in µs like `last_heartbeat` of a CANopen motor turns negative after 36 minutes, and a host reads the time of the sender from the header anyway.
 The `bool` fields follow as bits in their order, least significant bit first, padded to a full byte.
 All multi-byte numbers, including the time and the CRC, are little-endian.
 
@@ -313,6 +315,7 @@ Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `
   Another type is an error, and so is the same name of the same peer in a second module, e.g. `"motor.position" of peer 2 is already declared by arm`.
 - Values: a declared property is read-only.
   It keeps its declared value until a frame delivers one, and its last value when the peer stops sending or restarts.
+  An `int` arrives as int32, as at every reader of the [frame format](#core), so a value beyond that range wraps around.
 - Layouts: mirroring works whether or not the coordinator passes the peer's frames on.
   A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after; the other mirrored values keep following meanwhile.
   When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field, and the check for missing names runs again.
