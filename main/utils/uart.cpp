@@ -13,6 +13,7 @@
 static std::vector<std::pair<int, EchoCallback>> echo_callbacks;
 
 static bool handed_over = false;
+static std::function<void(unsigned long)> console_drain;
 static uint32_t console_baud_rate = CONSOLE_DEFAULT_BAUD_RATE;
 static vprintf_like_t console_log_vprintf = nullptr;
 
@@ -29,7 +30,7 @@ bool console_handed_over() {
     return handed_over;
 }
 
-void hand_over_console(const long baud_rate) {
+void hand_over_console(const long baud_rate, const std::function<void(unsigned long timeout_ms)> &drain) {
     uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
     uart_get_baudrate(UART_NUM_0, &console_baud_rate);
     uart_set_baudrate(UART_NUM_0, baud_rate);
@@ -38,11 +39,19 @@ void hand_over_console(const long baud_rate) {
     uart_write_bytes(UART_NUM_0, "\n", 1);
     console_log_vprintf = esp_log_set_vprintf(drop_log);
     esp_rom_install_channel_putc(1, nullptr);
+    console_drain = drain;
     handed_over = true;
+}
+
+void drain_console(const unsigned long timeout_ms) {
+    if (handed_over && console_drain) {
+        console_drain(timeout_ms);
+    }
 }
 
 void take_back_console() {
     handed_over = false;
+    console_drain = nullptr;
     uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
     uart_set_baudrate(UART_NUM_0, console_baud_rate);
     esp_log_set_vprintf(console_log_vprintf);
