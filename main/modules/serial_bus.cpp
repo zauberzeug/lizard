@@ -40,7 +40,7 @@ static constexpr unsigned long LAYOUT_REQUEST_INTERVAL_MS = 2000;
 static constexpr unsigned long SLOT_WARNING_INTERVAL_MS = 10000;
 static constexpr const char LAYOUT_REQUEST[] = "core.telemetry_info()";
 static constexpr unsigned long DROP_REPORT_INTERVAL_MS = 1000;
-static constexpr unsigned long PAUSE_TIMEOUT_MS = 500;      // a full TX buffer at 115200 baud takes 180 ms
+static constexpr unsigned long PAUSE_TIMEOUT_MS = 1000;     // the task sends its whole queue at once, 0.75 s at 115200 baud
 static constexpr unsigned long FLASHED_PEER_BOOT_MS = 5000; // until the fresh copy reports "Ready."
 
 // Estimator tunables: an unlocked estimate takes the first sample; from then on a sample whose accuracy
@@ -297,15 +297,22 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
     this->pause_communication();
     struct Resume {
         SerialBus *const bus;
-        const gpio_num_t pins[2];
+        const gpio_num_t boot_pin;
+        const gpio_num_t enable_pin;
+        bool completed = false;
         ~Resume() {
-            for (const gpio_num_t pin : this->pins) {
-                gpio_set_level(pin, 1); // high until the outputs' next step, since a peer's EN may be pulled low
-                gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+            // both high until the outputs' next step, since a peer's EN may be pulled low
+            gpio_set_level(this->boot_pin, 1);
+            gpio_set_direction(this->boot_pin, GPIO_MODE_OUTPUT);
+            gpio_set_direction(this->enable_pin, GPIO_MODE_OUTPUT);
+            if (!this->completed) {
+                gpio_set_level(this->enable_pin, 0); // restarts a peer that a failed transfer left in its bootloader
+                delay(100);
             }
+            gpio_set_level(this->enable_pin, 1);
             this->bus->pause_requested = false;
         }
-    } resume{this, {boot_pin, enable_pin}};
+    } resume{this, boot_pin, enable_pin};
     this->serial->deinstall();
     // the replicator connects at 115200 baud and flashes at 921600, whatever the link's rate
     const bool success = ZZ::Replicator::flash_replica(this->serial->uart_num, enable_pin, boot_pin,
@@ -316,6 +323,7 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
         throw std::runtime_error("serial bus \"" + this->name + "\" could not flash peer " + std::to_string(peer_id));
     }
     this->configure_flashed_peer(peer_id, boot_pin, enable_pin);
+    resume.completed = true;
 }
 
 void SerialBus::configure_flashed_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin) {

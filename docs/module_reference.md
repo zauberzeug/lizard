@@ -328,10 +328,10 @@ p0_boot = Output(25)
 p0_boot.on()
 p0_enable = Output(14)
 p0_enable.on()
-p0.flash_peer(2, p0_boot, p0_enable)
 ```
 
 Keep both outputs on while the peer runs, and turn the boot output on first, so that the peer starts its firmware and not its bootloader.
+With these lines in the coordinator's startup script, `p0.flash_peer(2, p0_boot, p0_enable)` flashes the peer, sent once, e.g. from the command line; in the startup script it would flash the peer with every boot.
 A port expander on a Robot Brain does not run while its enable pin is not driven high.
 
 `flash_peer` copies this node's firmware onto the peer like `expander.flash()` at 921600 baud, whatever the link's rate, which erases the peer's NVS, i.e. its startup script, its bus backup and a persisted console baud rate.
@@ -341,7 +341,7 @@ The copy boots with its console at 115200 baud; the coordinator writes it the tw
 The rest of the peer's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
 `flash_peer` blocks the main loop for the whole transfer like `expander.flash()`.
 It fails if another module uses the serial, if `boot` or `enable` is no output on a pin of this node, or if the copy does not report `Ready.` within 5 s.
-It drives the two pins itself while flashing; afterwards they are high and follow their outputs again.
+It drives the two pins itself while flashing; afterwards they are high and follow their outputs again, and a peer that a failed transfer left in its bootloader is restarted through its enable pin.
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.
