@@ -624,7 +624,7 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     const size_t prefix_len = sizeof(ECHO_CMD) - 1;
     if (std::strncmp(message.payload, ECHO_CMD, prefix_len) == 0) {
         const char *text = message.payload + prefix_len; // process_uart terminated the payload
-        echo("bus[%u]: %s", message.sender, text);
+        echo("%s[%u]: %s", this->name.c_str(), message.sender, text);
         if (std::strcmp(text, "Ready.") == 0) {
             this->peer_layouts.erase(message.sender); // the peer booted and announces its layouts with the first poll
             for (BusTelemetry *const listener : this->telemetry_listeners) {
@@ -759,7 +759,7 @@ bool SerialBus::store_telemetry_frame(const uint8_t frame_id, const char *line, 
         if (!this->slot_warning_sent || millis_since(this->last_slot_warning_millis) > SLOT_WARNING_INTERVAL_MS) {
             this->slot_warning_sent = true;
             this->last_slot_warning_millis = millis();
-            this->echo_target_id = this->coordinator_id; // relayed by handle_echo, printed as bus[<id>]: there
+            this->echo_target_id = this->coordinator_id; // relayed by handle_echo, printed as <bus>[<id>]: there
             echo("warning: serial bus %s has no slot for telemetry frame %u (at most %u frames)", this->name.c_str(),
                  frame_id, static_cast<unsigned>(FRAME_SLOTS));
             this->echo_target_id = 0;
@@ -829,7 +829,7 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
         }
     }
     if (printed) {
-        echo("bus[%u]: %s", message.sender, message.payload);
+        echo("%s[%u]: %s", this->name.c_str(), message.sender, message.payload);
     }
 
     const auto frame = layout.frames.find(body[0]);
@@ -858,7 +858,7 @@ void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
         return;
     }
     if (passed) {
-        echo("bus[%u]: %s", message.sender, message.payload);
+        echo("%s[%u]: %s", this->name.c_str(), message.sender, message.payload);
     }
 
     PeerLayout &layout = this->peer_layouts[message.sender];
