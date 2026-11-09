@@ -19,20 +19,38 @@
 #include <stdexcept>
 
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
-static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
-static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
-static constexpr size_t OFFSET_QUEUE_LENGTH = 8;            // full-state snapshots; a full queue only delays one
-static_assert(OUTGOING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update
-static_assert(INCOMING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled step() must not drop an OTB chunk
+static constexpr size_t OFFSET_QUEUE_LENGTH = 8;    // full-state snapshots; a full queue only delays one
+static constexpr size_t MESSAGE_BUFFER_SIZE = 4096; // per direction; a message takes its length plus 11 to 14 bytes
+static constexpr size_t RINGBUF_ITEM_HEADER = 8;
+// a message in a ring buffer: this header, the payload and its terminating zero
+struct MessageHeader {
+    uint8_t sender;
+    uint8_t receiver;
+};
+static constexpr size_t message_size(const size_t payload_length) {
+    return sizeof(MessageHeader) + payload_length + 1;
+}
+static constexpr size_t footprint(const size_t payload_length) { // in the ring buffer, aligned and with its header
+    return (message_size(payload_length) + 3) / 4 * 4 + RINGBUF_ITEM_HEADER;
+}
+static constexpr size_t LONGEST_MESSAGE_FOOTPRINT = footprint(SerialBus::PAYLOAD_CAPACITY - 1);
+// room in the ring buffers that telemetry never takes: frames coming in, layout lines and relayed console output going
+// out; it holds an OTB window of the longest messages, so commands, their replies and update chunks still get through
+static constexpr size_t TELEMETRY_RESERVE = otb::BUS_OTB_WINDOW * LONGEST_MESSAGE_FOOTPRINT;
+// a whole OTB window fits, also behind the room an item leaves unused when it does not fit before the buffer wraps
+static_assert(MESSAGE_BUFFER_SIZE >= (otb::BUS_OTB_WINDOW + 1) * LONGEST_MESSAGE_FOOTPRINT);
+static_assert(LONGEST_MESSAGE_FOOTPRINT <= MESSAGE_BUFFER_SIZE / 2); // the largest item of a no-split ring buffer
+
+// whether a message of this length leaves the reserve free in a buffer that holds `used` bytes
+static bool leaves_reserve(const size_t used, const size_t payload_length) {
+    return used + footprint(payload_length) + TELEMETRY_RESERVE <= MESSAGE_BUFFER_SIZE;
+}
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static_assert(otb::BUS_OTB_CHUNK_LINE_SIZE < SerialBus::PAYLOAD_CAPACITY, "OTB chunk lines must fit the bus payload");
 static constexpr const char DONE_CMD[] = "__DONE__";
 static constexpr size_t MAX_STAMP_DIGITS = 18; // beyond this strtoll saturates and skews the offset
 static constexpr size_t DONE_STAMP_FIELDS = 3; // T3, T3-T2, sequence number of the answered POLL
-// places in the bus queues that telemetry never takes: frames coming in, layout lines going out; relayed console output
-// leaves them free as well
-static constexpr size_t TELEMETRY_QUEUE_RESERVE = otb::BUS_OTB_WINDOW;
 static constexpr unsigned long LAYOUT_REQUEST_INTERVAL_MS = 2000;
 static constexpr unsigned long SLOT_WARNING_INTERVAL_MS = 10000;
 static constexpr const char LAYOUT_REQUEST[] = "core.telemetry_info()";
@@ -97,16 +115,20 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 
     this->config_queue = xQueueCreate(1, sizeof(Config));
     this->offset_queue = xQueueCreate(OFFSET_QUEUE_LENGTH, sizeof(OffsetUpdate));
-    this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage));
-    this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage));
-    const bool queues_created = this->config_queue && this->offset_queue && this->outbound_queue && this->inbound_queue;
+    this->outbound_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
+    this->inbound_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
+    const bool queues_created = this->config_queue && this->offset_queue && this->outbound_buffer && this->inbound_buffer;
     if (!queues_created ||
         xTaskCreatePinnedToCore(
             SerialBus::communication_loop, "serial_bus_comm", 4096, this, 5, &this->communication_task, 1) != pdPASS) {
-        for (const QueueHandle_t queue :
-             {this->config_queue, this->offset_queue, this->outbound_queue, this->inbound_queue}) {
+        for (const QueueHandle_t queue : {this->config_queue, this->offset_queue}) {
             if (queue) {
                 vQueueDelete(queue);
+            }
+        }
+        for (const RingbufHandle_t buffer : {this->outbound_buffer, this->inbound_buffer}) {
+            if (buffer) {
+                vRingbufferDelete(buffer);
             }
         }
         unregister_echo_callback(this->echo_callback_handle);
@@ -141,8 +163,11 @@ SerialBus::~SerialBus() {
     if (this->serial->on_console) {
         take_back_console();
     }
-    for (const QueueHandle_t queue : {this->config_queue, this->offset_queue, this->outbound_queue, this->inbound_queue}) {
+    for (const QueueHandle_t queue : {this->config_queue, this->offset_queue}) {
         vQueueDelete(queue);
+    }
+    for (const RingbufHandle_t buffer : {this->outbound_buffer, this->inbound_buffer}) {
+        vRingbufferDelete(buffer);
     }
     delete[] this->frame_slots.load();
 }
@@ -155,8 +180,9 @@ void SerialBus::step() {
 
     // only what is waiting now: messages that keep arriving while the console blocks must not hold up the main loop
     IncomingMessage message;
-    for (UBaseType_t waiting = uxQueueMessagesWaiting(this->inbound_queue);
-         waiting > 0 && xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE; --waiting) {
+    UBaseType_t waiting = 0;
+    vRingbufferGetInfo(this->inbound_buffer, nullptr, nullptr, nullptr, nullptr, &waiting);
+    for (; waiting > 0 && this->pop_incoming(message); --waiting) {
         this->handle_incoming_message(message);
     }
 
@@ -178,7 +204,7 @@ void SerialBus::step() {
     }
     // reported once the queue has room again, e.g. when a coordinator polls after a restart
     if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > DROP_REPORT_INTERVAL_MS &&
-        uxQueueSpacesAvailable(this->outbound_queue) > TELEMETRY_QUEUE_RESERVE) {
+        leaves_reserve(this->outbound_bytes, 0)) {
         this->last_output_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u lines of output (queue full)", this->name.c_str(), this->dropped_output.exchange(0));
     }
@@ -460,9 +486,9 @@ void SerialBus::process_uart() {
             }
         }
 
-        // telemetry frames never take the last slots of the inbound queue, so that a flood of them, e.g. while the main
+        // telemetry frames never take the reserve of the inbound buffer, so that a flood of them, e.g. while the main
         // task runs the startup, cannot crowd out commands, echoes and OTB chunks
-        if (message.payload[0] == telemetry::FRAME_PREFIX && uxQueueSpacesAvailable(this->inbound_queue) <= TELEMETRY_QUEUE_RESERVE) {
+        if (message.payload[0] == telemetry::FRAME_PREFIX && !leaves_reserve(this->inbound_bytes, message.length)) {
             this->dropped_frames++;
             continue;
         }
@@ -504,10 +530,35 @@ unsigned *SerialBus::find_missed_polls(const uint8_t peer_id) {
 }
 
 void SerialBus::push_incoming(const IncomingMessage &message) {
-    // a warning could not pass the full queue either, so count the drop and let step() report it
-    if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
+    char item[message_size(PAYLOAD_CAPACITY - 1)];
+    const MessageHeader header{message.sender, message.receiver};
+    const size_t length = std::min(message.length, PAYLOAD_CAPACITY - 1); // e.g. a truncated print_to_incoming_queue()
+    std::memcpy(item, &header, sizeof(header));
+    std::memcpy(item + sizeof(header), message.payload, length);
+    item[sizeof(header) + length] = '\0';
+    // a warning could not pass the full buffer either, so count the drop and let step() report it
+    this->inbound_bytes += footprint(length); // before the main task can take the message and subtract it
+    if (xRingbufferSend(this->inbound_buffer, item, message_size(length), 0) != pdTRUE) {
+        this->inbound_bytes -= footprint(length);
         this->dropped_inbound++;
     }
+}
+
+bool SerialBus::pop_incoming(IncomingMessage &message) {
+    size_t size = 0;
+    char *const item = static_cast<char *>(xRingbufferReceive(this->inbound_buffer, &size, 0));
+    if (!item) {
+        return false;
+    }
+    MessageHeader header;
+    std::memcpy(&header, item, sizeof(header));
+    message.sender = header.sender;
+    message.receiver = header.receiver;
+    message.length = size - message_size(0);
+    std::memcpy(message.payload, item + sizeof(header), message.length + 1);
+    vRingbufferReturnItem(this->inbound_buffer, item);
+    this->inbound_bytes -= footprint(message.length);
+    return true;
 }
 
 void SerialBus::send_poll() {
@@ -745,20 +796,41 @@ void SerialBus::enqueue_outgoing_message(const uint8_t receiver, const char *pay
 }
 
 bool SerialBus::queue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, const TickType_t wait) {
-    OutgoingMessage message{receiver, length, {}};
-    memcpy(message.payload, payload, length);
-    message.payload[length] = '\0';
-    return xQueueSend(this->outbound_queue, &message, wait) == pdTRUE;
+    if (length >= PAYLOAD_CAPACITY) {
+        return false;
+    }
+    char item[message_size(PAYLOAD_CAPACITY - 1)];
+    const MessageHeader header{this->node_id, receiver};
+    std::memcpy(item, &header, sizeof(header));
+    std::memcpy(item + sizeof(header), payload, length);
+    item[sizeof(header) + length] = '\0';
+    this->outbound_bytes += footprint(length); // before the communication task can take the message and subtract it
+    if (xRingbufferSend(this->outbound_buffer, item, message_size(length), wait) != pdTRUE) {
+        this->outbound_bytes -= footprint(length);
+        return false;
+    }
+    return true;
 }
 
 bool SerialBus::send_outgoing_queue() {
     bool sent_any = false;
-    OutgoingMessage message;
-    while (xQueueReceive(this->outbound_queue, &message, 0) == pdTRUE) {
+    size_t size = 0;
+    while (char *const item = static_cast<char *>(xRingbufferReceive(this->outbound_buffer, &size, 0))) {
+        struct Return {
+            SerialBus *bus;
+            char *item;
+            size_t size;
+            ~Return() {
+                vRingbufferReturnItem(this->bus->outbound_buffer, this->item);
+                this->bus->outbound_bytes -= footprint(this->size - message_size(0));
+            }
+        } returned{this, item, size}; // also when send_message() throws
+        MessageHeader header;
+        std::memcpy(&header, item, sizeof(header));
         // receiver 0 is the node that polls this one, e.g. for output queued before the first poll
-        const uint8_t receiver = message.receiver ? message.receiver : this->requesting_node;
+        const uint8_t receiver = header.receiver ? header.receiver : this->requesting_node;
         if (receiver) {
-            this->send_message(receiver, message.payload, message.length);
+            this->send_message(receiver, item + sizeof(header), size - message_size(0));
             sent_any = true;
         }
     }
@@ -780,8 +852,9 @@ void SerialBus::print_to_incoming_queue(const char *format, ...) {
     IncomingMessage message{this->node_id, this->node_id, 0, {}};
     va_list args;
     va_start(args, format);
-    message.length = std::vsnprintf(message.payload, PAYLOAD_CAPACITY, format, args);
+    const int length = std::vsnprintf(message.payload, PAYLOAD_CAPACITY, format, args);
     va_end(args);
+    message.length = std::clamp(length, 0, static_cast<int>(PAYLOAD_CAPACITY) - 1);
     this->push_incoming(message);
 }
 
@@ -817,7 +890,8 @@ void SerialBus::relay_console_line(const char *line) {
                             static_cast<int>(sizeof(payload) - sizeof(ECHO_CMD)));
     }
     // the reserve stays free for command replies and OTB acks
-    if (len < 0 || len >= static_cast<int>(sizeof(payload)) || uxQueueSpacesAvailable(this->outbound_queue) <= TELEMETRY_QUEUE_RESERVE ||
+    if (len < 0 || len >= static_cast<int>(sizeof(payload)) ||
+        !leaves_reserve(this->outbound_bytes, len) ||
         !this->queue_outgoing_message(this->coordinator_id, payload, len, 0)) {
         this->dropped_output++;
     }
@@ -825,7 +899,7 @@ void SerialBus::relay_console_line(const char *line) {
 
 bool SerialBus::send_telemetry_layout(const char *line, const size_t length) {
     // the reserve stays free for commands, echoes and OTB acks
-    return uxQueueSpacesAvailable(this->outbound_queue) > TELEMETRY_QUEUE_RESERVE &&
+    return leaves_reserve(this->outbound_bytes, length) &&
            this->queue_outgoing_message(this->coordinator_id, line, length, 0);
 }
 
