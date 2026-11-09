@@ -617,6 +617,9 @@ void process_uart() {
             process_uart_line(input + start, end - start);
             start = end;
         }
+        if (console_handed_over()) {
+            return; // a line created a serial bus on the console, which reads UART0 from now on
+        }
     }
 }
 

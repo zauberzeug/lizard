@@ -118,9 +118,20 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->outbound_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
     this->inbound_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
     const bool queues_created = this->config_queue && this->offset_queue && this->outbound_buffer && this->inbound_buffer;
+    if (queues_created && serial->on_console) {
+        // from now on, only this bus reads and writes UART0, and everything this node prints goes to its coordinator,
+        // including what the boot printed before; before the task starts, so that it reads nothing from before
+        hand_over_console(serial->baud_rate, [this](unsigned long timeout_ms) { this->drain_outbound(timeout_ms); });
+        for (const std::string &line : take_boot_lines()) {
+            this->relay_console_line(line.c_str());
+        }
+    }
     if (!queues_created ||
         xTaskCreatePinnedToCore(
             SerialBus::communication_loop, "serial_bus_comm", 4096, this, 5, &this->communication_task, 1) != pdPASS) {
+        if (queues_created && serial->on_console) {
+            take_back_console();
+        }
         for (const QueueHandle_t queue : {this->config_queue, this->offset_queue}) {
             if (queue) {
                 vQueueDelete(queue);
@@ -135,14 +146,7 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
         throw std::runtime_error(queues_created ? "failed to create serial bus communication task"
                                                 : "failed to create serial bus queues");
     }
-    if (serial->on_console) {
-        // from now on, only this bus reads and writes UART0, and everything this node prints goes to its coordinator,
-        // including what the boot printed before
-        hand_over_console(serial->baud_rate);
-        for (const std::string &line : take_boot_lines()) {
-            this->relay_console_line(line.c_str());
-        }
-    } else {
+    if (!serial->on_console) {
         // last: a claim is never released, so it must not outlive a constructor that throws
         this->serial->claim(name);
     }
@@ -236,6 +240,9 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         const std::string payload = format_args(arguments[1]->evaluate_string(), arguments, 2);
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "make_coordinator") {
+        if (this->serial->on_console) {
+            throw std::runtime_error("serial bus \"" + this->name + "\" cannot coordinate over this node's console");
+        }
         if (arguments.empty()) {
             throw std::runtime_error("make_coordinator expects at least one peer ID");
         }
@@ -812,6 +819,16 @@ bool SerialBus::queue_outgoing_message(const uint8_t receiver, const char *paylo
     return true;
 }
 
+void SerialBus::drain_outbound(const unsigned long timeout_ms) {
+    // the communication task takes messages out of the buffer only while it answers a poll, which then ends
+    const unsigned long start = millis();
+    while ((this->outbound_bytes > 0 || this->requesting_node != 0) &&
+           millis_since(start) < timeout_ms) {
+        delay(5);
+    }
+    uart_wait_tx_done(this->serial->uart_num, pdMS_TO_TICKS(100));
+}
+
 bool SerialBus::send_outgoing_queue() {
     bool sent_any = false;
     size_t size = 0;
@@ -828,7 +845,7 @@ bool SerialBus::send_outgoing_queue() {
         MessageHeader header;
         std::memcpy(&header, item, sizeof(header));
         // receiver 0 is the node that polls this one, e.g. for output queued before the first poll
-        const uint8_t receiver = header.receiver ? header.receiver : this->requesting_node;
+        const uint8_t receiver = header.receiver ? header.receiver : this->requesting_node.load();
         if (receiver) {
             this->send_message(receiver, item + sizeof(header), size - message_size(0));
             sent_any = true;
