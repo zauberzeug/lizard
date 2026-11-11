@@ -1,0 +1,31 @@
+# On the ESP32, keep the functions that every parse runs through in IRAM, so parsing a line does not wait for flash cache refills.
+if IDF_TARGET_ESP32 = y:
+    [mapping:parser]
+    archive: libmain.a
+    entries:
+        parser:owl_tree_create_from_string (noflash)
+        parser:owl_tree_create_with_options (noflash)
+        parser:owl_tree_create_empty (noflash)
+        parser:parse_string (noflash)
+        parser:owl_default_tokenizer_advance (noflash)
+        parser:read_keyword_token (noflash)
+        parser:fill_run_states (noflash)
+        parser:build_parse_tree (noflash)
+        parser:action_table_lookup (noflash)
+        parser:apply_actions (noflash)
+        parser:construct_begin (noflash)
+        parser:construct_action_apply (noflash)
+        parser:construct_node_alloc (noflash)
+        parser:construct_expression_alloc (noflash)
+        parser:construct_expression_should_reduce (noflash)
+        parser:construct_expression_reduce (noflash)
+        parser:construct_finish (noflash)
+        parser:construct_abandon (noflash)
+        parser:construct_node_free (noflash)
+        parser:construct_expression_free (noflash)
+        parser:construct_node_list_free (noflash)
+        parser:finish_node (noflash)
+        parser:finish_token (noflash)
+        parser:rule_lookup (noflash)
+        parser:fixity_associativity_precedence_lookup (noflash)
+        parser:left_right_operand_slots_lookup (noflash)
