@@ -15,7 +15,7 @@ HEADER = struct.Struct('<BBBI')  # frame ID, layout ID, sequence number, millis
 CRC_SIZE = 2
 LAYOUT_LINE = re.compile(r'__LAYOUT__(v\d+)(.*)')
 LAYOUT_FIELD = re.compile(r' (\d+)\.(\d+)/(\d+) ([0-9a-f]{2}) (\S+):([fi?])')
-BUS_LINE = re.compile(r'bus\[(\d+)\]: (.*)')  # a line that a serial bus coordinator passes on from peer N
+BUS_LINE = re.compile(r'([A-Za-z_]\w*\[\d+\]): (.*)')  # a line that serial bus <name> passes on from its peer N
 
 Value = Union[float, int, bool]
 Field = Tuple[str, str]  # name and type
@@ -68,7 +68,7 @@ class Frame:
 class TelemetryDecoder:
     """Turns console lines into Text, Layout and Frame results and keeps the layouts of each sender.
 
-    The sender is the device on the console, or serial bus peer N for a line starting with "bus[N]: ".
+    The sender is the device on the console, or "<bus>[N]" for a line that serial bus <bus> passes on from its peer N.
     """
 
     def __init__(self) -> None:
@@ -78,12 +78,12 @@ class TelemetryDecoder:
     def feed(self, line: str, sender: Hashable = None) -> Union[Text, Layout, Frame]:
         """Classify a line given without line end and checksum.
 
-        The layout lines and frames of a line "bus[N]: ..." come from peer N,
-        so their sender is N or, if a sender is given, (sender, N).
+        The layout lines and frames of a line "<bus>[N]: ..." come from peer N of that bus,
+        so their sender is "<bus>[N]" or, if a sender is given, (sender, "<bus>[N]").
         """
         relayed = BUS_LINE.fullmatch(line)
         if relayed:
-            peer = int(relayed.group(1))
+            peer = relayed.group(1)
             result = self._telemetry(relayed.group(2), peer if sender is None else (sender, peer))
         else:
             result = self._telemetry(line, sender)

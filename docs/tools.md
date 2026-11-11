@@ -98,6 +98,7 @@ for line in lines:
 The package is not installable, so a script outside the Lizard folder needs that folder on its `PYTHONPATH`.
 
 `feed` returns a `Text`, a `Layout` or a `Frame` and keeps the layouts of each sender.
+The sender is the device on the console or, for a line that a [serial bus](module_reference.md#serial-bus) coordinator passes on as `<bus>[<id>]: ...`, the string `"<bus>[<id>]"`, which the monitor prints in front of the frame.
 `str()` of a frame gives the line the monitor shows, with floats rounded to the seven significant digits of a float32.
 A frame that cannot be decoded has `values = None` and one of these statuses:
 
