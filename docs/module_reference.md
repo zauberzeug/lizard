@@ -55,6 +55,7 @@ It is automatically created right after the boot sequence.
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
+An empty format `""` stops the core line until a new format is set.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 

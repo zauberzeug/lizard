@@ -267,7 +267,7 @@ std::string Core::get_output() const {
         }
         return "";
     }
-    return std::string(output_buffer);
+    return std::string(output_buffer, pos);
 }
 
 void Core::keep_alive() {
