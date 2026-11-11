@@ -32,6 +32,7 @@ public:
 
     Serial(const std::string name,
            const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num);
+    static bool is_console(const int rx_pin, const int tx_pin, const int uart_num);
     ~Serial();
     void initialize_uart() const;
     void enable_line_detection() const;

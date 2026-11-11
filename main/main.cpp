@@ -640,6 +640,10 @@ void app_main() {
     nvs_flash_init();
     uint32_t baud_rate = CONSOLE_DEFAULT_BAUD_RATE;
     Storage::get_baudrate(baud_rate);
+    // a node whose console is a bus link prints at the link's rate from here on, so its coordinator can read
+    // what it prints before its bus takes over the console
+    const uint32_t own_baud_rate = baud_rate;
+    const bool at_bus_rate = bus_backup::get_console_baud_rate(baud_rate);
 
     const uart_config_t uart_config = {
         .baud_rate = static_cast<int>(baud_rate),
@@ -655,6 +659,10 @@ void app_main() {
     ESP_ERROR_CHECK(install_uart_driver_on_core1(UART_NUM_0, RX_RING_SIZE, 0));
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
+    if (at_bus_rate) {
+        // the coordinator read the boot log as garbage; a line end keeps it out of the first line printed here
+        uart_write_bytes(UART_NUM_0, "\n", 1);
+    }
 
     try {
         resources::reserve_boot_resources();
@@ -677,9 +685,13 @@ void app_main() {
 
     bus_backup::save_if_present();
     bus_backup::restore_if_needed();
-    take_boot_lines(); // ends their record, also when no serial bus took over the console
 
     if (!console_handed_over()) {
+        if (at_bus_rate) {
+            // no bus took the console over, e.g. the startup script moved it to other pins
+            uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
+            uart_set_baudrate(UART_NUM_0, own_baud_rate);
+        }
         printf("\nReady.\n"); // a serial bus that took over the console reports "Ready." with its first answer
     }
 

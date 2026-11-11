@@ -16,10 +16,11 @@ jobs:
       - uses: pre-commit/action@v3.0.1
 
   pytest:
-    runs-on: ubuntu-latest
+    # 3.8 is the system Python of L4T 35 Robot Brains, where monitor.py and espresso.py also run;
+    # setup-python has no 3.8 build for ubuntu-latest from Ubuntu 26.04 on, so the job stays on 24.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        # 3.8 is the system Python of L4T 35 Robot Brains, where monitor.py and espresso.py also run
         python-version: ["3.8", "3.x"]
     steps:
       - uses: actions/checkout@v7

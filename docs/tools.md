@@ -98,6 +98,7 @@ for line in lines:
 The package is not installable, so a script outside the Lizard folder needs that folder on its `PYTHONPATH`.
 
 `feed` returns a `Text`, a `Layout` or a `Frame` and keeps the layouts of each sender.
+The sender is the device on the console or, for a line that a [serial bus](module_reference.md#serial-bus) coordinator passes on as `<bus>[<id>]: ...`, the string `"<bus>[<id>]"`, which the monitor prints in front of the frame.
 `str()` of a frame gives the line the monitor shows, with floats rounded to the seven significant digits of a float32.
 A frame that cannot be decoded has `values = None` and one of these statuses:
 
@@ -250,6 +251,18 @@ e.g. `idf.py -DLIZARD_PROJECT_NAME=lizard-zz build`.
 The name is reported by `core.version()` and also names the build artifacts (`build/lizard-zz.bin`, `build/lizard-zz.elf`);
 `espresso.py` picks them up automatically via `build/project_description.json`,
 other tools like `otb_update.py` or `addr2line` need the renamed paths passed explicitly.
+
+The ESP32 build reads its flash at 80 MHz, which Espressif's modules like the ESP32-WROVER-E and the ESP32-WROOM-32E are rated for.
+The frequency travels with the app: the ESP32 sets its flash clock at startup from the image header of the app,
+so an update over OTA, OTB or `expander.flash()` moves a device to 80 MHz without a new bootloader.
+A board whose flash or layout cannot keep up crashes or does not boot at this speed,
+and only flashing a 40 MHz build over serial brings it back.
+For such a board, replace the two 80 MHz lines in `sdkconfig.defaults.esp32`
+with `CONFIG_ESPTOOLPY_FLASHFREQ_40M=y` and `CONFIG_ESPTOOLPY_FLASHFREQ="40m"`,
+or add them to `sdkconfig.defaults.secret`, which `build.py` loads after the base defaults,
+and build with `python build.py esp32 --clean`.
+The clean build is needed because ESP-IDF applies these defaults only when it creates a new `sdkconfig`;
+an existing `sdkconfig` keeps the flash frequency it was created with.
 
 ### Backtrace
 

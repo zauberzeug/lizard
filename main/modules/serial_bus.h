@@ -125,11 +125,11 @@ private:
     std::atomic<unsigned> dropped_output{0}; // console lines of this node that found no place in the outbound queue
     unsigned long last_output_drop_report_millis = 0;
     std::atomic<unsigned> ignored_lines{0}; // received lines that are no bus messages and are not printed
-    std::atomic<unsigned> stray_lines{0};   // those of them that are reported
-    unsigned long last_stray_report_millis = 0;
     Variable_ptr ignored_lines_property;
 
     // --- owned by the main task --------------------------------------------
+    unsigned unreported_ignored_lines = 0;
+    unsigned long last_ignored_report_millis = 0;
     Config config{};
     std::vector<OffsetProperties> offset_properties;
     void send_config();

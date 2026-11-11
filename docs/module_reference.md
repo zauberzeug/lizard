@@ -56,6 +56,7 @@ It is automatically created right after the boot sequence.
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
+An empty format `""` stops the core line until a new format is set.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
@@ -206,16 +207,20 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s             |
 | `bus.flash_peer(id, boot, enable)`  | Flash peer `id` through its boot and enable outputs with this node's firmware (see [Flashing a Peer](#serial-bus))                          | `int`, 2x `Output` |
 
+The coordinator prints the lines that reach it from its peers, e.g. `Ready.` and the output of commands sent with `bus.send()`, with the coordinator's name for the bus and the peer's ID in front, e.g. `bus[2]: Ready.` for peer 2 of a bus that the coordinator calls `bus`.
+So two buses of a node, e.g. `plexus` and `p0`, keep their peers apart, also when both have a peer 2.
+
 **Polling:**
 The coordinator polls its peers in turn, and a peer answers with the messages it has queued.
 A poll that its peer does not answer within 250 ms times out with `warning: serial bus <name> poll to <id> timed out`.
 The warning comes once until the peer answers again, e.g. after its restart, and then the coordinator prints `serial bus <name>: peer <id> answers again after <n> timed out polls`.
 
 **Other Lines:**
-Lines on the link that are no bus messages, e.g. the boot output or a panic of a peer, are not processed.
-A coordinator with a single peer prints those that are readable text as lines of that peer, e.g. `bus[2]: Guru Meditation Error: ...`.
-All others are counted in `ignored_lines` and reported with `warning: serial bus <name> ignored <n> lines that are no bus messages`, at most once per second.
-Lines with a valid Lizard checksum are counted without the warning, since they are what a peer printed before its bus took over its console, which relays them again (see [Console as Link](#serial-bus)).
+Lines on the link that are no bus messages are not processed, e.g. the boot output or a panic of a peer, or what a peer prints whose bus has not taken over its console.
+A coordinator prints those that are readable text, without their Lizard checksum if they have one.
+With a single peer it prints them as lines of that peer, e.g. `bus[2]: Guru Meditation Error: ...`, and with several peers, any of which may have sent the line, with only its name for the bus in front, e.g. `bus: Guru Meditation Error: ...`.
+All others, and all such lines on a peer, are counted in `ignored_lines` and reported with `warning: serial bus <name> ignored <n> lines that are no bus messages`, at most once per second.
+The ROM bootloader and the boot log of a peer always print at 115200 baud, whatever the rate of the link; on a link with another rate they arrive as an unreadable line, so a restart of the peer is followed by one warning about an ignored line.
 
 **Time Synchronization:**
 Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle.
@@ -249,7 +254,7 @@ A frame that is replaced before it was sent does not count in the sequence numbe
 A peer has eight slots; a frame beyond them is not sent, and the peer warns on its own console and through the coordinator, at most every 10 s.
 
 The coordinator checks payloads starting with `~` or `__LAYOUT__` and never processes them as Lizard code.
-`bus.pass_telemetry()` passes the frames and layout lines of all peers on to the console with `bus[<id>]: ` in front, `bus.pass_telemetry(2)` only those of peer 2:
+`bus.pass_telemetry()` passes the frames and layout lines of all peers on to the console with the coordinator's name for the bus and the peer's ID in front, here `bus[2]: `, and `bus.pass_telemetry(2)` only those of peer 2:
 
 ```
 bus = SerialBus(serial, 1)
@@ -306,16 +311,19 @@ bus = SerialBus(serial, 2)
 
 A serial on UART0 with the console's RX and TX pins (3 and 1 on an ESP32, 44 and 43 on an ESP32-S3) leaves the console alone until a serial bus is created on it.
 From then on, only the bus reads and writes UART0, at the serial's baud rate, and the node runs no console lines, only commands from the bus.
-Everything the node prints goes to the node that polls it, which prints it as `bus[<id>]: ...`.
-That includes replies, warnings, the output of unmuted modules and up to 16 lines that the boot printed before the bus took over the console.
+Everything the node prints goes to the node that polls it, which prints it as a line of this peer, e.g. `bus[2]: ...`.
+That includes replies, warnings and the output of unmuted modules.
 Lines printed before the first poll wait in the bus queue; when only its last eight places are free, further lines are dropped and a warning with their number follows.
-The node does not print `Ready.` on its console; the coordinator prints `bus[<id>]: Ready.` with the first answer.
+The node does not print `Ready.` on its console; the coordinator prints it with the first answer, e.g. `bus[2]: Ready.`.
 Telemetry frames and their layout lines wait for the first poll.
 While the bus has the console, ESP-IDF log and ROM output is dropped, but a panic still reaches the wire (see [Other Lines](#serial-bus)).
 Put the two lines at the top of the startup script, so that the output of the lines below reaches the coordinator, including an error that stops the script.
-A startup script that keeps failing is skipped after two failed boots (see [Startup Script](getting_started.md#startup-script)); the bus backup then takes over the console again, and the boot lines tell the coordinator why.
+What the node prints before the bus takes over the console still goes out on the console itself, e.g. an error in a line above the two.
+While the bus backup holds a bus on the console pins, i.e. from the boot after the first one with that bus, the console starts at the bus's baud rate instead of its own, so that the coordinator can read these lines and prints them (see [Other Lines](#serial-bus)).
+If no bus takes the console over during such a boot, the console returns to its own baud rate before it prints `Ready.`.
+A startup script that keeps failing is skipped after two failed boots (see [Startup Script](getting_started.md#startup-script)); the bus backup then takes over the console again, and the lines the node printed before tell the coordinator why.
 The console stays silent on USB as long as the startup script or the bus backup creates the bus, also after `./espresso.py flash`, which keeps both.
-To get it back, send the node `!-`, `!.` and `core.forget_serial_bus()` over the bus and restart it, or erase its flash with `./espresso.py erase` and flash it again.
+To get it back, send the node `!-`, `!.` and `core.forget_serial_bus()` over the bus and restart it, or erase its flash with `./espresso.py erase` and flash it again; it then runs at its own baud rate again (see [`core.set_baudrate()`](#core)).
 
 **Flashing a Peer:**
 A coordinator can flash a peer that is wired to it by the bus's RX and TX pins and by two outputs to the peer's GPIO0 and EN, e.g. a port expander:
