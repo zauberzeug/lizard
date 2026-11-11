@@ -136,7 +136,7 @@ private:
     void drain_outbound(const unsigned long timeout_ms);
     void pause_communication();
     void flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin);
-    void configure_flashed_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin);
+    void configure_flashed_peer(const uint8_t peer_id);
     void rebuild_offset_properties();
     void apply_offset_update(const OffsetUpdate &update);
 

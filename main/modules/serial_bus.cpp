@@ -291,6 +291,12 @@ void SerialBus::pause_communication() {
     }
 }
 
+static void restart_through_enable_pin(const gpio_num_t enable_pin) {
+    gpio_set_level(enable_pin, 0);
+    delay(100);
+    gpio_set_level(enable_pin, 1);
+}
+
 void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin) {
     if (this->serial->on_console) {
         throw std::runtime_error("serial bus \"" + this->name + "\" cannot flash a peer over this node's console");
@@ -302,16 +308,18 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
         const gpio_num_t boot_pin;
         const gpio_num_t enable_pin;
         bool completed = false;
-        ~Resume() {
-            // both high until the outputs' next step, since a peer's EN may be pulled low
-            gpio_set_level(this->boot_pin, 1);
-            gpio_set_direction(this->boot_pin, GPIO_MODE_OUTPUT);
-            gpio_set_direction(this->enable_pin, GPIO_MODE_OUTPUT);
-            if (!this->completed) {
-                gpio_set_level(this->enable_pin, 0); // restarts a peer that a failed transfer left in its bootloader
-                delay(100);
+        // both high until the outputs' next step, since a peer's EN may be pulled low
+        void drive_pins_high() const {
+            for (const gpio_num_t pin : {this->boot_pin, this->enable_pin}) {
+                gpio_set_level(pin, 1);
+                gpio_set_direction(pin, GPIO_MODE_OUTPUT);
             }
-            gpio_set_level(this->enable_pin, 1);
+        }
+        ~Resume() {
+            this->drive_pins_high();
+            if (!this->completed) {
+                restart_through_enable_pin(this->enable_pin); // a failed transfer may have left the peer in its bootloader
+            }
             this->bus->pause_requested = false;
         }
     } resume{this, boot_pin, enable_pin};
@@ -324,23 +332,18 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
     if (!success) {
         throw std::runtime_error("serial bus \"" + this->name + "\" could not flash peer " + std::to_string(peer_id));
     }
-    this->configure_flashed_peer(peer_id, boot_pin, enable_pin);
+    resume.drive_pins_high();
+    restart_through_enable_pin(enable_pin); // boots the copy
+    this->configure_flashed_peer(peer_id);
     resume.completed = true;
 }
 
-void SerialBus::configure_flashed_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin) {
+void SerialBus::configure_flashed_peer(const uint8_t peer_id) {
     // The copy boots with an empty NVS, i.e. with its console at the default baud rate and without a startup script.
     // Through that console it gets a startup script with a serial bus on the console, which takes the console over
     // after a restart and lands in the peer's bus backup.
     const uart_port_t uart_num = this->serial->uart_num;
     uart_set_baudrate(uart_num, CONSOLE_DEFAULT_BAUD_RATE);
-    for (const gpio_num_t pin : {boot_pin, enable_pin}) {
-        gpio_set_level(pin, 1);
-        gpio_set_direction(pin, GPIO_MODE_OUTPUT);
-    }
-    gpio_set_level(enable_pin, 0);
-    delay(100);
-    gpio_set_level(enable_pin, 1);
     this->serial->flush();
     bool ready = false;
     const unsigned long start = millis();
