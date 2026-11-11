@@ -137,6 +137,8 @@ python build.py --clean
 python build.py esp32s3 --clean
 ```
 
+The firmware needs ESP-IDF 5.3.6 or newer: older versions skip the linker fragment `main/parser.lf` without a warning, so the parser ends up in flash instead of IRAM. `./compile.sh` builds in the matching Docker image.
+
 ### Flash & Monitor
 
 ```bash
