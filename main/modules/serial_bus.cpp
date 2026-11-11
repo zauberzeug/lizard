@@ -40,7 +40,6 @@ static constexpr unsigned long LAYOUT_REQUEST_INTERVAL_MS = 2000;
 static constexpr unsigned long SLOT_WARNING_INTERVAL_MS = 10000;
 static constexpr const char LAYOUT_REQUEST[] = "core.telemetry_info()";
 static constexpr unsigned long REPORT_INTERVAL_MS = 1000;
-static constexpr unsigned long PAUSE_TIMEOUT_MS = 1000;     // the task sends its whole queue at once, 0.75 s at 115200 baud
 static constexpr unsigned long FLASHED_PEER_BOOT_MS = 5000; // until the fresh copy reports "Ready."
 
 // Estimator tunables: an unlocked estimate takes the first sample; from then on a sample whose accuracy
@@ -279,9 +278,12 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
 void SerialBus::pause_communication() {
     this->paused = false; // may still be set from the last pause
     this->pause_requested = true;
+    // a second for a frame in flight, plus twice the time the queue takes on the wire, since the task sends it at
+    // once and blocks on a full TX ring: 2.5 s at 115200 baud, 19 s at 9600 baud; normally it answers within 1 ms
+    const unsigned long timeout_ms = 1000 + 2 * OUTGOING_QUEUE_LENGTH * TX_FRAME_SIZE * 10 * 1000 / this->serial->baud_rate;
     const unsigned long start = millis();
     while (!this->paused) {
-        if (millis_since(start) > PAUSE_TIMEOUT_MS) {
+        if (millis_since(start) > timeout_ms) {
             this->pause_requested = false;
             throw std::runtime_error("serial bus \"" + this->name + "\" could not pause its communication");
         }
