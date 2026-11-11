@@ -203,11 +203,14 @@ def test_another_version_drops_the_layouts():
 def test_bus_prefix():
     decoder = TelemetryDecoder()
     results = [decoder.feed(f'bus[2]: {strip(line)}') for line in LAYOUT_1 + FRAMES_1]
-    assert results[0] == Layout(2, 1, 0x09, 0, 3, 'pos', 'f')
-    assert (results[-1].sender, results[-1].status) == (2, 'ok')
+    assert results[0] == Layout('bus[2]', 1, 0x09, 0, 3, 'pos', 'f')
+    assert (results[-1].sender, results[-1].status) == ('bus[2]', 'ok')
     assert decoder.feed(strip(FRAMES_1[0])).status == 'no_layout'  # layouts are kept per sender
     assert decoder.feed('bus[2]: hello') == Text(None, 'bus[2]: hello')
-    assert decoder.feed(f'bus[3]: {strip(FRAMES_1[0])}', sender='core').sender == ('core', 3)
+    assert decoder.feed(f'bus[3]: {strip(FRAMES_1[0])}', sender='core').sender == ('core', 'bus[3]')
+    plexus = [decoder.feed(f'plexus[2]: {strip(line)}') for line in LAYOUT_1 + FRAMES_1]
+    assert (plexus[-1].sender, plexus[-1].status) == ('plexus[2]', 'ok')
+    assert decoder.feed(f'p0[2]: {strip(FRAMES_1[0])}').status == 'no_layout'  # peer 2 of another bus is another sender
 
 
 @pytest.mark.parametrize('line', [

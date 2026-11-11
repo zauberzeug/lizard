@@ -27,10 +27,14 @@ const std::map<std::string, Variable_ptr> Serial::get_defaults() {
 
 static const Serial *console_serial = nullptr;
 
+bool Serial::is_console(const int rx_pin, const int tx_pin, const int uart_num) {
+    return uart_num == UART_NUM_0 && rx_pin == UART_NUM_0_RXD_DIRECT_GPIO_NUM && tx_pin == UART_NUM_0_TXD_DIRECT_GPIO_NUM;
+}
+
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
     : Module(name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num),
-      on_console(uart_num == UART_NUM_0 && rx_pin == UART_NUM_0_RXD_DIRECT_GPIO_NUM && tx_pin == UART_NUM_0_TXD_DIRECT_GPIO_NUM) {
+      on_console(Serial::is_console(rx_pin, tx_pin, uart_num)) {
     this->properties = Serial::get_defaults();
 
     if (this->on_console) {

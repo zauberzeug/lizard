@@ -54,7 +54,7 @@ static constexpr size_t DONE_STAMP_FIELDS = 3; // T3, T3-T2, sequence number of 
 static constexpr unsigned long LAYOUT_REQUEST_INTERVAL_MS = 2000;
 static constexpr unsigned long SLOT_WARNING_INTERVAL_MS = 10000;
 static constexpr const char LAYOUT_REQUEST[] = "core.telemetry_info()";
-static constexpr unsigned long DROP_REPORT_INTERVAL_MS = 1000;
+static constexpr unsigned long REPORT_INTERVAL_MS = 1000;
 
 // Estimator tunables: an unlocked estimate takes the first sample; from then on a sample whose accuracy
 // bound is at most SYNC_ACCEPT_ACCURACY_US replaces the estimate immediately, otherwise the best sample
@@ -119,12 +119,9 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->inbound_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
     const bool queues_created = this->config_queue && this->offset_queue && this->outbound_buffer && this->inbound_buffer;
     if (queues_created && serial->on_console) {
-        // from now on, only this bus reads and writes UART0, and everything this node prints goes to its coordinator,
-        // including what the boot printed before; before the task starts, so that it reads nothing from before
+        // from now on, only this bus reads and writes UART0, and everything this node prints goes to its coordinator;
+        // before the task starts, so that it reads nothing from before
         hand_over_console(serial->baud_rate, [this](unsigned long timeout_ms) { this->drain_outbound(timeout_ms); });
-        for (const std::string &line : take_boot_lines()) {
-            this->relay_console_line(line.c_str());
-        }
     }
     if (!queues_created ||
         xTaskCreatePinnedToCore(
@@ -191,7 +188,7 @@ void SerialBus::step() {
     }
 
     // the communication task must not echo() itself, so drops are counted there and reported here, at most once per second
-    if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > DROP_REPORT_INTERVAL_MS) {
+    if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > REPORT_INTERVAL_MS) {
         const unsigned dropped = this->dropped_inbound.exchange(0);
         this->last_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u inbound messages (queue full)", this->name.c_str(), dropped);
@@ -200,14 +197,17 @@ void SerialBus::step() {
         this->telemetry_dropped->set_integer_value(this->telemetry_dropped->integer_value() + this->dropped_frames.exchange(0));
     }
     if (this->ignored_lines > 0) {
-        this->ignored_lines_property->set_integer_value(this->ignored_lines_property->integer_value() + this->ignored_lines.exchange(0));
+        const unsigned ignored = this->ignored_lines.exchange(0);
+        this->ignored_lines_property->set_integer_value(this->ignored_lines_property->integer_value() + ignored);
+        this->unreported_ignored_lines += ignored;
     }
-    if (this->stray_lines > 0 && millis_since(this->last_stray_report_millis) > DROP_REPORT_INTERVAL_MS) {
-        this->last_stray_report_millis = millis();
-        echo("warning: serial bus %s ignored %u lines that are no bus messages", this->name.c_str(), this->stray_lines.exchange(0));
+    if (this->unreported_ignored_lines > 0 && millis_since(this->last_ignored_report_millis) > REPORT_INTERVAL_MS) {
+        this->last_ignored_report_millis = millis();
+        echo("warning: serial bus %s ignored %u lines that are no bus messages", this->name.c_str(), this->unreported_ignored_lines);
+        this->unreported_ignored_lines = 0;
     }
     // reported once the queue has room again, e.g. when a coordinator polls after a restart, also for the warning itself
-    if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > DROP_REPORT_INTERVAL_MS &&
+    if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > REPORT_INTERVAL_MS &&
         leaves_reserve(this->outbound_bytes, PAYLOAD_CAPACITY - 1)) {
         this->last_output_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u lines of output (queue full)", this->name.c_str(), this->dropped_output.exchange(0));
@@ -447,7 +447,6 @@ void SerialBus::process_uart() {
         if (len < 0) {
             // longer than any bus message, e.g. the boot output of a peer at another baud rate
             this->ignored_lines++;
-            this->stray_lines++;
             continue;
         }
         if (len < 2 || buffer[0] != '$' || buffer[1] != '$') {
@@ -506,25 +505,19 @@ void SerialBus::process_uart() {
 
 // a line that is no bus message, e.g. the boot output or a panic of a peer whose console is the bus
 void SerialBus::handle_foreign_line(char *line, const int length) {
-    const int text_length = strip(line, length);
+    bool checksum_ok;
+    const int text_length = check(line, length, &checksum_ok); // without the checksum of a line that a peer echoed
     if (text_length == 0) {
         return; // e.g. the line end that a peer sends when its bus takes over the console
     }
-    if (text_length >= 3 && line[text_length - 3] == '@') {
-        bool ok;
-        check(line, text_length, &ok);
-        if (ok) {
-            this->ignored_lines++; // echoed by a peer before its bus took over the console, which relays it again
-            return;
-        }
-    }
     const bool readable = std::all_of(line, line + text_length, [](const char c) { return c == '\t' || (c >= ' ' && c <= '~'); });
-    if (readable && this->is_coordinator() && this->peer_ids.size() == 1) {
-        this->print_to_incoming_queue("bus[%u]: %s", this->peer_ids[0], line);
-        return;
+    if (!readable || !this->is_coordinator()) {
+        this->ignored_lines++;
+    } else if (this->peer_ids.size() == 1) {
+        this->print_to_incoming_queue("%s[%u]: %s", this->name.c_str(), this->peer_ids[0], line);
+    } else {
+        this->print_to_incoming_queue("%s: %s", this->name.c_str(), line); // any of the peers may have sent it
     }
-    this->ignored_lines++;
-    this->stray_lines++;
 }
 
 unsigned *SerialBus::find_missed_polls(const uint8_t peer_id) {
@@ -762,7 +755,7 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     const size_t prefix_len = sizeof(ECHO_CMD) - 1;
     if (std::strncmp(message.payload, ECHO_CMD, prefix_len) == 0) {
         const char *text = message.payload + prefix_len; // process_uart terminated the payload
-        echo("bus[%u]: %s", message.sender, text);
+        echo("%s[%u]: %s", this->name.c_str(), message.sender, text);
         if (std::strcmp(text, "Ready.") == 0) {
             this->peer_layouts.erase(message.sender); // the peer booted and announces its layouts with the first poll
             for (BusTelemetry *const listener : this->telemetry_listeners) {
@@ -953,7 +946,7 @@ bool SerialBus::store_telemetry_frame(const uint8_t frame_id, const char *line, 
         if (!this->slot_warning_sent || millis_since(this->last_slot_warning_millis) > SLOT_WARNING_INTERVAL_MS) {
             this->slot_warning_sent = true;
             this->last_slot_warning_millis = millis();
-            this->echo_target_id = this->coordinator_id; // relayed by handle_echo, printed as bus[<id>]: there
+            this->echo_target_id = this->coordinator_id; // relayed by handle_echo, printed as <bus>[<id>]: there
             echo("warning: serial bus %s has no slot for telemetry frame %u (at most %u frames)", this->name.c_str(),
                  frame_id, static_cast<unsigned>(FRAME_SLOTS));
             this->echo_target_id = 0;
@@ -1023,7 +1016,7 @@ void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
         }
     }
     if (printed) {
-        echo("bus[%u]: %s", message.sender, message.payload);
+        echo("%s[%u]: %s", this->name.c_str(), message.sender, message.payload);
     }
 
     const auto frame = layout.frames.find(body[0]);
@@ -1052,7 +1045,7 @@ void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
         return;
     }
     if (passed) {
-        echo("bus[%u]: %s", message.sender, message.payload);
+        echo("%s[%u]: %s", this->name.c_str(), message.sender, message.payload);
     }
 
     PeerLayout &layout = this->peer_layouts[message.sender];
