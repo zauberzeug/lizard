@@ -252,6 +252,18 @@ The name is reported by `core.version()` and also names the build artifacts (`bu
 `espresso.py` picks them up automatically via `build/project_description.json`,
 other tools like `otb_update.py` or `addr2line` need the renamed paths passed explicitly.
 
+The ESP32 build reads its flash at 80 MHz, which Espressif's modules like the ESP32-WROVER-E and the ESP32-WROOM-32E are rated for.
+The frequency travels with the app: the ESP32 sets its flash clock at startup from the image header of the app,
+so an update over OTA, OTB or `expander.flash()` moves a device to 80 MHz without a new bootloader.
+A board whose flash or layout cannot keep up crashes or does not boot at this speed,
+and only flashing a 40 MHz build over serial brings it back.
+For such a board, replace the two 80 MHz lines in `sdkconfig.defaults.esp32`
+with `CONFIG_ESPTOOLPY_FLASHFREQ_40M=y` and `CONFIG_ESPTOOLPY_FLASHFREQ="40m"`,
+or add them to `sdkconfig.defaults.secret`, which `build.py` loads after the base defaults,
+and build with `python build.py esp32 --clean`.
+The clean build is needed because ESP-IDF applies these defaults only when it creates a new `sdkconfig`;
+an existing `sdkconfig` keeps the flash frequency it was created with.
+
 ### Backtrace
 
 In case Lizard terminates with a backtrace printed to the serial terminal,
