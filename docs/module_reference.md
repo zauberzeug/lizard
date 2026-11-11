@@ -203,7 +203,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
 | `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s            |
 
-The coordinator prints the lines that reach it from its peers, e.g. `Ready.` and the output of commands sent with `bus.send()`, with the bus's name and the peer's ID in front, e.g. `bus[2]: Ready.` for peer 2 of a bus named `bus`.
+The coordinator prints the lines that reach it from its peers, e.g. `Ready.` and the output of commands sent with `bus.send()`, with the coordinator's name for the bus and the peer's ID in front, e.g. `bus[2]: Ready.` for peer 2 of a bus that the coordinator calls `bus`.
 So two buses of a node, e.g. `plexus` and `p0`, keep their peers apart, also when both have a peer 2.
 
 **Time Synchronization:**
@@ -237,7 +237,7 @@ A frame that is replaced before it was sent does not count in the sequence numbe
 A peer has eight slots; a frame beyond them is not sent, and the peer warns on its own console and through the coordinator, at most every 10 s.
 
 The coordinator checks payloads starting with `~` or `__LAYOUT__` and never processes them as Lizard code.
-`bus.pass_telemetry()` passes the frames and layout lines of all peers on to the console with the bus's name and the peer's ID in front, here `bus[2]: `, and `bus.pass_telemetry(2)` only those of peer 2:
+`bus.pass_telemetry()` passes the frames and layout lines of all peers on to the console with the coordinator's name for the bus and the peer's ID in front, here `bus[2]: `, and `bus.pass_telemetry(2)` only those of peer 2:
 
 ```
 bus = SerialBus(serial, 1)
