@@ -212,6 +212,7 @@ The warning comes once until the peer answers again, e.g. after its restart, and
 
 **Other Lines:**
 Lines on the link that are no bus messages, e.g. the boot output or a panic of a peer, are not processed.
+The ROM bootloader and the boot log of a peer always print at 115200 baud, whatever the rate of the link; on a link with another rate they arrive as an unreadable line, so a restart of the peer is followed by one warning about an ignored line.
 A coordinator with a single peer prints those that are readable text as lines of that peer, e.g. `bus[2]: Guru Meditation Error: ...`.
 All others are counted in `ignored_lines` and reported with `warning: serial bus <name> ignored <n> lines that are no bus messages`, at most once per second.
 Lines with a valid Lizard checksum are counted without the warning, since they are what a peer printed before its bus took over its console, which relays them again (see [Console as Link](#serial-bus)).

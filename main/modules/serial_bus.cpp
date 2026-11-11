@@ -36,7 +36,7 @@ static constexpr size_t TELEMETRY_QUEUE_RESERVE = otb::BUS_OTB_WINDOW;
 static constexpr unsigned long LAYOUT_REQUEST_INTERVAL_MS = 2000;
 static constexpr unsigned long SLOT_WARNING_INTERVAL_MS = 10000;
 static constexpr const char LAYOUT_REQUEST[] = "core.telemetry_info()";
-static constexpr unsigned long DROP_REPORT_INTERVAL_MS = 1000;
+static constexpr unsigned long REPORT_INTERVAL_MS = 1000;
 
 // Estimator tunables: an unlocked estimate takes the first sample; from then on a sample whose accuracy
 // bound is at most SYNC_ACCEPT_ACCURACY_US replaces the estimate immediately, otherwise the best sample
@@ -165,7 +165,7 @@ void SerialBus::step() {
     }
 
     // the communication task must not echo() itself, so drops are counted there and reported here, at most once per second
-    if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > DROP_REPORT_INTERVAL_MS) {
+    if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > REPORT_INTERVAL_MS) {
         const unsigned dropped = this->dropped_inbound.exchange(0);
         this->last_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u inbound messages (queue full)", this->name.c_str(), dropped);
@@ -176,12 +176,12 @@ void SerialBus::step() {
     if (this->ignored_lines > 0) {
         this->ignored_lines_property->set_integer_value(this->ignored_lines_property->integer_value() + this->ignored_lines.exchange(0));
     }
-    if (this->stray_lines > 0 && millis_since(this->last_stray_report_millis) > DROP_REPORT_INTERVAL_MS) {
+    if (this->stray_lines > 0 && millis_since(this->last_stray_report_millis) > REPORT_INTERVAL_MS) {
         this->last_stray_report_millis = millis();
         echo("warning: serial bus %s ignored %u lines that are no bus messages", this->name.c_str(), this->stray_lines.exchange(0));
     }
     // reported once the queue has room again, e.g. when a coordinator polls after a restart
-    if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > DROP_REPORT_INTERVAL_MS &&
+    if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > REPORT_INTERVAL_MS &&
         uxQueueSpacesAvailable(this->outbound_queue) > TELEMETRY_QUEUE_RESERVE) {
         this->last_output_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u lines of output (queue full)", this->name.c_str(), this->dropped_output.exchange(0));
