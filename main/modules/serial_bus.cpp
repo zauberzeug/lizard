@@ -12,6 +12,7 @@
 #include "serial.h"
 #include <esp_timer.h>
 #include <algorithm>
+#include <cassert>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -22,7 +23,8 @@ static constexpr unsigned long POLL_TIMEOUT_MS = 250;
 static constexpr size_t OFFSET_QUEUE_LENGTH = 8;    // full-state snapshots; a full queue only delays one
 static constexpr size_t MESSAGE_BUFFER_SIZE = 4096; // per direction; a message takes its length plus 11 to 14 bytes
 static constexpr size_t RINGBUF_ITEM_HEADER = 8;
-// a message in a ring buffer: this header, the payload and its terminating zero
+// a message in a ring buffer: this header, the payload and its terminating zero; an outbound message names this node
+// as its sender, so that both buffers hold the same item
 struct MessageHeader {
     uint8_t sender;
     uint8_t receiver;
@@ -44,6 +46,33 @@ static_assert(LONGEST_MESSAGE_FOOTPRINT <= MESSAGE_BUFFER_SIZE / 2); // the larg
 // whether a message of this length leaves the reserve free in a buffer that holds `used` bytes
 static bool leaves_reserve(const size_t used, const size_t payload_length) {
     return used + footprint(payload_length) + TELEMETRY_RESERVE <= MESSAGE_BUFFER_SIZE;
+}
+// builds a message in place in a ring buffer and counts its bytes; false when it does not fit within `wait`
+static bool send_item(const RingbufHandle_t buffer, std::atomic<size_t> &bytes, const MessageHeader header,
+                      const char *payload, const size_t length, const TickType_t wait) {
+    bytes += footprint(length); // before the consumer can take the message and subtract it
+    void *item;
+    if (xRingbufferSendAcquire(buffer, &item, message_size(length), wait) != pdTRUE) {
+        bytes -= footprint(length);
+        return false;
+    }
+    char *const data = static_cast<char *>(item);
+    std::memcpy(data, &header, sizeof(header));
+    std::memcpy(data + sizeof(header), payload, length);
+    data[sizeof(header) + length] = '\0';
+    xRingbufferSendComplete(buffer, item);
+    return true;
+}
+// a message as it lies in a received item of `size` bytes
+struct StoredMessage {
+    MessageHeader header;
+    const char *payload; // terminated
+    size_t length;
+};
+static StoredMessage read_item(const char *const item, const size_t size) {
+    StoredMessage stored{{}, item + sizeof(MessageHeader), size - message_size(0)};
+    std::memcpy(&stored.header, item, sizeof(MessageHeader));
+    return stored;
 }
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
@@ -118,6 +147,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->outbound_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
     this->inbound_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
     const bool queues_created = this->config_queue && this->offset_queue && this->outbound_buffer && this->inbound_buffer;
+    // footprint() mirrors the item layout of esp_ringbuf; the largest item of a no-split buffer tells its header size
+    assert(!queues_created || xRingbufferGetMaxItemSize(this->inbound_buffer) == MESSAGE_BUFFER_SIZE / 2 - RINGBUF_ITEM_HEADER);
     if (queues_created && serial->on_console) {
         // from now on, only this bus reads and writes UART0, and everything this node prints goes to its coordinator;
         // before the task starts, so that it reads nothing from before
@@ -530,16 +561,9 @@ unsigned *SerialBus::find_missed_polls(const uint8_t peer_id) {
 }
 
 void SerialBus::push_incoming(const IncomingMessage &message) {
-    char item[message_size(PAYLOAD_CAPACITY - 1)];
-    const MessageHeader header{message.sender, message.receiver};
-    const size_t length = std::min(message.length, PAYLOAD_CAPACITY - 1); // e.g. a truncated print_to_incoming_queue()
-    std::memcpy(item, &header, sizeof(header));
-    std::memcpy(item + sizeof(header), message.payload, length);
-    item[sizeof(header) + length] = '\0';
     // a warning could not pass the full buffer either, so count the drop and let step() report it
-    this->inbound_bytes += footprint(length); // before the main task can take the message and subtract it
-    if (xRingbufferSend(this->inbound_buffer, item, message_size(length), 0) != pdTRUE) {
-        this->inbound_bytes -= footprint(length);
+    if (!send_item(this->inbound_buffer, this->inbound_bytes, {message.sender, message.receiver}, message.payload,
+                   message.length, 0)) {
         this->dropped_inbound++;
     }
 }
@@ -550,14 +574,13 @@ bool SerialBus::pop_incoming(IncomingMessage &message) {
     if (!item) {
         return false;
     }
-    MessageHeader header;
-    std::memcpy(&header, item, sizeof(header));
-    message.sender = header.sender;
-    message.receiver = header.receiver;
-    message.length = size - message_size(0);
-    std::memcpy(message.payload, item + sizeof(header), message.length + 1);
+    const StoredMessage stored = read_item(item, size);
+    message.sender = stored.header.sender;
+    message.receiver = stored.header.receiver;
+    message.length = stored.length;
+    std::memcpy(message.payload, stored.payload, stored.length + 1);
     vRingbufferReturnItem(this->inbound_buffer, item);
-    this->inbound_bytes -= footprint(message.length);
+    this->inbound_bytes -= footprint(stored.length);
     return true;
 }
 
@@ -799,17 +822,7 @@ bool SerialBus::queue_outgoing_message(const uint8_t receiver, const char *paylo
     if (length >= PAYLOAD_CAPACITY) {
         return false;
     }
-    char item[message_size(PAYLOAD_CAPACITY - 1)];
-    const MessageHeader header{this->node_id, receiver};
-    std::memcpy(item, &header, sizeof(header));
-    std::memcpy(item + sizeof(header), payload, length);
-    item[sizeof(header) + length] = '\0';
-    this->outbound_bytes += footprint(length); // before the communication task can take the message and subtract it
-    if (xRingbufferSend(this->outbound_buffer, item, message_size(length), wait) != pdTRUE) {
-        this->outbound_bytes -= footprint(length);
-        return false;
-    }
-    return true;
+    return send_item(this->outbound_buffer, this->outbound_bytes, {this->node_id, receiver}, payload, length, wait);
 }
 
 void SerialBus::drain_outbound(const unsigned long timeout_ms) {
@@ -835,12 +848,11 @@ bool SerialBus::send_outgoing_queue() {
                 this->bus->outbound_bytes -= footprint(this->size - message_size(0));
             }
         } returned{this, item, size}; // also when send_message() throws
-        MessageHeader header;
-        std::memcpy(&header, item, sizeof(header));
+        const StoredMessage stored = read_item(item, size);
         // receiver 0 is the node that polls this one, e.g. for output queued before the first poll
-        const uint8_t receiver = header.receiver ? header.receiver : this->requesting_node.load();
+        const uint8_t receiver = stored.header.receiver ? stored.header.receiver : this->requesting_node.load();
         if (receiver) {
-            this->send_message(receiver, item + sizeof(header), size - message_size(0));
+            this->send_message(receiver, stored.payload, stored.length);
             sent_any = true;
         }
     }
