@@ -144,10 +144,6 @@ class Config:
         return ('--no-stub',) if self.no_stub else ()
 
     @property
-    def flash_freq(self) -> str:
-        return {'esp32': '40m', 'esp32s3': '80m'}[self.chip]
-
-    @property
     def bootloader_offset(self) -> str:
         return {'esp32': '0x1000', 'esp32s3': '0x0'}[self.chip]
 
@@ -484,7 +480,7 @@ def flash(config: Config) -> None:
                 'write_flash',
                 '-z',
                 '--flash_mode', 'dio',
-                '--flash_freq', config.flash_freq,
+                '--flash_freq', 'keep',  # the bootloader keeps the flash frequency of its build
                 '--flash_size', 'detect',
                 config.bootloader_offset, config.bootloader,
                 '0x8000', config.partition_table,
