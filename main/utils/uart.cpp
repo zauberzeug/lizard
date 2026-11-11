@@ -17,11 +17,6 @@ static std::function<void(unsigned long)> console_drain;
 static uint32_t console_baud_rate = CONSOLE_DEFAULT_BAUD_RATE;
 static vprintf_like_t console_log_vprintf = nullptr;
 
-static constexpr size_t MAX_BOOT_LINES = 16;
-static constexpr size_t MAX_BOOT_LINE_LENGTH = 240; // fits a serial bus payload
-static std::vector<std::string> boot_lines;
-static bool keeping_boot_lines = true;
-
 static int drop_log(const char *, va_list) {
     return 0;
 }
@@ -34,8 +29,8 @@ void hand_over_console(const long baud_rate, const std::function<void(unsigned l
     uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
     uart_get_baudrate(UART_NUM_0, &console_baud_rate);
     uart_set_baudrate(UART_NUM_0, baud_rate);
-    uart_flush_input(UART_NUM_0); // e.g. polls that arrived at the boot's baud rate as garbage
-    // a coordinator at another rate read the boot output as garbage; a line end keeps it out of the first bus message
+    uart_flush_input(UART_NUM_0); // e.g. the polls that arrived while the node booted
+    // a coordinator at another rate read the boot log as garbage; a line end keeps it out of the first bus message
     uart_write_bytes(UART_NUM_0, "\n", 1);
     console_log_vprintf = esp_log_set_vprintf(drop_log);
     esp_rom_install_channel_putc(1, nullptr);
@@ -56,13 +51,6 @@ void take_back_console() {
     uart_set_baudrate(UART_NUM_0, console_baud_rate);
     esp_log_set_vprintf(console_log_vprintf);
     esp_rom_install_uart_printf();
-}
-
-std::vector<std::string> take_boot_lines() {
-    std::vector<std::string> lines;
-    lines.swap(boot_lines);
-    keeping_boot_lines = false;
-    return lines;
 }
 
 // printf() returns once the bytes are on the wire, so a console too slow for its output stretches the loop (#258)
@@ -142,9 +130,6 @@ void echo(const char *format, ...) {
                 const int64_t before_us = esp_timer_get_time();
                 printf("%s@%02x\n", &buffer[start], checksum);
                 console_blocked_us += esp_timer_get_time() - before_us;
-                if (keeping_boot_lines && boot_lines.size() < MAX_BOOT_LINES) {
-                    boot_lines.emplace_back(&buffer[start], std::min<size_t>(i - start, MAX_BOOT_LINE_LENGTH));
-                }
             }
             for (const auto &[handle, callback] : echo_callbacks) {
                 callback(&buffer[start]);

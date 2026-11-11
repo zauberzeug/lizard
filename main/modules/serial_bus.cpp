@@ -101,12 +101,9 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage));
     const bool queues_created = this->config_queue && this->offset_queue && this->outbound_queue && this->inbound_queue;
     if (queues_created && serial->on_console) {
-        // from now on, only this bus reads and writes UART0, and everything this node prints goes to its coordinator,
-        // including what the boot printed before; before the task starts, so that it reads nothing from before
+        // from now on, only this bus reads and writes UART0, and everything this node prints goes to its coordinator;
+        // before the task starts, so that it reads nothing from before
         hand_over_console(serial->baud_rate, [this](unsigned long timeout_ms) { this->drain_outbound(timeout_ms); });
-        for (const std::string &line : take_boot_lines()) {
-            this->relay_console_line(line.c_str());
-        }
     }
     if (!queues_created ||
         xTaskCreatePinnedToCore(
@@ -174,11 +171,14 @@ void SerialBus::step() {
         this->telemetry_dropped->set_integer_value(this->telemetry_dropped->integer_value() + this->dropped_frames.exchange(0));
     }
     if (this->ignored_lines > 0) {
-        this->ignored_lines_property->set_integer_value(this->ignored_lines_property->integer_value() + this->ignored_lines.exchange(0));
+        const unsigned ignored = this->ignored_lines.exchange(0);
+        this->ignored_lines_property->set_integer_value(this->ignored_lines_property->integer_value() + ignored);
+        this->unreported_ignored_lines += ignored;
     }
-    if (this->stray_lines > 0 && millis_since(this->last_stray_report_millis) > REPORT_INTERVAL_MS) {
-        this->last_stray_report_millis = millis();
-        echo("warning: serial bus %s ignored %u lines that are no bus messages", this->name.c_str(), this->stray_lines.exchange(0));
+    if (this->unreported_ignored_lines > 0 && millis_since(this->last_ignored_report_millis) > REPORT_INTERVAL_MS) {
+        this->last_ignored_report_millis = millis();
+        echo("warning: serial bus %s ignored %u lines that are no bus messages", this->name.c_str(), this->unreported_ignored_lines);
+        this->unreported_ignored_lines = 0;
     }
     // reported once the queue has room again, e.g. when a coordinator polls after a restart
     if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > REPORT_INTERVAL_MS &&
@@ -421,7 +421,6 @@ void SerialBus::process_uart() {
         if (len < 0) {
             // longer than any bus message, e.g. the boot output of a peer at another baud rate
             this->ignored_lines++;
-            this->stray_lines++;
             continue;
         }
         if (len < 2 || buffer[0] != '$' || buffer[1] != '$') {
@@ -480,25 +479,19 @@ void SerialBus::process_uart() {
 
 // a line that is no bus message, e.g. the boot output or a panic of a peer whose console is the bus
 void SerialBus::handle_foreign_line(char *line, const int length) {
-    const int text_length = strip(line, length);
+    bool checksum_ok;
+    const int text_length = check(line, length, &checksum_ok); // without the checksum of a line that a peer echoed
     if (text_length == 0) {
         return; // e.g. the line end that a peer sends when its bus takes over the console
     }
-    if (text_length >= 3 && line[text_length - 3] == '@') {
-        bool ok;
-        check(line, text_length, &ok);
-        if (ok) {
-            this->ignored_lines++; // echoed by a peer before its bus took over the console, which relays it again
-            return;
-        }
-    }
     const bool readable = std::all_of(line, line + text_length, [](const char c) { return c == '\t' || (c >= ' ' && c <= '~'); });
-    if (readable && this->is_coordinator() && this->peer_ids.size() == 1) {
-        this->print_to_incoming_queue("bus[%u]: %s", this->peer_ids[0], line);
-        return;
+    if (!readable || !this->is_coordinator()) {
+        this->ignored_lines++;
+    } else if (this->peer_ids.size() == 1) {
+        this->print_to_incoming_queue("%s[%u]: %s", this->name.c_str(), this->peer_ids[0], line);
+    } else {
+        this->print_to_incoming_queue("%s: %s", this->name.c_str(), line); // any of the peers may have sent it
     }
-    this->ignored_lines++;
-    this->stray_lines++;
 }
 
 unsigned *SerialBus::find_missed_polls(const uint8_t peer_id) {
