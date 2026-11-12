@@ -1,4 +1,5 @@
 #include "serial.h"
+#include "soc/soc_caps.h"
 #include "soc/uart_channel.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
@@ -182,6 +183,12 @@ bool Serial::has_buffered_lines() const {
 size_t Serial::unterminated_bytes() const {
     const bool has_lines = this->has_buffered_lines(); // first, because it may drop an oversized run into discarded_bytes
     return this->discarded_bytes + (has_lines ? 0 : this->available());
+}
+
+void Serial::wait_until_sent() const {
+    // twice the time the driver's TX buffer and the FIFO take on the wire
+    const uint32_t timeout_ms = 100 + 2 * (TX_BUF_SIZE + SOC_UART_FIFO_LEN) * 10 * 1000 / this->baud_rate;
+    uart_wait_tx_done(this->uart_num, pdMS_TO_TICKS(timeout_ms));
 }
 
 void Serial::flush() const {
