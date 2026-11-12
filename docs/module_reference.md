@@ -196,7 +196,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
 | `bus.telemetry_errors`     | Malformed telemetry frames and layout lines of passed-on or mirrored peers, e.g. with a wrong CRC             | `int`     |
-| `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for places in the inbound queue, e.g. while layout lines are awaited     | `int`     |
+| `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for room in the inbound queue, e.g. while layout lines are awaited       | `int`     |
 | `bus.ignored_lines`        | Received lines that are no bus messages and were not printed, e.g. the boot output of a peer                  | `int`     |
 
 | Methods                             | Description                                                                                                                                 | Arguments          |
@@ -279,13 +279,15 @@ Malformed frames and layout lines of passed-on or mirrored peers, e.g. no valid 
   Frames from before the request are passed on anyway, so a reader skips frames whose layout it has not seen yet.
   When the peer reports `Ready.`, the coordinator forgets its layouts; the peer sends them again with the first poll.
 - Late hosts: `core.telemetry_info()` on the coordinator also asks every passed-on peer of its `make_coordinator` list for its layout lines, so a host that connects later gets them too.
-- Queues: telemetry leaves the last eight places of the bus queues free (frames on the coordinator, layout lines on the peer), so commands, their replies and update chunks still get through while frames pile up, e.g. while long prints or the startup block the coordinator.
+- Queues: a bus keeps the messages of each direction at their length in a queue of 4 KB, and telemetry leaves room for eight of the longest messages free (frames on the coordinator, layout lines on the peer), so commands, their replies and update chunks still get through while frames pile up, e.g. while long prints or the startup block the coordinator.
+  A message takes its length plus 11 to 14 bytes, and a frame is stored without its bus header and checksum, so the room left to telemetry holds 35 frames of 4 floats or 12 frames of 20 floats.
   Lost telemetry recovers by itself: the next frame replaces a lost one, and missing layout lines are requested again.
   Frames dropped this way are counted in `telemetry_dropped`.
 - Bus load: a frame of n floats or ints is a line of about 5.3·n + 25 bytes, on the bus as well as on the coordinator's console.
   A frame of 20 floats takes 132 bytes, i.e. 2.9 ms at 460800 baud; 100 such frames per second would take almost a third of the bus.
   The most one poll can carry is all eight slots with the largest frame of 45 floats, about 2.1 KB:
   46 ms at 460800 baud, but 180 ms at 115200 baud, close to the coordinator's poll timeout of 250 ms.
+  The room left to telemetry in the coordinator's queue holds six of these frames, so its loop has to take them while they arrive.
 - Console load: the coordinator prints every frame it passes on, and printing blocks its loop until the line is on the wire (see [Console load](#core)).
   So every passed-on frame adds its line's time to the coordinator's loop: a frame of 45 floats takes 5.8 ms at 460800 baud, and one of them every 10 ms already needs more than half of the loop.
   A step handles only the messages that were waiting when it started, so frames that arrive faster than the console prints them slow the loop down instead of stalling it; those that no longer fit into the inbound queue are dropped and counted in `telemetry_dropped`.
@@ -313,7 +315,7 @@ A serial on UART0 with the console's RX and TX pins (3 and 1 on an ESP32, 44 and
 From then on, only the bus reads and writes UART0, at the serial's baud rate, and the node runs no console lines, only commands from the bus.
 Everything the node prints goes to the node that polls it, which prints it as a line of this peer, e.g. `bus[2]: ...`.
 That includes replies, warnings and the output of unmuted modules.
-Lines printed before the first poll wait in the bus queue; when only its last eight places are free, further lines are dropped and a warning with their number follows.
+Lines printed before the first poll wait in the bus queue; when only the room for eight of the longest messages is free, further lines are dropped and a warning with their number follows.
 The node does not print `Ready.` on its console; the coordinator prints it with the first answer, e.g. `bus[2]: Ready.`.
 Telemetry frames and their layout lines wait for the first poll.
 While the bus has the console, ESP-IDF log and ROM output is dropped, but a panic still reaches the wire (see [Other Lines](#serial-bus)).

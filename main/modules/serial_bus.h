@@ -3,6 +3,7 @@
 #include "../utils/otb.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/ringbuf.h"
 #include "freertos/task.h"
 #include "module.h"
 #include "serial.h"
@@ -52,11 +53,6 @@ public:
 private:
     struct IncomingMessage {
         uint8_t sender;
-        uint8_t receiver;
-        size_t length;
-        char payload[PAYLOAD_CAPACITY];
-    };
-    struct OutgoingMessage {
         uint8_t receiver;
         size_t length;
         char payload[PAYLOAD_CAPACITY];
@@ -111,8 +107,11 @@ private:
 
     QueueHandle_t config_queue = nullptr;
     QueueHandle_t offset_queue = nullptr;
-    QueueHandle_t outbound_queue = nullptr;
-    QueueHandle_t inbound_queue = nullptr;
+    // messages at their length; the main task writes the outbound one and the communication task the inbound one
+    RingbufHandle_t outbound_buffer = nullptr;
+    RingbufHandle_t inbound_buffer = nullptr;
+    std::atomic<size_t> outbound_bytes{0}; // taken by the messages in the buffer, which reports only its longest free item
+    std::atomic<size_t> inbound_bytes{0};
     // written by the communication task, drained and reported by step() on the main task
     std::atomic<unsigned> dropped_inbound{0};
     unsigned long last_drop_report_millis = 0;
@@ -219,6 +218,7 @@ private:
     void handle_foreign_line(char *line, const int length);
     unsigned *find_missed_polls(const uint8_t peer_id);
     void push_incoming(const IncomingMessage &message);
+    bool pop_incoming(IncomingMessage &message);
     bool parse_message(const char *message_line, IncomingMessage &message) const;
     void handle_incoming_message(const IncomingMessage &message);
     void enqueue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length);
