@@ -29,6 +29,7 @@ idf_component_register(
         mbedtls
         nvs_flash
         spi_flash
+    LDFRAGMENTS parser.lf
     WHOLE_ARCHIVE
 )
 if(CONFIG_IDF_TARGET_ESP32)

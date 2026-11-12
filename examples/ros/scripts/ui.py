@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+import json
+
 import rospy
-from std_msgs.msg import Empty, String
 from geometry_msgs.msg import Twist, Vector3
 from nicegui import ui
-import json
+from std_msgs.msg import Empty, String
 
 
 def send(x, y):

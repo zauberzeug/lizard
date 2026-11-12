@@ -18,6 +18,7 @@ I2C modules on the same port share its SDA and SCL pins, which stay reserved for
 Creating a module on a reserved pin or peripheral fails with an error that names the owner, e.g. `pin 15 is already used by module "led"`.
 In the startup script, such an error stops the script like any other error (see [Startup Script](getting_started.md#startup-script)).
 The console UART with its pins and the pins of the SPI flash are reserved from the start.
+Only a serial bus can take over the console UART (see [Console as Link](#serial-bus)).
 
 ## Core
 
@@ -49,12 +50,13 @@ It is automatically created right after the boot sequence.
 | `core.clear_schedule()`          | Discard all pending scheduled blocks                                                               |              |
 | `core.keep_alive()`              | Reset `last_message_age` without producing output                                                  |              |
 | `core.telemetry(...)`            | Define a telemetry frame of properties and variables                                               | see below    |
-| `core.telemetry_info()`          | Send the layout lines of all telemetry frames again                                                |              |
-| `core.clear_telemetry()`         | Clear all telemetry frames frames                                                                  |              |
+| `core.telemetry_info()`          | Send the layout lines of all telemetry frames again and ask passed-on bus peers for theirs         |              |
+| `core.clear_telemetry()`         | Clear all telemetry frames                                                                         |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
+An empty format `""` stops the core line until a new format is set.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
@@ -62,7 +64,12 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 The console (UART0) defaults to 115200 baud.
 `core.set_baudrate(baud)` persists a new rate to non-volatile storage; it takes effect on the next restart, so the change is not a breaking one for hosts that are not updated yet.
 After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with the host tools at the new rate, e.g. `./monitor.py /dev/ttyUSB0 --baud 921600` (`monitor.py`, `configure.py` and `otb_update.py` all accept `--baud`, defaulting to 115200).
-Supported rates are 115200, 230400, 460800 and 921600.
+Supported rates are 115200, 230400, 460800, 921600, 1000000, 1500000, 2000000 and 3000000.
+Above 921600, check which rates the host's UART actually produces: a Jetson Orin, for example, produces 1000000, 1500000 and 3000000 exactly, but 2000000 about 2 % too slow.
+Some USB-UART bridges stop below 3000000.
+The host's UART also has to keep up with the rate: a Jetson whose UART received without DMA lost 5 to 20 % of the core's lines at 1500000 to 3000000 (see [discussion #260](https://github.com/zauberzeug/lizard/discussions/260)), while with RX DMA enabled in its device tree it ran clean up to 3000000.
+If the host cannot talk to the core at the new rate, erase the chip with `./espresso.py erase` and flash it again.
+Erasing also clears the startup script and the other settings stored in non-volatile storage, so configure the core again afterwards.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
 
 **Console load:**
@@ -81,7 +88,8 @@ core.telemetry(wheels.linear_speed, wheels.angular_speed, 20)  # frame 2, every 
 ```
 
 Each call defines one frame; frame IDs count up from 1 in the order of definition.
-The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames.
+The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames, but only once per frame.
+A field's name, `<module>.<property>` or the variable's name, has at most 200 characters.
 An integer literal as last argument is the interval in milliseconds (0 to 3600000); an `int` variable or property in that place is a field.
 Without an interval or with 0, the frame is sent every step.
 Frames go out with the 10 ms steps, so the gaps between them vary, e.g. 10 and 20 ms for an interval of 15 ms, but match the interval on average.
@@ -94,32 +102,42 @@ A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (
 | Bytes | Content                                                           |
 | ----- | ----------------------------------------------------------------- |
 | 1     | frame ID                                                          |
+| 1     | layout ID, see below                                              |
 | 1     | sequence number per frame ID, modulo 256; a gap means lost frames |
 | 4     | time since booting (ms) when the frame was built                  |
 | n     | values of the fields                                              |
 | 2     | CRC-16/CCITT-FALSE over all preceding bytes                       |
 
-The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as int32, clamped to its range.
+The sequence number starts at 0 when a frame is defined, also when its ID is reused after `core.clear_telemetry()`.
+The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as its low 32 bits, so a value beyond the int32 range wraps around instead of sticking at the limit.
+Every reader, the host decoder included, reads them as int32.
+Send an age rather than a timestamp: a timestamp in µs like `last_heartbeat` of a CANopen motor turns negative after 36 minutes, and a host reads the time of the sender from the header anyway.
 The `bool` fields follow as bits in their order, least significant bit first, padded to a full byte.
 All multi-byte numbers, including the time and the CRC, are little-endian.
 
-A layout line `__LAYOUT__v1 <frame>.<index>/<count> <name>:<type>` describes one field: its frame ID, its position from 0, the number of fields in the frame, its name and its type: `f` for `float`, `i` for `int` or `?` for `bool`.
+A layout line `__LAYOUT__v1 <frame>.<index>/<count> <layout ID> <name>:<type>` describes one field: its frame ID, its position from 0, the number of fields in the frame, the layout ID in two hex digits, its name and its type: `f` for `float`, `i` for `int` or `?` for `bool`.
 For example, `core.telemetry(motor.position, motor.axis_state, motor.enabled)` yields:
 
 ```
-__LAYOUT__v1 1.0/3 motor.position:f@6e
-__LAYOUT__v1 1.1/3 motor.axis_state:i@52
-__LAYOUT__v1 1.2/3 motor.enabled:?@49
-~AQdA4gEAtvOdPwgAAAABwBc=@5c
+__LAYOUT__v1 1.0/3 bf motor.position:f@4a
+__LAYOUT__v1 1.1/3 bf motor.axis_state:i@76
+__LAYOUT__v1 1.2/3 bf motor.enabled:?@6d
+~Ab8HQOIBALbznT8IAAAAAY/t@25
 ```
 
-The frame body `01 07 40e20100 b6f39d3f 08000000 01 c017` holds frame ID 1, sequence number 7, millis 123456, the values 1.234, 8 and true, and the CRC.
+The frame body `01 bf 07 40e20100 b6f39d3f 08000000 01 8fed` holds frame ID 1, layout ID `bf`, sequence number 7, millis 123456, the values 1.234, 8 and true, and the CRC.
+
+The layout ID is the low byte of the CRC-16/CCITT-FALSE over the fields as `<name>:<type>`, separated by spaces, here `motor.position:f motor.axis_state:i motor.enabled:?`.
+A reader decodes a frame only with layout lines of the same frame ID and layout ID, so a frame ID that `core.clear_telemetry()` frees and a new frame reuses is not decoded with the old fields.
+Different fields get the same layout ID with a chance of 1 in 256.
 
 Layout lines go out when a frame is defined and on `core.telemetry_info()`, four per step in the order of the frames.
 A new frame is sent for the first time once all of its layout lines are out.
-Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines.
+Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines, except on a serial bus peer, see [Serial Bus](#serial-bus).
 There is no timer for them: a host that connects later or logs for hours calls `core.telemetry_info()` itself.
+On a serial bus peer, frames and layout lines go to the coordinator once it polls the peer, see [Serial Bus](#serial-bus).
 Only the prefix `~` and the word `__LAYOUT__` stay the same in future versions of the format; the version is part of each layout line.
+On the host, the [`lizard_host`](tools.md#telemetry-decoder) package decodes these lines.
 
 ## Bluetooth
 
@@ -177,12 +195,32 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
 | `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
+| `bus.telemetry_errors`     | Malformed telemetry frames and layout lines of passed-on or mirrored peers, e.g. with a wrong CRC             | `int`     |
+| `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for room in the inbound queue, e.g. while layout lines are awaited       | `int`     |
+| `bus.ignored_lines`        | Received lines that are no bus messages and were not printed, e.g. the boot output of a peer                  | `int`     |
 
-| Methods                             | Description                                                                                                                                 | Arguments         |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
-| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
-| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
+| Methods                             | Description                                                                                                                                 | Arguments          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ...  |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s             |
+| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                    |
+| `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s             |
+| `bus.flash_peer(id, boot, enable)`  | Flash peer `id` through its boot and enable outputs with this node's firmware (see [Flashing a Peer](#serial-bus))                          | `int`, 2x `Output` |
+
+The coordinator prints the lines that reach it from its peers, e.g. `Ready.` and the output of commands sent with `bus.send()`, with the coordinator's name for the bus and the peer's ID in front, e.g. `bus[2]: Ready.` for peer 2 of a bus that the coordinator calls `bus`.
+So two buses of a node, e.g. `plexus` and `p0`, keep their peers apart, also when both have a peer 2.
+
+**Polling:**
+The coordinator polls its peers in turn, and a peer answers with the messages it has queued.
+A poll that its peer does not answer within 250 ms times out with `warning: serial bus <name> poll to <id> timed out`.
+The warning comes once until the peer answers again, e.g. after its restart, and then the coordinator prints `serial bus <name>: peer <id> answers again after <n> timed out polls`.
+
+**Other Lines:**
+Lines on the link that are no bus messages are not processed, e.g. the boot output or a panic of a peer, or what a peer prints whose bus has not taken over its console.
+A coordinator prints those that are readable text, without their Lizard checksum if they have one.
+With a single peer it prints them as lines of that peer, e.g. `bus[2]: Guru Meditation Error: ...`, and with several peers, any of which may have sent the line, with only its name for the bus in front, e.g. `bus: Guru Meditation Error: ...`.
+All others, and all such lines on a peer, are counted in `ignored_lines` and reported with `warning: serial bus <name> ignored <n> lines that are no bus messages`, at most once per second.
+The ROM bootloader and the boot log of a peer always print at 115200 baud, whatever the rate of the link; on a link with another rate they arrive as an unreadable line, so a restart of the peer is followed by one warning about an ignored line.
 
 **Time Synchronization:**
 Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle.
@@ -206,18 +244,161 @@ This is intended for timestamping sensor data (e.g. wheel odometry) received fro
 - Compatibility: update the coordinator's firmware first, and treat `__POLL__<digits>` and `__DONE__<digits>,<digits>,<digits>` payloads as reserved for this protocol.
   A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.
 
+**Telemetry Frames:**
+A peer that defines [telemetry frames](#core) with `core.telemetry(...)` sends them to its own console until a coordinator polls it, and from then on to the coordinator until the peer restarts.
+A peer whose console is the bus link holds them back until then (see [Console as Link](#serial-bus)).
+With the first poll the peer sends their layout lines again, this time to the coordinator.
+While layout lines go to the coordinator, the peer holds back all of its frames.
+Then it keeps the newest frame of each ID in a slot and sends the slots with the next poll, so a poll delivers the current values and no backlog, and a frame ID arrives at most once per poll of its peer.
+A frame that is replaced before it was sent does not count in the sequence number, so a gap is still a loss.
+A peer has eight slots; a frame beyond them is not sent, and the peer warns on its own console and through the coordinator, at most every 10 s.
+
+The coordinator checks payloads starting with `~` or `__LAYOUT__` and never processes them as Lizard code.
+`bus.pass_telemetry()` passes the frames and layout lines of all peers on to the console with the coordinator's name for the bus and the peer's ID in front, here `bus[2]: `, and `bus.pass_telemetry(2)` only those of peer 2:
+
+```
+bus = SerialBus(serial, 1)
+bus.make_coordinator(2, 3)
+bus.pass_telemetry(2)
+```
+
+```
+bus[2]: __LAYOUT__v1 1.0/2 d3 motor.position:f@52
+bus[2]: __LAYOUT__v1 1.1/2 d3 motor.enabled:?@76
+bus[2]: ~AdMHQOIBALbznT8BIbs=@31
+```
+
+Each call replaces the selection of the previous one; without a call nothing is passed on.
+Peers send their frames over the bus whether they are passed on or not.
+The coordinator drops the frames of a peer it neither passes on nor mirrors with a [BusTelemetry](#bus-telemetry) without checking them.
+Malformed frames and layout lines of passed-on or mirrored peers, e.g. no valid Base64 or with a wrong CRC, are dropped and counted in `telemetry_errors`.
+
+- Recovery: when a frame arrives whose layout the coordinator does not have or that does not match the frame, e.g. because `pass_telemetry` came after the peer sent its layout lines or the coordinator booted after the peer, it asks the peer for its layout lines with `core.telemetry_info()`, at most every 2 s.
+  Until the first of them arrives, at most for 2 s, it does not pass the peer's frames on and counts them in `telemetry_dropped`, since printing the frames queued ahead of the layout lines would keep the inbound queue full and drop those.
+  A [BusTelemetry](#bus-telemetry) of the peer still gets them.
+  Frames from before the request are passed on anyway, so a reader skips frames whose layout it has not seen yet.
+  When the peer reports `Ready.`, the coordinator forgets its layouts; the peer sends them again with the first poll.
+- Late hosts: `core.telemetry_info()` on the coordinator also asks every passed-on peer of its `make_coordinator` list for its layout lines, so a host that connects later gets them too.
+- Queues: a bus keeps the messages of each direction at their length in a queue of 4 KB, and telemetry leaves room for eight of the longest messages free (frames on the coordinator, layout lines on the peer), so commands, their replies and update chunks still get through while frames pile up, e.g. while long prints or the startup block the coordinator.
+  A message takes its length plus 11 to 14 bytes, and a frame is stored without its bus header and checksum, so the room left to telemetry holds 35 frames of 4 floats or 12 frames of 20 floats.
+  Lost telemetry recovers by itself: the next frame replaces a lost one, and missing layout lines are requested again.
+  Frames dropped this way are counted in `telemetry_dropped`.
+- Bus load: a frame of n floats or ints is a line of about 5.3·n + 25 bytes, on the bus as well as on the coordinator's console.
+  A frame of 20 floats takes 132 bytes, i.e. 2.9 ms at 460800 baud; 100 such frames per second would take almost a third of the bus.
+  The most one poll can carry is all eight slots with the largest frame of 45 floats, about 2.1 KB:
+  46 ms at 460800 baud, but 180 ms at 115200 baud, close to the coordinator's poll timeout of 250 ms.
+  The room left to telemetry in the coordinator's queue holds six of these frames, so its loop has to take them while they arrive.
+- Console load: the coordinator prints every frame it passes on, and printing blocks its loop until the line is on the wire (see [Console load](#core)).
+  So every passed-on frame adds its line's time to the coordinator's loop: a frame of 45 floats takes 5.8 ms at 460800 baud, and one of them every 10 ms already needs more than half of the loop.
+  A step handles only the messages that were waiting when it started, so frames that arrive faster than the console prints them slow the loop down instead of stalling it; those that no longer fit into the inbound queue are dropped and counted in `telemetry_dropped`.
+- Compatibility: update the coordinator's firmware first, since an older coordinator tries to run the peer's frames and layout lines as Lizard code.
+  Payloads starting with `~` or `__LAYOUT__` are reserved for telemetry.
+
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
 If multiple SerialBus modules exist, only the first one is backed up.
 On boot, if the startup script does not create a SerialBus but a backup config exists,
 Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
 This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
+A bus on the console is restored the same way and takes over the console again (see [Console as Link](#serial-bus)).
 To remove the saved configuration, call `core.forget_serial_bus()`.
+
+**Console as Link:**
+A node can use its console UART as a bus link, e.g. a port expander that is wired to the core by its console pins:
+
+```
+serial = Serial(3, 1, 115200, 0)
+bus = SerialBus(serial, 2)
+```
+
+A serial on UART0 with the console's RX and TX pins (3 and 1 on an ESP32, 44 and 43 on an ESP32-S3) leaves the console alone until a serial bus is created on it.
+From then on, only the bus reads and writes UART0, at the serial's baud rate, and the node runs no console lines, only commands from the bus.
+Everything the node prints goes to the node that polls it, which prints it as a line of this peer, e.g. `bus[2]: ...`.
+That includes replies, warnings and the output of unmuted modules.
+Lines printed before the first poll wait in the bus queue; when only the room for eight of the longest messages is free, further lines are dropped and a warning with their number follows.
+The node does not print `Ready.` on its console; the coordinator prints it with the first answer, e.g. `bus[2]: Ready.`.
+Telemetry frames and their layout lines wait for the first poll.
+While the bus has the console, ESP-IDF log and ROM output is dropped, but a panic still reaches the wire (see [Other Lines](#serial-bus)).
+Put the two lines at the top of the startup script, so that the output of the lines below reaches the coordinator, including an error that stops the script.
+What the node prints before the bus takes over the console still goes out on the console itself, e.g. an error in a line above the two.
+While the bus backup holds a bus on the console pins, i.e. from the boot after the first one with that bus, the console starts at the bus's baud rate instead of its own, so that the coordinator can read these lines and prints them (see [Other Lines](#serial-bus)).
+If no bus takes the console over during such a boot, the console returns to its own baud rate before it prints `Ready.`.
+A startup script that keeps failing is skipped after two failed boots (see [Startup Script](getting_started.md#startup-script)); the bus backup then takes over the console again, and the lines the node printed before tell the coordinator why.
+The console stays silent on USB as long as the startup script or the bus backup creates the bus, also after `./espresso.py flash`, which keeps both.
+To get it back, send the node `!-`, `!.` and `core.forget_serial_bus()` over the bus and restart it, or erase its flash with `./espresso.py erase` and flash it again; it then runs at its own baud rate again (see [`core.set_baudrate()`](#core)).
+
+**Flashing a Peer:**
+A coordinator can flash a peer that is wired to it by the bus's RX and TX pins and by two outputs to the peer's GPIO0 and EN, e.g. a port expander:
+
+```
+serial = Serial(26, 27, 460800, 1)
+p0 = SerialBus(serial, 1)
+p0.make_coordinator(2)
+p0_boot = Output(25)
+p0_boot.on()
+p0_enable = Output(14)
+p0_enable.on()
+```
+
+Keep both outputs on while the peer runs, and turn the boot output on first, so that the peer starts its firmware and not its bootloader.
+With these lines in the coordinator's startup script, `p0.flash_peer(2, p0_boot, p0_enable)` flashes the peer, sent once, e.g. from the command line; in the startup script it would flash the peer with every boot.
+A port expander on a Robot Brain does not run while its enable pin is not driven high.
+
+`flash_peer` copies this node's firmware onto the peer like `expander.flash()` at 921600 baud, whatever the link's rate, which erases the peer's NVS, i.e. its startup script, its bus backup and a persisted console baud rate.
+It needs no answer from the peer, so it also flashes a peer without firmware.
+It does not check the strapping pins; a peer that does not enter its bootloader fails the transfer before anything is erased.
+The copy boots with its console at 115200 baud; the coordinator writes it the two lines of a bus on its console as its startup script, with the baud rate of the coordinator's serial and the ID `id`, and restarts it (see [Console as Link](#serial-bus)).
+The rest of the peer's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
+`flash_peer` blocks the main loop for the whole transfer like `expander.flash()`.
+It fails if another module uses the serial, if `boot` or `enable` is no output on a pin of this node, or if the copy does not report `Ready.` within 5 s.
+It drives the two pins itself while flashing; afterwards they are high and follow their outputs again, and a peer that a failed transfer left in its bootloader is restarted through its enable pin.
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.
 Use the `otb_update.py` tool to push new firmware to any peer node.
 See [OTB Update](tools.md#otb-update) for details.
+
+## Bus Telemetry
+
+On a serial bus coordinator, a BusTelemetry module mirrors values that one peer sends in its [telemetry frames](#core), so that rules, `core.output` and the coordinator's own frames can use them.
+
+| Constructor                        | Description                     | Arguments          |
+| ---------------------------------- | ------------------------------- | ------------------ |
+| `arm = BusTelemetry(bus, peer_id)` | Mirror values of peer `peer_id` | `SerialBus`, `int` |
+
+The module has no properties of its own.
+Each value it mirrors is a [property declaration](language.md) with the name the peer gives the field:
+
+```
+bus = SerialBus(serial, 1)
+bus.make_coordinator(2)
+arm = BusTelemetry(bus, 2)
+bool arm.motor.enabled = false    # property motor.enabled of peer 2
+float arm.motor.position = 0.0
+bool arm.parked = false           # variable parked of peer 2
+when arm.motor.enabled then wheels.locked = true end
+core.telemetry(wheels.linear_speed, arm.motor.position, 100)
+```
+
+Peer 2 has to send these values in one of its frames, e.g. with `core.telemetry(motor.position, motor.enabled, parked, 100)` in its startup.
+Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `arm2 = BusTelemetry(bus, 3)`.
+
+- Declarations: only `bool`, `int` and `float` can be declared.
+  Declaring a name again with the same type only sets the value while no frame has delivered one yet.
+  Another type is an error, and so is the same name of the same peer in a second module, e.g. `"motor.position" of peer 2 is already declared by arm`.
+- Values: a declared property is read-only.
+  It keeps its declared value until a frame delivers one, and its last value when the peer stops sending or restarts.
+  An `int` arrives as int32, as at every reader of the [frame format](#core), so a value beyond that range wraps around.
+- Layouts: mirroring works whether or not the coordinator passes the peer's frames on.
+  A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after; the other mirrored values keep following meanwhile.
+  When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field, and the check for missing names runs again.
+- Warnings: a field the peer sends with another type is not mirrored, and the module warns once, e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`.
+  When the peer's frames arrive but none carries a declared name within 5 s, the module warns once, e.g. `warning: arm: no frame of peer 2 carries "parked"`.
+  Both warnings come once per run of the peer, i.e. again after its `Ready.`.
+  When no frame of the peer arrives within 5 s of a declaration or of the peer's `Ready.`, e.g. because its startup sends none, the peer ID is wrong or the peer is not polled, the module warns once, e.g. `warning: arm: no frame of peer 2 within 5 s`.
+  A peer whose layout lines have another version than this node reads is not mirrored; the bus warns once per run of the peer, e.g. `warning: serial bus bus does not read layout version 2 of peer 2, only version 1`, and the module does not report its names as missing.
+- Cost: each mirrored value takes about 100 bytes of heap on the coordinator.
+  Rules over many mirrored values are expensive on their own, so a peer should compute a predicate like `parked` itself and the coordinator mirror one bool.
 
 ## Input
 
@@ -577,6 +758,9 @@ The `start()` and `stop()` methods are primarily for debugging purposes.
 
 The `reset()` method will stop the driver, try to recover it and then start it again.
 It can be used to recover the driver from a "BUS_OFF" state.
+The module does the same by itself while the bus is "BUS_OFF", at most once per second.
+It prints "CAN bus running again" once the bus has stayed out of "BUS_OFF" for a second.
+Each reset sets the counters of `get_status()` back to zero.
 
 ## Serial interface
 
@@ -597,6 +781,67 @@ An unmuted module prints one line per batch of bytes the hardware hands over, so
 A line carries at most 85 bytes; the rest of a longer batch follows on the next line.
 
 The UART number and its pins stay reserved for the serial module until the core restarts, also after `Expander.disconnect()`.
+
+A serial on UART0 with the console's pins can only carry a [serial bus](#serial-bus), which takes over the console (see [Console as Link](#serial-bus)); its own methods fail.
+
+## JBD BMS
+
+The JBD BMS module reads a battery management system with the JBD protocol (frames from `0xDD` to `0x77`) over a [serial](#serial-interface), usually at 9600 baud.
+
+| Constructor            | Description                    | Arguments |
+| ---------------------- | ------------------------------ | --------- |
+| `bms = JbdBms(serial)` | Serial module wired to the BMS | `Serial`  |
+
+| Properties              | Description                                                | Data type |
+| ----------------------- | ---------------------------------------------------------- | --------- |
+| `bms.voltage`           | Total voltage (V)                                          | `float`   |
+| `bms.current`           | Current (A), positive while charging                       | `float`   |
+| `bms.residual_capacity` | Remaining capacity (Ah)                                    | `float`   |
+| `bms.nominal_capacity`  | Nominal capacity (Ah)                                      | `float`   |
+| `bms.percentage`        | State of charge (%)                                        | `int`     |
+| `bms.cycles`            | Charge cycles                                              | `int`     |
+| `bms.temperature`       | Mean of the temperature sensors (°C)                       | `float`   |
+| `bms.protections`       | Protection flags (see below)                               | `int`     |
+| `bms.fets`              | MOSFETs that are on: charging (bit 0), discharging (bit 1) | `int`     |
+| `bms.cells`             | Number of cells                                            | `int`     |
+| `bms.interval`          | Time between requests (s), 0 to stop them                  | `float`   |
+| `bms.last_message_age`  | Time since the values were last updated (ms)               | `int`     |
+| `bms.errors`            | Answers that were missing or invalid                       | `int`     |
+
+| Methods                  | Description                                  | Arguments |
+| ------------------------ | -------------------------------------------- | --------- |
+| `bms.cell_voltages()`    | Ask for the cell voltages and print them (V) |           |
+| `bms.hardware_version()` | Ask for the hardware version and print it    |           |
+
+The module asks for the basic information every `interval` seconds, 1 s by default, and updates the properties with each valid answer.
+Until the first valid answer with the basic information, the values of the BMS are 0 and `last_message_age` counts from the boot, like `core.last_message_age`.
+An answer that is missing after 500 ms or invalid, e.g. with a wrong checksum or an error status, counts in `errors`, and the properties keep their last values.
+If the answer to a method is missing or invalid, the module also prints a warning, e.g. `warning: bms got no cell voltages`.
+Keep the serial muted, since the module reads its bytes.
+
+The bits of `protections` are:
+
+- bit 0: cell over-voltage,
+- bit 1: cell under-voltage,
+- bit 2: battery over-voltage,
+- bit 3: battery under-voltage,
+- bit 4: charging over-temperature,
+- bit 5: charging under-temperature,
+- bit 6: discharging over-temperature,
+- bit 7: discharging under-temperature,
+- bit 8: charging over-current,
+- bit 9: discharging over-current,
+- bit 10: short circuit,
+- bit 11: front-end IC error and
+- bit 12: MOSFET software lock.
+
+On a [serial bus](#serial-bus) peer, the values can travel to the coordinator in [telemetry frames](#core):
+
+```
+bms_serial = Serial(26, 27, 9600, 2)
+bms = JbdBms(bms_serial)
+core.telemetry(bms.voltage, bms.current, bms.percentage, bms.temperature, bms.protections, 1000)
+```
 
 ## Linear motor
 
@@ -978,6 +1223,12 @@ If acceleration is 0, the motor stops immediately.
 
 The `read_position_error()` method requests the current position error from the motor via CAN.
 The result is available in the `position_error` property (in degrees) once the motor responds.
+
+The `position` and `speed` properties are read in turns, so each of them is updated every other step.
+
+On construction, the module switches off the motor's answers to speed and position commands (command `0x8C`),
+including the status the motor would otherwise send when a move or a stop completes.
+The motor keeps answering read and configuration commands.
 
 The `set_bitrate()` method changes the CAN bitrate on the motor.
 The rate is given in Hz and must be one of the four supported values (125000, 250000, 500000 or 1000000);

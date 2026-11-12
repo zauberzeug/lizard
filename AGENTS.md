@@ -77,7 +77,7 @@ end
 | **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander`                                                                                                            |
 | **Motor Controllers** | `LinearMotor`, `ODriveMotor`, `ODriveWheels`, `RmdMotor`, `RmdPair`, `StepperMotor`, `RoboClawMotor`, `RoboClawWheels`, `D1Motor`, `DunkerMotor`, `DunkerWheels` |
 | **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                  |
-| **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                       |
+| **Sensors**           | `Imu`, `ImuBno085`, `TemperatureSensor`, `JbdBms`                                                                                                                |
 | **Expanders**         | `Mcp23017` (I2C GPIO expander)                                                                                                                                   |
 | **Utilities**         | `MotorAxis`, `Proxy`                                                                                                                                             |
 
@@ -101,7 +101,11 @@ lizard/
 ├── build.py               # Build script (wraps idf.py)
 ├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
 ├── monitor.py             # Serial monitor
-├── serial_devices.py      # Serial device discovery shared by the host tools
+├── lizard_host/           # Package shared by the host tools and other host software
+│   ├── serial_devices.py  # Serial device discovery
+│   ├── console_line.py    # Console line checksum
+│   └── telemetry.py       # Telemetry frame decoder
+├── tests/                 # Unit tests of the host tools (pytest)
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
 └── gen_parser.sh          # Regenerates parser.h from language.owl
 ```
@@ -133,6 +137,8 @@ python build.py --clean
 python build.py esp32s3 --clean
 ```
 
+The firmware needs ESP-IDF 5.3.6 or newer: older versions skip the linker fragment `main/parser.lf` without a warning, so the parser ends up in flash instead of IRAM. `./compile.sh` builds in the matching Docker image.
+
 ### Flash & Monitor
 
 ```bash
@@ -145,6 +151,15 @@ python monitor.py
 # Or use idf.py directly
 idf.py flash monitor
 ```
+
+### Host Tool Tests
+
+```bash
+pytest
+```
+
+The checks of the host tools (ruff, mypy) run with pre-commit; `pyproject.toml` holds their configuration.
+The host tools stay compatible with Python 3.8, the system Python of L4T 35 Robot Brains.
 
 ### Parser Regeneration
 

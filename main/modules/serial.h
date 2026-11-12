@@ -28,13 +28,15 @@ public:
     const gpio_num_t tx_pin;
     const long baud_rate;
     const uart_port_t uart_num;
+    const bool on_console; // UART0 on the console pins, only for a SerialBus, which takes over the console's driver
 
     Serial(const std::string name,
            const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num);
+    static bool is_console(const int rx_pin, const int tx_pin, const int uart_num);
     ~Serial();
     void initialize_uart() const;
     void enable_line_detection() const;
-    void claim(const std::string &user) const;
+    void claim(const std::string &user) const; // refused on the console pins, which only a SerialBus takes over
     void require_sole_user(const std::string &user) const;
     void deinstall() const;
     void reinitialize_after_flash() const;

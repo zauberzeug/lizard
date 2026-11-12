@@ -44,7 +44,9 @@ bool RmdMotor::send(const uint8_t d0, const uint8_t d1, const uint8_t d2, const 
     this->last_msg_id = 0;
     const int max_attempts = 3;
     for (int i = 0; i < max_attempts; ++i) {
-        this->can->send(this->motor_id + 0x140, d0, d1, d2, d3, d4, d5, d6, d7);
+        if (!this->can->send(this->motor_id + 0x140, d0, d1, d2, d3, d4, d5, d6, d7)) {
+            return false; // the bus is not RUNNING or the TX queue is full; the next step() sends again anyway
+        }
         unsigned long int start = micros();
         while (this->last_msg_id != d0 && micros_since(start) < timeout_ms * 1000) {
             this->can->receive();

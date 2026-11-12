@@ -96,8 +96,9 @@ std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
     return arguments;
 }
 
-Expression_ptr compile_expression(const struct owl_ref ref) {
-    const struct parsed_expression expression = parsed_expression_get(ref);
+// compile_leaf, compile_unary and compile_binary are kept out of line
+// so that compile_expression's recursive frame does not hold the temporaries of every case (256 instead of 1056 B)
+__attribute__((noinline)) static Expression_ptr compile_leaf(const struct parsed_expression &expression) {
     switch (expression.type) {
     case PARSED_TRUE:
         return std::make_shared<BooleanExpression>(true);
@@ -120,54 +121,84 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
     case PARSED_PROPERTY:
         return std::make_shared<PropertyExpression>(Global::get_module(identifier_to_string(expression.module_name)),
                                                     property_name_to_string(expression.property_name, expression.subproperty_name));
+    default:
+        throw std::runtime_error("invalid expression");
+    }
+}
+
+template <typename T>
+__attribute__((noinline)) static Expression_ptr compile_unary(const struct owl_ref operand) {
+    return std::make_shared<T>(compile_expression(operand));
+}
+
+template <typename T>
+__attribute__((noinline)) static Expression_ptr compile_binary(const struct owl_ref left, const struct owl_ref right) {
+    return std::make_shared<T>(compile_expression(left), compile_expression(right));
+}
+
+Expression_ptr compile_expression(const struct owl_ref ref) {
+    // each level takes up to 336 B of the 32 kB main task stack (256 B here plus 80 B in compile_binary, IDF 5.3);
+    // an ESP32 crashed at 95 levels, but an "at" block runs and is torn down on the 8 kB scheduler stack,
+    // where a sum of 47 terms crashed, so 40 leaves some headroom there
+    static const int MAX_EXPRESSION_DEPTH = 40;
+    static int depth = 0; // a plain static is fine: compilation only runs under the InterpreterLock
+    if (depth >= MAX_EXPRESSION_DEPTH) {
+        throw std::runtime_error("expression is nested too deeply");
+    }
+    struct DepthGuard {
+        DepthGuard() { ++depth; }
+        ~DepthGuard() { --depth; }
+    } depth_guard;
+    const struct parsed_expression expression = parsed_expression_get(ref);
+    switch (expression.type) {
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
-        return std::make_shared<PowerExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<PowerExpression>(expression.left, expression.right);
     case PARSED_NEGATE:
-        return std::make_shared<NegateExpression>(compile_expression(expression.operand));
+        return compile_unary<NegateExpression>(expression.operand);
     case PARSED_MULTIPLY:
-        return std::make_shared<MultiplyExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<MultiplyExpression>(expression.left, expression.right);
     case PARSED_DIVIDE:
-        return std::make_shared<DivideExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<DivideExpression>(expression.left, expression.right);
     case PARSED_MODULO:
-        return std::make_shared<ModuloExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<ModuloExpression>(expression.left, expression.right);
     case PARSED_FLOOR_DIVIDE:
-        return std::make_shared<FloorDivideExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<FloorDivideExpression>(expression.left, expression.right);
     case PARSED_ADD:
-        return std::make_shared<AddExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<AddExpression>(expression.left, expression.right);
     case PARSED_SUBTRACT:
-        return std::make_shared<SubtractExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<SubtractExpression>(expression.left, expression.right);
     case PARSED_SHIFT_LEFT:
-        return std::make_shared<ShiftLeftExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<ShiftLeftExpression>(expression.left, expression.right);
     case PARSED_SHIFT_RIGHT:
-        return std::make_shared<ShiftRightExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<ShiftRightExpression>(expression.left, expression.right);
     case PARSED_BIT_AND:
-        return std::make_shared<BitAndExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<BitAndExpression>(expression.left, expression.right);
     case PARSED_BIT_XOR:
-        return std::make_shared<BitXorExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<BitXorExpression>(expression.left, expression.right);
     case PARSED_BIT_OR:
-        return std::make_shared<BitOrExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<BitOrExpression>(expression.left, expression.right);
     case PARSED_GREATER:
-        return std::make_shared<GreaterExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<GreaterExpression>(expression.left, expression.right);
     case PARSED_LESS:
-        return std::make_shared<LessExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<LessExpression>(expression.left, expression.right);
     case PARSED_GREATER_EQUAL:
-        return std::make_shared<GreaterEqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<GreaterEqualExpression>(expression.left, expression.right);
     case PARSED_LESS_EQUAL:
-        return std::make_shared<LessEqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<LessEqualExpression>(expression.left, expression.right);
     case PARSED_EQUAL:
-        return std::make_shared<EqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<EqualExpression>(expression.left, expression.right);
     case PARSED_UNEQUAL:
-        return std::make_shared<UnequalExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<UnequalExpression>(expression.left, expression.right);
     case PARSED_NOT:
-        return std::make_shared<NotExpression>(compile_expression(expression.operand));
+        return compile_unary<NotExpression>(expression.operand);
     case PARSED_AND:
-        return std::make_shared<AndExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<AndExpression>(expression.left, expression.right);
     case PARSED_OR:
-        return std::make_shared<OrExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<OrExpression>(expression.left, expression.right);
     default:
-        throw std::runtime_error("invalid expression");
+        return compile_leaf(expression);
     }
 }
 
@@ -405,7 +436,9 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
         return;
     }
     if (debug) {
-        owl_tree_print(tree.get());
+        if (!console_handed_over()) {
+            owl_tree_print(tree.get()); // prints to stdout directly
+        }
         tic();
     }
     process_tree(tree.get(), from_expander);
@@ -541,6 +574,9 @@ static void process_uart_line(char *line, const int len) {
 void process_uart() {
     static char input[CONSOLE_LINE_SIZE];
     static bool discarding = false; // an unterminated run exceeded a line: drop everything up to its line end
+    if (console_handed_over()) {
+        return; // a serial bus reads UART0
+    }
     while (true) {
         const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
@@ -581,6 +617,9 @@ void process_uart() {
             process_uart_line(input + start, end - start);
             start = end;
         }
+        if (console_handed_over()) {
+            return; // a line created a serial bus on the console, which reads UART0 from now on
+        }
     }
 }
 
@@ -599,8 +638,12 @@ void app_main() {
     // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be initialized first.
     // Note: the ROM bootloader and early boot log always use 115200 regardless of this value.
     nvs_flash_init();
-    uint32_t baud_rate = 115200;
+    uint32_t baud_rate = CONSOLE_DEFAULT_BAUD_RATE;
     Storage::get_baudrate(baud_rate);
+    // a node whose console is a bus link prints at the link's rate from here on, so its coordinator can read
+    // what it prints before its bus takes over the console
+    const uint32_t own_baud_rate = baud_rate;
+    const bool at_bus_rate = bus_backup::get_console_baud_rate(baud_rate);
 
     const uart_config_t uart_config = {
         .baud_rate = static_cast<int>(baud_rate),
@@ -616,6 +659,10 @@ void app_main() {
     ESP_ERROR_CHECK(install_uart_driver_on_core1(UART_NUM_0, RX_RING_SIZE, 0));
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
+    if (at_bus_rate) {
+        // the coordinator read the boot log as garbage; a line end keeps it out of the first line printed here
+        uart_write_bytes(UART_NUM_0, "\n", 1);
+    }
 
     try {
         resources::reserve_boot_resources();
@@ -639,7 +686,14 @@ void app_main() {
     bus_backup::save_if_present();
     bus_backup::restore_if_needed();
 
-    printf("\nReady.\n");
+    if (!console_handed_over()) {
+        if (at_bus_rate) {
+            // no bus took the console over, e.g. the startup script moved it to other pins
+            uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
+            uart_set_baudrate(UART_NUM_0, own_baud_rate);
+        }
+        printf("\nReady.\n"); // a serial bus that took over the console reports "Ready." with its first answer
+    }
 
     constexpr int LOOP_PERIOD_MS = 10;
     // Anchor for the deadline loop below: xTaskDelayUntil advances this by one period

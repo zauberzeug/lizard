@@ -9,7 +9,7 @@ from pathlib import Path
 
 import serial
 
-from serial_devices import resolve_device
+from lizard_host import resolve_device
 
 CHUNK_SIZE = 165  # must match BUS_OTB_CHUNK_SIZE in main/utils/otb.h (the chunk line has to fit the bus payload)
 WINDOW = 8  # must match BUS_OTB_WINDOW in main/utils/otb.h

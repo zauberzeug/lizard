@@ -1,0 +1,28 @@
+# Configuration of the code checks for the host tools; Lizard is not installed as a Python package.
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py38" # the system Python of L4T 35 Robot Brains, where monitor.py and espresso.py also run
+extend-exclude = ["components", "owl"]
+
+[tool.ruff.lint]
+select = [
+    "B",  # bugbear
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "FA102", # list[int] or int | None in annotations break the scripts on Python 3.8
+    "I",  # isort
+    "UP", # pyupgrade
+    "W",  # pycodestyle warnings
+]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/**" = ["FA102"] # the examples run on newer host Pythons, not on L4T 35
+
+[tool.mypy]
+ignore_missing_imports = true
+exclude = ["^build/", "^components/", "^owl/"]

@@ -13,8 +13,8 @@ constexpr int RX_FULL_THRESHOLD_BYTES = 32;
 constexpr int RX_FULL_THRESHOLD_DEFAULT_BYTES = 120;
 
 // Depth of the driver's event queue. Nothing reads it, it only has to exist: when the receive ring runs full while
-// a line end is detected, the receive ISR of IDF 5.3.1 (and still of master) posts to the queue without a NULL
-// check, and FreeRTOS asserts in the ISR if there is none (#146, #302). Any depth works; 20 is what #146 chose.
+// a line end is detected, the receive ISR of IDF 5.3.1 to 5.3.6 (and still of master) posts to the queue without a
+// NULL check, and FreeRTOS asserts in the ISR if there is none (#146, #302). Any depth works; 20 is what #146 chose.
 constexpr int RX_EVENT_QUEUE_SIZE = 20;
 
 // Installs a UART driver from core 1 so its interrupt is allocated there, away from the Bluetooth controller

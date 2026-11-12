@@ -3,32 +3,91 @@
 #include "../main.h"
 #include "../utils/format.h"
 #include "../utils/otb.h"
+#include "../utils/serial-replicator.h"
 #include "../utils/string_utils.h"
+#include "../utils/telemetry.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
+#include "bus_telemetry.h"
 #include "module_helpers.h"
+#include "output.h"
 #include "serial.h"
+#include "soc/uart_channel.h"
 #include <esp_timer.h>
 #include <algorithm>
+#include <cassert>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 
-static constexpr size_t FRAME_BUFFER_SIZE = 512;
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
-static constexpr size_t OUTGOING_QUEUE_LENGTH = 32;
-static constexpr size_t INCOMING_QUEUE_LENGTH = 32;
-static constexpr size_t OFFSET_QUEUE_LENGTH = 8;            // full-state snapshots; a full queue only delays one
-static_assert(OUTGOING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled poll must not abort an OTB update
-static_assert(INCOMING_QUEUE_LENGTH > otb::BUS_OTB_WINDOW); // a stalled step() must not drop an OTB chunk
+static constexpr size_t OFFSET_QUEUE_LENGTH = 8;    // full-state snapshots; a full queue only delays one
+static constexpr size_t MESSAGE_BUFFER_SIZE = 4096; // per direction; a message takes its length plus 11 to 14 bytes
+static constexpr size_t RINGBUF_ITEM_HEADER = 8;
+// a message in a ring buffer: this header, the payload and its terminating zero; an outbound message names this node
+// as its sender, so that both buffers hold the same item
+struct MessageHeader {
+    uint8_t sender;
+    uint8_t receiver;
+};
+static constexpr size_t message_size(const size_t payload_length) {
+    return sizeof(MessageHeader) + payload_length + 1;
+}
+static constexpr size_t footprint(const size_t payload_length) { // in the ring buffer, aligned and with its header
+    return (message_size(payload_length) + 3) / 4 * 4 + RINGBUF_ITEM_HEADER;
+}
+static constexpr size_t LONGEST_MESSAGE_FOOTPRINT = footprint(SerialBus::PAYLOAD_CAPACITY - 1);
+// room in the ring buffers that telemetry never takes: frames coming in, layout lines and relayed console output going
+// out; it holds an OTB window of the longest messages, so commands, their replies and update chunks still get through,
+// also behind the room an item leaves unused when it does not fit before the buffer wraps
+static constexpr size_t TELEMETRY_RESERVE = (otb::BUS_OTB_WINDOW + 1) * LONGEST_MESSAGE_FOOTPRINT;
+static_assert(MESSAGE_BUFFER_SIZE >= TELEMETRY_RESERVE + LONGEST_MESSAGE_FOOTPRINT);
+static_assert(LONGEST_MESSAGE_FOOTPRINT <= MESSAGE_BUFFER_SIZE / 2); // the largest item of a no-split ring buffer
+
+// whether a message of this length leaves the reserve free in a buffer that holds `used` bytes
+static bool leaves_reserve(const size_t used, const size_t payload_length) {
+    return used + footprint(payload_length) + TELEMETRY_RESERVE <= MESSAGE_BUFFER_SIZE;
+}
+// builds a message in place in a ring buffer and counts its bytes; false when it does not fit within `wait`
+static bool send_item(const RingbufHandle_t buffer, std::atomic<size_t> &bytes, const MessageHeader header,
+                      const char *payload, const size_t length, const TickType_t wait) {
+    bytes += footprint(length); // before the consumer can take the message and subtract it
+    void *item;
+    if (xRingbufferSendAcquire(buffer, &item, message_size(length), wait) != pdTRUE) {
+        bytes -= footprint(length);
+        return false;
+    }
+    char *const data = static_cast<char *>(item);
+    std::memcpy(data, &header, sizeof(header));
+    std::memcpy(data + sizeof(header), payload, length);
+    data[sizeof(header) + length] = '\0';
+    xRingbufferSendComplete(buffer, item);
+    return true;
+}
+// a message as it lies in a received item of `size` bytes
+struct StoredMessage {
+    MessageHeader header;
+    const char *payload; // terminated
+    size_t length;
+};
+static StoredMessage read_item(const char *const item, const size_t size) {
+    StoredMessage stored{{}, item + sizeof(MessageHeader), size - message_size(0)};
+    std::memcpy(&stored.header, item, sizeof(MessageHeader));
+    return stored;
+}
 static constexpr const char ECHO_CMD[] = "__ECHO__";
 static constexpr const char POLL_CMD[] = "__POLL__";
 static_assert(otb::BUS_OTB_CHUNK_LINE_SIZE < SerialBus::PAYLOAD_CAPACITY, "OTB chunk lines must fit the bus payload");
 static constexpr const char DONE_CMD[] = "__DONE__";
 static constexpr size_t MAX_STAMP_DIGITS = 18; // beyond this strtoll saturates and skews the offset
 static constexpr size_t DONE_STAMP_FIELDS = 3; // T3, T3-T2, sequence number of the answered POLL
+static constexpr unsigned long LAYOUT_REQUEST_INTERVAL_MS = 2000;
+static constexpr unsigned long SLOT_WARNING_INTERVAL_MS = 10000;
+static constexpr const char LAYOUT_REQUEST[] = "core.telemetry_info()";
+static constexpr unsigned long REPORT_INTERVAL_MS = 1000;
+static constexpr unsigned long FLASHED_PEER_BOOT_MS = 5000; // until the fresh copy reports "Ready."
 
 // Estimator tunables: an unlocked estimate takes the first sample; from then on a sample whose accuracy
 // bound is at most SYNC_ACCEPT_ACCURACY_US replaces the estimate immediately, otherwise the best sample
@@ -49,13 +108,42 @@ static Module_ptr create_serial_bus(const std::string &name, const std::vector<C
 }
 REGISTER_MODULE(SerialBus, &create_serial_bus)
 
+static gpio_num_t gpio_output_pin(const ConstExpression_ptr &argument) {
+    const auto gpio_output = std::dynamic_pointer_cast<GpioOutput>(get_module_argument<Output>(argument));
+    if (!gpio_output) {
+        throw std::runtime_error("output \"" + argument->evaluate_identifier() + "\" is no GPIO pin of this node");
+    }
+    return gpio_output->number;
+}
+
+uint8_t SerialBus::to_peer_id(const ConstExpression_ptr &argument) {
+    if ((argument->type & integer) == 0) {
+        throw std::runtime_error("peer IDs must be integers");
+    }
+    const long peer_value = argument->evaluate_integer();
+    if (peer_value <= 0 || peer_value >= 255) {
+        throw std::runtime_error("peer IDs must be between 0 and 255");
+    }
+    return static_cast<uint8_t>(peer_value);
+}
+
 const std::map<std::string, Variable_ptr> SerialBus::get_defaults() {
-    return {};
+    return {
+        {"telemetry_errors", std::make_shared<IntegerVariable>(0)},
+        {"telemetry_dropped", std::make_shared<IntegerVariable>(0)},
+        {"ignored_lines", std::make_shared<IntegerVariable>(0)},
+    };
 }
 
 SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, const uint8_t node_id)
     : Module(name), serial(serial), node_id(node_id) {
     this->properties = SerialBus::get_defaults();
+    this->telemetry_errors = this->properties.at("telemetry_errors");
+    this->telemetry_dropped = this->properties.at("telemetry_dropped");
+    this->ignored_lines_property = this->properties.at("ignored_lines");
+    if (serial->on_console && console_handed_over()) {
+        throw std::runtime_error("the console is already taken over by another serial bus");
+    }
     this->serial->enable_line_detection();
 
     // everything that can throw comes before the task exists: an exception from a constructor unwinds without running
@@ -68,29 +156,47 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
 
     this->config_queue = xQueueCreate(1, sizeof(Config));
     this->offset_queue = xQueueCreate(OFFSET_QUEUE_LENGTH, sizeof(OffsetUpdate));
-    this->outbound_queue = xQueueCreate(OUTGOING_QUEUE_LENGTH, sizeof(OutgoingMessage));
-    this->inbound_queue = xQueueCreate(INCOMING_QUEUE_LENGTH, sizeof(IncomingMessage));
-    const bool queues_created = this->config_queue && this->offset_queue && this->outbound_queue && this->inbound_queue;
+    this->outbound_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
+    this->inbound_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
+    const bool queues_created = this->config_queue && this->offset_queue && this->outbound_buffer && this->inbound_buffer;
+    // footprint() mirrors the item layout of esp_ringbuf; the largest item of a no-split buffer tells its header size
+    assert(!queues_created || xRingbufferGetMaxItemSize(this->inbound_buffer) == MESSAGE_BUFFER_SIZE / 2 - RINGBUF_ITEM_HEADER);
+    if (queues_created && serial->on_console) {
+        // from now on, only this bus reads and writes UART0, and everything this node prints goes to its coordinator;
+        // before the task starts, so that it reads nothing from before
+        hand_over_console(serial->baud_rate, [this](unsigned long timeout_ms) { this->drain_outbound(timeout_ms); });
+    }
     if (!queues_created ||
         xTaskCreatePinnedToCore(
             SerialBus::communication_loop, "serial_bus_comm", 4096, this, 5, &this->communication_task, 1) != pdPASS) {
-        for (const QueueHandle_t queue :
-             {this->config_queue, this->offset_queue, this->outbound_queue, this->inbound_queue}) {
+        if (queues_created && serial->on_console) {
+            take_back_console();
+        }
+        for (const QueueHandle_t queue : {this->config_queue, this->offset_queue}) {
             if (queue) {
                 vQueueDelete(queue);
+            }
+        }
+        for (const RingbufHandle_t buffer : {this->outbound_buffer, this->inbound_buffer}) {
+            if (buffer) {
+                vRingbufferDelete(buffer);
             }
         }
         unregister_echo_callback(this->echo_callback_handle);
         throw std::runtime_error(queues_created ? "failed to create serial bus communication task"
                                                 : "failed to create serial bus queues");
     }
-    // claim last: a claim is never released, so it must not outlive a constructor that throws
-    this->serial->claim(name);
+    if (!serial->on_console) {
+        // last: a claim is never released, so it must not outlive a constructor that throws
+        this->serial->claim(name);
+    }
+    telemetry::add_bus(this);
 }
 
 // only reached when a constructed bus is dropped again, e.g. because Global::add_module() throws; the task must be gone
 // before the queues and `this` are
 SerialBus::~SerialBus() {
+    telemetry::remove_bus(this);
     unregister_echo_callback(this->echo_callback_handle);
     this->stop_requested = true;
     for (int i = 0; i < 100 && !this->stopped; ++i) {
@@ -98,9 +204,16 @@ SerialBus::~SerialBus() {
     }
     // the task parks itself once it has left its loop, so this is the only delete and cannot collide with a self-delete
     vTaskDelete(this->communication_task);
-    for (const QueueHandle_t queue : {this->config_queue, this->offset_queue, this->outbound_queue, this->inbound_queue}) {
+    if (this->serial->on_console) {
+        take_back_console();
+    }
+    for (const QueueHandle_t queue : {this->config_queue, this->offset_queue}) {
         vQueueDelete(queue);
     }
+    for (const RingbufHandle_t buffer : {this->outbound_buffer, this->inbound_buffer}) {
+        vRingbufferDelete(buffer);
+    }
+    delete[] this->frame_slots.load();
 }
 
 void SerialBus::step() {
@@ -109,16 +222,38 @@ void SerialBus::step() {
         this->apply_offset_update(update);
     }
 
+    // only what is waiting now: messages that keep arriving while the console blocks must not hold up the main loop
     IncomingMessage message;
-    while (xQueueReceive(this->inbound_queue, &message, 0) == pdTRUE) {
+    UBaseType_t waiting = 0;
+    vRingbufferGetInfo(this->inbound_buffer, nullptr, nullptr, nullptr, nullptr, &waiting);
+    for (; waiting > 0 && this->pop_incoming(message); --waiting) {
         this->handle_incoming_message(message);
     }
 
     // the communication task must not echo() itself, so drops are counted there and reported here, at most once per second
-    if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > 1000) {
+    if (this->dropped_inbound > 0 && millis_since(this->last_drop_report_millis) > REPORT_INTERVAL_MS) {
         const unsigned dropped = this->dropped_inbound.exchange(0);
         this->last_drop_report_millis = millis();
         echo("warning: serial bus %s dropped %u inbound messages (queue full)", this->name.c_str(), dropped);
+    }
+    if (this->dropped_frames > 0) {
+        this->telemetry_dropped->set_integer_value(this->telemetry_dropped->integer_value() + this->dropped_frames.exchange(0));
+    }
+    if (this->ignored_lines > 0) {
+        const unsigned ignored = this->ignored_lines.exchange(0);
+        this->ignored_lines_property->set_integer_value(this->ignored_lines_property->integer_value() + ignored);
+        this->unreported_ignored_lines += ignored;
+    }
+    if (this->unreported_ignored_lines > 0 && millis_since(this->last_ignored_report_millis) > REPORT_INTERVAL_MS) {
+        this->last_ignored_report_millis = millis();
+        echo("warning: serial bus %s ignored %u lines that are no bus messages", this->name.c_str(), this->unreported_ignored_lines);
+        this->unreported_ignored_lines = 0;
+    }
+    // reported once the queue has room again, e.g. when a coordinator polls after a restart, also for the warning itself
+    if (this->dropped_output > 0 && millis_since(this->last_output_drop_report_millis) > REPORT_INTERVAL_MS &&
+        leaves_reserve(this->outbound_bytes, PAYLOAD_CAPACITY - 1)) {
+        this->last_output_drop_report_millis = millis();
+        echo("warning: serial bus %s dropped %u lines of output (queue full)", this->name.c_str(), this->dropped_output.exchange(0));
     }
 
     if (this->otb_session.handle != 0) {
@@ -148,6 +283,9 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         const std::string payload = format_args(arguments[1]->evaluate_string(), arguments, 2);
         this->enqueue_outgoing_message(static_cast<uint8_t>(receiver), payload.c_str(), payload.size());
     } else if (method_name == "make_coordinator") {
+        if (this->serial->on_console) {
+            throw std::runtime_error("serial bus \"" + this->name + "\" cannot coordinate over this node's console");
+        }
         if (arguments.empty()) {
             throw std::runtime_error("make_coordinator expects at least one peer ID");
         }
@@ -157,14 +295,7 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         uint8_t peer_ids[sizeof(Config::peer_ids)];
         uint8_t peer_count = 0;
         for (const auto &argument : arguments) {
-            if ((argument->type & integer) == 0) {
-                throw std::runtime_error("peer IDs must be integers");
-            }
-            const long peer_value = argument->evaluate_integer();
-            if (peer_value <= 0 || peer_value >= 255) {
-                throw std::runtime_error("peer IDs must be between 0 and 255");
-            }
-            peer_ids[peer_count++] = static_cast<uint8_t>(peer_value);
+            peer_ids[peer_count++] = to_peer_id(argument);
         }
         std::memcpy(this->config.peer_ids, peer_ids, peer_count);
         this->config.peer_count = peer_count;
@@ -173,9 +304,134 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
         Module::expect(arguments, 0);
         this->config.time_sync_enabled = true;
         this->send_config();
+    } else if (method_name == "pass_telemetry") {
+        std::bitset<256> peers;
+        for (const auto &argument : arguments) {
+            peers.set(to_peer_id(argument));
+        }
+        if (arguments.empty()) {
+            peers.set();
+        }
+        for (auto it = this->peer_layouts.begin(); it != this->peer_layouts.end();) {
+            if (!peers[it->first] && !this->is_listened_to(it->first)) {
+                it = this->peer_layouts.erase(it); // no longer passed on
+                continue;
+            }
+            if (peers[it->first] && !this->passes_telemetry(it->first)) {
+                // passed on anew: the host needs the layout lines a BusTelemetry kept, whose mirrors keep following meanwhile
+                this->refresh_layout(it->second);
+            }
+            ++it;
+        }
+        this->passed_peers = peers;
+    } else if (method_name == "flash_peer") {
+        Module::expect(arguments, 3, integer, identifier, identifier);
+        this->flash_peer(to_peer_id(arguments[0]), gpio_output_pin(arguments[1]), gpio_output_pin(arguments[2]));
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void SerialBus::pause_communication() {
+    this->paused = false; // may still be set from the last pause
+    this->pause_requested = true;
+    // a second for a frame in flight, plus twice the time a full outbound buffer takes on the wire, since the task
+    // sends it at once and blocks on a full TX ring: 1.7 s at 115200 baud, 9.5 s at 9600 baud; normally within 1 ms
+    const unsigned long timeout_ms = 1000 + 2 * MESSAGE_BUFFER_SIZE * 10 * 1000 / this->serial->baud_rate;
+    const unsigned long start = millis();
+    while (!this->paused) {
+        if (millis_since(start) > timeout_ms) {
+            this->pause_requested = false;
+            throw std::runtime_error("serial bus \"" + this->name + "\" could not pause its communication");
+        }
+        delay(1);
+    }
+}
+
+static void restart_through_enable_pin(const gpio_num_t enable_pin) {
+    gpio_set_level(enable_pin, 0);
+    delay(100);
+    gpio_set_level(enable_pin, 1);
+}
+
+void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin) {
+    if (this->serial->on_console) {
+        throw std::runtime_error("serial bus \"" + this->name + "\" cannot flash a peer over this node's console");
+    }
+    this->serial->require_sole_user(this->name);
+    this->pause_communication();
+    struct Resume {
+        SerialBus *const bus;
+        const gpio_num_t boot_pin;
+        const gpio_num_t enable_pin;
+        bool completed = false;
+        // both high until the outputs' next step, since a peer's EN may be pulled low
+        void drive_pins_high() const {
+            for (const gpio_num_t pin : {this->boot_pin, this->enable_pin}) {
+                gpio_set_level(pin, 1);
+                gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+            }
+        }
+        ~Resume() {
+            this->drive_pins_high();
+            if (!this->completed) {
+                restart_through_enable_pin(this->enable_pin); // a failed transfer may have left the peer in its bootloader
+            }
+            this->bus->pause_requested = false;
+        }
+    } resume{this, boot_pin, enable_pin};
+    this->serial->deinstall();
+    // the replicator connects at 115200 baud and flashes at 921600, whatever the link's rate
+    const bool success = ZZ::Replicator::flash_replica(this->serial->uart_num, enable_pin, boot_pin,
+                                                       this->serial->rx_pin, this->serial->tx_pin);
+    delay(100);
+    this->serial->reinitialize_after_flash();
+    if (!success) {
+        throw std::runtime_error("serial bus \"" + this->name + "\" could not flash peer " + std::to_string(peer_id));
+    }
+    resume.drive_pins_high();
+    restart_through_enable_pin(enable_pin); // boots the copy
+    this->configure_flashed_peer(peer_id);
+    resume.completed = true;
+}
+
+void SerialBus::configure_flashed_peer(const uint8_t peer_id) {
+    // The copy boots with an empty NVS, i.e. with its console at the default baud rate and without a startup script.
+    // Through that console it gets a startup script with a serial bus on the console, which takes the console over
+    // after a restart and lands in the peer's bus backup.
+    const uart_port_t uart_num = this->serial->uart_num;
+    uart_set_baudrate(uart_num, CONSOLE_DEFAULT_BAUD_RATE);
+    this->serial->flush();
+    bool ready = false;
+    const unsigned long start = millis();
+    while (!ready && millis_since(start) < FLASHED_PEER_BOOT_MS) {
+        char line[128]; // longer boot log lines are discarded by read_line()
+        while (!ready && this->serial->has_buffered_lines()) {
+            const int len = this->serial->read_line(line, sizeof(line));
+            bool checksum_ok = false;
+            ready = len > 0 && (check(line, len, &checksum_ok), checksum_ok) && std::strcmp(line, "Ready.") == 0;
+        }
+        delay(10);
+    }
+    if (ready) {
+        char command[64];
+        const int rx_pin = UART_NUM_0_RXD_DIRECT_GPIO_NUM; // a copy of this firmware runs on the same chip
+        const int tx_pin = UART_NUM_0_TXD_DIRECT_GPIO_NUM;
+        this->serial->write_checked_line("!-");
+        this->serial->write_checked_line(command, csprintf(command, sizeof(command), "!+serial = Serial(%d, %d, %ld, 0)",
+                                                           rx_pin, tx_pin, this->serial->baud_rate));
+        this->serial->write_checked_line(command, csprintf(command, sizeof(command), "!+bus = SerialBus(serial, %u)", peer_id));
+        this->serial->write_checked_line("!.");
+        this->serial->write_checked_line("core.restart()");
+        uart_wait_tx_done(uart_num, pdMS_TO_TICKS(500));
+        delay(100); // before polls at another baud rate could garble the lines
+    }
+    uart_set_baudrate(uart_num, this->serial->baud_rate);
+    this->serial->flush();
+    if (!ready) {
+        throw std::runtime_error("peer " + std::to_string(peer_id) + " flashed by serial bus \"" + this->name + "\" did not report \"Ready.\"");
+    }
+    echo("serial bus %s flashed peer %u, which restarts now", this->name.c_str(), peer_id);
 }
 
 void SerialBus::send_config() {
@@ -228,6 +484,12 @@ void SerialBus::apply_offset_update(const OffsetUpdate &update) {
 void SerialBus::communication_loop(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
     while (!bus->stop_requested) {
+        if (bus->pause_requested) {
+            bus->is_polling = false; // the main task uses the UART, e.g. to flash a peer, so an outstanding poll is void
+            bus->paused = true;
+            vTaskDelay(pdMS_TO_TICKS(1));
+            continue;
+        }
         if (xQueueReceive(bus->config_queue, &bus->received_config, 0) == pdTRUE) {
             bus->adopt_config(bus->received_config);
         }
@@ -240,8 +502,11 @@ void SerialBus::communication_loop(void *param) {
             }
             // handle poll timeout
             if (bus->is_polling && millis_since(bus->poll_start_millis) > POLL_TIMEOUT_MS) {
-                bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out",
-                                             bus->name.c_str(), bus->polled_peer_id);
+                // one warning until the peer answers again, e.g. after its restart, not one with every poll
+                unsigned *const missed = bus->find_missed_polls(bus->polled_peer_id);
+                if (missed && (*missed)++ == 0) {
+                    bus->print_to_incoming_queue("warning: serial bus %s poll to %u timed out", bus->name.c_str(), bus->polled_peer_id);
+                }
                 bus->is_polling = false;
                 if (bus->time_sync_enabled) {
                     bus->reset_peer_clock(bus->polled_peer_id);
@@ -259,11 +524,13 @@ void SerialBus::communication_loop(void *param) {
                         bus->ready_pending = false;
                     }
                     bus->send_outgoing_queue();
+                    bus->send_frame_slots(bus->requesting_node);
                     char done[sizeof(DONE_CMD) + DONE_STAMP_FIELDS * (MAX_STAMP_DIGITS + 1)];
                     int done_len = std::snprintf(done, sizeof(done), "%s", DONE_CMD);
                     if (bus->time_sync_enabled) {
-                        // T3 is stamped as late as possible; the elapsed time since T2 lets the
-                        // coordinator cancel everything that happened on this side in between
+                        // T3 is stamped as late as possible, once the frames before it have left; the elapsed
+                        // time since T2 lets the coordinator cancel everything that happened on this side in between
+                        uart_wait_tx_done(bus->serial->uart_num, pdMS_TO_TICKS(POLL_TIMEOUT_MS));
                         const int64_t t3 = esp_timer_get_time();
                         done_len += std::snprintf(done + done_len, sizeof(done) - done_len, "%lld,%lld,%lu",
                                                   (long long)t3, (long long)(t3 - bus->poll_received_us),
@@ -288,6 +555,7 @@ void SerialBus::adopt_config(const Config &config) {
     this->peer_ids.assign(config.peer_ids, config.peer_ids + config.peer_count);
     this->time_sync_enabled = config.time_sync_enabled;
     this->generation = config.generation;
+    this->missed_polls.assign(this->peer_ids.size(), 0);
     // every estimate starts fresh; a re-used ID must not inherit the previous board's state
     this->peer_clocks.clear();
     for (const uint8_t id : this->peer_ids) {
@@ -327,11 +595,16 @@ static bool parse_stamp(const char *stamp, int64_t *fields, const size_t count) 
 }
 
 void SerialBus::process_uart() {
-    static char buffer[FRAME_BUFFER_SIZE];
+    auto &buffer = this->rx_frame;
     while (this->serial->has_buffered_lines()) {
         const int len = this->serial->read_line(buffer, sizeof(buffer));
         if (len < 0) {
-            this->print_to_incoming_queue("warning: serial bus %s error while processing uart: %s", this->name.c_str(), Serial::read_line_error(len));
+            // longer than any bus message, e.g. the boot output of a peer at another baud rate
+            this->ignored_lines++;
+            continue;
+        }
+        if (len < 2 || buffer[0] != '$' || buffer[1] != '$') {
+            this->handle_foreign_line(buffer, len);
             continue;
         }
         if (bool ok; (check(buffer, len, &ok), !ok)) {
@@ -358,6 +631,7 @@ void SerialBus::process_uart() {
                 this->poll_received_us = esp_timer_get_time(); // T2
                 this->poll_received_seq = seq < 0 ? 0 : seq;
                 this->requesting_node = message.sender;
+                this->coordinator_id = message.sender;
                 continue;
             }
         }
@@ -372,15 +646,65 @@ void SerialBus::process_uart() {
             }
         }
 
+        // telemetry frames never take the reserve of the inbound buffer, so that a flood of them, e.g. while the main
+        // task runs the startup, cannot crowd out commands, echoes and OTB chunks
+        if (message.payload[0] == telemetry::FRAME_PREFIX && !leaves_reserve(this->inbound_bytes, message.length)) {
+            this->dropped_frames++;
+            continue;
+        }
+
         this->push_incoming(message);
     }
 }
 
+// a line that is no bus message, e.g. the boot output or a panic of a peer whose console is the bus
+void SerialBus::handle_foreign_line(char *line, const int length) {
+    bool checksum_ok;
+    const int text_length = check(line, length, &checksum_ok); // without the checksum of a line that a peer echoed
+    if (text_length == 0) {
+        return; // e.g. the line end that a peer sends when its bus takes over the console
+    }
+    const bool readable = std::all_of(line, line + text_length, [](const char c) { return c == '\t' || (c >= ' ' && c <= '~'); });
+    if (!readable || !this->is_coordinator()) {
+        this->ignored_lines++;
+    } else if (this->peer_ids.size() == 1) {
+        this->print_to_incoming_queue("%s[%u]: %s", this->name.c_str(), this->peer_ids[0], line);
+    } else {
+        this->print_to_incoming_queue("%s: %s", this->name.c_str(), line); // any of the peers may have sent it
+    }
+}
+
+unsigned *SerialBus::find_missed_polls(const uint8_t peer_id) {
+    for (size_t i = 0; i < this->peer_ids.size(); ++i) {
+        if (this->peer_ids[i] == peer_id) {
+            return &this->missed_polls[i];
+        }
+    }
+    return nullptr;
+}
+
 void SerialBus::push_incoming(const IncomingMessage &message) {
-    // a warning could not pass the full queue either, so count the drop and let step() report it
-    if (xQueueSend(this->inbound_queue, &message, 0) != pdTRUE) {
+    // a warning could not pass the full buffer either, so count the drop and let step() report it
+    if (!send_item(this->inbound_buffer, this->inbound_bytes, {message.sender, message.receiver}, message.payload,
+                   message.length, 0)) {
         this->dropped_inbound++;
     }
+}
+
+bool SerialBus::pop_incoming(IncomingMessage &message) {
+    size_t size = 0;
+    char *const item = static_cast<char *>(xRingbufferReceive(this->inbound_buffer, &size, 0));
+    if (!item) {
+        return false;
+    }
+    const StoredMessage stored = read_item(item, size);
+    message.sender = stored.header.sender;
+    message.receiver = stored.header.receiver;
+    message.length = stored.length;
+    std::memcpy(message.payload, stored.payload, stored.length + 1);
+    vRingbufferReturnItem(this->inbound_buffer, item);
+    this->inbound_bytes -= footprint(stored.length);
+    return true;
 }
 
 void SerialBus::send_poll() {
@@ -410,6 +734,12 @@ void SerialBus::handle_done(const uint8_t sender, const int64_t *stamp, const in
         return;
     }
     this->is_polling = false;
+    unsigned *const missed = this->find_missed_polls(sender);
+    if (missed && *missed > 0) {
+        this->print_to_incoming_queue("serial bus %s: peer %u answers again after %u timed out poll%s", this->name.c_str(), sender,
+                                      *missed, *missed == 1 ? "" : "s");
+        *missed = 0;
+    }
     PeerClock *clock = this->time_sync_enabled ? this->find_peer_clock(sender) : nullptr;
     if (!clock) {
         return;
@@ -549,6 +879,16 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
         return;
     }
 
+    // telemetry of peers is checked here and never processed as Lizard code
+    if (message.payload[0] == telemetry::FRAME_PREFIX) {
+        this->handle_telemetry_frame(message);
+        return;
+    }
+    if (std::strncmp(message.payload, telemetry::LAYOUT_PREFIX, sizeof(telemetry::LAYOUT_PREFIX) - 1) == 0) {
+        this->handle_telemetry_layout(message);
+        return;
+    }
+
     // Handle OTB frames (check prefix first to avoid function call overhead for regular messages)
     std::string_view payload_view(message.payload, message.length);
     constexpr size_t otb_prefix_len = sizeof(otb::OTB_MSG_PREFIX) - 1;
@@ -560,11 +900,16 @@ void SerialBus::handle_incoming_message(const IncomingMessage &message) {
     // echo incoming messages from peers
     const size_t prefix_len = sizeof(ECHO_CMD) - 1;
     if (std::strncmp(message.payload, ECHO_CMD, prefix_len) == 0) {
-        static char buffer[PAYLOAD_CAPACITY];
-        const size_t copy_len = std::min(message.length - prefix_len, static_cast<size_t>(sizeof(buffer) - 1));
-        memcpy(buffer, message.payload + prefix_len, copy_len);
-        buffer[copy_len] = '\0';
-        echo("bus[%u]: %s", message.sender, buffer);
+        const char *text = message.payload + prefix_len; // process_uart terminated the payload
+        echo("%s[%u]: %s", this->name.c_str(), message.sender, text);
+        if (std::strcmp(text, "Ready.") == 0) {
+            this->peer_layouts.erase(message.sender); // the peer booted and announces its layouts with the first poll
+            for (BusTelemetry *const listener : this->telemetry_listeners) {
+                if (listener->peer_id == message.sender) {
+                    listener->reset();
+                }
+            }
+        }
         return;
     }
 
@@ -591,30 +936,55 @@ void SerialBus::enqueue_outgoing_message(const uint8_t receiver, const char *pay
     if (std::strchr(payload, '\n') != nullptr) {
         throw std::runtime_error("serial bus: payload must not contain newline characters");
     }
-    OutgoingMessage message{receiver, length, {}};
-    memcpy(message.payload, payload, length);
-    message.payload[length] = '\0';
-    if (xQueueSend(this->outbound_queue, &message, pdMS_TO_TICKS(50)) != pdTRUE) {
+    if (!this->queue_outgoing_message(receiver, payload, length, pdMS_TO_TICKS(50))) {
         throw std::runtime_error("serial bus: could not enqueue outgoing message");
     }
 }
 
+bool SerialBus::queue_outgoing_message(const uint8_t receiver, const char *payload, const size_t length, const TickType_t wait) {
+    if (length >= PAYLOAD_CAPACITY) {
+        return false;
+    }
+    return send_item(this->outbound_buffer, this->outbound_bytes, {this->node_id, receiver}, payload, length, wait);
+}
+
+void SerialBus::drain_outbound(const unsigned long timeout_ms) {
+    // the communication task takes messages out of the buffer only while it answers a poll, which then ends
+    const unsigned long start = millis();
+    while ((this->outbound_bytes > 0 || this->requesting_node != 0) &&
+           millis_since(start) < timeout_ms) {
+        delay(5);
+    }
+    uart_wait_tx_done(this->serial->uart_num, pdMS_TO_TICKS(100));
+}
+
 bool SerialBus::send_outgoing_queue() {
     bool sent_any = false;
-    OutgoingMessage message;
-    while (xQueueReceive(this->outbound_queue, &message, 0) == pdTRUE) {
-        this->send_message(message.receiver, message.payload, message.length);
-        sent_any = true;
+    size_t size = 0;
+    while (char *const item = static_cast<char *>(xRingbufferReceive(this->outbound_buffer, &size, 0))) {
+        struct Return {
+            SerialBus *bus;
+            char *item;
+            size_t size;
+            ~Return() {
+                vRingbufferReturnItem(this->bus->outbound_buffer, this->item);
+                this->bus->outbound_bytes -= footprint(this->size - message_size(0));
+            }
+        } returned{this, item, size}; // also when send_message() throws
+        const StoredMessage stored = read_item(item, size);
+        // receiver 0 is the node that polls this one, e.g. for output queued before the first poll
+        const uint8_t receiver = stored.header.receiver ? stored.header.receiver : this->requesting_node.load();
+        if (receiver) {
+            this->send_message(receiver, stored.payload, stored.length);
+            sent_any = true;
+        }
     }
     return sent_any;
 }
 
-size_t SerialBus::send_message(const uint8_t receiver, const char *payload, const size_t length) const {
-    static char buffer[FRAME_BUFFER_SIZE];
-    const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver);
-    if (header_len < 0) {
-        throw std::runtime_error("serial bus: could not format bus header");
-    }
+size_t SerialBus::send_message(const uint8_t receiver, const char *payload, const size_t length) {
+    auto &buffer = this->tx_frame;
+    const int header_len = csprintf(buffer, sizeof(buffer), "$$%u:%u$$", this->node_id, receiver); // throws on failure
     if (header_len + length >= sizeof(buffer)) {
         throw std::runtime_error("serial bus: payload is too large");
     }
@@ -627,13 +997,17 @@ void SerialBus::print_to_incoming_queue(const char *format, ...) {
     IncomingMessage message{this->node_id, this->node_id, 0, {}};
     va_list args;
     va_start(args, format);
-    message.length = std::vsnprintf(message.payload, PAYLOAD_CAPACITY, format, args);
+    const int length = std::vsnprintf(message.payload, PAYLOAD_CAPACITY, format, args);
     va_end(args);
+    message.length = std::clamp(length, 0, static_cast<int>(PAYLOAD_CAPACITY) - 1);
     this->push_incoming(message);
 }
 
 void SerialBus::handle_echo(const char *line) {
     if (!this->echo_target_id) {
+        if (this->serial->on_console) {
+            this->relay_console_line(line);
+        }
         return;
     }
     char payload[PAYLOAD_CAPACITY];
@@ -649,4 +1023,265 @@ void SerialBus::handle_echo(const char *line) {
         this->echo_target_id = 0;
         echo("warning: serial bus %s failed to relay output: %s", this->name.c_str(), e.what());
     }
+}
+
+void SerialBus::relay_console_line(const char *line) {
+    // without waiting: while no coordinator polls, e.g. while the core restarts, the queue fills and lines are dropped
+    char payload[PAYLOAD_CAPACITY];
+    int len = std::snprintf(payload, sizeof(payload), "%s%s", ECHO_CMD, line);
+    if (len >= static_cast<int>(sizeof(payload))) {
+        len = std::snprintf(payload, sizeof(payload), "%swarning: serial bus %s dropped a line of %d bytes, longer than %d",
+                            ECHO_CMD, this->name.c_str(), static_cast<int>(std::strlen(line)),
+                            static_cast<int>(sizeof(payload) - sizeof(ECHO_CMD)));
+    }
+    // the reserve stays free for command replies and OTB acks
+    if (len < 0 || len >= static_cast<int>(sizeof(payload)) ||
+        !leaves_reserve(this->outbound_bytes, len) ||
+        !this->queue_outgoing_message(this->coordinator_id, payload, len, 0)) {
+        this->dropped_output++;
+    }
+}
+
+bool SerialBus::send_telemetry_layout(const char *line, const size_t length) {
+    // the reserve stays free for commands, echoes and OTB acks
+    return leaves_reserve(this->outbound_bytes, length) &&
+           this->queue_outgoing_message(this->coordinator_id, line, length, 0);
+}
+
+SerialBus::FrameSlot *SerialBus::find_frame_slot(const uint8_t frame_id) const {
+    FrameSlot *const slots = this->frame_slots;
+    for (size_t i = 0; slots && i < FRAME_SLOTS; ++i) {
+        if (slots[i].frame_id == frame_id) {
+            return &slots[i];
+        }
+    }
+    return nullptr;
+}
+
+bool SerialBus::telemetry_frame_pending(const uint8_t frame_id) {
+    const FrameSlot *const slot = this->find_frame_slot(frame_id);
+    if (!slot) {
+        return false;
+    }
+    taskENTER_CRITICAL(&this->frame_slot_lock);
+    const bool pending = slot->pending;
+    taskEXIT_CRITICAL(&this->frame_slot_lock);
+    return pending;
+}
+
+bool SerialBus::store_telemetry_frame(const uint8_t frame_id, const char *line, const size_t length, const bool replace) {
+    if (!this->frame_slots) {
+        this->frame_slots = new FrameSlot[FRAME_SLOTS];
+    }
+    FrameSlot *slot = this->find_frame_slot(frame_id);
+    if (!slot) {
+        slot = this->find_frame_slot(0); // a free one
+    }
+    if (!slot) {
+        if (!this->slot_warning_sent || millis_since(this->last_slot_warning_millis) > SLOT_WARNING_INTERVAL_MS) {
+            this->slot_warning_sent = true;
+            this->last_slot_warning_millis = millis();
+            this->echo_target_id = this->coordinator_id; // relayed by handle_echo, printed as <bus>[<id>]: there
+            echo("warning: serial bus %s has no slot for telemetry frame %u (at most %u frames)", this->name.c_str(),
+                 frame_id, static_cast<unsigned>(FRAME_SLOTS));
+            this->echo_target_id = 0;
+        }
+        return false;
+    }
+    slot->frame_id = frame_id;
+    taskENTER_CRITICAL(&this->frame_slot_lock);
+    const bool store = !replace || slot->pending; // a frame that left meanwhile is followed by the next sequence number
+    if (store) {
+        slot->pending = true;
+        slot->length = length;
+        memcpy(slot->line, line, length);
+    }
+    taskEXIT_CRITICAL(&this->frame_slot_lock);
+    return store;
+}
+
+void SerialBus::clear_telemetry_slots() {
+    FrameSlot *const slots = this->frame_slots;
+    for (size_t i = 0; slots && i < FRAME_SLOTS; ++i) {
+        taskENTER_CRITICAL(&this->frame_slot_lock);
+        slots[i].pending = false;
+        taskEXIT_CRITICAL(&this->frame_slot_lock);
+        slots[i].frame_id = 0;
+    }
+}
+
+void SerialBus::send_frame_slots(const uint8_t receiver) {
+    FrameSlot *const slots = this->frame_slots;
+    auto &line = this->slot_line;
+    for (size_t i = 0; slots && i < FRAME_SLOTS; ++i) {
+        size_t length = 0;
+        taskENTER_CRITICAL(&this->frame_slot_lock);
+        if (slots[i].pending) {
+            length = slots[i].length;
+            memcpy(line, slots[i].line, length);
+            slots[i].pending = false;
+        }
+        taskEXIT_CRITICAL(&this->frame_slot_lock);
+        if (length > 0) {
+            this->send_outgoing_queue(); // layout lines queued before this frame was stored go first
+            this->send_message(receiver, line, length);
+        }
+    }
+}
+
+void SerialBus::handle_telemetry_frame(const IncomingMessage &message) {
+    const bool passed = this->passes_telemetry(message.sender);
+    const bool listened = this->is_listened_to(message.sender);
+    if (!passed && !listened) {
+        return;
+    }
+    PeerLayout &layout = this->peer_layouts[message.sender];
+    uint8_t body[telemetry::MAX_BODY];
+    const size_t length = telemetry::decode_frame(message.payload, message.length, body);
+    if (length == 0) {
+        this->telemetry_errors->set_integer_value(this->telemetry_errors->integer_value() + 1);
+        return;
+    }
+    const bool printed = passed && !(layout.awaiting && millis_since(layout.request_millis) <= LAYOUT_REQUEST_INTERVAL_MS);
+    if (passed && !printed) {
+        // printing the frames queued ahead of the requested layout lines would keep the queue full and drop those
+        this->telemetry_dropped->set_integer_value(this->telemetry_dropped->integer_value() + 1);
+        if (!listened) {
+            return;
+        }
+    }
+    if (printed) {
+        echo("%s[%u]: %s", this->name.c_str(), message.sender, message.payload);
+    }
+
+    const auto frame = layout.frames.find(body[0]);
+    const bool known = frame != layout.frames.end() && frame->second.layout_id == body[1] &&
+                       std::find(frame->second.types.begin(), frame->second.types.end(), 0) == frame->second.types.end() &&
+                       telemetry::payload_size(frame->second.types) == length - telemetry::HEADER_SIZE - telemetry::CRC_SIZE;
+    for (BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == message.sender) {
+            listener->handle_frame(body, known ? &frame->second.types : nullptr);
+        }
+    }
+    if ((!known || layout.stale) && !layout.other_version) {
+        // e.g. because this node booted after the peer, a layout line got lost or the peer redefined the frame
+        this->request_layout(message.sender, layout);
+    }
+}
+
+void SerialBus::handle_telemetry_layout(const IncomingMessage &message) {
+    const bool passed = this->passes_telemetry(message.sender);
+    if (!passed && !this->is_listened_to(message.sender)) {
+        return;
+    }
+    telemetry::LayoutLine line;
+    if (!telemetry::parse_layout(message.payload, line)) {
+        this->telemetry_errors->set_integer_value(this->telemetry_errors->integer_value() + 1);
+        return;
+    }
+    if (passed) {
+        echo("%s[%u]: %s", this->name.c_str(), message.sender, message.payload);
+    }
+
+    PeerLayout &layout = this->peer_layouts[message.sender];
+    if (layout.awaiting) {
+        layout.awaiting = false;
+        layout.stale = false; // the lines that follow a request cover every frame, also one declared while they were under way
+    }
+    if (line.version != telemetry::LAYOUT_VERSION) {
+        if (!layout.other_version) {
+            layout.other_version = true; // only the host may read it; the peer may be updated, so until its Ready.
+            echo("warning: serial bus %s does not read layout version %d of peer %u, only version %d", this->name.c_str(),
+                 line.version, message.sender, telemetry::LAYOUT_VERSION);
+            for (BusTelemetry *const listener : this->telemetry_listeners) {
+                if (listener->peer_id == message.sender) {
+                    listener->mark_layout_unreadable();
+                }
+            }
+        }
+        return;
+    }
+    FrameLayout &frame = layout.frames[line.frame_id];
+    const bool redefined = frame.layout_id != line.layout_id || frame.types.size() != line.count;
+    if (redefined) {
+        frame.layout_id = line.layout_id; // e.g. the peer cleared its frames and reused the frame ID
+        frame.types.assign(line.count, 0);
+    }
+    frame.types[line.index] = line.type;
+    for (BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == message.sender) {
+            listener->handle_layout_line(line, redefined);
+        }
+    }
+}
+
+void SerialBus::request_layout(const uint8_t peer_id, PeerLayout &layout) {
+    if (layout.requested && millis_since(layout.request_millis) <= LAYOUT_REQUEST_INTERVAL_MS) {
+        return;
+    }
+    // while the queue is full, the next frame asks again
+    if (this->queue_outgoing_message(peer_id, LAYOUT_REQUEST, sizeof(LAYOUT_REQUEST) - 1, 0)) {
+        layout.requested = true;
+        layout.awaiting = true;
+        layout.request_millis = millis();
+    }
+}
+
+void SerialBus::request_passed_layouts() {
+    for (size_t i = 0; i < this->config.peer_count; ++i) {
+        const uint8_t peer_id = this->config.peer_ids[i];
+        if (this->passes_telemetry(peer_id)) {
+            PeerLayout &layout = this->peer_layouts[peer_id];
+            layout.requested = false; // asked for on purpose, however recently a frame asked
+            this->request_layout(peer_id, layout);
+        }
+    }
+}
+
+void SerialBus::add_telemetry_listener(BusTelemetry *const listener) {
+    this->telemetry_listeners.push_back(listener);
+    const auto layout = this->peer_layouts.find(listener->peer_id);
+    if (layout != this->peer_layouts.end() && layout->second.other_version) {
+        listener->mark_layout_unreadable(); // the bus warned before this module existed
+    }
+}
+
+void SerialBus::remove_telemetry_listener(BusTelemetry *const listener) {
+    this->telemetry_listeners.erase(std::remove(this->telemetry_listeners.begin(), this->telemetry_listeners.end(), listener),
+                                    this->telemetry_listeners.end());
+    if (!this->passes_telemetry(listener->peer_id) && !this->is_listened_to(listener->peer_id)) {
+        this->peer_layouts.erase(listener->peer_id);
+    }
+}
+
+bool SerialBus::is_listened_to(const uint8_t peer_id) const {
+    for (const BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == peer_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const BusTelemetry *SerialBus::find_telemetry_listener(const uint8_t peer_id, const std::string &property_name) const {
+    for (const BusTelemetry *const listener : this->telemetry_listeners) {
+        if (listener->peer_id == peer_id && listener->declares(property_name)) {
+            return listener;
+        }
+    }
+    return nullptr;
+}
+
+void SerialBus::refresh_telemetry_layout(const uint8_t peer_id) {
+    const auto layout = this->peer_layouts.find(peer_id);
+    if (layout != this->peer_layouts.end()) {
+        this->refresh_layout(layout->second);
+    }
+}
+
+void SerialBus::refresh_layout(PeerLayout &layout) {
+    // the layouts stay, so the mirrors keep following; the next frame asks, however recently a frame asked, and a burst of
+    // calls before it asks once
+    layout.stale = true;
+    layout.requested = false;
 }

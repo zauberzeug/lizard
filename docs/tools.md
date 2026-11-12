@@ -29,7 +29,7 @@ This requires a Jetson Orin (L4T 35 or 36);
 for Nano/Xavier Robot Brains use release 0.12.x or earlier, which still ships `flash.py`.
 
 To flash a Robot Brain over the network from a development machine, pass `--host`.
-This rsyncs the binaries, `espresso.py` and `serial_devices.py` to the target and runs the command there over SSH:
+This rsyncs the binaries, `espresso.py` and the `lizard_host` package to the target and runs the command there over SSH:
 
 ```bash
 ./espresso.py flash --host user@robot-brain[:path]
@@ -56,16 +56,62 @@ A microcontroller on a USB-UART bridge attached to a Jetson is not detected and 
 Pass the device path explicitly when several devices may be found and there is no terminal to answer the question.
 Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see [Robot Brain](#robot-brain)).
 
+The monitor shows [telemetry frames](module_reference.md#core) with the names of their fields:
+
+```
+[frame 1 seq=7 millis=123456] motor.position=1.234 motor.axis_state=8 motor.enabled=true
+```
+
+A frame it cannot decode shows its [status](#telemetry-decoder) and its payload in hex, e.g. `[frame 1 seq=7 millis=123456 no_layout] b6f39d3f0800000001`.
+For a sender with an unknown format version it shows only the first frame.
+If the layout of a frame is missing or does not fit, e.g. because the frames started before the monitor, the monitor sends `core.telemetry_info()`, but only 2 s after its last request and the last layout line, so that it does not restart layout lines that are still coming.
+
 You can also use an SSH monitor to access a microcontroller via SSH:
 
 ```bash
 ./monitor_ssh.sh <user@host>
 ```
 
-This copies `monitor.py` and `serial_devices.py` from this checkout to `~/lizard` on the target and starts the monitor there,
+This copies `monitor.py` and the `lizard_host` package from this checkout to `~/lizard` on the target and starts the monitor there,
 so which device it detects does not depend on the age of the target's own checkout.
 
 Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.
+
+### Telemetry Decoder
+
+The `lizard_host` package next to the scripts decodes [telemetry frames](module_reference.md#core) for the serial monitor and for other host software.
+It also splits off and computes the [line checksum](machine_safety.md#checksums) first:
+
+```python
+import lizard_host as lh
+
+decoder = lh.TelemetryDecoder()
+for line in lines:
+    text, check = lh.split_checksum(line)
+    if check is not None and lh.checksum(text) != check:
+        continue  # a damaged line
+    result = decoder.feed(text)
+    if isinstance(result, lh.Frame) and result.status == 'ok':
+        print(result.frame_id, result.seq, result.millis, result.values)
+```
+
+The package is not installable, so a script outside the Lizard folder needs that folder on its `PYTHONPATH`.
+
+`feed` returns a `Text`, a `Layout` or a `Frame` and keeps the layouts of each sender.
+The sender is the device on the console or, for a line that a [serial bus](module_reference.md#serial-bus) coordinator passes on as `<bus>[<id>]: ...`, the string `"<bus>[<id>]"`, which the monitor prints in front of the frame.
+`str()` of a frame gives the line the monitor shows, with floats rounded to the seven significant digits of a float32.
+A frame that cannot be decoded has `values = None` and one of these statuses:
+
+| Status              | Meaning                                                         |
+| ------------------- | --------------------------------------------------------------- |
+| `no_layout`         | no layout line with the frame's layout ID has arrived           |
+| `layout_incomplete` | layout lines of some fields are missing                         |
+| `layout_mismatch`   | the payload size does not match the layout                      |
+| `unknown_version`   | the sender's layout lines have a format version other than `v1` |
+
+A host that cannot decode a frame because of its layout, e.g. because the frames started before it, sends `core.telemetry_info()` like the monitor.
+When a frame ID gets new fields, e.g. after `core.clear_telemetry()`, its frames carry a new layout ID, and the decoder waits for the layout lines with that ID instead of using the old ones.
+Logs should keep the raw lines and decode them when they are read.
 
 ### OTB Update
 
@@ -205,6 +251,18 @@ e.g. `idf.py -DLIZARD_PROJECT_NAME=lizard-zz build`.
 The name is reported by `core.version()` and also names the build artifacts (`build/lizard-zz.bin`, `build/lizard-zz.elf`);
 `espresso.py` picks them up automatically via `build/project_description.json`,
 other tools like `otb_update.py` or `addr2line` need the renamed paths passed explicitly.
+
+The ESP32 build reads its flash at 80 MHz, which Espressif's modules like the ESP32-WROVER-E and the ESP32-WROOM-32E are rated for.
+The frequency travels with the app: the ESP32 sets its flash clock at startup from the image header of the app,
+so an update over OTA, OTB or `expander.flash()` moves a device to 80 MHz without a new bootloader.
+A board whose flash or layout cannot keep up crashes or does not boot at this speed,
+and only flashing a 40 MHz build over serial brings it back.
+For such a board, replace the two 80 MHz lines in `sdkconfig.defaults.esp32`
+with `CONFIG_ESPTOOLPY_FLASHFREQ_40M=y` and `CONFIG_ESPTOOLPY_FLASHFREQ="40m"`,
+or add them to `sdkconfig.defaults.secret`, which `build.py` loads after the base defaults,
+and build with `python build.py esp32 --clean`.
+The clean build is needed because ESP-IDF applies these defaults only when it creates a new `sdkconfig`;
+an existing `sdkconfig` keeps the flash frequency it was created with.
 
 ### Backtrace
 
