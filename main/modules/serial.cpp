@@ -185,16 +185,16 @@ size_t Serial::unterminated_bytes() const {
     return this->discarded_bytes + (has_lines ? 0 : this->available());
 }
 
-void Serial::wait_until_sent() const {
-    // twice the time the driver's TX buffer and the FIFO take on the wire
-    const uint32_t timeout_ms = 100 + 2 * (TX_BUF_SIZE + SOC_UART_FIFO_LEN) * 10 * 1000 / this->baud_rate;
-    uart_wait_tx_done(this->uart_num, pdMS_TO_TICKS(timeout_ms));
-}
-
 void Serial::flush() const {
     this->pending_lines.clear();
     this->discarded_bytes = 0;
     uart_flush(this->uart_num);
+}
+
+void Serial::wait_until_sent() const {
+    // twice the time the driver's TX buffer and the FIFO take on the wire
+    const uint32_t timeout_ms = 100 + 2 * (TX_BUF_SIZE + SOC_UART_FIFO_LEN) * 10 * 1000 / this->baud_rate;
+    uart_wait_tx_done(this->uart_num, pdMS_TO_TICKS(timeout_ms));
 }
 
 int Serial::read(uint32_t timeout) const {
