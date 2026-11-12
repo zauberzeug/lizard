@@ -35,6 +35,30 @@ void save_if_present() {
     }
 }
 
+static bool load(int8_t &tx, int8_t &rx, int32_t &baud, int8_t &uart, int8_t &node) {
+    nvs_handle handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
+        return false;
+    }
+    const bool ok = nvs_get_i8(handle, "tx", &tx) == ESP_OK &&
+                    nvs_get_i8(handle, "rx", &rx) == ESP_OK &&
+                    nvs_get_i32(handle, "baud", &baud) == ESP_OK &&
+                    nvs_get_i8(handle, "uart", &uart) == ESP_OK &&
+                    nvs_get_i8(handle, "node", &node) == ESP_OK;
+    nvs_close(handle);
+    return ok;
+}
+
+bool get_console_baud_rate(uint32_t &baud_rate) {
+    int8_t tx, rx, uart, node;
+    int32_t baud;
+    if (!load(tx, rx, baud, uart, node) || !Serial::is_console(rx, tx, uart) || baud <= 0) {
+        return false;
+    }
+    baud_rate = baud;
+    return true;
+}
+
 void restore_if_needed() {
     for (const auto &[name, module] : Global::modules) {
         if (std::dynamic_pointer_cast<SerialBus>(module)) {
@@ -42,19 +66,9 @@ void restore_if_needed() {
         }
     }
 
-    nvs_handle handle;
-    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
-        return;
-    }
     int8_t tx, rx, uart, node;
     int32_t baud;
-    bool ok = nvs_get_i8(handle, "tx", &tx) == ESP_OK &&
-              nvs_get_i8(handle, "rx", &rx) == ESP_OK &&
-              nvs_get_i32(handle, "baud", &baud) == ESP_OK &&
-              nvs_get_i8(handle, "uart", &uart) == ESP_OK &&
-              nvs_get_i8(handle, "node", &node) == ESP_OK;
-    nvs_close(handle);
-    if (!ok) {
+    if (!load(tx, rx, baud, uart, node)) {
         return;
     }
 

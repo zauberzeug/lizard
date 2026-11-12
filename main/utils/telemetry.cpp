@@ -286,6 +286,9 @@ void step() {
             frame.announced = false;
         }
     }
+    if (!bus && console_handed_over()) {
+        return; // the console is a serial bus link: frames and layout lines wait for the first poll
+    }
     const unsigned long now = millis();
     if (!send_layout_lines(bus, now) && bus) {
         return; // frames would crowd the layout lines out of the coordinator's inbound queue

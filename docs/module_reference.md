@@ -18,6 +18,7 @@ I2C modules on the same port share its SDA and SCL pins, which stay reserved for
 Creating a module on a reserved pin or peripheral fails with an error that names the owner, e.g. `pin 15 is already used by module "led"`.
 In the startup script, such an error stops the script like any other error (see [Startup Script](getting_started.md#startup-script)).
 The console UART with its pins and the pins of the SPI flash are reserved from the start.
+Only a serial bus can take over the console UART (see [Console as Link](#serial-bus)).
 
 ## Core
 
@@ -196,6 +197,7 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
 | `bus.telemetry_errors`     | Malformed telemetry frames and layout lines of passed-on or mirrored peers, e.g. with a wrong CRC             | `int`     |
 | `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for places in the inbound queue, e.g. while layout lines are awaited     | `int`     |
+| `bus.ignored_lines`        | Received lines that are no bus messages and were not printed, e.g. the boot output of a peer                  | `int`     |
 
 | Methods                             | Description                                                                                                                                 | Arguments         |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -206,6 +208,18 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 
 The coordinator prints the lines that reach it from its peers, e.g. `Ready.` and the output of commands sent with `bus.send()`, with the coordinator's name for the bus and the peer's ID in front, e.g. `bus[2]: Ready.` for peer 2 of a bus that the coordinator calls `bus`.
 So two buses of a node, e.g. `plexus` and `p0`, keep their peers apart, also when both have a peer 2.
+
+**Polling:**
+The coordinator polls its peers in turn, and a peer answers with the messages it has queued.
+A poll that its peer does not answer within 250 ms times out with `warning: serial bus <name> poll to <id> timed out`.
+The warning comes once until the peer answers again, e.g. after its restart, and then the coordinator prints `serial bus <name>: peer <id> answers again after <n> timed out polls`.
+
+**Other Lines:**
+Lines on the link that are no bus messages are not processed, e.g. the boot output or a panic of a peer, or what a peer prints whose bus has not taken over its console.
+A coordinator prints those that are readable text, without their Lizard checksum if they have one.
+With a single peer it prints them as lines of that peer, e.g. `bus[2]: Guru Meditation Error: ...`, and with several peers, any of which may have sent the line, with only its name for the bus in front, e.g. `bus: Guru Meditation Error: ...`.
+All others, and all such lines on a peer, are counted in `ignored_lines` and reported with `warning: serial bus <name> ignored <n> lines that are no bus messages`, at most once per second.
+The ROM bootloader and the boot log of a peer always print at 115200 baud, whatever the rate of the link; on a link with another rate they arrive as an unreadable line, so a restart of the peer is followed by one warning about an ignored line.
 
 **Time Synchronization:**
 Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle.
@@ -231,6 +245,7 @@ This is intended for timestamping sensor data (e.g. wheel odometry) received fro
 
 **Telemetry Frames:**
 A peer that defines [telemetry frames](#core) with `core.telemetry(...)` sends them to its own console until a coordinator polls it, and from then on to the coordinator until the peer restarts.
+A peer whose console is the bus link holds them back until then (see [Console as Link](#serial-bus)).
 With the first poll the peer sends their layout lines again, this time to the coordinator.
 While layout lines go to the coordinator, the peer holds back all of its frames.
 Then it keeps the newest frame of each ID in a slot and sends the slots with the next poll, so a poll delivers the current values and no backlog, and a frame ID arrives at most once per poll of its peer.
@@ -282,7 +297,32 @@ If multiple SerialBus modules exist, only the first one is backed up.
 On boot, if the startup script does not create a SerialBus but a backup config exists,
 Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
 This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
+A bus on the console is restored the same way and takes over the console again (see [Console as Link](#serial-bus)).
 To remove the saved configuration, call `core.forget_serial_bus()`.
+
+**Console as Link:**
+A node can use its console UART as a bus link, e.g. a port expander that is wired to the core by its console pins:
+
+```
+serial = Serial(3, 1, 115200, 0)
+bus = SerialBus(serial, 2)
+```
+
+A serial on UART0 with the console's RX and TX pins (3 and 1 on an ESP32, 44 and 43 on an ESP32-S3) leaves the console alone until a serial bus is created on it.
+From then on, only the bus reads and writes UART0, at the serial's baud rate, and the node runs no console lines, only commands from the bus.
+Everything the node prints goes to the node that polls it, which prints it as a line of this peer, e.g. `bus[2]: ...`.
+That includes replies, warnings and the output of unmuted modules.
+Lines printed before the first poll wait in the bus queue; when only its last eight places are free, further lines are dropped and a warning with their number follows.
+The node does not print `Ready.` on its console; the coordinator prints it with the first answer, e.g. `bus[2]: Ready.`.
+Telemetry frames and their layout lines wait for the first poll.
+While the bus has the console, ESP-IDF log and ROM output is dropped, but a panic still reaches the wire (see [Other Lines](#serial-bus)).
+Put the two lines at the top of the startup script, so that the output of the lines below reaches the coordinator, including an error that stops the script.
+What the node prints before the bus takes over the console still goes out on the console itself, e.g. an error in a line above the two.
+While the bus backup holds a bus on the console pins, i.e. from the boot after the first one with that bus, the console starts at the bus's baud rate instead of its own, so that the coordinator can read these lines and prints them (see [Other Lines](#serial-bus)).
+If no bus takes the console over during such a boot, the console returns to its own baud rate before it prints `Ready.`.
+A startup script that keeps failing is skipped after two failed boots (see [Startup Script](getting_started.md#startup-script)); the bus backup then takes over the console again, and the lines the node printed before tell the coordinator why.
+The console stays silent on USB as long as the startup script or the bus backup creates the bus, also after `./espresso.py flash`, which keeps both.
+To get it back, send the node `!-`, `!.` and `core.forget_serial_bus()` over the bus and restart it, or erase its flash with `./espresso.py erase` and flash it again; it then runs at its own baud rate again (see [`core.set_baudrate()`](#core)).
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.
@@ -712,6 +752,8 @@ An unmuted module prints one line per batch of bytes the hardware hands over, so
 A line carries at most 85 bytes; the rest of a longer batch follows on the next line.
 
 The UART number and its pins stay reserved for the serial module until the core restarts, also after `Expander.disconnect()`.
+
+A serial on UART0 with the console's pins can only carry a [serial bus](#serial-bus), which takes over the console (see [Console as Link](#serial-bus)); its own methods fail.
 
 ## JBD BMS
 
