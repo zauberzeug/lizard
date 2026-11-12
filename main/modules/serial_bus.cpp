@@ -3,13 +3,16 @@
 #include "../main.h"
 #include "../utils/format.h"
 #include "../utils/otb.h"
+#include "../utils/serial-replicator.h"
 #include "../utils/string_utils.h"
 #include "../utils/telemetry.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "bus_telemetry.h"
 #include "module_helpers.h"
+#include "output.h"
 #include "serial.h"
+#include "soc/uart_channel.h"
 #include <esp_timer.h>
 #include <algorithm>
 #include <cctype>
@@ -37,6 +40,7 @@ static constexpr unsigned long LAYOUT_REQUEST_INTERVAL_MS = 2000;
 static constexpr unsigned long SLOT_WARNING_INTERVAL_MS = 10000;
 static constexpr const char LAYOUT_REQUEST[] = "core.telemetry_info()";
 static constexpr unsigned long REPORT_INTERVAL_MS = 1000;
+static constexpr unsigned long FLASHED_PEER_BOOT_MS = 5000; // until the fresh copy reports "Ready."
 
 // Estimator tunables: an unlocked estimate takes the first sample; from then on a sample whose accuracy
 // bound is at most SYNC_ACCEPT_ACCURACY_US replaces the estimate immediately, otherwise the best sample
@@ -56,6 +60,14 @@ static Module_ptr create_serial_bus(const std::string &name, const std::vector<C
     return std::make_shared<SerialBus>(name, serial, node_id);
 }
 REGISTER_MODULE(SerialBus, &create_serial_bus)
+
+static gpio_num_t gpio_output_pin(const ConstExpression_ptr &argument) {
+    const auto gpio_output = std::dynamic_pointer_cast<GpioOutput>(get_module_argument<Output>(argument));
+    if (!gpio_output) {
+        throw std::runtime_error("output \"" + argument->evaluate_identifier() + "\" is no GPIO pin of this node");
+    }
+    return gpio_output->number;
+}
 
 uint8_t SerialBus::to_peer_id(const ConstExpression_ptr &argument) {
     if ((argument->type & integer) == 0) {
@@ -255,9 +267,114 @@ void SerialBus::call(const std::string method_name, const std::vector<ConstExpre
             ++it;
         }
         this->passed_peers = peers;
+    } else if (method_name == "flash_peer") {
+        Module::expect(arguments, 3, integer, identifier, identifier);
+        this->flash_peer(to_peer_id(arguments[0]), gpio_output_pin(arguments[1]), gpio_output_pin(arguments[2]));
     } else {
         Module::call(method_name, arguments);
     }
+}
+
+void SerialBus::pause_communication() {
+    this->paused = false; // may still be set from the last pause
+    this->pause_requested = true;
+    // a second for a frame in flight, plus twice the time the queue takes on the wire, since the task sends it at
+    // once and blocks on a full TX ring: 2.5 s at 115200 baud, 19 s at 9600 baud; normally it answers within 1 ms
+    const unsigned long timeout_ms = 1000 + 2 * OUTGOING_QUEUE_LENGTH * TX_FRAME_SIZE * 10 * 1000 / this->serial->baud_rate;
+    const unsigned long start = millis();
+    while (!this->paused) {
+        if (millis_since(start) > timeout_ms) {
+            this->pause_requested = false;
+            throw std::runtime_error("serial bus \"" + this->name + "\" could not pause its communication");
+        }
+        delay(1);
+    }
+}
+
+static void restart_through_enable_pin(const gpio_num_t enable_pin) {
+    gpio_set_level(enable_pin, 0);
+    delay(100);
+    gpio_set_level(enable_pin, 1);
+}
+
+void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, const gpio_num_t enable_pin) {
+    if (this->serial->on_console) {
+        throw std::runtime_error("serial bus \"" + this->name + "\" cannot flash a peer over this node's console");
+    }
+    this->serial->require_sole_user(this->name);
+    this->pause_communication();
+    struct Resume {
+        SerialBus *const bus;
+        const gpio_num_t boot_pin;
+        const gpio_num_t enable_pin;
+        bool completed = false;
+        // both high until the outputs' next step, since a peer's EN may be pulled low
+        void drive_pins_high() const {
+            for (const gpio_num_t pin : {this->boot_pin, this->enable_pin}) {
+                gpio_set_level(pin, 1);
+                gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+            }
+        }
+        ~Resume() {
+            this->drive_pins_high();
+            if (!this->completed) {
+                restart_through_enable_pin(this->enable_pin); // a failed transfer may have left the peer in its bootloader
+            }
+            this->bus->pause_requested = false;
+        }
+    } resume{this, boot_pin, enable_pin};
+    this->serial->deinstall();
+    // the replicator connects at 115200 baud and flashes at 921600, whatever the link's rate
+    const bool success = ZZ::Replicator::flash_replica(this->serial->uart_num, enable_pin, boot_pin,
+                                                       this->serial->rx_pin, this->serial->tx_pin);
+    delay(100);
+    this->serial->reinitialize_after_flash();
+    if (!success) {
+        throw std::runtime_error("serial bus \"" + this->name + "\" could not flash peer " + std::to_string(peer_id));
+    }
+    resume.drive_pins_high();
+    restart_through_enable_pin(enable_pin); // boots the copy
+    this->configure_flashed_peer(peer_id);
+    resume.completed = true;
+}
+
+void SerialBus::configure_flashed_peer(const uint8_t peer_id) {
+    // The copy boots with an empty NVS, i.e. with its console at the default baud rate and without a startup script.
+    // Through that console it gets a startup script with a serial bus on the console, which takes the console over
+    // after a restart and lands in the peer's bus backup.
+    const uart_port_t uart_num = this->serial->uart_num;
+    uart_set_baudrate(uart_num, CONSOLE_DEFAULT_BAUD_RATE);
+    this->serial->flush();
+    bool ready = false;
+    const unsigned long start = millis();
+    while (!ready && millis_since(start) < FLASHED_PEER_BOOT_MS) {
+        char line[128]; // longer boot log lines are discarded by read_line()
+        while (!ready && this->serial->has_buffered_lines()) {
+            const int len = this->serial->read_line(line, sizeof(line));
+            bool checksum_ok = false;
+            ready = len > 0 && (check(line, len, &checksum_ok), checksum_ok) && std::strcmp(line, "Ready.") == 0;
+        }
+        delay(10);
+    }
+    if (ready) {
+        char command[64];
+        const int rx_pin = UART_NUM_0_RXD_DIRECT_GPIO_NUM; // a copy of this firmware runs on the same chip
+        const int tx_pin = UART_NUM_0_TXD_DIRECT_GPIO_NUM;
+        this->serial->write_checked_line("!-");
+        this->serial->write_checked_line(command, csprintf(command, sizeof(command), "!+serial = Serial(%d, %d, %ld, 0)",
+                                                           rx_pin, tx_pin, this->serial->baud_rate));
+        this->serial->write_checked_line(command, csprintf(command, sizeof(command), "!+bus = SerialBus(serial, %u)", peer_id));
+        this->serial->write_checked_line("!.");
+        this->serial->write_checked_line("core.restart()");
+        uart_wait_tx_done(uart_num, pdMS_TO_TICKS(500));
+        delay(100); // before polls at another baud rate could garble the lines
+    }
+    uart_set_baudrate(uart_num, this->serial->baud_rate);
+    this->serial->flush();
+    if (!ready) {
+        throw std::runtime_error("peer " + std::to_string(peer_id) + " flashed by serial bus \"" + this->name + "\" did not report \"Ready.\"");
+    }
+    echo("serial bus %s flashed peer %u, which restarts now", this->name.c_str(), peer_id);
 }
 
 void SerialBus::send_config() {
@@ -310,6 +427,12 @@ void SerialBus::apply_offset_update(const OffsetUpdate &update) {
 void SerialBus::communication_loop(void *param) {
     SerialBus *bus = static_cast<SerialBus *>(param);
     while (!bus->stop_requested) {
+        if (bus->pause_requested) {
+            bus->is_polling = false; // the main task uses the UART, e.g. to flash a peer, so an outstanding poll is void
+            bus->paused = true;
+            vTaskDelay(pdMS_TO_TICKS(1));
+            continue;
+        }
         if (xQueueReceive(bus->config_queue, &bus->received_config, 0) == pdTRUE) {
             bus->adopt_config(bus->received_config);
         }
