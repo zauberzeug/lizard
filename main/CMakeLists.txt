@@ -29,6 +29,7 @@ idf_component_register(
         mbedtls
         nvs_flash
         spi_flash
+    LDFRAGMENTS parser.lf
     WHOLE_ARCHIVE
 )
 add_compile_definitions(OWL_TOKEN_RUN_LENGTH=256)
