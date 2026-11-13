@@ -108,7 +108,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     environment: pypi
     permissions:
-      id-token: write
+      contents: read # for actions/checkout
+      id-token: write # for Trusted Publishing
     steps:
       - name: Checkout
         uses: actions/checkout@v7

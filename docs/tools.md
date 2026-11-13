@@ -155,7 +155,7 @@ with serial.Serial('/dev/ttyUSB0', 115200, timeout=0.1) as port:
 | --------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `send(command, target)`                       | Send a command                                                                          |
 | `request(command, prefix, target, timeout=3)` | Send a command and return the first line that starts with `prefix`, or `None`           |
-| `read_startup_checksum(target)`               | The checksum of the startup script, as an `int`                                         |
+| `read_startup_checksum(target)`               | The checksum of the startup script, as an `int`, or `None` without an answer            |
 | `read_version(target)`                        | The Lizard version the firmware is built from, as a `LizardVersion`, or `None`          |
 | `write_startup(script, target)`               | Write, verify and store a startup script like [the configure script](#configure)        |
 | `write_startups(scripts)`                     | Write one startup script per microcontroller, the core first, then the peers through it |

@@ -6,6 +6,7 @@ read loop of an async host, so the steps of e.g. writing a startup script are wr
 """
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Callable, Dict, Generator, List, Mapping, Optional, TypeVar
 
@@ -15,6 +16,7 @@ T = TypeVar('T')
 
 log = logging.getLogger('lizard_host')
 
+EXPANDER = re.compile(r'\bExpander\s*\(')
 BUS_PAYLOAD_CAPACITY = 256  # must match SerialBus::PAYLOAD_CAPACITY in main/modules/serial_bus.h
 
 
@@ -142,7 +144,7 @@ def check_script(script: str, version: Optional[LizardVersion], target: Target =
 
 
 def write_startup(script: str, target: Target = CORE, *,
-                  attempts: int = 3, ready_timeout: float = 15.0, check_version: bool = True,
+                  attempts: int = 3, ready_timeout: Optional[float] = None, check_version: bool = True,
                   pace: Optional[int] = None) -> Procedure[None]:
     """Write a startup script, verify it, persist it, restart the microcontroller and verify it again.
 
@@ -154,6 +156,8 @@ def write_startup(script: str, target: Target = CORE, *,
     Every ``pace`` lines the checksum of the lines so far is checked, which waits until they arrived and finds a lost
     line early; by default every 20 lines for a peer, whose lines pass the coordinator's outbound queue, and never for
     the core.
+    The wait for ``Ready.`` takes ``ready_timeout`` seconds, by default 15 s plus 5 s for every ``Expander`` of the
+    script, whose constructor waits up to its ``boot_timeout`` of 5 s for the expander to boot.
 
     :raises StartupError: when the script cannot be written or verified
     :raises UnsupportedFirmware: when the firmware lacks a feature the script uses
@@ -165,8 +169,8 @@ def write_startup(script: str, target: Target = CORE, *,
     yield from _write(script, target, attempts=attempts, ready_timeout=ready_timeout, pace=pace)
 
 
-def write_startups(scripts: Mapping[Target, str], *,
-                   attempts: int = 3, ready_timeout: float = 15.0, check_version: bool = True) -> Procedure[None]:
+def write_startups(scripts: Mapping[Target, str], *, attempts: int = 3, ready_timeout: Optional[float] = None,
+                   check_version: bool = True) -> Procedure[None]:
     """Write one startup script per microcontroller, the core first, so that its serial buses reach the peers.
 
     All scripts are checked before the first one is written, so a refused script leaves every microcontroller as it is.
@@ -195,8 +199,12 @@ def check_firmware(script: str, target: Target = CORE) -> Procedure[None]:
         check_script(script, version, target)
 
 
-def _write(script: str, target: Target, *, attempts: int, ready_timeout: float, pace: Optional[int]) -> Procedure[None]:
+def _write(script: str, target: Target, *,
+           attempts: int, ready_timeout: Optional[float], pace: Optional[int]) -> Procedure[None]:
     lines = startup_lines(script)
+    if ready_timeout is None:
+        code = [line for line in lines if not line.lstrip().startswith('#')]
+        ready_timeout = 15.0 + 5.0 * sum(bool(EXPANDER.search(line)) for line in code)
     expected = startup_checksum(script)
     if pace is None and target.bus is not None:
         pace = 20

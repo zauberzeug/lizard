@@ -296,3 +296,20 @@ def test_async_connection_drops_lines_from_before_a_command():
         assert await connection.run(two_requests()) == ['answer 1', 'answer 3']
 
     asyncio.run(main())
+
+
+def test_ready_timeout_grows_with_expanders():
+    def ready_timeout(script: str, **kwargs) -> float:
+        lizard = FakeLizard()
+        procedure = procedures.write_startup(script, **kwargs)
+        exchange = next(procedure)
+        while True:
+            if exchange.command == 'core.restart()' and exchange.expect is not None:
+                return exchange.timeout
+            answers = lizard.handle(exchange.command) if exchange.command else []
+            match = next((line for line in answers if exchange.expect and exchange.expect(line)), None)
+            exchange = procedure.send(match)
+
+    assert ready_timeout(SCRIPT) == 15.0
+    assert ready_timeout('p0 = Expander(serial)\np1 = Expander(serial2)\n# Expander(x)\n') == 25.0
+    assert ready_timeout(SCRIPT, ready_timeout=3.0) == 3.0

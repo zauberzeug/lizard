@@ -25,13 +25,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     args = parser.parse_args(argv)
     logging.basicConfig(format='%(levelname)s: %(message)s')
 
-    script = Path(args.config_file).read_text('utf-8')
     target = CORE if args.serial_bus is None else Target.peer(args.bus_name, args.serial_bus)
     try:
+        script = Path(args.config_file).read_text('utf-8')
         device = resolve_device(args.device_path)
         print(f'Connecting to {device} at {args.baud} baud')
         port = serial.Serial(device, baudrate=args.baud, timeout=0.1)
-    except (RuntimeError, serial.SerialException) as e:
+    except (OSError, RuntimeError) as e:  # serial.SerialException is an OSError
         sys.exit(f'Error: {e}')
     with port:
         connection = Connection(port, on_send=lambda line: print(f'Sending: {line}'))
