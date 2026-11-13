@@ -1,5 +1,6 @@
 """Flash and control an ESP32 microcontroller, locally or on a Robot Brain via SSH."""
 import argparse
+import importlib.util
 import json
 import re
 import shlex
@@ -429,7 +430,7 @@ def erase(config: Config) -> None:
         with _flash_mode(config):
             success = run(
                 config,
-                'esptool.py',
+                *esptool_command(),
                 '--chip', config.chip,
                 '--port', device,
                 '--baud', config.flash_baud,
@@ -447,7 +448,7 @@ def reset_partition(config: Config) -> None:
     print_bold('Resetting partition to "ota_0"...')
     success = run(
         config,
-        'esptool.py',
+        *esptool_command(),
         '--chip', config.chip,
         '--port', config.device,
         '--baud', config.flash_baud,
@@ -468,7 +469,7 @@ def flash(config: Config) -> None:
         with _flash_mode(config):
             success = run(
                 config,
-                'esptool.py',
+                *esptool_command(),
                 '--chip', config.chip,
                 '--port', device,
                 '--baud', config.flash_baud,
@@ -535,6 +536,17 @@ COMMANDS: Dict[str, Command] = {
     'release_pins': Command(_release_pins, uses_pins=True),
     'coredump': Command(coredump, artifacts=('elf',)),
 }
+
+
+def esptool_command() -> Tuple[str, ...]:
+    """Return the command that starts esptool: the module of this interpreter, or else ``esptool.py`` on the PATH.
+
+    esptool is a dependency of the package, so started as a module it is also found from pipx, ``uv tool`` or a venv
+    that is not activated; ``esptool.py`` stays for an interpreter without it, e.g. the root Python under sudo.
+    """
+    if importlib.util.find_spec('esptool') is not None:
+        return (sys.executable, '-m', 'esptool')
+    return ('esptool.py',)
 
 
 def run(config: Config, *run_args: str) -> bool:

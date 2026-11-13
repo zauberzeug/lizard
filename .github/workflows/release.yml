@@ -119,9 +119,10 @@ jobs:
         with:
           python-version: "3.x"
       - name: Build package
+        # not "python3 -m build", which would run build.py of this repository, the firmware build
         run: |
           python3 -m pip install build
-          python3 -m build
+          pyproject-build
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 

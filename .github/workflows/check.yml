@@ -29,3 +29,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install pytest
       - run: pytest
+
+  package:
+    # builds lizard-host as the release workflow does and checks that it installs and starts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # hatch-vcs takes the version from the tags
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - run: python3 -m pip install build twine
+      - run: pyproject-build
+      - run: twine check --strict dist/*
+      - run: python3 -m pip install dist/*.whl
+      - run: cd /tmp && lizard-espresso --help && lizard-configure --help && lizard-monitor --help && lizard-otb-update --help

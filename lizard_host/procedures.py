@@ -124,7 +124,7 @@ def startup_lines(script: str) -> List[str]:
 
 def startup_checksum(script: str) -> int:
     """The checksum ``core.startup_checksum()`` reports for the stored script: the sum of its bytes and line ends."""
-    return sum(''.join(f'{line}\n' for line in startup_lines(script)).encode()) % 0x10000
+    return _lines_checksum(startup_lines(script))
 
 
 def check_script(script: str, version: Optional[LizardVersion], target: Target = CORE) -> None:
@@ -142,30 +142,67 @@ def check_script(script: str, version: Optional[LizardVersion], target: Target =
 
 
 def write_startup(script: str, target: Target = CORE, *,
-                  attempts: int = 3, ready_timeout: float = 15.0, check_version: bool = True) -> Procedure[None]:
+                  attempts: int = 3, ready_timeout: float = 15.0, check_version: bool = True,
+                  pace: Optional[int] = None) -> Procedure[None]:
     """Write a startup script, verify it, persist it, restart the microcontroller and verify it again.
 
     The script is checked with ``core.startup_checksum()`` before it is persisted with ``!.``,
     so a lossy connection cannot leave a corrupt script in the microcontroller's storage.
-    After the restart the persisted script is verified once more, which also catches a failed ``!.``.
+    After the restart, which has to end with the microcontroller's ``Ready.``, the persisted script is verified once
+    more, which also catches a failed ``!.``.
     With ``check_version`` a script that uses a feature the firmware lacks is refused before anything is written.
+    Every ``pace`` lines the checksum of the lines so far is checked, which waits until they arrived and finds a lost
+    line early; by default every 20 lines for a peer, whose lines pass the coordinator's outbound queue, and never for
+    the core.
 
     :raises StartupError: when the script cannot be written or verified
     :raises UnsupportedFirmware: when the firmware lacks a feature the script uses
+    :raises ValueError: when a line of a peer's script does not fit into a bus message
     """
-    if check_version and required_features(script):
+    check_lines(script, target)
+    if check_version:
+        yield from check_firmware(script, target)
+    yield from _write(script, target, attempts=attempts, ready_timeout=ready_timeout, pace=pace)
+
+
+def write_startups(scripts: Mapping[Target, str], *,
+                   attempts: int = 3, ready_timeout: float = 15.0, check_version: bool = True) -> Procedure[None]:
+    """Write one startup script per microcontroller, the core first, so that its serial buses reach the peers.
+
+    All scripts are checked before the first one is written, so a refused script leaves every microcontroller as it is.
+    """
+    targets = sorted(scripts, key=lambda target: target.bus is not None)
+    for target in targets:
+        check_lines(scripts[target], target)
+    if check_version:
+        for target in targets:
+            yield from check_firmware(scripts[target], target)
+    for target in targets:
+        yield from _write(scripts[target], target, attempts=attempts, ready_timeout=ready_timeout, pace=None)
+
+
+def check_lines(script: str, target: Target = CORE) -> None:
+    """Refuse a script with a line that does not fit into a message to the target, e.g. a bus message to a peer."""
+    for line in startup_lines(script):
+        target.command(f'!+{line}')
+
+
+def check_firmware(script: str, target: Target = CORE) -> Procedure[None]:
+    """Read the Lizard version of the target if the script needs it, and refuse the script if the firmware lacks a
+    feature it uses."""
+    if required_features(script):
         version = yield from read_version(target)
         check_script(script, version, target)
+
+
+def _write(script: str, target: Target, *, attempts: int, ready_timeout: float, pace: Optional[int]) -> Procedure[None]:
     lines = startup_lines(script)
-    for line in lines:
-        target.command(f'!+{line}')  # raises before anything is sent for a line that does not fit
     expected = startup_checksum(script)
+    if pace is None and target.bus is not None:
+        pace = 20
     checksum: Optional[int] = None
     for _ in range(attempts):
-        yield from send('!-', target)
-        for line in lines:
-            yield from send(f'!+{line}', target)
-        checksum = yield from read_startup_checksum(target)
+        checksum = yield from _send_lines(lines, target, pace)
         if checksum == expected:
             break
     else:
@@ -173,10 +210,12 @@ def write_startup(script: str, target: Target = CORE, *,
         yield from send('core.restart()', target)
         raise StartupError(f'Writing the startup script to {target} failed: {_describe(checksum, expected)}')
     yield from send('!.', target)
-    yield Exchange(target.command('core.restart()'), lambda line: line.endswith(target.prefix + 'Ready.'),
-                   ready_timeout)
+    ready = yield Exchange(target.command('core.restart()'), lambda line: line == target.prefix + 'Ready.',
+                           ready_timeout)
+    if ready is None:
+        raise StartupError(f'{target} did not report "Ready." within {ready_timeout:.0f} s after its restart')
     checksum = None
-    for _ in range(3):  # a microcontroller answers commands also when its startup script fails
+    for _ in range(3):
         checksum = yield from read_startup_checksum(target, timeout=1.0)
         if checksum is not None:
             break
@@ -184,12 +223,20 @@ def write_startup(script: str, target: Target = CORE, *,
         raise StartupError(f'Verifying the stored startup script of {target} failed: {_describe(checksum, expected)}')
 
 
-def write_startups(scripts: Mapping[Target, str], *,
-                   attempts: int = 3, ready_timeout: float = 15.0, check_version: bool = True) -> Procedure[None]:
-    """Write one startup script per microcontroller, the core first, so that its serial buses reach the peers."""
-    for target in sorted(scripts, key=lambda target: target.bus is not None):
-        yield from write_startup(scripts[target], target,
-                                 attempts=attempts, ready_timeout=ready_timeout, check_version=check_version)
+def _send_lines(lines: List[str], target: Target, pace: Optional[int]) -> Procedure[Optional[int]]:
+    """Send a script as an edit and return the checksum the target reports for it, or for the lines up to a loss."""
+    yield from send('!-', target)
+    for count, line in enumerate(lines, 1):
+        yield from send(f'!+{line}', target)
+        if pace and count % pace == 0 and count < len(lines):
+            checksum = yield from read_startup_checksum(target)
+            if checksum != _lines_checksum(lines[:count]):
+                return checksum  # a line got lost; the next attempt starts over
+    return (yield from read_startup_checksum(target))
+
+
+def _lines_checksum(lines: List[str]) -> int:
+    return sum(''.join(f'{line}\n' for line in lines).encode()) % 0x10000
 
 
 def _describe(checksum: Optional[int], expected: int) -> str:

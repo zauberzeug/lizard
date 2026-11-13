@@ -31,4 +31,5 @@ and runs the same procedures in an async host with `AsyncConnection`.
 
 The version of the package is the Lizard release it belongs to; it works with firmware of that release and older,
 and refuses a startup script that uses a feature the firmware lacks.
+A peer of a serial bus with another name than `bus` needs a coordinator of Lizard 0.16.0 or newer.
 See the [documentation](https://lizard.dev/tools/) for details.

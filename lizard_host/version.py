@@ -23,6 +23,10 @@ class Feature:
 
 FEATURES: List[Feature] = [
     Feature('telemetry frames (core.telemetry)', (0, 16, 0), re.compile(r'\bcore\.telemetry\s*\(')),
+    Feature('passing on telemetry of serial bus peers (pass_telemetry)', (0, 16, 0),
+            re.compile(r'\.pass_telemetry\s*\(')),
+    Feature('the BusTelemetry module', (0, 16, 0), re.compile(r'\bBusTelemetry\s*\(')),
+    Feature('the JbdBms module', (0, 16, 0), re.compile(r'\bJbdBms\s*\(')),
 ]
 
 

@@ -16,6 +16,8 @@ in a release zip or a checkout of this repository.
 This page uses the scripts.
 The version of the package is the Lizard release it belongs to, e.g. `lizard-host==0.16.0` for Lizard v0.16.0;
 it works with firmware of that release and older ones, see [Host Library](#host-library).
+On a Robot Brain with L4T 35 and Python 3.8 the package leaves out `gpiod`, whose package on PyPI is another one there;
+`espresso.py` then uses the bindings of apt's `python3-libgpiod`.
 
 ### Flash
 
@@ -123,7 +125,7 @@ A frame that cannot be decoded has `values = None` and one of these statuses:
 | `unknown_version`   | the sender's layout lines have a format version other than `v1` |
 
 A host that cannot decode a frame because of its layout, e.g. because the frames started before it, sends `core.telemetry_info()` like the monitor.
-`lh.LayoutRequester().feed(result, time.monotonic())` takes each result of the decoder and returns whether to send it now.
+A `requester = lh.LayoutRequester()`, kept like the decoder, takes each result with `requester.feed(result, time.monotonic())` and returns whether to send it now.
 When a frame ID gets new fields, e.g. after `core.clear_telemetry()`, its frames carry a new layout ID, and the decoder waits for the layout lines with that ID instead of using the old ones.
 Logs should keep the raw lines and decode them when they are read.
 
@@ -162,11 +164,17 @@ The `target` is `lh.CORE`, the microcontroller on the port, by default.
 `lh.Target.peer('bus', 1)` is peer 1 of the [serial bus](module_reference.md#serial-bus) `bus`:
 its commands go through the coordinator with `bus.send(1, "...")`,
 and the lines it waits for are those the coordinator prints as `bus[1]: ...`, without that prefix.
-Lines carry no request ID, so an answer to an earlier command can satisfy a request with the same prefix.
+A coordinator before v0.16.0 prints `bus[1]: ...` whatever its bus is called, so a peer of a bus with another name needs a coordinator of v0.16.0 or newer.
+The lines of a peer pass the coordinator's outbound queue, so `write_startup()` checks the checksum of the lines so far every 20 lines,
+which paces the write and finds a lost line early.
+`write_startups()` checks the line lengths and the firmware of all microcontrollers before it writes the first script.
+Lines carry no request ID, so an answer to an earlier command can satisfy a request with the same prefix,
+and two requests with the same prefix at the same time both get the first answer; a host that sends them concurrently has to serialize them.
 
 `AsyncConnection` offers the same methods as coroutines for an async host that reads the lines itself.
 It takes a coroutine function that sends a line, given with checksum and without line end,
-and the host passes every line it reads to `feed()`, after checking and removing the checksum:
+and the host passes every line it reads to `feed()` on the thread of the event loop,
+a line with a checksum after checking and removing it and a line without one as it is, e.g. the `Ready.` of a restart:
 
 ```python
 connection = lh.AsyncConnection(write)
@@ -205,6 +213,8 @@ if line is not None and line.millis is not None:
 `lh.StepMerger` collects the frames of each sender with the same millis into a `Step`,
 e.g. the frames a `core.telemetry` call with many fields is split into.
 `add(frame)` returns the step that the frame ends, `flush()` the steps still open, and `step.values` merges the values of its frames.
+A step ends with the next frame of its sender with other millis, i.e. one interval later, unless the host calls `flush()` earlier, e.g. when no frame came for longer than the interval of its frames.
+The merger cannot tell whether a frame of a step got lost, since the layout lines do not say which frames belong to one call.
 
 ### OTB Update
 
@@ -309,7 +319,8 @@ Without a device path the serial device is detected the same way as for the [ser
 
 The configure script compares `core.startup_checksum()` with the file before it stores the script with `!.`, and tries up to three times,
 so a lost line cannot end up in the microcontroller's storage.
-Afterwards it restarts the microcontroller and fails if `core.startup_checksum()` does not match the file or the microcontroller does not answer.
+Afterwards it restarts the microcontroller and fails if it does not report `Ready.` within 15 s,
+or if `core.startup_checksum()` does not match the file or the microcontroller does not answer.
 With `--serial-bus <id>` it writes the script to peer `<id>` of the serial bus `bus` (or the one named with `--bus-name`) through the coordinator.
 A script that uses a feature the firmware lacks is refused before anything is written, see [Host Library](#host-library).
 

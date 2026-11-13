@@ -14,7 +14,8 @@ license-files = ["LICENSE"]
 requires-python = ">=3.8" # the system Python of L4T 35 Robot Brains, where the tools also run
 dependencies = [
     "esptool",
-    "gpiod; sys_platform == 'linux'",
+    # gpiod resolves to an unrelated package on Python 3.8; L4T 35 brings the bindings with apt's python3-libgpiod
+    "gpiod; sys_platform == 'linux' and python_version >= '3.9'",
     "prompt_toolkit",
     "pyserial",
 ]

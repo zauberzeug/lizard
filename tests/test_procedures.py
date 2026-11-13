@@ -23,6 +23,7 @@ class FakeLizard:
         self.edit: Optional[List[str]] = None
         self.drop_next_line = False  # a "!+" line that gets lost on the way
         self.silent = False
+        self.boot_lines = ['Ready.']  # what a restart prints
 
     def handle(self, command: str) -> List[str]:
         match = BUS_SEND.fullmatch(command)
@@ -46,7 +47,7 @@ class FakeLizard:
             self.edit = None
         elif command == 'core.restart()':
             self.edit = None
-            return ['Ready.']
+            return list(self.boot_lines)
         elif command == 'core.startup_checksum()':
             script = self.stored if self.edit is None else ''.join(f'{line}\n' for line in self.edit)
             return [f'checksum: {sum(script.encode()) % 0x10000:04x}']
@@ -120,6 +121,46 @@ def test_write_startups_core_first():
     run(procedures.write_startups({lh.Target.peer('bus', 1): 'a = 1\n', lh.CORE: 'b = 2\n'}), core, sent)
     assert (core.stored, peer.stored) == ('b = 2\n', 'a = 1\n')
     assert sent[0] == '!-'
+
+
+def test_write_startup_waits_for_its_own_ready():
+    lizard = FakeLizard()
+    lizard.boot_lines = ['p0: Ready.', 'mybus[1]: Ready.']  # an expander's echo, a peer of another bus
+    with pytest.raises(lh.StartupError, match='did not report "Ready."'):
+        run(procedures.write_startup(SCRIPT), lizard)
+    lizard.boot_lines = ['p0: Ready.', 'Ready.']
+    run(procedures.write_startup(SCRIPT), lizard)
+    assert lizard.stored == SCRIPT
+
+
+def test_peer_write_is_paced():
+    peer = FakeLizard()
+    core = FakeLizard(peers={1: peer})
+    script = ''.join(f'float v{i} = {i}\n' for i in range(45))
+    peer.drop_next_line = True  # the first line of the first attempt
+    sent: List[str] = []
+    run(procedures.write_startup(script, lh.Target.peer('bus', 1)), core, sent)
+    assert peer.stored == script
+    first_attempt = sent[:sent.index('bus.send(1, "!-")', 1)]
+    assert len([line for line in first_attempt if '!+' in line]) == 20  # stopped at the first check
+    assert len([line for line in sent if 'core.startup_checksum()' in line]) == 1 + 2 + 1 + 1  # checks, final, verify
+
+
+def test_write_startups_checks_all_scripts_first():
+    peer = FakeLizard({'project name': 'lizard', 'version': 'v0.15.1'})
+    core = FakeLizard(peers={1: peer})
+    with pytest.raises(ValueError, match='too long'):
+        run(procedures.write_startups({lh.CORE: SCRIPT, lh.Target.peer('bus', 1): 'x' * 300}), core)
+    with pytest.raises(lh.UnsupportedFirmware):
+        run(procedures.write_startups({lh.CORE: SCRIPT, lh.Target.peer('bus', 1): 'core.telemetry(a, 100)\n'}), core)
+    assert core.stored == peer.stored == ''
+
+
+def test_connection_needs_read_timeout():
+    class Port:
+        timeout = None
+    with pytest.raises(ValueError, match='read timeout'):
+        lh.Connection(Port())
 
 
 def test_line_too_long_for_bus():

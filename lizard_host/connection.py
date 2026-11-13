@@ -14,7 +14,7 @@ log = logging.getLogger('lizard_host')
 
 
 class Connection:
-    """Runs procedures on a serial port, e.g. a ``serial.Serial`` with a read timeout.
+    """Runs procedures on a serial port, e.g. a ``serial.Serial``, which needs a read timeout like 0.1 s.
 
     ``on_line`` gets every line that arrives, without line end and checksum, also those a procedure waits for;
     ``on_send`` gets every line that is sent. Lines with a wrong checksum are dropped.
@@ -23,6 +23,8 @@ class Connection:
     def __init__(self, port: Any, *,
                  on_line: Optional[Callable[[str], None]] = None,
                  on_send: Optional[Callable[[str], None]] = None) -> None:
+        if getattr(port, 'timeout', 0) is None:  # a read would block for as long as the microcontroller is silent
+            raise ValueError('The port needs a read timeout, e.g. serial.Serial(..., timeout=0.1)')
         self.port = port
         self.on_line = on_line
         self.on_send = on_send
@@ -109,7 +111,8 @@ class AsyncConnection:
     """Runs procedures in an async host that reads the lines itself.
 
     ``write`` sends a line, given with checksum and without line end.
-    The host passes every line it reads to ``feed()``, after checking and removing its checksum.
+    The host passes every line it reads to ``feed()`` on the thread of the event loop:
+    a line with a checksum after checking and removing it, a line without one as it is, e.g. ``Ready.``.
     """
 
     def __init__(self, write: Callable[[str], Awaitable[None]]) -> None:
