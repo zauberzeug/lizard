@@ -12,6 +12,9 @@ if(GIT_FOUND)
 else()
     set(PROJECT_VER "unknown")
 endif()
+if(NOT GIT_VERSION)
+    set(GIT_VERSION "unknown")
+endif()
 
 # Configure version.h to place in the build directory
 configure_file(${CMAKE_SOURCE_DIR}/version.h.in ${CMAKE_BINARY_DIR}/generated/version.h)

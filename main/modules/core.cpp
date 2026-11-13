@@ -14,6 +14,8 @@
 #include "hal/gpio_hal.h"
 #include "soc/io_mux_reg.h"
 #include "soc/soc.h"
+#include "version.h"
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <stdlib.h>
@@ -44,6 +46,10 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         const esp_app_desc_t *app_desc = esp_app_get_description();
         echo("project name: %s", app_desc->project_name);
         echo("version: %s", app_desc->version);
+        // a project with its own version also reports the Lizard version it is built from
+        if (strncmp(app_desc->version, GIT_VERSION, strlen(GIT_VERSION)) != 0) {
+            echo("lizard version: %s", GIT_VERSION);
+        }
         echo("compile time: %s, %s", app_desc->date, app_desc->time);
         echo("idf version: %s", app_desc->idf_ver);
     } else if (method_name == "print") {
