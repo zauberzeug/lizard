@@ -47,7 +47,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         echo("project name: %s", app_desc->project_name);
         echo("version: %s", app_desc->version);
         // a project with its own version also reports the Lizard version it is built from
-        if (strncmp(app_desc->version, GIT_VERSION, strlen(GIT_VERSION)) != 0) {
+        if (strncmp(app_desc->version, GIT_VERSION, sizeof(app_desc->version) - 1) != 0) {
             echo("lizard version: %s", GIT_VERSION);
         }
         echo("compile time: %s, %s", app_desc->date, app_desc->time);

@@ -4,11 +4,25 @@ cmake_minimum_required(VERSION 3.5)
 find_package(Git QUIET)
 if(GIT_FOUND)
     execute_process(
-        COMMAND ${GIT_EXECUTABLE} describe --always --tags
+        COMMAND ${GIT_EXECUTABLE} describe --always --tags --dirty
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         OUTPUT_VARIABLE GIT_VERSION
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
+    # reconfigure when HEAD moves; ESP-IDF only watches it while it determines PROJECT_VER itself
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --git-path logs/HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_HEAD_LOG
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(GIT_HEAD_LOG)
+        get_filename_component(GIT_HEAD_LOG "${GIT_HEAD_LOG}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+        if(EXISTS "${GIT_HEAD_LOG}")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${GIT_HEAD_LOG}")
+        endif()
+    endif()
 else()
     set(PROJECT_VER "unknown")
 endif()
