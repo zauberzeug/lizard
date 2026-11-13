@@ -3,8 +3,28 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "driver/twai.h"
+#include "esp_attr.h"
+#include "esp_idf_version.h"
+#include "hal/twai_hal.h"
 #include <algorithm>
 #include <stdexcept>
+
+#ifdef CONFIG_IDF_TARGET_ESP32
+#if ESP_IDF_VERSION_MAJOR >= 6
+#error "ESP-IDF 6 renames the TX event and always enables the lost-interrupt workaround; adapt the wrapper below"
+#endif
+// Linked in place of the IDF's function (see CMakeLists.txt): only a frame that still occupies the TX buffer can finish,
+// so a TX interrupt arriving after the lost-interrupt workaround has already counted its frame is not counted again.
+extern "C" uint32_t __real_twai_hal_get_events(twai_hal_context_t *hal_ctx);
+extern "C" uint32_t IRAM_ATTR __wrap_twai_hal_get_events(twai_hal_context_t *hal_ctx) {
+    const bool tx_pending = twai_hal_check_state_flags(hal_ctx, TWAI_HAL_STATE_FLAG_TX_BUFF_OCCUPIED);
+    uint32_t events = __real_twai_hal_get_events(hal_ctx);
+    if (!tx_pending) {
+        events &= ~TWAI_HAL_EVENT_TX_BUFF_FREE;
+    }
+    return events;
+}
+#endif
 
 static constexpr int64_t MAX_STANDARD_ID = 0x7FF;
 static constexpr int64_t MAX_EXTENDED_ID = 0x1FFFFFFF;
