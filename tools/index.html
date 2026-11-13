@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
       
 
@@ -456,6 +456,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#host-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Host Tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#flash" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -499,6 +510,28 @@
     <span class="md-ellipsis">
       
         Serial Monitor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#telemetry-decoder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Telemetry Decoder
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#host-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Host Library
       
     </span>
   </a>
@@ -651,6 +684,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#host-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Host Tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#flash" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -694,6 +738,28 @@
     <span class="md-ellipsis">
       
         Serial Monitor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#telemetry-decoder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Telemetry Decoder
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#host-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Host Library
       
     </span>
   </a>
@@ -821,6 +887,18 @@
 
 <h1 id="tools">Tools<a class="headerlink" href="#tools" title="Permanent link">&para;</a></h1>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<h3 id="host-tools">Host Tools<a class="headerlink" href="#host-tools" title="Permanent link">&para;</a></h3>
+<p>The tools on this page come with the Python package <code>lizard-host</code>:</p>
+<pre><code class="language-bash">python3 -m pip install lizard-host
+</code></pre>
+<p>It installs the commands <code>lizard-monitor</code>, <code>lizard-configure</code>, <code>lizard-espresso</code> and <code>lizard-otb-update</code>,
+which take the same arguments as the scripts <code>./monitor.py</code>, <code>./configure.py</code>, <code>./espresso.py</code> and <code>./otb_update.py</code>
+in a release zip or a checkout of this repository.
+This page uses the scripts.
+The version of the package is the Lizard release it belongs to, e.g. <code>lizard-host==0.16.0</code> for Lizard v0.16.0;
+it works with firmware of that release and older ones, see <a href="#host-library">Host Library</a>.
+On a Robot Brain with L4T 35 and Python 3.8 the package leaves out <code>gpiod</code>, whose package on PyPI is another one there;
+<code>espresso.py</code> then uses the bindings of apt's <code>python3-libgpiod</code>.</p>
 <h3 id="flash">Flash<a class="headerlink" href="#flash" title="Permanent link">&para;</a></h3>
 <p>To install Lizard on your ESP32 run</p>
 <pre><code class="language-bash">sudo ./espresso.py flash [--device &lt;device_path&gt;]
@@ -839,7 +917,7 @@ where the microcontroller is connected to the pin header of an NVIDIA Jetson com
 This requires a Jetson Orin (L4T 35 or 36);
 for Nano/Xavier Robot Brains use release 0.12.x or earlier, which still ships <code>flash.py</code>.</p>
 <p>To flash a Robot Brain over the network from a development machine, pass <code>--host</code>.
-This rsyncs the binaries, <code>espresso.py</code> and <code>serial_devices.py</code> to the target and runs the command there over SSH:</p>
+This rsyncs the binaries and the <code>lizard_host</code> package to the target and runs the command there over SSH:</p>
 <pre><code class="language-bash">./espresso.py flash --host user@robot-brain[:path]
 </code></pre>
 <p><code>--host</code> works for every command (<code>flash</code>, <code>erase</code>, <code>enable</code>, <code>disable</code>, <code>reset</code>, <code>release_pins</code>, <code>coredump</code>),
@@ -856,12 +934,164 @@ If several devices are found, it lists them and asks which one to use.
 A microcontroller on a USB-UART bridge attached to a Jetson is not detected and needs its device path.
 Pass the device path explicitly when several devices may be found and there is no terminal to answer the question.
 Detecting the Jetson's UART has the same Jetson Orin requirement as flashing (see <a href="#robot-brain">Robot Brain</a>).</p>
+<p>The monitor shows <a href="../module_reference/#core">telemetry frames</a> with the names of their fields:</p>
+<pre><code>[frame 1 seq=7 millis=123456] motor.position=1.234 motor.axis_state=8 motor.enabled=true
+</code></pre>
+<p>A frame it cannot decode shows its <a href="#telemetry-decoder">status</a> and its payload in hex, e.g. <code>[frame 1 seq=7 millis=123456 no_layout] b6f39d3f0800000001</code>.
+For a sender with an unknown format version it shows only the first frame.
+If the layout of a frame is missing or does not fit, e.g. because the frames started before the monitor, the monitor sends <code>core.telemetry_info()</code>, but only 2 s after its last request and the last layout line, so that it does not restart layout lines that are still coming.</p>
 <p>You can also use an SSH monitor to access a microcontroller via SSH:</p>
 <pre><code class="language-bash">./monitor_ssh.sh &lt;user@host&gt;
 </code></pre>
-<p>This copies <code>monitor.py</code> and <code>serial_devices.py</code> from this checkout to <code>~/lizard</code> on the target and starts the monitor there,
+<p>This copies <code>monitor.py</code> and the <code>lizard_host</code> package from this checkout to <code>~/lizard</code> on the target and starts the monitor there,
 so which device it detects does not depend on the age of the target's own checkout.</p>
 <p>Note that the serial monitor cannot communicate while the serial interface is busy communicating with another process.</p>
+<h3 id="telemetry-decoder">Telemetry Decoder<a class="headerlink" href="#telemetry-decoder" title="Permanent link">&para;</a></h3>
+<p>The <code>lizard_host</code> package next to the scripts decodes <a href="../module_reference/#core">telemetry frames</a> for the serial monitor and for other host software.
+It also splits off and computes the <a href="../machine_safety/#checksums">line checksum</a> first:</p>
+<pre><code class="language-python">import lizard_host as lh
+
+decoder = lh.TelemetryDecoder()
+for line in lines:
+    text, check = lh.split_checksum(line)
+    if check is not None and lh.checksum(text) != check:
+        continue  # a damaged line
+    result = decoder.feed(text)
+    if isinstance(result, lh.Frame) and result.status == 'ok':
+        print(result.frame_id, result.seq, result.millis, result.values)
+</code></pre>
+<p><code>feed</code> returns a <code>Text</code>, a <code>Layout</code> or a <code>Frame</code> and keeps the layouts of each sender.
+The sender is the device on the console or, for a line that a <a href="../module_reference/#serial-bus">serial bus</a> coordinator passes on as <code>&lt;bus&gt;[&lt;id&gt;]: ...</code>, the string <code>"&lt;bus&gt;[&lt;id&gt;]"</code>, which the monitor prints in front of the frame.
+<code>str()</code> of a frame gives the line the monitor shows, with floats rounded to the seven significant digits of a float32.
+A frame that cannot be decoded has <code>values = None</code> and one of these statuses:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>no_layout</code></td>
+<td>no layout line with the frame's layout ID has arrived</td>
+</tr>
+<tr>
+<td><code>layout_incomplete</code></td>
+<td>layout lines of some fields are missing</td>
+</tr>
+<tr>
+<td><code>layout_mismatch</code></td>
+<td>the payload size does not match the layout</td>
+</tr>
+<tr>
+<td><code>unknown_version</code></td>
+<td>the sender's layout lines have a format version other than <code>v1</code></td>
+</tr>
+</tbody>
+</table>
+<p>A host that cannot decode a frame because of its layout, e.g. because the frames started before it, sends <code>core.telemetry_info()</code> like the monitor.
+A <code>requester = lh.LayoutRequester()</code>, kept like the decoder, takes each result with <code>requester.feed(result, time.monotonic())</code> and returns whether to send it now.
+When a frame ID gets new fields, e.g. after <code>core.clear_telemetry()</code>, its frames carry a new layout ID, and the decoder waits for the layout lines with that ID instead of using the old ones.
+Logs should keep the raw lines and decode them when they are read.</p>
+<h3 id="host-library">Host Library<a class="headerlink" href="#host-library" title="Permanent link">&para;</a></h3>
+<p>Besides the telemetry decoder, <code>lizard_host</code> holds what a host needs to talk to Lizard,
+so that host software like <a href="https://rosys.io">RoSys</a> does not need its own copy.</p>
+<p><code>Connection</code> runs commands on a serial port:</p>
+<pre><code class="language-python">import serial
+import lizard_host as lh
+
+with serial.Serial('/dev/ttyUSB0', 115200, timeout=0.1) as port:
+    connection = lh.Connection(port, on_line=print)
+    connection.write_startup(open('core.liz').read())
+    connection.write_startups({
+        lh.CORE: open('core.liz').read(),
+        lh.Target.peer('bus', 1): open('p1.liz').read(),
+    })
+    print(connection.request('core.startup_checksum()', 'checksum:'))
+    print(connection.read_version())
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>send(command, target)</code></td>
+<td>Send a command</td>
+</tr>
+<tr>
+<td><code>request(command, prefix, target, timeout=3)</code></td>
+<td>Send a command and return the first line that starts with <code>prefix</code>, or <code>None</code></td>
+</tr>
+<tr>
+<td><code>read_startup_checksum(target)</code></td>
+<td>The checksum of the startup script, as an <code>int</code>, or <code>None</code> without an answer</td>
+</tr>
+<tr>
+<td><code>read_version(target)</code></td>
+<td>The Lizard version the firmware is built from, as a <code>LizardVersion</code>, or <code>None</code></td>
+</tr>
+<tr>
+<td><code>write_startup(script, target)</code></td>
+<td>Write, verify and store a startup script like <a href="#configure">the configure script</a></td>
+</tr>
+<tr>
+<td><code>write_startups(scripts)</code></td>
+<td>Write one startup script per microcontroller, the core first, then the peers through it</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>target</code> is <code>lh.CORE</code>, the microcontroller on the port, by default.
+<code>lh.Target.peer('bus', 1)</code> is peer 1 of the <a href="../module_reference/#serial-bus">serial bus</a> <code>bus</code>:
+its commands go through the coordinator with <code>bus.send(1, "...")</code>,
+and the lines it waits for are those the coordinator prints as <code>bus[1]: ...</code>, without that prefix.
+A coordinator before v0.16.0 prints <code>bus[1]: ...</code> whatever its bus is called, so a peer of a bus with another name needs a coordinator of v0.16.0 or newer.
+The lines of a peer pass the coordinator's outbound queue, so <code>write_startup()</code> checks the checksum of the lines so far every 20 lines,
+which paces the write and finds a lost line early.
+<code>write_startups()</code> checks the line lengths and the firmware of all microcontrollers before it writes the first script.
+A peer that does not report its version then, e.g. because the core's script brings the bus that reaches it, is checked once the core's script is written.
+Lines carry no request ID, so an answer to an earlier command can satisfy a request with the same prefix,
+and two requests with the same prefix at the same time both get the first answer; a host that sends them concurrently has to serialize them.</p>
+<p><code>AsyncConnection</code> offers the same methods as coroutines for an async host that reads the lines itself.
+It takes a coroutine function that sends a line, given with checksum and without line end,
+and the host passes every line it reads to <code>feed()</code> on the thread of the event loop,
+a line with a checksum after checking and removing it and a line without one as it is, e.g. the <code>Ready.</code> of a restart:</p>
+<pre><code class="language-python">connection = lh.AsyncConnection(write)
+...
+connection.feed(text)  # in the read loop
+...
+await connection.write_startup(script)
+</code></pre>
+<p>Both run the same procedures from <code>lizard_host.procedures</code>, generators that yield the line to send and the line to wait for,
+so other front ends can run them too.</p>
+<p><strong>Firmware versions:</strong>
+<code>read_version()</code> reads the Lizard version from <code>core.info()</code>:
+the line <code>lizard version:</code> of a project with its own name and version, otherwise <code>project version:</code>,
+and <code>version:</code> of firmware before 0.16.0, which is the Lizard version only for a project named <code>lizard</code>.
+<code>write_startup()</code> refuses a script that uses a feature the firmware lacks with <code>UnsupportedFirmware</code>,
+e.g. <code>core.telemetry</code> before v0.16.0.
+A build between two releases, e.g. <code>v0.15.1-40-gea96593</code>, a build with local changes and an unknown version only log a warning,
+since they may or may not have the feature.</p>
+<p><strong>Core lines and clock offset:</strong>
+<code>lh.parse_core_line(text)</code> parses a line <code>core ...</code> of <code>core.output(...)</code>;
+its <code>millis</code> is the first value if that is an integer, as with <code>core.output("core.millis ...")</code>.
+<code>lh.ClockOffset</code> averages the host time minus the microcontroller's time over the last 100 samples and starts anew after a jump of more than 0.1 s:</p>
+<pre><code class="language-python">offset = lh.ClockOffset()
+line = lh.parse_core_line(text)
+if line is not None and line.millis is not None:
+    offset.update(time.time(), line.millis)
+    host_time = offset.host_time(line.millis)
+</code></pre>
+<p><strong>Steps:</strong>
+<code>lh.StepMerger</code> collects the frames of each sender with the same millis into a <code>Step</code>,
+e.g. the frames a <code>core.telemetry</code> call with many fields is split into.
+<code>add(frame)</code> returns the step that the frame ends, <code>flush()</code> the steps still open, and <code>step.values</code> merges the values of its frames.
+A step ends with the next frame of its sender with other millis, i.e. one interval later, unless the host calls <code>flush()</code> earlier, e.g. when no frame came for longer than the interval of its frames.
+The merger cannot tell whether a frame of a step got lost, since the layout lines do not say which frames belong to one call.</p>
 <h3 id="otb-update">OTB Update<a class="headerlink" href="#otb-update" title="Permanent link">&para;</a></h3>
 <p><code>otb_update.py</code> pushes firmware to a peer over a <code>SerialBus</code> coordinator using the OTB (Over The Bus) protocol.</p>
 <pre><code class="language-bash">./otb_update.py build/lizard.bin [--device &lt;path&gt;] --target &lt;peer_id&gt; [--bus &lt;name&gt;] [--expander &lt;name&gt;]
@@ -1004,6 +1234,12 @@ and a target still accepts chunks without the field from older hosts.</p>
 <pre><code class="language-bash">./configure.py &lt;config_file&gt; [&lt;device_path&gt;]
 </code></pre>
 <p>Without a device path the serial device is detected the same way as for the <a href="#serial-monitor">serial monitor</a>.</p>
+<p>The configure script compares <code>core.startup_checksum()</code> with the file before it stores the script with <code>!.</code>, and tries up to three times,
+so a lost line cannot end up in the microcontroller's storage.
+Afterwards it restarts the microcontroller and fails if it does not report <code>Ready.</code> within 15 s plus 5 s for every <code>Expander</code> of the script,
+or if <code>core.startup_checksum()</code> does not match the file or the microcontroller does not answer.
+With <code>--serial-bus &lt;id&gt;</code> it writes the script to peer <code>&lt;id&gt;</code> of the serial bus <code>bus</code> (or the one named with <code>--bus-name</code>) through the coordinator.
+A script that uses a feature the firmware lacks is refused before anything is written, see <a href="#host-library">Host Library</a>.</p>
 <p>Note that the configure script cannot communicate while the serial interface is busy communicating with another process.</p>
 <h2 id="development">Development<a class="headerlink" href="#development" title="Permanent link">&para;</a></h2>
 <h3 id="prepare-for-development">Prepare for Development<a class="headerlink" href="#prepare-for-development" title="Permanent link">&para;</a></h3>
@@ -1023,7 +1259,21 @@ and a target still accepts chunks without the field from older hosts.</p>
 e.g. <code>idf.py -DLIZARD_PROJECT_NAME=lizard-zz build</code>.
 The name is reported by <code>core.version()</code> and also names the build artifacts (<code>build/lizard-zz.bin</code>, <code>build/lizard-zz.elf</code>);
 <code>espresso.py</code> picks them up automatically via <code>build/project_description.json</code>,
-other tools like <code>otb_update.py</code> or <code>addr2line</code> need the renamed paths passed explicitly.</p>
+other tools like <code>otb_update.py</code> or <code>addr2line</code> need the renamed paths passed explicitly.
+A build with its own version (<code>-DPROJECT_VER=...</code>) additionally reports the Lizard version in <code>core.info()</code>
+as <code>lizard version: &lt;git describe&gt;</code> of the Lizard checkout,
+which therefore needs its git metadata and tags: a full-depth submodule checkout, and git access from inside a build container.</p>
+<p>The ESP32 build reads its flash at 80 MHz, which Espressif's modules like the ESP32-WROVER-E and the ESP32-WROOM-32E are rated for.
+The frequency travels with the app: the ESP32 sets its flash clock at startup from the image header of the app,
+so an update over OTA, OTB or <code>expander.flash()</code> moves a device to 80 MHz without a new bootloader.
+A board whose flash or layout cannot keep up crashes or does not boot at this speed,
+and only flashing a 40 MHz build over serial brings it back.
+For such a board, replace the two 80 MHz lines in <code>sdkconfig.defaults.esp32</code>
+with <code>CONFIG_ESPTOOLPY_FLASHFREQ_40M=y</code> and <code>CONFIG_ESPTOOLPY_FLASHFREQ="40m"</code>,
+or add them to <code>sdkconfig.defaults.secret</code>, which <code>build.py</code> loads after the base defaults,
+and build with <code>python build.py esp32 --clean</code>.
+The clean build is needed because ESP-IDF applies these defaults only when it creates a new <code>sdkconfig</code>;
+an existing <code>sdkconfig</code> keeps the flash frequency it was created with.</p>
 <h3 id="backtrace">Backtrace<a class="headerlink" href="#backtrace" title="Permanent link">&para;</a></h3>
 <p>In case Lizard terminates with a backtrace printed to the serial terminal,
 you can translate the addresses to source code lines with the <code>addr2line</code> tool from the ESP-IDF toolchain.
@@ -1049,7 +1299,7 @@ Unlike flashing, the remote core dump runs without sudo,
 so the SSH user needs access to the serial device (e.g. membership in the <code>dialout</code> group).</p>
 <h3 id="releasing">Releasing<a class="headerlink" href="#releasing" title="Permanent link">&para;</a></h3>
 <p>To build a new release, tag the commit with a "v" prefix, for example "v0.1.4".
-A GitHub action will build the binary and create a new release.
+A GitHub action will build the binary, create a new release and publish the package <code>lizard-host</code> with the same version on PyPI.
 After creation you can fill in a description if necessary.</p>
 
 
@@ -1100,10 +1350,10 @@ After creation you can fill in a description if necessary.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

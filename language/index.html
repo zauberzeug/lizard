@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
       
 
@@ -625,7 +625,10 @@ button.level
 1 == 2 or (x == 4 and button.level == 0)
 </code></pre>
 <p>Expressions can be assigned to variables, used in conditions and passed to constructors, method calls or routine calls.
-Plain expression statements print their result to the command line.</p>
+Plain expression statements print their result to the command line.
+Expressions can be nested up to 39 levels deep, where every operator and every pair of parentheses adds a level.
+A chain like <code>a + b + c + ...</code> can therefore have up to 40 terms.
+Deeper expressions are rejected with "expression is nested too deeply".</p>
 <p><strong>Variables: declaration and assignment</strong></p>
 <p>New variables need to be explicitly declared with a data type:</p>
 <pre><code>int i
@@ -651,6 +654,12 @@ Plain expression statements print their result to the command line.</p>
 <p>Some module properties are meant to be written to:</p>
 <pre><code>motor.reversed = true
 </code></pre>
+<p><strong>Properties: declaration</strong></p>
+<p>Some modules accept property declarations, which work like variable declarations:</p>
+<pre><code>float x.level = 0.5
+</code></pre>
+<p>Modules that do not accept declarations report an error.
+<a href="../module_reference/#proxy">Proxies</a> and <a href="../module_reference/#bus-telemetry">BusTelemetry</a> modules accept declarations.</p>
 <p><strong>Routines: definition and call</strong></p>
 <p>Routines have a name and contain a list of actions:</p>
 <pre><code>let all_on do
@@ -729,6 +738,12 @@ end
     core.print(&quot;Done.&quot;)
 end
 </code></pre>
+<p><strong>Failing actions</strong></p>
+<p>If an action fails, for example because a module reports an error, the error is printed and the remaining actions are skipped.
+The rule or routine has then finished: a rule fires again the next time its condition is true and starts again from its first action, and a routine can be called again.
+A rule that uses a flag to fire only once should therefore set the flag after its actions; otherwise a failed action is never attempted again.
+If an awaited routine fails, the <code>await</code> fails as well and the actions after it are skipped.
+A routine started without <code>await</code> runs on its own, so its failure does not affect the rule or routine that started it.</p>
 <h2 id="data-types">Data types<a class="headerlink" href="#data-types" title="Permanent link">&para;</a></h2>
 <p>Lizard currently supports five data types:</p>
 <table>
@@ -815,7 +830,13 @@ float f = i + 3.14
 </tr>
 </tbody>
 </table>
-<p>Note that the commands <code>!+</code>, <code>!-</code> and <code>!?</code> affect the startup script in RAM, which is only written to non-volatile storage with the <code>!.</code> command.</p>
+<p>Note that <code>!+</code> and <code>!-</code> edit a copy of the startup script in RAM, which is only written to non-volatile storage with the <code>!.</code> command; until then <code>!?</code> prints this copy.
+Otherwise the startup script is not held in RAM: <code>!?</code> reads it from non-volatile storage, and the boot runs it from there statement by statement.
+The <code>!.</code> command does not reply when it succeeds and prints an error when it cannot write to non-volatile storage.
+The <a href="../module_reference/#core"><code>core.startup_checksum()</code></a> command sums the bytes of the copy while there is one, so before <code>!.</code> it checks the result of the <code>!+</code> and <code>!-</code> commands.
+After a successful <code>!.</code> there is no copy, and the same command sums what <code>!.</code> has stored, also before a restart.
+If <code>!.</code> fails, the copy stays in RAM for another <code>!.</code>, and <code>core.startup_checksum()</code> reports the error instead of a checksum until the copy changes or a <code>!.</code> succeeds.
+If the stored script cannot be read, <code>!+</code> and <code>!-abc</code> report the error and change nothing; <code>!-</code> starts a new script without reading the old one.</p>
 <p>Input from the default command-line interface UART0 is usually interpreted as Lizard code;
 input from a <a href="../module_reference/#expander">port expander</a> is usually printed to the command-line on UART0.
 This behavior can be changed using <code>!!</code> and <code>!"</code>.</p>
@@ -868,10 +889,10 @@ This behavior can be changed using <code>!!</code> and <code>!"</code>.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>
