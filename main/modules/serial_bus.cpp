@@ -955,7 +955,7 @@ void SerialBus::drain_outbound(const unsigned long timeout_ms) {
            millis_since(start) < timeout_ms) {
         delay(5);
     }
-    uart_wait_tx_done(this->serial->uart_num, pdMS_TO_TICKS(100));
+    this->serial->wait_until_sent();
 }
 
 bool SerialBus::send_outgoing_queue() {

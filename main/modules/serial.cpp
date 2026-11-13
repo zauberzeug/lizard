@@ -1,4 +1,5 @@
 #include "serial.h"
+#include "soc/soc_caps.h"
 #include "soc/uart_channel.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
@@ -115,6 +116,7 @@ void Serial::deinstall() const {
         return; // the driver and the pins stay with the console
     }
     if (uart_is_driver_installed(this->uart_num)) {
+        this->wait_until_sent(); // bytes left in a deleted driver break the next one, e.g. the flasher's connection to a peer
         uart_driver_delete(this->uart_num);
     }
     gpio_reset_pin(this->rx_pin);
@@ -188,6 +190,12 @@ void Serial::flush() const {
     this->pending_lines.clear();
     this->discarded_bytes = 0;
     uart_flush(this->uart_num);
+}
+
+void Serial::wait_until_sent() const {
+    // 100 ms plus twice the time the driver's TX buffer and the FIFO take on the wire
+    const uint32_t timeout_ms = 100 + 2 * (TX_BUF_SIZE + SOC_UART_FIFO_LEN) * 10 * 1000 / this->baud_rate;
+    uart_wait_tx_done(this->uart_num, pdMS_TO_TICKS(timeout_ms));
 }
 
 int Serial::read(uint32_t timeout) const {
