@@ -35,14 +35,21 @@ struct Frame {
     size_t bits_offset = 0; // the bools follow the floats and ints as bits
     size_t payload_size = 0;
     uint8_t layout_id = 0;
-    unsigned long interval = 0;
-    unsigned long last_millis = 0;
     uint8_t sequence = 0;
     size_t layout_lines_sent = 0;
-    bool announced = false; // all layout lines were sent once, so readers can decode the frame
+};
+
+// the frames of one core.telemetry call: one timer, so that all of them carry the same millis
+struct Group {
+    size_t first = 0; // index of the first frame
+    size_t count = 0;
+    unsigned long interval = 0;
+    unsigned long last_millis = 0;
+    bool announced = false; // all layout lines of all frames were sent once, so readers can decode them
 };
 
 static std::vector<Frame> frames; // frame ID = index + 1
+static std::vector<Group> groups;
 static std::vector<SerialBus *> buses;
 static uint8_t coordinator = 0; // the node the layout lines went to, 0 for the console
 
@@ -104,45 +111,68 @@ static Field to_field(const ConstExpression_ptr &argument) {
     return field;
 }
 
-void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
-    if (frames.size() >= MAX_FRAMES) {
-        throw std::runtime_error("too many telemetry frames");
-    }
+static Frame to_frame(std::vector<Field>::iterator begin, const std::vector<Field>::iterator end, const size_t bools) {
     Frame frame;
+    frame.fields.assign(std::make_move_iterator(begin), std::make_move_iterator(end));
+    std::string layout; // "name:type name:type ..."
+    for (const Field &field : frame.fields) {
+        layout += (layout.empty() ? "" : " ") + field.name + ":" + type_letter(field.variable->type);
+    }
+    frame.layout_id = crc16(layout.data(), layout.size()) & 0xff; // tells a reader which layout lines a frame needs
+    frame.bits_offset = 4 * (frame.fields.size() - bools);
+    frame.payload_size = payload_size(frame.fields.size(), bools);
+    return frame;
+}
+
+void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
+    Group group;
     size_t field_count = arguments.size();
     if (field_count > 1 && std::dynamic_pointer_cast<const IntegerExpression>(arguments.back())) {
         const int64_t interval = arguments.back()->evaluate_integer();
         if (interval < 0 || interval > MAX_INTERVAL) {
             throw std::runtime_error("telemetry interval must be between 0 and 3600000 ms");
         }
-        frame.interval = interval;
+        group.interval = interval;
         --field_count;
     }
     if (field_count == 0) {
         throw std::runtime_error("telemetry frames need at least one field");
     }
-    frame.fields.reserve(field_count);
-    size_t bools = 0;
-    std::string layout; // "name:type name:type ..."
+    std::vector<Field> fields;
+    fields.reserve(field_count);
     for (size_t i = 0; i < field_count; ++i) {
         Field new_field = to_field(arguments[i]);
-        for (const Field &other : frame.fields) {
+        for (const Field &other : fields) {
             if (other.name == new_field.name) { // a reader keys the values by name, and a second copy adds no information
-                throw std::runtime_error("telemetry field \"" + new_field.name + "\" appears twice in the frame");
+                throw std::runtime_error("telemetry field \"" + new_field.name + "\" appears twice in the call");
             }
         }
-        frame.fields.push_back(std::move(new_field));
-        const Field &field = frame.fields.back();
-        bools += field.variable->type == boolean;
-        layout += (i ? " " : "") + field.name + ":" + type_letter(field.variable->type);
+        fields.push_back(std::move(new_field));
     }
-    frame.layout_id = crc16(layout.data(), layout.size()) & 0xff; // tells a reader which layout lines a frame needs
-    frame.bits_offset = 4 * (field_count - bools);
-    frame.payload_size = payload_size(field_count, bools);
-    if (frame.payload_size > MAX_PAYLOAD) {
-        throw std::runtime_error("too many fields for one frame");
+
+    // split greedily, keeping the order of the fields
+    std::vector<Frame> parts;
+    auto begin = fields.begin();
+    size_t bools = 0;
+    for (auto field = fields.begin(); field != fields.end(); ++field) {
+        const bool is_bool = field->variable->type == boolean;
+        if (payload_size(static_cast<size_t>(field - begin) + 1, bools + is_bool) > MAX_PAYLOAD) {
+            parts.push_back(to_frame(begin, field, bools));
+            begin = field;
+            bools = 0;
+        }
+        bools += is_bool;
     }
-    frames.push_back(std::move(frame));
+    parts.push_back(to_frame(begin, fields.end(), bools));
+
+    if (frames.size() + parts.size() > MAX_FRAMES) {
+        throw std::runtime_error("too many telemetry frames");
+    }
+    group.first = frames.size();
+    group.count = parts.size();
+    groups.reserve(groups.size() + 1); // so that push_back cannot throw after the insert
+    frames.insert(frames.end(), std::make_move_iterator(parts.begin()), std::make_move_iterator(parts.end()));
+    groups.push_back(group);
 }
 
 void announce() {
@@ -157,6 +187,7 @@ void announce() {
 
 void clear() {
     frames.clear();
+    groups.clear();
     for (SerialBus *const bus : buses) {
         bus->clear_telemetry_slots();
     }
@@ -196,20 +227,22 @@ static bool send_layout_line(SerialBus *const bus, const uint8_t id, const Frame
 // true once all layout lines are out
 static bool send_layout_lines(SerialBus *const bus, const unsigned long now) {
     size_t budget = LAYOUT_LINES_PER_STEP;
-    for (size_t i = 0; i < frames.size(); ++i) {
-        Frame &frame = frames[i];
-        for (; frame.layout_lines_sent < frame.fields.size() && budget > 0; --budget) {
-            if (!send_layout_line(bus, i + 1, frame, frame.layout_lines_sent)) {
-                return false; // the queue empties with the next poll
+    for (Group &group : groups) {
+        for (size_t i = group.first; i < group.first + group.count; ++i) {
+            Frame &frame = frames[i];
+            for (; frame.layout_lines_sent < frame.fields.size() && budget > 0; --budget) {
+                if (!send_layout_line(bus, i + 1, frame, frame.layout_lines_sent)) {
+                    return false; // the queue empties with the next poll
+                }
+                ++frame.layout_lines_sent;
             }
-            ++frame.layout_lines_sent;
+            if (frame.layout_lines_sent < frame.fields.size()) {
+                return false;
+            }
         }
-        if (frame.layout_lines_sent < frame.fields.size()) {
-            return false;
-        }
-        if (!frame.announced) {
-            frame.announced = true;
-            frame.last_millis = now - frame.interval; // due right away, however long the layout took
+        if (!group.announced) {
+            group.announced = true;
+            group.last_millis = now - group.interval; // due right away, however long the layout took
         }
     }
     return true;
@@ -283,7 +316,9 @@ void step() {
         coordinator = polling;
         for (Frame &frame : frames) {
             frame.layout_lines_sent = 0;
-            frame.announced = false;
+        }
+        for (Group &group : groups) {
+            group.announced = false;
         }
     }
     if (!bus && console_handed_over()) {
@@ -293,12 +328,13 @@ void step() {
     if (!send_layout_lines(bus, now) && bus) {
         return; // frames would crowd the layout lines out of the coordinator's inbound queue
     }
-    for (size_t i = 0; i < frames.size(); ++i) {
-        Frame &frame = frames[i];
-        if (frame.announced && now - frame.last_millis >= frame.interval) {
+    for (Group &group : groups) {
+        if (group.announced && now - group.last_millis >= group.interval) {
             // keep the rate when steps run late, catching up at most one interval
-            frame.last_millis = now - frame.last_millis < 2 * frame.interval ? frame.last_millis + frame.interval : now - frame.interval;
-            send_frame(bus, i + 1, frame, now);
+            group.last_millis = now - group.last_millis < 2 * group.interval ? group.last_millis + group.interval : now - group.interval;
+            for (size_t i = group.first; i < group.first + group.count; ++i) {
+                send_frame(bus, i + 1, frames[i], now);
+            }
         }
     }
 }

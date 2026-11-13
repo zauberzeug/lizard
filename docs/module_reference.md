@@ -87,14 +87,17 @@ core.telemetry(imu.yaw, imu.pitch, imu.temp)                   # frame 1, every 
 core.telemetry(wheels.linear_speed, wheels.angular_speed, 20)  # frame 2, every 20 ms
 ```
 
-Each call defines one frame; frame IDs count up from 1 in the order of definition.
-The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several frames, but only once per frame.
+Each call defines one frame, or several if its values take more than 180 bytes (see below); frame IDs count up from 1 in the order of definition.
+The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several calls, but only once per call.
 A field's name, `<module>.<property>` or the variable's name, has at most 200 characters.
 An integer literal as last argument is the interval in milliseconds (0 to 3600000); an `int` variable or property in that place is a field.
 Without an interval or with 0, the frame is sent every step.
 Frames go out with the 10 ms steps, so the gaps between them vary, e.g. 10 and 20 ms for an interval of 15 ms, but match the interval on average.
 Frames are built at the end of the step, after modules, rules and routines, so all fields of a frame come from the same step.
 The values of one frame take at most 180 bytes, e.g. 45 floats.
+A call whose values take more is split into several frames, each filled up in the order of the arguments, with its own frame ID and layout.
+These frames share their timer and are sent in the same step, only once all of them are announced, so they carry the same millis and a reader can merge them into one step by that time.
+Every one of them counts against the limit of 255 frames.
 `core.clear_telemetry()` removes all frames and frees their IDs.
 
 A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (standard alphabet with `=` padding) and the usual [checksum](machine_safety.md#checksums).
@@ -252,6 +255,8 @@ While layout lines go to the coordinator, the peer holds back all of its frames.
 Then it keeps the newest frame of each ID in a slot and sends the slots with the next poll, so a poll delivers the current values and no backlog, and a frame ID arrives at most once per poll of its peer.
 A frame that is replaced before it was sent does not count in the sequence number, so a gap is still a loss.
 A peer has eight slots; a frame beyond them is not sent, and the peer warns on its own console and through the coordinator, at most every 10 s.
+A call that is split into several frames takes one slot per frame; if the slots run out within a call, only its first frames are sent.
+The frames of a split call arrive as one step only while a poll can carry them within their interval; a peer that sends more than the bus carries delivers steps with some of their frames missing, without a gap in the sequence numbers.
 
 The coordinator checks payloads starting with `~` or `__LAYOUT__` and never processes them as Lizard code.
 `bus.pass_telemetry()` passes the frames and layout lines of all peers on to the console with the coordinator's name for the bus and the peer's ID in front, here `bus[2]: `, and `bus.pass_telemetry(2)` only those of peer 2:
