@@ -1,4 +1,44 @@
-# Configuration of the code checks for the host tools; Lizard is not installed as a Python package.
+# The host package lizard_host, published on PyPI as lizard-host, and the configuration of the code checks.
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lizard-host"
+dynamic = ["version"] # the Lizard release tag, e.g. 0.16.0 for v0.16.0
+description = "Host-side tools and library for microcontrollers running Lizard"
+readme = "lizard_host/README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.8" # the system Python of L4T 35 Robot Brains, where the tools also run
+dependencies = [
+    "esptool",
+    # gpiod resolves to an unrelated package on Python 3.8; L4T 35 brings the bindings with apt's python3-libgpiod
+    "gpiod; sys_platform == 'linux' and python_version >= '3.9'",
+    "prompt_toolkit",
+    "pyserial",
+]
+
+[project.urls]
+Homepage = "https://lizard.dev"
+Documentation = "https://lizard.dev/tools/"
+Repository = "https://github.com/zauberzeug/lizard"
+
+[project.scripts]
+lizard-configure = "lizard_host.configure:main"
+lizard-espresso = "lizard_host.espresso:main"
+lizard-monitor = "lizard_host.monitor:main"
+lizard-otb-update = "lizard_host.otb_update:main"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.sdist]
+only-include = ["lizard_host", "LICENSE"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["lizard_host"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

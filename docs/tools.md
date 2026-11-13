@@ -2,6 +2,23 @@
 
 ## Installation
 
+### Host Tools
+
+The tools on this page come with the Python package `lizard-host`:
+
+```bash
+python3 -m pip install lizard-host
+```
+
+It installs the commands `lizard-monitor`, `lizard-configure`, `lizard-espresso` and `lizard-otb-update`,
+which take the same arguments as the scripts `./monitor.py`, `./configure.py`, `./espresso.py` and `./otb_update.py`
+in a release zip or a checkout of this repository.
+This page uses the scripts.
+The version of the package is the Lizard release it belongs to, e.g. `lizard-host==0.16.0` for Lizard v0.16.0;
+it works with firmware of that release and older ones, see [Host Library](#host-library).
+On a Robot Brain with L4T 35 and Python 3.8 the package leaves out `gpiod`, whose package on PyPI is another one there;
+`espresso.py` then uses the bindings of apt's `python3-libgpiod`.
+
 ### Flash
 
 To install Lizard on your ESP32 run
@@ -29,7 +46,7 @@ This requires a Jetson Orin (L4T 35 or 36);
 for Nano/Xavier Robot Brains use release 0.12.x or earlier, which still ships `flash.py`.
 
 To flash a Robot Brain over the network from a development machine, pass `--host`.
-This rsyncs the binaries, `espresso.py` and the `lizard_host` package to the target and runs the command there over SSH:
+This rsyncs the binaries and the `lizard_host` package to the target and runs the command there over SSH:
 
 ```bash
 ./espresso.py flash --host user@robot-brain[:path]
@@ -95,8 +112,6 @@ for line in lines:
         print(result.frame_id, result.seq, result.millis, result.values)
 ```
 
-The package is not installable, so a script outside the Lizard folder needs that folder on its `PYTHONPATH`.
-
 `feed` returns a `Text`, a `Layout` or a `Frame` and keeps the layouts of each sender.
 The sender is the device on the console or, for a line that a [serial bus](module_reference.md#serial-bus) coordinator passes on as `<bus>[<id>]: ...`, the string `"<bus>[<id>]"`, which the monitor prints in front of the frame.
 `str()` of a frame gives the line the monitor shows, with floats rounded to the seven significant digits of a float32.
@@ -110,8 +125,97 @@ A frame that cannot be decoded has `values = None` and one of these statuses:
 | `unknown_version`   | the sender's layout lines have a format version other than `v1` |
 
 A host that cannot decode a frame because of its layout, e.g. because the frames started before it, sends `core.telemetry_info()` like the monitor.
+A `requester = lh.LayoutRequester()`, kept like the decoder, takes each result with `requester.feed(result, time.monotonic())` and returns whether to send it now.
 When a frame ID gets new fields, e.g. after `core.clear_telemetry()`, its frames carry a new layout ID, and the decoder waits for the layout lines with that ID instead of using the old ones.
 Logs should keep the raw lines and decode them when they are read.
+
+### Host Library
+
+Besides the telemetry decoder, `lizard_host` holds what a host needs to talk to Lizard,
+so that host software like [RoSys](https://rosys.io) does not need its own copy.
+
+`Connection` runs commands on a serial port:
+
+```python
+import serial
+import lizard_host as lh
+
+with serial.Serial('/dev/ttyUSB0', 115200, timeout=0.1) as port:
+    connection = lh.Connection(port, on_line=print)
+    connection.write_startup(open('core.liz').read())
+    connection.write_startups({
+        lh.CORE: open('core.liz').read(),
+        lh.Target.peer('bus', 1): open('p1.liz').read(),
+    })
+    print(connection.request('core.startup_checksum()', 'checksum:'))
+    print(connection.read_version())
+```
+
+| Method                                        | Description                                                                             |
+| --------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `send(command, target)`                       | Send a command                                                                          |
+| `request(command, prefix, target, timeout=3)` | Send a command and return the first line that starts with `prefix`, or `None`           |
+| `read_startup_checksum(target)`               | The checksum of the startup script, as an `int`, or `None` without an answer            |
+| `read_version(target)`                        | The Lizard version the firmware is built from, as a `LizardVersion`, or `None`          |
+| `write_startup(script, target)`               | Write, verify and store a startup script like [the configure script](#configure)        |
+| `write_startups(scripts)`                     | Write one startup script per microcontroller, the core first, then the peers through it |
+
+The `target` is `lh.CORE`, the microcontroller on the port, by default.
+`lh.Target.peer('bus', 1)` is peer 1 of the [serial bus](module_reference.md#serial-bus) `bus`:
+its commands go through the coordinator with `bus.send(1, "...")`,
+and the lines it waits for are those the coordinator prints as `bus[1]: ...`, without that prefix.
+A coordinator before v0.16.0 prints `bus[1]: ...` whatever its bus is called, so a peer of a bus with another name needs a coordinator of v0.16.0 or newer.
+The lines of a peer pass the coordinator's outbound queue, so `write_startup()` checks the checksum of the lines so far every 20 lines,
+which paces the write and finds a lost line early.
+`write_startups()` checks the line lengths and the firmware of all microcontrollers before it writes the first script.
+A peer that does not report its version then, e.g. because the core's script brings the bus that reaches it, is checked once the core's script is written.
+Lines carry no request ID, so an answer to an earlier command can satisfy a request with the same prefix,
+and two requests with the same prefix at the same time both get the first answer; a host that sends them concurrently has to serialize them.
+
+`AsyncConnection` offers the same methods as coroutines for an async host that reads the lines itself.
+It takes a coroutine function that sends a line, given with checksum and without line end,
+and the host passes every line it reads to `feed()` on the thread of the event loop,
+a line with a checksum after checking and removing it and a line without one as it is, e.g. the `Ready.` of a restart:
+
+```python
+connection = lh.AsyncConnection(write)
+...
+connection.feed(text)  # in the read loop
+...
+await connection.write_startup(script)
+```
+
+Both run the same procedures from `lizard_host.procedures`, generators that yield the line to send and the line to wait for,
+so other front ends can run them too.
+
+**Firmware versions:**
+`read_version()` reads the Lizard version from `core.info()`:
+the line `lizard version:` of a project with its own name and version, otherwise `project version:`,
+and `version:` of firmware before 0.16.0, which is the Lizard version only for a project named `lizard`.
+`write_startup()` refuses a script that uses a feature the firmware lacks with `UnsupportedFirmware`,
+e.g. `core.telemetry` before v0.16.0.
+A build between two releases, e.g. `v0.15.1-40-gea96593`, a build with local changes and an unknown version only log a warning,
+since they may or may not have the feature.
+
+**Core lines and clock offset:**
+`lh.parse_core_line(text)` parses a line `core ...` of `core.output(...)`;
+its `millis` is the first value if that is an integer, as with `core.output("core.millis ...")`.
+`lh.ClockOffset` averages the host time minus the microcontroller's time over the last 100 samples and starts anew after a jump of more than 0.1 s:
+
+```python
+offset = lh.ClockOffset()
+line = lh.parse_core_line(text)
+if line is not None and line.millis is not None:
+    offset.update(time.time(), line.millis)
+    host_time = offset.host_time(line.millis)
+```
+
+**Steps:**
+`lh.StepMerger` collects the frames of each sender with the same millis into a `Step`,
+e.g. the frames a `core.telemetry` call with many fields is split into.
+`add(frame)` returns the step that the frame ends, `flush()` the steps still open, and `step.values` merges the values of its frames.
+A step ends with the next frame of its sender with other millis, i.e. one interval later, unless the host calls `flush()` earlier, e.g. when no frame came for longer than the interval of its frames.
+The merger cannot tell whether a frame of a step got lost, since the layout lines do not say which frames belong to one call.
 
 ### OTB Update
 
@@ -214,7 +318,12 @@ Use the configure script to send a new startup script to the microcontroller.
 
 Without a device path the serial device is detected the same way as for the [serial monitor](#serial-monitor).
 
-Afterwards the configure script restarts the microcontroller and fails if `core.startup_checksum()` does not match the file or the microcontroller does not answer.
+The configure script compares `core.startup_checksum()` with the file before it stores the script with `!.`, and tries up to three times,
+so a lost line cannot end up in the microcontroller's storage.
+Afterwards it restarts the microcontroller and fails if it does not report `Ready.` within 15 s plus 5 s for every `Expander` of the script,
+or if `core.startup_checksum()` does not match the file or the microcontroller does not answer.
+With `--serial-bus <id>` it writes the script to peer `<id>` of the serial bus `bus` (or the one named with `--bus-name`) through the coordinator.
+A script that uses a feature the firmware lacks is refused before anything is written, see [Host Library](#host-library).
 
 Note that the configure script cannot communicate while the serial interface is busy communicating with another process.
 
@@ -302,5 +411,5 @@ so the SSH user needs access to the serial device (e.g. membership in the `dialo
 ### Releasing
 
 To build a new release, tag the commit with a "v" prefix, for example "v0.1.4".
-A GitHub action will build the binary and create a new release.
+A GitHub action will build the binary, create a new release and publish the package `lizard-host` with the same version on PyPI.
 After creation you can fill in a description if necessary.

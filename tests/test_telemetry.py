@@ -4,7 +4,7 @@ import struct
 
 import pytest
 
-from lizard_host import Frame, Layout, TelemetryDecoder, Text, checksum, split_checksum
+from lizard_host import Frame, Layout, LayoutRequester, StepMerger, TelemetryDecoder, Text, checksum, split_checksum
 
 # Recorded from an ESP32 after
 #   float pos = 1.234, int state = 8, bool on = true, bool b0 = true ... bool b8 = false (true every third),
@@ -231,3 +231,28 @@ def test_lines_that_are_not_telemetry_stay_text(line):
     decoder = TelemetryDecoder()
     feed(decoder, LAYOUT_1)
     assert decoder.feed(line) == Text(None, line)
+
+
+def test_step_merger():
+    def frame(sender, millis, values):
+        return Frame(sender, 1, 0, 0, millis, 'ok', values, b'')
+
+    merger = StepMerger()
+    assert merger.add(frame(None, 10, {'a': 1})) is None
+    assert merger.add(frame(None, 10, {'b': 2})) is None
+    assert merger.add(frame('bus[1]', 10, {'c': 3})) is None  # another sender
+    step = merger.add(frame(None, 20, {'a': 4}))
+    assert step is not None and (step.millis, step.values) == (10, {'a': 1, 'b': 2})
+    assert sorted(step.millis for step in merger.flush()) == [10, 20]
+    assert merger.flush() == []
+
+
+def test_layout_requester():
+    requester = LayoutRequester()
+    missing = Frame(None, 1, 0, 0, 0, 'no_layout', None, b'')
+    assert requester.feed(missing, 100.0)
+    assert not requester.feed(missing, 101.0)
+    assert not requester.feed(Layout(None, 1, 0, 0, 2, 'a', 'f'), 102.5)
+    assert not requester.feed(missing, 104.0)
+    assert requester.feed(missing, 104.6)
+    assert not requester.feed(Text(None, 'Ready.'), 110.0)
