@@ -18,7 +18,7 @@ jobs:
         target: [esp32, esp32s3]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: "recursive"
       - name: Determine version
@@ -40,7 +40,7 @@ jobs:
       - name: Zip bins and tools for ${{ matrix.target }}
         run: "zip -r lizard_${{ matrix.target }}.zip -@ -x '*/__pycache__/*' < .github/zip_content.txt"
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lizard_${{ matrix.target }}_artifacts
           path: |
@@ -53,12 +53,12 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Determine version
         id: version_id
         run: echo "value=$(git describe --always --tags --dirty)" >> $GITHUB_OUTPUT
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Create release
@@ -111,11 +111,11 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0 # hatch-vcs takes the version from the tag
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.x"
       - name: Build package
@@ -130,9 +130,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: "3.x"
       - name: Install dependencies
@@ -140,7 +140,7 @@ jobs:
       - name: Build docs
         run: mkdocs build -v
       - name: Deploy gh-pages
-        uses: JamesIves/github-pages-deploy-action@v4.2.5
+        uses: JamesIves/github-pages-deploy-action@v4.9.0
         with:
           branch: gh-pages
           folder: site
