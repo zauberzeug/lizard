@@ -320,7 +320,7 @@ Without a device path the serial device is detected the same way as for the [ser
 
 The configure script compares `core.startup_checksum()` with the file before it stores the script with `!.`, and tries up to three times,
 so a lost line cannot end up in the microcontroller's storage.
-Afterwards it restarts the microcontroller and fails if it does not report `Ready.` within 15 s,
+Afterwards it restarts the microcontroller and fails if it does not report `Ready.` within 15 s plus 5 s for every `Expander` of the script,
 or if `core.startup_checksum()` does not match the file or the microcontroller does not answer.
 With `--serial-bus <id>` it writes the script to peer `<id>` of the serial bus `bus` (or the one named with `--bus-name`) through the coordinator.
 A script that uses a feature the firmware lacks is refused before anything is written, see [Host Library](#host-library).

@@ -227,8 +227,9 @@ def build_gpio(en: str, g0: str) -> GpioController:
     """
     if GPIOD_VERSION is None:
         if IS_JETSON:
+            hint = '"pip install gpiod"' if sys.version_info >= (3, 9) else 'python3-libgpiod with apt'
             raise RuntimeError('Module gpiod is required to control the EN and G0 pins on a Jetson, '
-                               'but it is not installed. Install it (e.g. "pip install gpiod").')
+                               f'but it is not installed. Install it ({hint}).')
         print_fail('Module gpiod not found; relying on esptool reset only (EN and G0 pins are not controllable).')
         return GpioController(en, g0)
     try:
