@@ -2,7 +2,8 @@
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable, List, Mapping, Optional, Tuple
+from collections import deque
+from typing import Any, Awaitable, Callable, Deque, List, Mapping, Optional
 
 from . import procedures
 from .console_line import checksum, format_line, split_checksum
@@ -113,37 +114,44 @@ class AsyncConnection:
 
     def __init__(self, write: Callable[[str], Awaitable[None]]) -> None:
         self._write = write
-        self._waiters: List[Tuple[Callable[[str], bool], asyncio.Future[str]]] = []
+        self._inboxes: List[_Inbox] = []  # one per running procedure
 
     def feed(self, text: str) -> None:
-        """Pass a line to the procedures waiting for it."""
-        for expect, future in self._waiters:
-            if not future.done() and expect(text):
-                future.set_result(text)
+        """Pass a line to the procedures that are running."""
+        for inbox in self._inboxes:
+            inbox.lines.append(text)
+            inbox.arrived.set()
 
     async def run(self, procedure: Procedure[T]) -> T:
+        inbox = _Inbox()
+        self._inboxes.append(inbox)
         try:
             exchange = next(procedure)
             while True:
-                exchange = procedure.send(await self._exchange(exchange))
+                exchange = procedure.send(await self._exchange(exchange, inbox))
         except StopIteration as stop:
             return stop.value
-
-    async def _exchange(self, exchange: Exchange) -> Optional[str]:
-        if exchange.expect is None:
-            if exchange.command is not None:
-                await self.write(exchange.command)
-            return None
-        waiter = (exchange.expect, asyncio.get_running_loop().create_future())
-        self._waiters.append(waiter)  # before sending, so that a fast answer is not missed
-        try:
-            if exchange.command is not None:
-                await self.write(exchange.command)
-            return await asyncio.wait_for(waiter[1], exchange.timeout)
-        except asyncio.TimeoutError:
-            return None
         finally:
-            self._waiters.remove(waiter)
+            self._inboxes.remove(inbox)
+
+    async def _exchange(self, exchange: Exchange, inbox: '_Inbox') -> Optional[str]:
+        if exchange.command is not None:
+            inbox.lines.clear()  # an answer that arrived before the command cannot be the answer to it
+            await self.write(exchange.command)
+        if exchange.expect is None:
+            return None
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + exchange.timeout
+        while True:
+            while inbox.lines:  # also lines fed between two exchanges, e.g. the further lines of core.info()
+                line = inbox.lines.popleft()
+                if exchange.expect(line):
+                    return line
+            inbox.arrived.clear()
+            try:
+                await asyncio.wait_for(inbox.arrived.wait(), deadline - loop.time())
+            except asyncio.TimeoutError:
+                return None
 
     async def write(self, text: str) -> None:
         """Send a line, given without line end and checksum."""
@@ -167,6 +175,14 @@ class AsyncConnection:
 
     async def write_startups(self, scripts: Mapping[Target, str], **kwargs: Any) -> None:
         await self.run(procedures.write_startups(scripts, **kwargs))
+
+
+class _Inbox:
+    """The lines fed while a procedure runs that none of its exchanges has taken yet."""
+
+    def __init__(self) -> None:
+        self.lines: Deque[str] = deque()
+        self.arrived = asyncio.Event()
 
 
 def _checked(raw: str) -> Optional[str]:

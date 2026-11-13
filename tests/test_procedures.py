@@ -215,3 +215,43 @@ def test_async_connection():
 
     asyncio.run(main())
     assert lizard.stored == SCRIPT
+
+
+def test_async_connection_keeps_lines_fed_in_one_go():
+    lizard = FakeLizard({'project name': 'lizard', 'version': 'v0.15.1'})
+
+    async def main() -> None:
+        connection: lh.AsyncConnection
+
+        async def write(line: str) -> None:
+            for answer in lizard.handle(lh.split_checksum(line)[0]):
+                connection.feed(answer)  # like a read loop that passes on all lines it has read before it yields
+
+        connection = lh.AsyncConnection(write)
+        assert await connection.read_version() == lh.LizardVersion.parse('v0.15.1')
+        with pytest.raises(lh.UnsupportedFirmware, match='0.16.0'):
+            await connection.write_startup('core.telemetry(core.millis)\n')
+
+    asyncio.run(main())
+    assert lizard.stored == ''
+
+
+def test_async_connection_drops_lines_from_before_a_command():
+    answers = {'first': ['answer 1', 'answer 2'], 'second': ['answer 3']}
+
+    def two_requests() -> Procedure[List[Optional[str]]]:
+        first = yield lh.Exchange('first', lambda line: line.startswith('answer'), 0.05)
+        second = yield lh.Exchange('second', lambda line: line.startswith('answer'), 0.05)
+        return [first, second]
+
+    async def main() -> None:
+        connection: lh.AsyncConnection
+
+        async def write(line: str) -> None:
+            for answer in answers[lh.split_checksum(line)[0]]:
+                connection.feed(answer)
+
+        connection = lh.AsyncConnection(write)
+        assert await connection.run(two_requests()) == ['answer 1', 'answer 3']
+
+    asyncio.run(main())
