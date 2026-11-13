@@ -170,6 +170,7 @@ void add_frame(const std::vector<ConstExpression_ptr> &arguments) {
     }
     group.first = frames.size();
     group.count = parts.size();
+    groups.reserve(groups.size() + 1); // so that push_back cannot throw after the insert
     frames.insert(frames.end(), std::make_move_iterator(parts.begin()), std::make_move_iterator(parts.end()));
     groups.push_back(group);
 }
