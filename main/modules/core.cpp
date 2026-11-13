@@ -45,7 +45,7 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 0);
         const esp_app_desc_t *app_desc = esp_app_get_description();
         echo("project name: %s", app_desc->project_name);
-        echo("version: %s", app_desc->version);
+        echo("project version: %s", app_desc->version);
         // a project with its own version also reports the Lizard version it is built from
         if (strncmp(app_desc->version, GIT_VERSION, sizeof(app_desc->version) - 1) != 0) {
             echo("lizard version: %s", GIT_VERSION);
