@@ -168,6 +168,7 @@ A coordinator before v0.16.0 prints `bus[1]: ...` whatever its bus is called, so
 The lines of a peer pass the coordinator's outbound queue, so `write_startup()` checks the checksum of the lines so far every 20 lines,
 which paces the write and finds a lost line early.
 `write_startups()` checks the line lengths and the firmware of all microcontrollers before it writes the first script.
+A peer that does not report its version then, e.g. because the core's script brings the bus that reaches it, is checked once the core's script is written.
 Lines carry no request ID, so an answer to an earlier command can satisfy a request with the same prefix,
 and two requests with the same prefix at the same time both get the first answer; a host that sends them concurrently has to serialize them.
 

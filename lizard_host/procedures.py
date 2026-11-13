@@ -174,14 +174,24 @@ def write_startups(scripts: Mapping[Target, str], *, attempts: int = 3, ready_ti
     """Write one startup script per microcontroller, the core first, so that its serial buses reach the peers.
 
     All scripts are checked before the first one is written, so a refused script leaves every microcontroller as it is.
+    A peer that does not report its version then, e.g. because the core's script brings the bus that reaches it,
+    is checked once the core's script is written.
     """
     targets = sorted(scripts, key=lambda target: target.bus is not None)
     for target in targets:
         check_lines(scripts[target], target)
+    unanswered: List[Target] = []
     if check_version:
         for target in targets:
-            yield from check_firmware(scripts[target], target)
+            if required_features(scripts[target]):
+                version = yield from read_version(target)
+                if version is None and target.bus is not None and CORE in scripts:
+                    unanswered.append(target)
+                else:
+                    check_script(scripts[target], version, target)
     for target in targets:
+        if target in unanswered:
+            yield from check_firmware(scripts[target], target)
         yield from _write(scripts[target], target, attempts=attempts, ready_timeout=ready_timeout, pace=None)
 
 

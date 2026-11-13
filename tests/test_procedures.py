@@ -156,6 +156,28 @@ def test_write_startups_checks_all_scripts_first():
     assert core.stored == peer.stored == ''
 
 
+def test_write_startups_checks_a_peer_the_core_script_makes_reachable(caplog: pytest.LogCaptureFixture):
+    class FreshCore(FakeLizard):
+        """A core that has no bus until a script that creates one is stored and the core has restarted."""
+        running = ''
+
+        def handle(self, command: str) -> List[str]:
+            if BUS_SEND.fullmatch(command) and 'SerialBus' not in self.running:
+                return ['error processing uart0: unknown module "bus"']
+            answers = super().handle(command)
+            if command == 'core.restart()':
+                self.running = self.stored
+            return answers
+
+    peer = FakeLizard({'project name': 'lizard', 'version': 'v0.15.1'})
+    core = FreshCore(peers={1: peer})
+    scripts = {lh.CORE: 'bus = SerialBus(serial, 0)\n', lh.Target.peer('bus', 1): 'core.telemetry(a, 100)\n'}
+    with caplog.at_level(logging.WARNING, 'lizard_host'), pytest.raises(lh.UnsupportedFirmware):
+        run(procedures.write_startups(scripts), core)
+    assert core.stored and peer.stored == ''
+    assert 'unknown Lizard version' not in caplog.text
+
+
 def test_connection_needs_read_timeout():
     class Port:
         timeout = None
