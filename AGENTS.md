@@ -99,12 +99,20 @@ lizard/
 ├── docs/                   # MkDocs documentation
 ├── examples/               # Usage examples (ROS integration, trajectories)
 ├── build.py               # Build script (wraps idf.py)
-├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
-├── monitor.py             # Serial monitor
-├── lizard_host/           # Package shared by the host tools and other host software
+├── espresso.py            # Flash & control script (ESP32 / ESP32-S3), runs lizard_host/espresso.py
+├── monitor.py             # Serial monitor, runs lizard_host/monitor.py
+├── lizard_host/           # Python package lizard-host on PyPI: host tools and library
+│   ├── monitor.py         # Serial monitor (lizard-monitor)
+│   ├── configure.py       # Writes startup scripts (lizard-configure)
+│   ├── espresso.py        # Flashing and pin control (lizard-espresso)
+│   ├── otb_update.py      # Firmware update of serial bus peers (lizard-otb-update)
+│   ├── connection.py      # Runs the procedures on a serial port or in an async host
+│   ├── procedures.py      # Startup scripts, requests and version checks without I/O
+│   ├── version.py         # Lizard versions and the features they bring
+│   ├── core_line.py       # Core lines and clock offset
 │   ├── serial_devices.py  # Serial device discovery
 │   ├── console_line.py    # Console line checksum
-│   └── telemetry.py       # Telemetry frame decoder
+│   └── telemetry.py       # Telemetry frame decoder, steps and layout requests
 ├── tests/                 # Unit tests of the host tools (pytest)
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
 └── gen_parser.sh          # Regenerates parser.h from language.owl

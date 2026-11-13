@@ -101,6 +101,30 @@ jobs:
             fi
           done
 
+  pypi:
+    # publishes lizard_host as lizard-host with the version of the tag, see "Trusted Publishing" on pypi.org
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # hatch-vcs takes the version from the tag
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Build package
+        run: |
+          python3 -m pip install build
+          python3 -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
   docs:
     needs: build
     runs-on: ubuntu-latest

@@ -169,3 +169,70 @@ def _decode(layout: List[Field], payload: bytes) -> Optional[Dict[str, Value]]:
             values[name] = struct.unpack_from('<' + type_, payload, offset)[0]
             offset += 4
     return values
+
+
+@dataclass
+class Step:
+    """The frames of one sender with the same millis, e.g. the parts of a core.telemetry call split into frames."""
+    sender: Hashable
+    millis: int
+    frames: List[Frame]
+
+    @property
+    def values(self) -> Dict[str, Value]:
+        """The values of all decoded frames of the step."""
+        values: Dict[str, Value] = {}
+        for frame in self.frames:
+            values.update(frame.values or {})
+        return values
+
+
+class StepMerger:
+    """Collects the frames of each sender into steps.
+
+    The parts of a split frame are sent one after the other with the same millis, so a step ends with the first frame
+    of its sender that has other millis; ``flush()`` ends the steps still open, e.g. when no line came for a while.
+    """
+
+    def __init__(self) -> None:
+        self._open: Dict[Hashable, Step] = {}
+
+    def add(self, frame: Frame) -> Optional[Step]:
+        """Add a frame and return the step it ends, if any."""
+        step = self._open.get(frame.sender)
+        if step is not None and step.millis == frame.millis:
+            step.frames.append(frame)
+            return None
+        self._open[frame.sender] = Step(frame.sender, frame.millis, [frame])
+        return step
+
+    def flush(self) -> List[Step]:
+        """End and return all open steps."""
+        steps = list(self._open.values())
+        self._open.clear()
+        return steps
+
+
+class LayoutRequester:
+    """Decides when to ask for missing layouts with ``core.telemetry_info()``.
+
+    A frame without a fitting layout, e.g. because the frames started before the host, asks for them, but only
+    ``interval`` seconds after the last request and the last layout line, so that it does not restart layout lines
+    that are still coming.
+    """
+
+    def __init__(self, interval: float = 2.0) -> None:
+        self.interval = interval
+        self._activity = float('-inf')  # time of the last layout request or layout line
+
+    def feed(self, result: Union[Text, Layout, Frame], now: float) -> bool:
+        """Take a result of the decoder and return whether to send ``core.telemetry_info()`` now."""
+        if isinstance(result, Layout):
+            self._activity = now
+            return False
+        if not isinstance(result, Frame) or result.status not in ('no_layout', 'layout_incomplete', 'layout_mismatch'):
+            return False
+        if now < self._activity + self.interval:
+            return False
+        self._activity = now
+        return True
