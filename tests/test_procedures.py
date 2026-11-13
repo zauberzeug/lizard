@@ -146,6 +146,29 @@ def test_peer_write_is_paced():
     assert len([line for line in sent if 'core.startup_checksum()' in line]) == 1 + 2 + 1 + 1  # checks, final, verify
 
 
+def test_late_answer_does_not_store_a_part_of_the_script():
+    class LateCore(FakeLizard):
+        """Passes on the answer to the third checksum request only with the fourth, i.e. after its timeout."""
+        requests = 0
+        held: List[str] = []
+
+        def handle(self, command: str) -> List[str]:
+            answers = super().handle(command)
+            if 'core.startup_checksum()' in command:
+                self.requests += 1
+                if self.requests == 3:
+                    self.held, answers = answers, []
+                else:
+                    answers, self.held = self.held + answers, []
+            return answers
+
+    peer = FakeLizard()
+    core = LateCore(peers={1: peer})
+    script = ''.join(f'float v{i} = {i}\n' for i in range(45))
+    run(procedures.write_startup(script, lh.Target.peer('bus', 1)), core)  # the third request ends the first attempt
+    assert peer.stored == script
+
+
 def test_write_startups_checks_all_scripts_first():
     peer = FakeLizard({'project name': 'lizard', 'version': 'v0.15.1'})
     core = FakeLizard(peers={1: peer})

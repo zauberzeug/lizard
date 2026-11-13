@@ -8,7 +8,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Callable, Dict, Generator, List, Mapping, Optional, TypeVar
+from typing import Callable, Dict, Generator, List, Mapping, Optional, Tuple, TypeVar
 
 from .version import LizardVersion, format_release, parse_info, parse_info_line, required_features
 
@@ -218,15 +218,17 @@ def _write(script: str, target: Target, *,
     expected = startup_checksum(script)
     if pace is None and target.bus is not None:
         pace = 20
+    count = 0
     checksum: Optional[int] = None
     for _ in range(attempts):
-        checksum = yield from _send_lines(lines, target, pace)
-        if checksum == expected:
+        count, checksum = yield from _send_lines(lines, target, pace)
+        if count == len(lines) and checksum == expected:  # a late answer to an earlier request can equal it in between
             break
     else:
         # restart to drop the unpersisted edit, so core.startup_checksum() reports the stored script again
         yield from send('core.restart()', target)
-        raise StartupError(f'Writing the startup script to {target} failed: {_describe(checksum, expected)}')
+        raise StartupError(f'Writing the startup script to {target} failed: '
+                           f'{_describe(checksum, _lines_checksum(lines[:count]))}')
     yield from send('!.', target)
     ready = yield Exchange(target.command('core.restart()'), lambda line: line == target.prefix + 'Ready.',
                            ready_timeout)
@@ -241,16 +243,17 @@ def _write(script: str, target: Target, *,
         raise StartupError(f'Verifying the stored startup script of {target} failed: {_describe(checksum, expected)}')
 
 
-def _send_lines(lines: List[str], target: Target, pace: Optional[int]) -> Procedure[Optional[int]]:
-    """Send a script as an edit and return the checksum the target reports for it, or for the lines up to a loss."""
+def _send_lines(lines: List[str], target: Target, pace: Optional[int]) -> Procedure[Tuple[int, Optional[int]]]:
+    """Send a script as an edit, up to a check that fails, and return the number of lines sent and the checksum the
+    target reports for them."""
     yield from send('!-', target)
     for count, line in enumerate(lines, 1):
         yield from send(f'!+{line}', target)
         if pace and count % pace == 0 and count < len(lines):
             checksum = yield from read_startup_checksum(target)
             if checksum != _lines_checksum(lines[:count]):
-                return checksum  # a line got lost; the next attempt starts over
-    return (yield from read_startup_checksum(target))
+                return count, checksum  # a line got lost; the next attempt starts over
+    return len(lines), (yield from read_startup_checksum(target))
 
 
 def _lines_checksum(lines: List[str]) -> int:
