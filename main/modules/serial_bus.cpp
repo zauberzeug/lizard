@@ -380,7 +380,6 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
             this->bus->pause_requested = false;
         }
     } resume{this, boot_pin, enable_pin};
-    this->serial->wait_until_sent(); // bytes left in the driver when it is deleted break the flasher's connection
     this->serial->deinstall();
     // the replicator connects at 115200 baud and flashes at 921600, whatever the link's rate
     const bool success = ZZ::Replicator::flash_replica(this->serial->uart_num, enable_pin, boot_pin,
@@ -956,7 +955,7 @@ void SerialBus::drain_outbound(const unsigned long timeout_ms) {
            millis_since(start) < timeout_ms) {
         delay(5);
     }
-    uart_wait_tx_done(this->serial->uart_num, pdMS_TO_TICKS(100));
+    this->serial->wait_until_sent();
 }
 
 bool SerialBus::send_outgoing_queue() {
