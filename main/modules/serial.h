@@ -17,6 +17,8 @@ private:
     mutable std::string pending_lines; // lines after the first of a read that held several; not visible to read() and available()
     // dropped by has_buffered_lines() for lack of a line end, counted since flush()
     mutable size_t discarded_bytes = 0;
+    mutable int rx_buffer_size; // of the UART driver; a line can take half of the receive buffer
+    mutable int tx_buffer_size;
 
     /// Set the receive FIFO threshold to what the current reader needs; call after install and after mute/unmute.
     void apply_rx_full_threshold() const;
@@ -35,6 +37,8 @@ public:
     static bool is_console(const int rx_pin, const int tx_pin, const int uart_num);
     ~Serial();
     void initialize_uart() const;
+    /// Reinstall the driver with other buffers, e.g. smaller ones for a reader that reads in a task of its own.
+    void resize_buffers(const int rx_buffer_size, const int tx_buffer_size) const;
     void enable_line_detection() const;
     void claim(const std::string &user) const; // refused on the console pins, which only a SerialBus takes over
     void require_sole_user(const std::string &user) const;
