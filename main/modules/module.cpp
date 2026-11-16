@@ -26,7 +26,7 @@ bool Module::broadcast_paused = false;
 Module::Module(const std::string name) : name(name), claims(this->name) {
 }
 
-void Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
+void Module::expect(const std::vector<ConstExpression_ptr> &arguments, const int num, ...) {
     if (num >= 0 && arguments.size() != num) {
         throw std::runtime_error("expecting " + std::to_string(num) + " arguments, got " + std::to_string(arguments.size()));
     }
@@ -105,7 +105,7 @@ void Module::disable() {
     this->get_enabled_property()->set_boolean_value(false);
 }
 
-void Module::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Module::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "mute") {
         Module::expect(arguments, 0);
         this->output_on = false;
@@ -130,7 +130,7 @@ void Module::call(const std::string method_name, const std::vector<ConstExpressi
     }
 }
 
-void Module::call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Module::call_with_shadows(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     this->call(method_name, arguments);
     for (auto const &module : this->shadow_modules) {
         module->call(method_name, arguments);

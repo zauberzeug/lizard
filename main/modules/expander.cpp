@@ -205,7 +205,7 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
     }
 }
 
-void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
         this->require_connected();
@@ -333,7 +333,7 @@ void Expander::send_property(const std::string proxy_name, const std::string pro
     this->serial->write_checked_line(buffer, pos);
 }
 
-void Expander::send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::send_call(const std::string proxy_name, const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     static char buffer[512];
     int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", proxy_name.c_str(), method_name.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);

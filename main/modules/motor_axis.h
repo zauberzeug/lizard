@@ -19,6 +19,6 @@ public:
 
     MotorAxis(const std::string name, const Module_ptr motor_module, const Input_ptr input1, const Input_ptr input2);
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

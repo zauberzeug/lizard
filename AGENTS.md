@@ -198,7 +198,7 @@ public:
 
     MyModule(const std::string name, /* constructor args */);
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     std::string get_output() const override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };
@@ -237,7 +237,7 @@ void MyModule::step() {
     // Per-cycle logic
 }
 
-void MyModule::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void MyModule::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "my_method") {
         Module::expect(arguments, 1, numbery);
         // Implementation

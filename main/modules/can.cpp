@@ -238,7 +238,7 @@ bool Can::send(const uint32_t id,
     return this->send(id, data, rtr);
 }
 
-void Can::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Can::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "send") {
         Module::expect(arguments, 9, integer, integer, integer, integer, integer, integer, integer, integer, integer);
         this->send(to_29_bit(arguments[0]->evaluate_integer(), "CAN ID"),

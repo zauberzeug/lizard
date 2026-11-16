@@ -8,6 +8,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 class Module;
@@ -28,6 +29,68 @@ using DefaultsFunction = std::function<std::map<std::string, Variable_ptr>()>;
     } register_module_##class_name;                                                             \
     } // namespace
 
+/// A module's properties by name. A lookup with a string literal remembers the entry it found,
+/// so a step neither builds a std::string nor walks the map again; the address of the literal is the key.
+class PropertyMap : public std::map<std::string, Variable_ptr> {
+private:
+    using Base = std::map<std::string, Variable_ptr>;
+    mutable std::vector<std::pair<const char *, Variable_ptr *>> known; // literal -> its entry, which the map never moves
+
+public:
+    PropertyMap() = default;
+    // a copy starts without remembered entries, they point into the map they came from
+    PropertyMap(const Base &other) : Base(other) {}
+    PropertyMap(const PropertyMap &other) : Base(other) {}
+    PropertyMap &operator=(const Base &other) {
+        Base::operator=(other);
+        this->known.clear();
+        return *this;
+    }
+    PropertyMap &operator=(const PropertyMap &other) {
+        return *this = static_cast<const Base &>(other);
+    }
+
+    using Base::at;
+    using Base::operator[];
+
+    /// The entry of a literal name, or nullptr if there is none.
+    template <typename Char, size_t N>
+    Variable_ptr *find_literal(Char (&literal)[N]) const {
+        static_assert(std::is_same_v<Char, const char>, "only a name that cannot change can be remembered by its address");
+        for (const auto &[known_literal, entry] : this->known) {
+            if (known_literal == literal) {
+                return entry;
+            }
+        }
+        const auto it = Base::find(literal);
+        if (it == Base::end()) {
+            return nullptr;
+        }
+        this->known.emplace_back(literal, const_cast<Variable_ptr *>(&it->second));
+        return this->known.back().second;
+    }
+
+    template <typename Char, size_t N>
+    Variable_ptr &at(Char (&literal)[N]) {
+        Variable_ptr *const entry = this->find_literal(literal);
+        if (entry == nullptr) {
+            throw std::out_of_range(literal);
+        }
+        return *entry;
+    }
+
+    template <typename Char, size_t N>
+    const Variable_ptr &at(Char (&literal)[N]) const {
+        return const_cast<PropertyMap *>(this)->at(literal);
+    }
+
+    template <typename Char, size_t N>
+    Variable_ptr &operator[](Char (&literal)[N]) {
+        Variable_ptr *const entry = this->find_literal(literal);
+        return entry != nullptr ? *entry : Base::operator[](literal);
+    }
+};
+
 class Module {
 private:
     Variable_ptr enabled_property; // cached by get_enabled_property()
@@ -39,7 +102,7 @@ protected:
     std::list<Module_ptr> shadow_modules;
     // Only ever add to this map, never replace a variable under an existing name: compiled property expressions,
     // core.output fields, telemetry frames and enabled_property keep the Variable_ptr they found once.
-    std::map<std::string, Variable_ptr> properties;
+    PropertyMap properties;
     bool output_on = false;
     bool broadcast = false;
     bool enabled = true; // last value applied to the hardware; `sync_enabled()` edge-detects direct property writes against it
@@ -64,22 +127,30 @@ protected:
 public:
     Module(const std::string name);
     virtual ~Module() = default;
-    static void expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...);
+    static void expect(const std::vector<ConstExpression_ptr> &arguments, const int num, ...);
     static Module_ptr create(const std::string type,
                              const std::string name,
                              const std::vector<ConstExpression_ptr> arguments,
                              MessageHandler message_handler);
     virtual void step();
-    virtual void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    virtual void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments);
     /// Switch the module on/off and keep the `enabled` member and property in sync.
     /// Throws for modules that do not declare an `enabled` property.
     virtual void enable();
     virtual void disable();
     static void register_module(const std::string &type_name, ModuleFactory factory, DefaultsFunction defaults);
     static const std::map<std::string, Variable_ptr> get_module_defaults(const std::string &type_name);
-    void call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments);
+    void call_with_shadows(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments);
     virtual std::string get_output() const;
     const Variable_ptr &get_property(const std::string &property_name) const;
+    template <typename Char, size_t N>
+    const Variable_ptr &get_property(Char (&property_name)[N]) const {
+        const Variable_ptr *const variable = this->properties.find_literal(property_name);
+        if (variable == nullptr) {
+            throw std::runtime_error(std::string("unknown property \"") + property_name + "\"");
+        }
+        return *variable;
+    }
     virtual void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander = false);
     /// Declare a property from Lizard code like `float arm.motor.position = 0.0`; the default implementation throws.
     virtual void declare_property(const std::string &property_name, const Variable_ptr &variable);
