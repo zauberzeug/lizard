@@ -11,6 +11,8 @@ private:
     const ledc_timer_t ledc_timer;
     const ledc_channel_t ledc_channel;
     bool is_on = false;
+    uint32_t applied_duty = 0; // the duty last handed to the LEDC; the channel starts at 0
+    int64_t applied_us = 0;    // when it was handed over
     void do_disable() override;
     void configure_timer(const uint32_t frequency);
     std::vector<PwmOutput *> timer_siblings() const;
