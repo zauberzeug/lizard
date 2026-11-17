@@ -90,18 +90,22 @@ void Bluetooth::call(const std::string method_name, const std::vector<ConstExpre
         ZZ::BleCommand::deactivate_pin();
         echo("Bluetooth PIN/security deactivated - connections are unauthenticated");
     } else if (method_name == "scan") {
-        if (arguments.size() < 1 || arguments.size() > 2) {
-            throw std::runtime_error("unexpected number of arguments");
-        }
-        expect(arguments, -1, string, numbery);
-        const double duration = arguments.size() > 1 ? arguments[1]->evaluate_number() : 5.0;
-        if (duration <= 0 || duration > 60) {
-            throw std::runtime_error("scan duration must be more than 0 and at most 60 seconds");
-        }
-        if (const char *error = ZZ::BleCommand::scan(arguments[0]->evaluate_string(), static_cast<uint32_t>(duration * 1000))) {
-            throw std::runtime_error(error);
-        }
+        this->scan(arguments);
     } else {
         Module::call(method_name, arguments);
+    }
+}
+
+void Bluetooth::scan(const std::vector<ConstExpression_ptr> &arguments) {
+    if (arguments.size() < 1 || arguments.size() > 2) {
+        throw std::runtime_error("unexpected number of arguments");
+    }
+    expect(arguments, -1, string, numbery);
+    const double duration = arguments.size() > 1 ? arguments[1]->evaluate_number() : 5.0;
+    if (duration <= 0 || duration > 60) {
+        throw std::runtime_error("scan duration must be more than 0 and at most 60 seconds");
+    }
+    if (const char *error = ZZ::BleCommand::scan(arguments[0]->evaluate_string(), static_cast<uint32_t>(duration * 1000))) {
+        throw std::runtime_error(error);
     }
 }
