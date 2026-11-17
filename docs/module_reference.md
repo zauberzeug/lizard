@@ -159,13 +159,14 @@ Clients uploading many lines at once should therefore pace their writes or wait 
 | `bluetooth.connected`        | Whether a device is currently connected                  | `bool`    |
 | `bluetooth.last_message_age` | Time since the last line was received via Bluetooth (ms) | `int`     |
 
-| Methods                      | Description                                 | Arguments |
-| ---------------------------- | ------------------------------------------- | --------- |
-| `bluetooth.send(data)`       | send `data` via notification                | `str`     |
-| `bluetooth.set_pin(pin)`     | set 6-digit user PIN (000000-999999)        | `int`     |
-| `bluetooth.get_pin()`        | print current user PIN or "No user PIN set" |           |
-| `bluetooth.reset_pin()`      | remove the user PIN                         |           |
-| `bluetooth.deactivate_pin()` | Disables PIN enforcement                    |           |
+| Methods                           | Description                                         | Arguments      |
+| --------------------------------- | --------------------------------------------------- | -------------- |
+| `bluetooth.send(data)`            | send `data` via notification                        | `str`          |
+| `bluetooth.set_pin(pin)`          | set 6-digit user PIN (000000-999999)                | `int`          |
+| `bluetooth.get_pin()`             | print current user PIN or "No user PIN set"         |                |
+| `bluetooth.reset_pin()`           | remove the user PIN                                 |                |
+| `bluetooth.deactivate_pin()`      | Disables PIN enforcement                            |                |
+| `bluetooth.scan(name[, timeout])` | look for a device advertising `name` (default: 5 s) | `str`, `float` |
 
 Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0
 that allows writing Lizard statements like on the command line.
@@ -181,6 +182,12 @@ After three wrong PINs or 30 seconds without a PIN attempt, Lizard closes the co
 The PIN is the user PIN set with `bluetooth.set_pin(pin)` or, without one, the PIN configured at build time; Lizard prints it on every connection.
 After `bluetooth.deactivate_pin()`, every client is accepted without a PIN until the next restart.
 Note that the PIN is sent unencrypted, so it keeps out accidental connections but not someone listening in.
+
+`bluetooth.scan(name)` checks whether another device is in radio range without connecting to it, e.g. another Lizard with a Bluetooth module.
+It listens for up to `timeout` seconds (at most 60) and then prints `BLE scan: found "<name>" <address> rssi=<dBm>` or `BLE scan: "<name>" not found`.
+The name must match completely; like the advertised device name, it is cut to 29 characters.
+Lizard keeps advertising while it scans.
+Right after the module is created, the call fails with "bluetooth is still starting" until the Bluetooth stack is up.
 
 Unlike `core.last_message_age`, which any input channel resets, `bluetooth.last_message_age` only counts lines received via Bluetooth.
 Together with `connected`, it lets rules and the host tell a silent or disconnected app apart from a host that keeps talking on UART0.

@@ -70,7 +70,10 @@ static bool running = false;
 static bool pin_deactivated = false;
 static std::atomic<bool> authenticated{false};
 static uint8_t pin_failures = 0;
-static ble_npl_callout idle_timer; // posts to the NimBLE host task, so it runs in line with the GAP and GATT callbacks
+static std::array<char, MAX_DEVICE_NAME_LEN> scan_name{}; // name `scan` is looking for; only written while no scan runs
+static std::atomic<bool> scan_found{false};
+static std::atomic<bool> host_ready{false}; // the host is synced with the controller and has its address
+static ble_npl_callout idle_timer;          // posts to the NimBLE host task, so it runs in line with the GAP and GATT callbacks
 
 // 16-bit Alert Notification Service UUID for app filtering
 static const ble_uuid16_t alert_uuid = BLE_UUID16_INIT(0x1811);
@@ -340,10 +343,12 @@ static void on_sync() {
         echo("BLE: failed to initialize address");
         return;
     }
+    host_ready = true;
     advertise();
 }
 
 static void on_reset(int reason) {
+    host_ready = false;
     echo("BLE: host reset (reason=%d)", reason);
 }
 
@@ -432,6 +437,62 @@ void finalize() {
 
 void deactivate_pin() {
     pin_deactivated = true;
+}
+
+// Runs on the NimBLE host task for every advertisement and scan response received during a scan
+static int on_scan_event(struct ble_gap_event *event, void * /* arg */) {
+    switch (event->type) {
+    case BLE_GAP_EVENT_DISC: {
+        struct ble_hs_adv_fields fields = {};
+        if (ble_hs_adv_parse_fields(&fields, event->disc.data, event->disc.length_data) != 0) {
+            return 0;
+        }
+        const size_t name_len = strlen(scan_name.data());
+        if (fields.name == nullptr || fields.name_len != name_len || memcmp(fields.name, scan_name.data(), name_len) != 0) {
+            return 0;
+        }
+        // Cancelling suppresses the DISC_COMPLETE event; if it fails, the scan runs on and must not report again
+        if (!scan_found.exchange(true)) {
+            ble_gap_disc_cancel();
+            const uint8_t *addr = event->disc.addr.val;
+            echo("BLE scan: found \"%s\" %02x:%02x:%02x:%02x:%02x:%02x rssi=%d", scan_name.data(),
+                 addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], event->disc.rssi);
+        }
+        return 0;
+    }
+
+    case BLE_GAP_EVENT_DISC_COMPLETE:
+        if (!scan_found) {
+            echo("BLE scan: \"%s\" not found", scan_name.data());
+        }
+        return 0;
+
+    default:
+        return 0;
+    }
+}
+
+const char *scan(const std::string_view &name, const uint32_t duration_ms) {
+    // Shortly after init the host has no address yet; ble_gap_disc would dereference a null pointer then
+    if (!running || !host_ready) {
+        return "bluetooth is still starting";
+    }
+    if (ble_gap_disc_active()) {
+        return "a bluetooth scan is already running";
+    }
+
+    // The advertiser cuts its name to the same length (see init)
+    const size_t name_len = std::min(name.length(), MAX_DEVICE_NAME_LEN - 1);
+    memcpy(scan_name.data(), name.data(), name_len);
+    scan_name[name_len] = '\0';
+    scan_found = false;
+
+    // Active scan: Lizard advertises its name in the scan response, which a passive scan never requests.
+    // Duplicates are not filtered, so a device seen before the scan response arrived is still reported with it.
+    struct ble_gap_disc_params params = {};
+    params.passive = 0;
+    params.filter_duplicates = 0;
+    return ble_gap_disc(own_addr_type, duration_ms, &params, on_scan_event, nullptr) == 0 ? nullptr : "could not start bluetooth scan";
 }
 
 } // namespace ZZ::BleCommand

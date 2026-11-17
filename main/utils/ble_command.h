@@ -22,6 +22,10 @@ int send(const std::string_view &data);
 bool is_connected();
 void finalize();
 void deactivate_pin();
+// Look for a device advertising `name` for up to `duration_ms`, without connecting to it.
+// Prints one line when the scan ends: `BLE scan: found "<name>" <address> rssi=<dBm>` or `BLE scan: "<name>" not found`.
+// Returns nullptr if the scan started, else the reason why not (e.g. a scan is running or the stack is still starting).
+const char *scan(const std::string_view &name, uint32_t duration_ms);
 
 } // namespace ZZ::BleCommand
 
