@@ -4,6 +4,7 @@
 #include "../utils/uart.h"
 #include "uart.h"
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <stdexcept>
 
@@ -45,6 +46,18 @@ Bluetooth::Bluetooth(const std::string name, const std::string device_name, Mess
 void Bluetooth::step() {
     if (const uint32_t dropped = dropped_lines.exchange(0, std::memory_order_relaxed)) {
         echo("warning: dropped %lu bluetooth lines because the line queue was full", static_cast<unsigned long>(dropped));
+    }
+    ZZ::BleCommand::ScanResult result;
+    if (ZZ::BleCommand::take_scan_result(result)) {
+        if (result.outcome == ZZ::BleCommand::ScanOutcome::found) {
+            echo("BLE scan: found \"%s\" %02x:%02x:%02x:%02x:%02x:%02x rssi=%d", result.name,
+                 result.address[0], result.address[1], result.address[2],
+                 result.address[3], result.address[4], result.address[5], result.rssi);
+        } else if (result.outcome == ZZ::BleCommand::ScanOutcome::aborted) {
+            echo("BLE scan: \"%s\" aborted", result.name);
+        } else {
+            echo("BLE scan: \"%s\" not found", result.name);
+        }
     }
     char *raw;
     while (xQueueReceive(this->line_queue, &raw, 0) == pdTRUE) {
@@ -101,11 +114,16 @@ void Bluetooth::scan(const std::vector<ConstExpression_ptr> &arguments) {
         throw std::runtime_error("unexpected number of arguments");
     }
     expect(arguments, -1, string, numbery);
-    const double duration = arguments.size() > 1 ? arguments[1]->evaluate_number() : 5.0;
-    if (duration <= 0 || duration > 60) {
-        throw std::runtime_error("scan duration must be more than 0 and at most 60 seconds");
+    const std::string name = arguments[0]->evaluate_string();
+    if (name.empty()) {
+        throw std::runtime_error("name must not be empty");
     }
-    if (const char *error = ZZ::BleCommand::scan(arguments[0]->evaluate_string(), static_cast<uint32_t>(duration * 1000))) {
+    const double timeout = arguments.size() > 1 ? arguments[1]->evaluate_number() : 5.0;
+    if (!(timeout >= 0.001 && timeout <= 60)) { // written this way to refuse NaN as well
+        throw std::runtime_error("timeout must be between 0.001 and 60 seconds");
+    }
+    // Rounded, because 0 ms would make NimBLE scan for its default of 10.24 s
+    if (const char *error = ZZ::BleCommand::scan(name, static_cast<uint32_t>(std::lround(timeout * 1000)))) {
         throw std::runtime_error(error);
     }
 }

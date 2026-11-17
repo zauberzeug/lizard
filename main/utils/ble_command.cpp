@@ -10,6 +10,7 @@
 #include <array>
 #include <atomic>
 #include <cassert>
+#include <cstdio>
 #include <cstring>
 #include <new>
 
@@ -70,10 +71,22 @@ static bool running = false;
 static bool pin_deactivated = false;
 static std::atomic<bool> authenticated{false};
 static uint8_t pin_failures = 0;
-static std::array<char, MAX_DEVICE_NAME_LEN> scan_name{}; // name `scan` is looking for; only written while no scan runs
-static std::atomic<bool> scan_found{false};
-static std::atomic<bool> host_ready{false}; // the host is synced with the controller and has its address
-static ble_npl_callout idle_timer;          // posts to the NimBLE host task, so it runs in line with the GAP and GATT callbacks
+static ble_npl_callout idle_timer; // posts to the NimBLE host task, so it runs in line with the GAP and GATT callbacks
+// The host is synced with the controller and has its address
+static std::atomic<bool> host_ready{false};
+
+// A scan is `running` from `scan` until the host task stores its outcome; `take_scan_result` sets it back to `idle`
+enum class ScanState : uint8_t { idle,
+                                 running,
+                                 found,
+                                 not_found,
+                                 aborted };
+static std::atomic<ScanState> scan_state{ScanState::idle};
+// Name `scan` is looking for; only written by the main task while the state is `idle`
+static std::array<char, MAX_DEVICE_NAME_LEN> scan_name{};
+// Written by the host task before the state becomes `found`, read by the main task afterwards
+static uint8_t scan_address[6] = {};
+static int8_t scan_rssi = 0;
 
 // 16-bit Alert Notification Service UUID for app filtering
 static const ble_uuid16_t alert_uuid = BLE_UUID16_INIT(0x1811);
@@ -439,33 +452,41 @@ void deactivate_pin() {
     pin_deactivated = true;
 }
 
-// Runs on the NimBLE host task for every advertisement and scan response received during a scan
+// Runs on the NimBLE host task for every advertisement and scan response received during a scan.
+// It only stores the outcome: echo() is not safe to call from here, so the main task prints it (see take_scan_result).
 static int on_scan_event(struct ble_gap_event *event, void * /* arg */) {
     switch (event->type) {
     case BLE_GAP_EVENT_DISC: {
+        // If cancelling failed after a match, the scan runs on and must not report again
+        if (scan_state.load() != ScanState::running) {
+            return 0;
+        }
         struct ble_hs_adv_fields fields = {};
         if (ble_hs_adv_parse_fields(&fields, event->disc.data, event->disc.length_data) != 0) {
             return 0;
         }
         const size_t name_len = strlen(scan_name.data());
-        if (fields.name == nullptr || fields.name_len != name_len || memcmp(fields.name, scan_name.data(), name_len) != 0) {
+        if (fields.name == nullptr || !fields.name_is_complete || fields.name_len != name_len ||
+            memcmp(fields.name, scan_name.data(), name_len) != 0) {
             return 0;
         }
-        // Cancelling suppresses the DISC_COMPLETE event; if it fails, the scan runs on and must not report again
-        if (!scan_found.exchange(true)) {
-            ble_gap_disc_cancel();
-            const uint8_t *addr = event->disc.addr.val;
-            echo("BLE scan: found \"%s\" %02x:%02x:%02x:%02x:%02x:%02x rssi=%d", scan_name.data(),
-                 addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], event->disc.rssi);
+        // Cancelling suppresses the DISC_COMPLETE event
+        ble_gap_disc_cancel();
+        for (int i = 0; i < 6; ++i) {
+            scan_address[i] = event->disc.addr.val[5 - i];
         }
+        scan_rssi = event->disc.rssi;
+        scan_state = ScanState::found;
         return 0;
     }
 
-    case BLE_GAP_EVENT_DISC_COMPLETE:
-        if (!scan_found) {
-            echo("BLE scan: \"%s\" not found", scan_name.data());
-        }
+    case BLE_GAP_EVENT_DISC_COMPLETE: {
+        // A host reset ends the scan with reason 0, but the host is no longer synced by then
+        const bool aborted = event->disc_complete.reason != 0 || !ble_hs_synced();
+        ScanState expected = ScanState::running;
+        scan_state.compare_exchange_strong(expected, aborted ? ScanState::aborted : ScanState::not_found);
         return 0;
+    }
 
     default:
         return 0;
@@ -475,9 +496,9 @@ static int on_scan_event(struct ble_gap_event *event, void * /* arg */) {
 const char *scan(const std::string_view &name, const uint32_t duration_ms) {
     // Shortly after init the host has no address yet; ble_gap_disc would dereference a null pointer then
     if (!running || !host_ready) {
-        return "bluetooth is still starting";
+        return "bluetooth is not ready";
     }
-    if (ble_gap_disc_active()) {
+    if (scan_state.load() != ScanState::idle || ble_gap_disc_active()) {
         return "a bluetooth scan is already running";
     }
 
@@ -485,14 +506,43 @@ const char *scan(const std::string_view &name, const uint32_t duration_ms) {
     const size_t name_len = std::min(name.length(), MAX_DEVICE_NAME_LEN - 1);
     memcpy(scan_name.data(), name.data(), name_len);
     scan_name[name_len] = '\0';
-    scan_found = false;
+    scan_state = ScanState::running;
 
     // Active scan: Lizard advertises its name in the scan response, which a passive scan never requests.
     // Duplicates are not filtered, so a device seen before the scan response arrived is still reported with it.
     struct ble_gap_disc_params params = {};
     params.passive = 0;
     params.filter_duplicates = 0;
-    return ble_gap_disc(own_addr_type, duration_ms, &params, on_scan_event, nullptr) == 0 ? nullptr : "could not start bluetooth scan";
+    const int rc = ble_gap_disc(own_addr_type, duration_ms, &params, on_scan_event, nullptr);
+    if (rc != 0) {
+        scan_state = ScanState::idle;
+        static char message[48]; // only used on the main task
+        snprintf(message, sizeof(message), "could not start bluetooth scan (rc=%d)", rc);
+        return message;
+    }
+    return nullptr;
+}
+
+bool take_scan_result(ScanResult &result) {
+    switch (scan_state.load()) {
+    case ScanState::found:
+        result.outcome = ScanOutcome::found;
+        break;
+    case ScanState::not_found:
+        result.outcome = ScanOutcome::not_found;
+        break;
+    case ScanState::aborted:
+        result.outcome = ScanOutcome::aborted;
+        break;
+    default:
+        return false;
+    }
+    // The host task no longer writes once the state has left `running`
+    result.name = scan_name.data();
+    memcpy(result.address, scan_address, sizeof(result.address));
+    result.rssi = scan_rssi;
+    scan_state = ScanState::idle;
+    return true;
 }
 
 } // namespace ZZ::BleCommand
