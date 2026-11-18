@@ -217,13 +217,7 @@ auto flash_replica(const uart_port_t uart_num,
         return false;
     }
 
-    if (!flash(running_partition, block_size)) {
-        return false;
-    }
-
-    ESP_LOGI(TAG, "Replica complete.");
-
-    return true;
+    return flash(running_partition, block_size);
 }
 
 } // namespace ZZ::Replicator
