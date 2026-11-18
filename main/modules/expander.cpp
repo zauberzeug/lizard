@@ -259,6 +259,7 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         if (!success) {
             throw std::runtime_error("could not flash expander \"" + this->name + "\"");
         } else {
+            echo("%s: Replica complete", this->name.c_str());
             this->restart();
         }
     } else {
