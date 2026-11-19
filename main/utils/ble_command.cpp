@@ -18,6 +18,7 @@
 
 #include <host/ble_gap.h>
 #include <host/ble_hs.h>
+#include <host/ble_hs_hci.h>
 #include <host/ble_store.h>
 #include <host/util/util.h>
 #include <nimble/nimble_port.h>
@@ -71,6 +72,7 @@ static std::array<char, MAX_DEVICE_NAME_LEN> ble_device_name{};
 static std::atomic<uint16_t> current_con{BLE_HS_CONN_HANDLE_NONE};
 static uint16_t send_chr_val_handle = 0;
 static uint8_t own_addr_type = 0;
+static uint16_t controller_buffers = 0; // ACL buffers of the controller, all free at sync
 static bool running = false;
 static bool pin_deactivated = false;
 static std::atomic<bool> authenticated{false};
@@ -361,6 +363,13 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
             console_rx_discarding = false;
             stop_idle_timer();
         }
+        // the robot serves one central, so with it gone every buffer is free again unless their count was lost
+        if (const uint16_t free_buffers = ble_hs_hci_get_avail_pkts(); free_buffers < controller_buffers) {
+            echo("BLE: %u of %u controller buffers did not come back with the connection, resetting the host",
+                 controller_buffers - free_buffers, controller_buffers);
+            ble_hs_sched_reset(BLE_HS_ECONTROLLER); // syncing again advertises
+            return 0;
+        }
         advertise();
         return 0;
     }
@@ -483,6 +492,7 @@ static void on_sync() {
         echo("BLE: failed to initialize address");
         return;
     }
+    controller_buffers = ble_hs_hci_get_avail_pkts();
     advertise();
 }
 
