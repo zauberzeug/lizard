@@ -225,13 +225,16 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
     },
     {}};
 
-// with the PIN deactivated, the first access authenticates a client, so that the idle timer spares it
-static bool admit() {
-    if (!authenticated && pin_deactivated) {
-        authenticated = true;
+// the console serves a client once it has sent its PIN, or every client while the PIN is deactivated;
+// a console client may never write a command, so using the console spares it from the idle timer
+static bool admit_console() {
+    if (!authenticated && !pin_deactivated) {
+        return false;
+    }
+    if (ble_npl_callout_is_active(&idle_timer)) {
         stop_idle_timer();
     }
-    return authenticated;
+    return true;
 }
 
 // a console central like a laptop often connects with 30-50 ms; ask for 7.5-15 ms, as the BLE bridge uses
@@ -374,7 +377,7 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         if (event->subscribe.attr_handle == console_out_val_handle) {
             console_subscribed = event->subscribe.cur_notify;
             if (event->subscribe.cur_notify) {
-                admit(); // a console listener may never write while the PIN is deactivated
+                admit_console();
                 request_short_interval(event->subscribe.conn_handle);
             }
             return 0;
@@ -433,10 +436,16 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
             }
 
             // Reject non-AUTH commands before authentication (unless PIN is deactivated)
-            if (!admit()) {
+            if (!authenticated && !pin_deactivated) {
                 echo("BLE: rejected command before authentication");
                 send_notification(conn_handle, "AUTH_REQUIRED\n");
                 return 0;
+            }
+
+            // Mark as authenticated on first command when PIN is deactivated
+            if (!authenticated && pin_deactivated) {
+                authenticated = true;
+                stop_idle_timer();
             }
 
             // Process command normally
@@ -448,7 +457,7 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
     }
 
     if (ble_uuid_cmp(ctxt->chr->uuid, &console_in_chr_uuid.u) == 0 && ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
-        if (!admit()) {
+        if (!admit_console()) {
             echo("BLE: rejected console input before authentication");
             return BLE_ATT_ERR_INSUFFICIENT_AUTHOR;
         }
