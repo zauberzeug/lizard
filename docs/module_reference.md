@@ -201,6 +201,7 @@ Neither property stops anything by itself; use the wheels' `drive_command_timeou
 The BLE bridge makes an ESP32 a Bluetooth dongle for a robot's console.
 It connects as a BLE central to the robot's [Bluetooth](#bluetooth) module, which it finds by the advertised device name, and authenticates with the robot's PIN by writing `AUTH <pin>`.
 A wrong PIN is reported as a warning, and the bridge tries again after 5 seconds.
+So does a link that is not up 10 seconds after the connect request.
 After a reset or a radio loss on either side, it reconnects and authenticates by itself.
 BLE hops between 37 channels, which helps in crowded radio environments like a trade fair.
 

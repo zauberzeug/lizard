@@ -53,6 +53,7 @@ constexpr int32_t SCAN_MS = 10000;
 constexpr int32_t CONNECT_TIMEOUT_MS = 5000;
 constexpr uint32_t RECONNECT_MS = 500;
 constexpr uint32_t RETRY_AFTER_FAILURE_MS = 5000;
+constexpr uint32_t LINK_TIMEOUT_MS = 10000; // from the connect request until the robot accepts the PIN
 constexpr char PREFIX[] = "!dongle";
 constexpr size_t PREFIX_LEN = sizeof(PREFIX) - 1;
 constexpr char AUTH_ACCEPTED[] = "POST /notification Connected";
@@ -180,12 +181,14 @@ enum class LinkState {
 
 ble_npl_event request_event;
 ble_npl_callout scan_callout;
+ble_npl_callout link_callout;
 LinkState link_state = LinkState::IDLE;
 char target[MAX_NAME + 1] = "";
 uint32_t pin = 0;
 bool synced = false;
 bool backoff = false; // the last attempt failed: wait longer before the next one
 uint8_t own_addr_type = 0;
+ble_addr_t robot_addr;
 uint16_t service_start = 0;
 uint16_t service_end = 0;
 uint16_t console_out_handle = 0;
@@ -314,6 +317,7 @@ void handle_reply(uint16_t conn, const os_mbuf *om) {
     char reply[sizeof(AUTH_ACCEPTED)] = {};
     os_mbuf_copydata(om, 0, std::min<int>(OS_MBUF_PKTLEN(om), sizeof(reply) - 1), reply);
     if (strncmp(reply, AUTH_ACCEPTED, sizeof(AUTH_ACCEPTED) - 1) == 0) {
+        ble_npl_callout_stop(&link_callout);
         linked = true;
         say("dongle: linked to \"%s\"", target);
     } else if (strncmp(reply, AUTH_REJECTED, sizeof(AUTH_REJECTED) - 1) == 0) {
@@ -396,6 +400,8 @@ int on_gap_event(ble_gap_event *event, void *) {
         params.supervision_timeout = 200; // 2 s
         if (ble_gap_connect(own_addr_type, &event->disc.addr, CONNECT_TIMEOUT_MS, &params, on_gap_event, nullptr) == 0) {
             link_state = LinkState::CONNECTING;
+            robot_addr = event->disc.addr;
+            ble_npl_callout_reset(&link_callout, ble_npl_time_ms_to_ticks32(LINK_TIMEOUT_MS));
         } else {
             link_state = LinkState::IDLE;
             schedule_scan(RECONNECT_MS);
@@ -412,6 +418,7 @@ int on_gap_event(ble_gap_event *event, void *) {
 
     case BLE_GAP_EVENT_CONNECT:
         if (event->connect.status != 0) {
+            ble_npl_callout_stop(&link_callout);
             link_state = LinkState::IDLE;
             schedule_scan(RECONNECT_MS);
             return 0;
@@ -453,6 +460,7 @@ int on_gap_event(ble_gap_event *event, void *) {
 
     case BLE_GAP_EVENT_DISCONNECT: {
         const bool was_linked = linked;
+        ble_npl_callout_stop(&link_callout);
         conn_handle = BLE_HS_CONN_HANDLE_NONE;
         linked = false;
         link_state = LinkState::IDLE;
@@ -467,6 +475,23 @@ int on_gap_event(ble_gap_event *event, void *) {
 
     default:
         return 0;
+    }
+}
+
+// a setup that stalls, on either side, would otherwise hold the connection without ever linking
+void on_link_timeout(ble_npl_event *) {
+    if (linked || (link_state != LinkState::CONNECTING && link_state != LinkState::CONNECTED)) {
+        return;
+    }
+    say("dongle: linking to \"%s\" timed out", target);
+    ble_gap_conn_desc desc;
+    if (ble_gap_conn_find_by_addr(&robot_addr, &desc) == 0) { // also a connection NimBLE has not reported yet
+        drop_connection(desc.conn_handle);
+        ble_npl_callout_reset(&link_callout, ble_npl_time_ms_to_ticks32(LINK_TIMEOUT_MS)); // until the disconnect event arrives
+    } else if (link_state == LinkState::CONNECTED || ble_gap_conn_cancel() != 0) {
+        conn_handle = BLE_HS_CONN_HANDLE_NONE;
+        link_state = LinkState::IDLE;
+        schedule_scan(RETRY_AFTER_FAILURE_MS);
     }
 }
 
@@ -790,6 +815,7 @@ extern "C" void app_main() {
     ble_hs_cfg.sync_cb = on_sync;
     ble_npl_event_init(&request_event, on_request, nullptr);
     ble_npl_callout_init(&scan_callout, nimble_port_get_dflt_eventq(), on_scan_callout, nullptr);
+    ble_npl_callout_init(&link_callout, nimble_port_get_dflt_eventq(), on_link_timeout, nullptr);
     nimble_port_freertos_init(host_task);
 
     xTaskCreate(uart_task, "uart", 4096, nullptr, 10, nullptr);

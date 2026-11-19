@@ -44,6 +44,7 @@ Lines starting with `!dongle` stay on the dongle, every other byte goes to the r
 | `!dongle`                       | show the link, the baud rate and the bytes dropped so far       |
 
 After connecting, the dongle sends the PIN as `AUTH <pin>` and reports `dongle: linked to "robot"` once the robot has accepted it, or `dongle: "robot" rejected the PIN` and tries again after 5 s.
+A link that is not up 10 s after the connect request is dropped with `dongle: linking to "robot" timed out` and tried again after 5 s as well.
 A robot whose PIN is deactivated (`bluetooth.deactivate_pin()`) accepts any PIN.
 The robot's name, the PIN and the baud rate are stored in the dongle's NVS, so the dongle links again by itself after every restart.
 After `!dongle baud`, the host has to reopen the port at the new rate.
