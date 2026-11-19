@@ -27,7 +27,7 @@ idf.py set-target esp32 build
 idf.py -p /dev/ttyUSB0 flash
 ```
 
-To pair with Lizard's developer PIN, build with `SDKCONFIG_DEFAULTS="sdkconfig.defaults;../sdkconfig.defaults.secret"`; otherwise pass the robot's PIN to `!dongle link`.
+To authenticate with Lizard's developer PIN, build with `SDKCONFIG_DEFAULTS="sdkconfig.defaults;../sdkconfig.defaults.secret"`; otherwise pass the robot's PIN to `!dongle link`.
 The serial port starts at 115200 baud (`CONFIG_DONGLE_BAUD_RATE`) until `!dongle baud` stores another rate.
 
 ## Link to a robot
@@ -43,7 +43,9 @@ Lines starting with `!dongle` stay on the dongle, every other byte goes to the r
 | `!dongle baud 460800`           | switch the serial port to 115200, 230400, 460800 or 921600 baud |
 | `!dongle`                       | show the link, the baud rate and the bytes dropped so far       |
 
-The robot's name, the PIN and the baud rate are stored in the dongle's NVS, the bond after the first pairing, so the dongle links again by itself after every restart.
+After connecting, the dongle sends the PIN as `AUTH <pin>` and reports `dongle: linked to "robot"` once the robot has accepted it, or `dongle: "robot" rejected the PIN` and tries again after 5 s.
+A robot whose PIN is deactivated (`bluetooth.deactivate_pin()`) accepts any PIN.
+The robot's name, the PIN and the baud rate are stored in the dongle's NVS, so the dongle links again by itself after every restart.
 After `!dongle baud`, the host has to reopen the port at the new rate.
 It reports its state in lines like `dongle: linked to "robot"`, with a checksum like Lizard's console lines.
 

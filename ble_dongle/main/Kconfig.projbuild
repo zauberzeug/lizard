@@ -9,11 +9,19 @@ config ZZ_BLE_DEV_PIN
     range 0 999999
     default 0
     help
-        PIN for pairing when "!dongle link" names none; the same option as in Lizard, so sdkconfig.defaults.secret applies.
+        PIN sent to the robot when "!dongle link" names none; the same option as in Lizard, so sdkconfig.defaults.secret applies.
 
 config DONGLE_SVC_UUID
     string "Service UUID of Lizard's Bluetooth module"
     default "23014ccc-4677-4864-b4c1-8f772b373fac"
+
+config DONGLE_COMMAND_UUID
+    string "Command characteristic UUID"
+    default "37107598-7030-46d3-b688-e3664c1712f0"
+
+config DONGLE_REPLY_UUID
+    string "Reply characteristic UUID"
+    default "19f91f52-e3b1-4809-9d71-bc16ecd81069"
 
 config DONGLE_CONSOLE_IN_UUID
     string "Console input characteristic UUID"
