@@ -25,8 +25,6 @@
 #include <nimble/nimble_port.h>
 #include <nimble/nimble_port_freertos.h>
 #include <os/os_mbuf.h>
-#include <services/gap/ble_svc_gap.h>
-#include <services/gatt/ble_svc_gatt.h>
 
 // Undef NimBLE macros that conflict with STL
 #ifdef min
@@ -787,9 +785,6 @@ extern "C" void app_main() {
     ESP_ERROR_CHECK(nimble_port_init());
     ble_hs_cfg.reset_cb = on_reset;
     ble_hs_cfg.sync_cb = on_sync;
-    ble_svc_gap_init();
-    ble_svc_gatt_init();
-    ble_svc_gap_device_name_set("Lizard BLE dongle");
     ble_npl_event_init(&request_event, on_request, nullptr);
     ble_npl_callout_init(&scan_callout, nimble_port_get_dflt_eventq(), on_scan_callout, nullptr);
     nimble_port_freertos_init(host_task);
