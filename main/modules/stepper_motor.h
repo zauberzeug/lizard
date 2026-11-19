@@ -29,6 +29,7 @@ private:
     int last_count = 0;
 
     StepperState state = Idle;
+    bool pulsing = false; // whether the step pin carries the pulses of the LEDC
     int32_t target_position = 0;
     int32_t target_speed = 0;
     uint32_t target_acceleration = 0;
@@ -36,6 +37,7 @@ private:
     void do_disable() override;
     void read_position();
     void set_state(StepperState new_state);
+    void route_pulses(const bool on);
 
 public:
     static inline constexpr const char *TYPE = "StepperMotor";

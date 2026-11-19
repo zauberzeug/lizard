@@ -1,6 +1,7 @@
 #include "pwm_output.h"
 #include "../global.h"
 #include "../utils/esp_error.h"
+#include "esp_timer.h"
 #include <driver/ledc.h>
 #include <soc/soc.h>
 
@@ -69,6 +70,7 @@ PwmOutput::PwmOutput(const std::string name,
     };
     gpio_set_direction(pin, GPIO_MODE_OUTPUT);
     check_error(ledc_channel_config(&channel_config), "could not configure LEDC channel");
+    this->applied_us = esp_timer_get_time();
 }
 
 void PwmOutput::configure_timer(const uint32_t frequency) {
@@ -117,9 +119,15 @@ void PwmOutput::write_property(const std::string property_name, const ConstExpre
 }
 
 void PwmOutput::step() {
-    uint32_t duty = this->properties.at("duty")->integer_value();
-    ledc_set_duty(SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
-    ledc_update_duty(SPEED_MODE, this->ledc_channel);
+    const uint32_t duty = this->is_on ? this->properties.at("duty")->integer_value() : 0;
+    // On the ESP32, ledc_update_duty() waits with interrupts off until the last update is done, up to two periods after it.
+    const int64_t period_us = 1000000 / this->properties.at("frequency")->integer_value();
+    if (duty != this->applied_duty && esp_timer_get_time() - this->applied_us > 2 * period_us) {
+        ledc_set_duty(SPEED_MODE, this->ledc_channel, duty);
+        ledc_update_duty(SPEED_MODE, this->ledc_channel);
+        this->applied_duty = duty;
+        this->applied_us = esp_timer_get_time();
+    }
     this->sync_enabled();
     Module::step();
 }

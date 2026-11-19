@@ -497,6 +497,8 @@ That makes 257 settings, one more than an 8 bit value holds:
 | 255    | high for 255 of 256 steps, not fully on |
 | 256    | always high                             |
 
+The output takes up a new `duty` at most once every two periods, so below 200 Hz it skips changes that come faster.
+
 | Methods         | Description             | Arguments |
 | --------------- | ----------------------- | --------- |
 | `pwm.on()`      | Turn on the PWM signal  |           |
