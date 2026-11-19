@@ -23,7 +23,7 @@ Proxy::Proxy(const std::string name,
     this->expander->add_proxy(this); // last: a throw above frees this proxy, and the expander must not keep a pointer to it
 }
 
-void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Proxy::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     this->expander->send_call(this->name, method_name, arguments);
 }
 

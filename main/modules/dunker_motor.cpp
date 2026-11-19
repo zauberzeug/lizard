@@ -102,7 +102,7 @@ void DunkerMotor::wait() {
     this->waiting_sdo_writes = 0;
 }
 
-void DunkerMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void DunkerMotor::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "sdo_read") {
         if (arguments.size() < 1 || arguments.size() > 2) {
             throw std::runtime_error("unexpected number of arguments");

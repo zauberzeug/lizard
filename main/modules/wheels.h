@@ -83,7 +83,7 @@ protected:
 public:
     Wheels(const std::string name, const std::map<std::string, Variable_ptr> &defaults = Wheels::get_defaults());
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     void write_property(const std::string property_name, ConstExpression_ptr expression,
                         const bool from_expander = false) override;
     void disable() override;

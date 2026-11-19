@@ -69,7 +69,7 @@ void JbdBms::step() {
     Module::step();
 }
 
-void JbdBms::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void JbdBms::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "cell_voltages") {
         Module::expect(arguments, 0);
         this->queued_registers.insert(CELL_VOLTAGES);
