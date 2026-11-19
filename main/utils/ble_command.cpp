@@ -18,10 +18,12 @@
 
 #include <host/ble_gap.h>
 #include <host/ble_hs.h>
+#include <host/ble_hs_hci.h>
 #include <host/ble_store.h>
 #include <host/util/util.h>
 #include <nimble/nimble_port.h>
 #include <nimble/nimble_port_freertos.h>
+#include <os/os_mbuf.h>
 #include <services/gap/ble_svc_gap.h>
 #include <services/gatt/ble_svc_gatt.h>
 
@@ -50,6 +52,7 @@ static constexpr uint8_t MAX_PIN_FAILURES = 3;     // Wrong PINs per connection 
 static constexpr size_t MAX_DEVICE_NAME_LEN = 30;
 static constexpr uint16_t TX_DATA_LENGTH = 0xFB;
 static constexpr uint16_t TX_DATA_TIME = 0x0848;
+static constexpr int MIN_FREE_MBUFS = 12; // keep buffers for incoming writes and their responses while streaming the console
 
 constexpr ble_uuid128_t uuid128_from_str(const char *str) {
     ble_uuid128_t result{BLE_UUID_TYPE_128, {0}};
@@ -60,17 +63,38 @@ constexpr ble_uuid128_t uuid128_from_str(const char *str) {
 static constexpr ble_uuid128_t svc_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_SVC_UUID);
 static constexpr ble_uuid128_t cmd_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CHR_UUID);
 static constexpr ble_uuid128_t send_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_SEND_CHR_UUID);
+static constexpr ble_uuid128_t console_in_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CONSOLE_IN_CHR_UUID);
+static constexpr ble_uuid128_t console_out_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CONSOLE_OUT_CHR_UUID);
+static constexpr ble_uuid128_t console_flow_chr_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CONSOLE_FLOW_CHR_UUID);
 
 static CommandCallback client_callback{};
 static std::array<char, MAX_DEVICE_NAME_LEN> ble_device_name{};
 static std::atomic<uint16_t> current_con{BLE_HS_CONN_HANDLE_NONE};
 static uint16_t send_chr_val_handle = 0;
 static uint8_t own_addr_type = 0;
+static uint16_t controller_buffers = 0; // ACL buffers of the controller, all free at sync
 static bool running = false;
 static bool pin_deactivated = false;
 static std::atomic<bool> authenticated{false};
 static uint8_t pin_failures = 0;
 static ble_npl_callout idle_timer; // posts to the NimBLE host task, so it runs in line with the GAP and GATT callbacks
+static const char *host_owner = nullptr;
+
+static ConsoleCallback console_callback{};
+static std::atomic<uint32_t> dropped_console_lines{0};
+static uint16_t console_out_val_handle = 0;
+static std::atomic<bool> console_subscribed{false};
+static std::unique_ptr<char[]> console_rx; // console input up to its line end, allocated on first use
+static size_t console_rx_len = 0;
+static size_t console_rx_raw = 0; // bytes of the current line so far, also the discarded ones
+static bool console_rx_discarding = false;
+// processed input since the connection began, counted in bytes including each line's '\n' and in lines
+static uint16_t console_flow_val_handle = 0;
+static std::atomic<bool> console_flow_subscribed{false};
+static std::atomic<uint32_t> console_released_bytes{0};
+static std::atomic<uint32_t> console_released_lines{0};
+static uint32_t console_flow_sent_bytes = 0;
+static uint32_t console_flow_sent_lines = 0;
 
 // 16-bit Alert Notification Service UUID for app filtering
 static const ble_uuid16_t alert_uuid = BLE_UUID16_INIT(0x1811);
@@ -166,9 +190,101 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
                 .val_handle = &send_chr_val_handle,
                 .cpfd = NULL,
             },
+            {
+                // Console input: lines as a byte stream, each terminated by '\n' - served after AUTH
+                .uuid = &console_in_chr_uuid.u,
+                .access_cb = on_chr_access,
+                .arg = NULL,
+                .descriptors = NULL,
+                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
+                .min_key_size = 0,
+                .val_handle = NULL,
+                .cpfd = NULL,
+            },
+            {
+                // Console output: every console line as a byte stream - notify only, sent after AUTH
+                .uuid = &console_out_chr_uuid.u,
+                .access_cb = on_chr_access,
+                .arg = NULL,
+                .descriptors = NULL,
+                .flags = BLE_GATT_CHR_F_NOTIFY,
+                .min_key_size = 0,
+                .val_handle = &console_out_val_handle,
+                .cpfd = NULL,
+            },
+            {
+                // Console flow: processed input bytes and lines as two little-endian 32-bit counters - notify only
+                .uuid = &console_flow_chr_uuid.u,
+                .access_cb = on_chr_access,
+                .arg = NULL,
+                .descriptors = NULL,
+                .flags = BLE_GATT_CHR_F_NOTIFY,
+                .min_key_size = 0,
+                .val_handle = &console_flow_val_handle,
+                .cpfd = NULL,
+            },
             {}},
     },
     {}};
+
+// the console serves a client once it has sent its PIN, or every client while the PIN is deactivated;
+// a console client may never write a command, so using the console spares it from the idle timer
+static bool admit_console() {
+    if (!authenticated && !pin_deactivated) {
+        return false;
+    }
+    if (ble_npl_callout_is_active(&idle_timer)) {
+        stop_idle_timer();
+    }
+    return true;
+}
+
+// a console central like a laptop often connects with 30-50 ms; ask for 7.5-15 ms, as the BLE bridge uses
+static void request_short_interval(uint16_t conn_handle) {
+    struct ble_gap_conn_desc desc;
+    if (ble_gap_conn_find(conn_handle, &desc) != 0 || desc.conn_itvl <= 12) {
+        return;
+    }
+    struct ble_gap_upd_params params = {};
+    params.itvl_min = 6;
+    params.itvl_max = 12;
+    params.latency = 0;
+    params.supervision_timeout = 200;
+    ble_gap_update_params(conn_handle, &params);
+}
+
+// splits the console byte stream into lines; a line longer than the console limit is dropped up to its line end
+static void receive_console(const struct os_mbuf *om) {
+    if (!console_rx && !(console_rx = std::unique_ptr<char[]>(new (std::nothrow) char[CONSOLE_LINE_SIZE]))) {
+        return;
+    }
+    for (const struct os_mbuf *m = om; m != nullptr; m = SLIST_NEXT(m, om_next)) {
+        for (uint16_t i = 0; i < m->om_len; i++) {
+            const char c = m->om_data[i];
+            if (c != '\n') {
+                console_rx_raw++;
+                if (console_rx_len + 1 < CONSOLE_LINE_SIZE) {
+                    console_rx[console_rx_len++] = c;
+                } else if (!console_rx_discarding) {
+                    console_rx_discarding = true;
+                    echo("warning: bluetooth console line exceeds %d bytes and is dropped", CONSOLE_LINE_SIZE);
+                }
+                continue;
+            }
+            // the line keeps a trailing '\r', so that its release accounts for every byte; check() strips it later
+            if (console_rx_discarding || !console_callback || !console_callback(console_rx.get(), console_rx_len)) {
+                if (!console_rx_discarding) {
+                    dropped_console_lines.fetch_add(1, std::memory_order_relaxed);
+                }
+                console_released_bytes.fetch_add(console_rx_raw + 1, std::memory_order_relaxed);
+                console_released_lines.fetch_add(1, std::memory_order_relaxed);
+            }
+            console_rx_len = 0;
+            console_rx_raw = 0;
+            console_rx_discarding = false;
+        }
+    }
+}
 
 static void advertise() {
     if (!running) {
@@ -209,6 +325,8 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         if (event->connect.status == 0) {
             current_con = event->connect.conn_handle;
             pin_failures = 0;
+            console_released_bytes = 0;
+            console_released_lines = 0;
 
             ble_gap_set_data_len(event->connect.conn_handle, TX_DATA_LENGTH, TX_DATA_TIME);
 
@@ -238,7 +356,19 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         if (event->disconnect.conn.conn_handle == current_con) {
             current_con = BLE_HS_CONN_HANDLE_NONE;
             authenticated = false;
+            console_subscribed = false;
+            console_flow_subscribed = false;
+            console_rx_len = 0;
+            console_rx_raw = 0;
+            console_rx_discarding = false;
             stop_idle_timer();
+        }
+        // the robot serves one central, so with it gone every buffer is free again unless their count was lost
+        if (const uint16_t free_buffers = ble_hs_hci_get_avail_pkts(); free_buffers < controller_buffers) {
+            echo("BLE: %u of %u controller buffers did not come back with the connection, resetting the host",
+                 controller_buffers - free_buffers, controller_buffers);
+            ble_hs_sched_reset(BLE_HS_ECONTROLLER); // syncing again advertises
+            return 0;
         }
         advertise();
         return 0;
@@ -249,8 +379,20 @@ static int on_gap_event(struct ble_gap_event *event, void * /* arg */) {
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
+        if (event->subscribe.attr_handle == console_flow_val_handle) {
+            console_flow_subscribed = event->subscribe.cur_notify;
+            return 0;
+        }
+        if (event->subscribe.attr_handle == console_out_val_handle) {
+            console_subscribed = event->subscribe.cur_notify;
+            if (event->subscribe.cur_notify) {
+                admit_console();
+                request_short_interval(event->subscribe.conn_handle);
+            }
+            return 0;
+        }
         // Signal readiness on subscribe; AUTH_REQUIRED tells the app to ask for the PIN
-        if (event->subscribe.cur_notify) {
+        if (event->subscribe.attr_handle == send_chr_val_handle && event->subscribe.cur_notify) {
             send_notification(event->subscribe.conn_handle, authenticated || pin_deactivated ? "\n" : "AUTH_REQUIRED\n");
         }
         return 0;
@@ -323,7 +465,17 @@ static int on_chr_access(uint16_t conn_handle, uint16_t /* attr_handle */,
         }
     }
 
-    if (ble_uuid_cmp(ctxt->chr->uuid, &send_chr_uuid.u) == 0) {
+    if (ble_uuid_cmp(ctxt->chr->uuid, &console_in_chr_uuid.u) == 0 && ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
+        if (!admit_console()) {
+            echo("BLE: rejected console input before authentication");
+            return BLE_ATT_ERR_INSUFFICIENT_AUTHOR;
+        }
+        receive_console(ctxt->om);
+        return 0;
+    }
+
+    if (ble_uuid_cmp(ctxt->chr->uuid, &send_chr_uuid.u) == 0 || ble_uuid_cmp(ctxt->chr->uuid, &console_out_chr_uuid.u) == 0 ||
+        ble_uuid_cmp(ctxt->chr->uuid, &console_flow_chr_uuid.u) == 0) {
         return 0;
     }
 
@@ -340,6 +492,7 @@ static void on_sync() {
         echo("BLE: failed to initialize address");
         return;
     }
+    controller_buffers = ble_hs_hci_get_avail_pkts();
     advertise();
 }
 
@@ -428,6 +581,76 @@ void finalize() {
         nimble_port_deinit();
     }
     running = false;
+}
+
+void set_console_callback(ConsoleCallback on_console_line) {
+    console_callback = on_console_line;
+}
+
+void release_console_line(size_t len) {
+    console_released_bytes.fetch_add(len + 1, std::memory_order_relaxed);
+    console_released_lines.fetch_add(1, std::memory_order_relaxed);
+}
+
+void send_console_flow() {
+    if (!console_flow_subscribed || current_con == BLE_HS_CONN_HANDLE_NONE) {
+        return;
+    }
+    const uint32_t bytes = console_released_bytes;
+    const uint32_t lines = console_released_lines;
+    if (bytes == console_flow_sent_bytes && lines == console_flow_sent_lines) {
+        return;
+    }
+    const uint8_t data[8] = {
+        static_cast<uint8_t>(bytes),
+        static_cast<uint8_t>(bytes >> 8),
+        static_cast<uint8_t>(bytes >> 16),
+        static_cast<uint8_t>(bytes >> 24),
+        static_cast<uint8_t>(lines),
+        static_cast<uint8_t>(lines >> 8),
+        static_cast<uint8_t>(lines >> 16),
+        static_cast<uint8_t>(lines >> 24),
+    };
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(data, sizeof(data));
+    if (om && ble_gattc_notify_custom(current_con, console_flow_val_handle, om) == 0) {
+        console_flow_sent_bytes = bytes; // otherwise the next step tries again
+        console_flow_sent_lines = lines;
+    }
+}
+
+uint32_t take_dropped_console_lines() {
+    return dropped_console_lines.exchange(0, std::memory_order_relaxed);
+}
+
+bool console_ready() {
+    return current_con != BLE_HS_CONN_HANDLE_NONE && console_subscribed && (authenticated || pin_deactivated);
+}
+
+size_t console_chunk_size() {
+    const uint16_t mtu = ble_att_mtu(current_con);
+    return mtu > 3 ? mtu - 3 : 20;
+}
+
+int send_console(const char *data, size_t len) {
+    if (!console_ready()) {
+        return BLE_HS_ENOTCONN;
+    }
+    if (os_msys_num_free() < MIN_FREE_MBUFS) {
+        return BLE_HS_ENOMEM;
+    }
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(data, len);
+    if (!om) {
+        return BLE_HS_ENOMEM;
+    }
+    return ble_gattc_notify_custom(current_con, console_out_val_handle, om);
+}
+
+bool claim_host(const char *owner) {
+    if (host_owner != nullptr && strcmp(host_owner, owner) != 0) {
+        return false;
+    }
+    host_owner = owner;
+    return true;
 }
 
 void deactivate_pin() {

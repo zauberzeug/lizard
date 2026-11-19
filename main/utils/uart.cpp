@@ -11,6 +11,7 @@
 #include <string>
 
 static std::vector<std::pair<int, EchoCallback>> echo_callbacks;
+static Uart0Interceptor uart0_interceptor;
 
 static bool handed_over = false;
 static std::function<void(unsigned long)> console_drain;
@@ -100,6 +101,14 @@ void unregister_echo_callback(const int handle) {
     echo_callbacks.erase(
         std::remove_if(echo_callbacks.begin(), echo_callbacks.end(), [handle](const auto &entry) { return entry.first == handle; }),
         echo_callbacks.end());
+}
+
+void set_uart0_interceptor(const Uart0Interceptor &interceptor) {
+    uart0_interceptor = interceptor;
+}
+
+bool intercept_uart0(const char *line, int len) {
+    return uart0_interceptor && uart0_interceptor(line, len);
 }
 
 void echo(const char *format, ...) {

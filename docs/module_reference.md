@@ -182,9 +182,68 @@ The PIN is the user PIN set with `bluetooth.set_pin(pin)` or, without one, the P
 After `bluetooth.deactivate_pin()`, every client is accepted without a PIN until the next restart.
 Note that the PIN is sent unencrypted, so it keeps out accidental connections but not someone listening in.
 
+Three more characteristics carry the console for a [BLE bridge](#ble-bridge) dongle.
+75cdc16b-212b-4176-8bb8-4222f21cc826 takes console lines as a byte stream, each terminated by a newline, and runs them like lines on UART0, including `!+` and `!.` startup editing.
+f8f511b2-1401-4e28-82f1-ad753df3b750 streams every console line via notifications.
+Both carry the lines like UART0 does: output lines end with their `@xx` checksum, and input lines may carry one, which is checked.
+d1e7616c-a8ac-4ec8-9c49-3ae32a008a89 notifies how many input bytes (each line with its newline) and lines the robot has processed since the connection began, as two little-endian 32-bit counters.
+A client that keeps less than 8 KB and 64 lines of its input unprocessed never loses a line; without this flow control, lines that arrive faster than the robot processes them are dropped.
+The console is guarded by the same PIN: a client writes `AUTH <pin>` to the command characteristic and waits for `POST /notification Connected` on the second one before its console input is run and the console output reaches it.
+After `bluetooth.deactivate_pin()`, the console serves every client right away.
+A laptop can use the characteristics directly as well, e.g. with Python's `bleak`; the robot asks such a client for a connection interval of 7.5 to 15 ms.
+
 Unlike `core.last_message_age`, which any input channel resets, `bluetooth.last_message_age` only counts lines received via Bluetooth.
 Together with `connected`, it lets rules and the host tell a silent or disconnected app apart from a host that keeps talking on UART0.
 Neither property stops anything by itself; use the wheels' `drive_command_timeout` for that (see [Machine Safety](machine_safety.md#dead-mans-switch-for-wheels)).
+
+## BLE Bridge
+
+The BLE bridge makes an ESP32 a Bluetooth dongle for a robot's console.
+It connects as a BLE central to the robot's [Bluetooth](#bluetooth) module, which it finds by the advertised device name, and authenticates with the robot's PIN by writing `AUTH <pin>`.
+A wrong PIN is reported as a warning, and the bridge tries again after 5 seconds.
+After a reset or a radio loss on either side, it reconnects and authenticates by itself.
+BLE hops between 37 channels, which helps in crowded radio environments like a trade fair.
+
+Every line the host writes to the dongle's UART0 is forwarded to the robot, and the robot's console comes back unprefixed, so the host talks to the dongle as if it were the robot's UART0.
+Only lines starting with the dongle module's own name (e.g. `usb.unlink()`) stay on the dongle.
+Write the dongle's own startup script before linking, because `!+` and `!.` are forwarded as well.
+Lines the host sends while the link is down are dropped and counted.
+The link carries about 50 kB/s in each direction, so at 115200 baud the UARTs are the limit; at higher rates, lines beyond the link's capacity are dropped and counted as well.
+
+| Constructor            | Description                      | Arguments |
+| ---------------------- | -------------------------------- | --------- |
+| `bridge = BleBridge()` | start the radio as a BLE central |           |
+
+| Properties         | Description                                   | Data type |
+| ------------------ | --------------------------------------------- | --------- |
+| `bridge.link`      | device name of the linked robot, `""` if none | `str`     |
+| `bridge.connected` | whether the console link to the robot is up   | `bool`    |
+| `bridge.rx`        | console lines received from the robot         | `int`     |
+| `bridge.tx`        | lines forwarded to the robot                  | `int`     |
+| `bridge.lost`      | lines dropped (link down or queues full)      | `int`     |
+
+| Methods                         | Description                                   | Arguments    |
+| ------------------------------- | --------------------------------------------- | ------------ |
+| `bridge.link(device_name)`      | connect to the robot with the developer PIN   | `str`        |
+| `bridge.link(device_name, pin)` | same, with the robot's user PIN (`set_pin()`) | `str`, `int` |
+| `bridge.unlink()`               | disconnect and stop forwarding                |              |
+
+Robot and dongle startup scripts (see the [examples](examples.md#use-a-wireless-console-dongle) for the complete setup):
+
+```
+bluetooth = Bluetooth("robot")
+```
+
+```
+usb = BleBridge()
+usb.link("robot")
+```
+
+The robot's Bluetooth module serves one central at a time, so the app cannot connect while the dongle is linked.
+Only one BLE bridge can exist per node, and a node cannot run a BLE bridge and a Bluetooth module together.
+The bridge costs about 40 KB of heap on the dongle and about 5 KB on top of the robot's Bluetooth module once a dongle listens, plus up to 16 KB of queued lines under load.
+It adds roughly 25 ms to a console round trip, mostly because the robot and the dongle each handle the lines in their 10 ms main loop.
+A dongle with the standalone firmware in the repository's `ble_dongle/` folder instead of Lizard passes the bytes on right away and saves about 7 ms of that.
 
 ## Serial Bus
 
