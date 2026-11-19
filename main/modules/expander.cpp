@@ -257,6 +257,10 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
         this->serial->reinitialize_after_flash();
         this->disconnected = false;
         if (!success) {
+            // a transfer that failed before the replicator drove the pins, e.g. short of heap, leaves them floating
+            // after deinstall(); drive both high and restart the expander, so that it runs its previous firmware
+            this->drive_pins_high();
+            this->restart();
             throw std::runtime_error("could not flash expander \"" + this->name + "\"");
         } else {
             echo("%s: Replica complete", this->name.c_str());
@@ -312,6 +316,15 @@ void Expander::deinstall() {
         gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
         gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
     }
+}
+
+void Expander::drive_pins_high() {
+    gpio_reset_pin(this->boot_pin);
+    gpio_reset_pin(this->enable_pin);
+    gpio_set_direction(this->boot_pin, GPIO_MODE_OUTPUT);
+    gpio_set_direction(this->enable_pin, GPIO_MODE_OUTPUT);
+    gpio_set_level(this->boot_pin, 1);
+    gpio_set_level(this->enable_pin, 1);
 }
 
 void Expander::add_proxy(Module *proxy) {

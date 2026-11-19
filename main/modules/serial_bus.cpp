@@ -383,7 +383,7 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
                     this->bus->serial->reinitialize_after_flash();
                 } catch (...) {
                     try {
-                        echo("error: serial bus %s stays paused, its serial has no UART driver", this->bus->name.c_str());
+                        echo("error: serial bus %s stays paused until this node restarts, its serial has no UART driver", this->bus->name.c_str());
                     } catch (...) {
                     }
                     return;
