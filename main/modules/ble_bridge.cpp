@@ -7,6 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "sdkconfig.h"
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -16,7 +17,6 @@
 #include <host/ble_gap.h>
 #include <host/ble_gatt.h>
 #include <host/ble_hs.h>
-#include <host/ble_store.h>
 #include <host/util/util.h>
 #include <nimble/nimble_npl.h>
 #include <nimble/nimble_port.h>
@@ -33,6 +33,7 @@
 #undef max
 #endif
 
+#include <algorithm>
 #include <esp_zeug/ble/uuid.h>
 
 // NimBLE runs once per node. The link state only changes on its host task (GAP events, GATT callbacks and the posted
@@ -47,6 +48,8 @@ static constexpr uint32_t RECONNECT_MS = 500;
 static constexpr uint32_t RETRY_AFTER_FAILURE_MS = 5000;
 static constexpr unsigned long LOST_WARNING_INTERVAL_MS = 1000;
 static constexpr size_t MAX_PRINT_PER_STEP = 1024; // printing blocks the main loop, which also has to read the host's lines
+static constexpr char AUTH_ACCEPTED[] = "POST /notification Connected";
+static constexpr char AUTH_REJECTED[] = "AUTH_FAIL";
 
 constexpr ble_uuid128_t uuid128_from_str(const char *str) {
     ble_uuid128_t result{BLE_UUID_TYPE_128, {0}};
@@ -55,6 +58,8 @@ constexpr ble_uuid128_t uuid128_from_str(const char *str) {
 }
 
 static constexpr ble_uuid128_t svc_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_SVC_UUID);
+static constexpr ble_uuid128_t command_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CHR_UUID);
+static constexpr ble_uuid128_t reply_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_SEND_CHR_UUID);
 static constexpr ble_uuid128_t console_in_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CONSOLE_IN_CHR_UUID);
 static constexpr ble_uuid128_t console_out_uuid = uuid128_from_str(CONFIG_ZZ_BLE_COM_CONSOLE_OUT_CHR_UUID);
 
@@ -81,6 +86,8 @@ static bool backoff = false; // the last attempt failed: wait longer before the 
 static uint8_t own_addr_type = 0;
 static uint16_t service_start = 0;
 static uint16_t service_end = 0;
+static uint16_t command_handle = 0;
+static uint16_t reply_handle = 0;
 static char *rx_line = nullptr; // CONSOLE_LINE_SIZE bytes, allocated with the bridge
 static size_t rx_len = 0;
 static bool rx_discarding = false;
@@ -91,11 +98,10 @@ static std::atomic<uint16_t> conn_handle{BLE_HS_CONN_HANDLE_NONE};
 static std::atomic<uint16_t> console_in_handle{0};
 static std::atomic<uint16_t> console_out_handle{0};
 static std::atomic<bool> linked{false};
-static std::atomic<bool> pairing_failed{false};
+static std::atomic<bool> pin_rejected{false};
 static std::atomic<bool> no_console{false};
 static std::atomic<uint32_t> lost_lines{0};
 
-extern "C" void ble_store_config_init(void);
 static int on_gap_event(struct ble_gap_event *event, void *arg);
 
 static void start_scan() {
@@ -178,13 +184,46 @@ static void receive(const struct os_mbuf *om) {
     }
 }
 
-static int on_subscribed(uint16_t conn, const struct ble_gatt_error *error, struct ble_gatt_attr *, void *) {
-    if (error->status == 0) {
-        linked = true;
-    } else {
+// the robot answers on its reply characteristic, see handle_reply()
+static int on_auth_sent(uint16_t conn, const struct ble_gatt_error *error, struct ble_gatt_attr *, void *) {
+    if (error->status != 0) {
         drop_connection(conn);
     }
     return 0;
+}
+
+static int on_reply_subscribed(uint16_t conn, const struct ble_gatt_error *error, struct ble_gatt_attr *, void *) {
+    char auth[12];
+    const int len = snprintf(auth, sizeof(auth), "AUTH %06lu", static_cast<unsigned long>(pin));
+    if (error->status != 0 || ble_gattc_write_flat(conn, command_handle, auth, len, on_auth_sent, nullptr) != 0) {
+        drop_connection(conn);
+    }
+    return 0;
+}
+
+// NimBLE places the client configuration descriptor right after the value of a notifying characteristic
+static int subscribe(uint16_t conn, uint16_t value_handle, ble_gatt_attr_fn *on_done) {
+    static const uint8_t enable_notifications[2] = {1, 0};
+    return ble_gattc_write_flat(conn, value_handle + 1, enable_notifications, sizeof(enable_notifications), on_done, nullptr);
+}
+
+static int on_console_subscribed(uint16_t conn, const struct ble_gatt_error *error, struct ble_gatt_attr *, void *) {
+    if (error->status != 0 || subscribe(conn, reply_handle, on_reply_subscribed) != 0) {
+        drop_connection(conn);
+    }
+    return 0;
+}
+
+// the robot greets with "AUTH_REQUIRED" or, with its PIN deactivated, an empty line; either way it accepts the AUTH
+static void handle_reply(uint16_t conn, const struct os_mbuf *om) {
+    char reply[sizeof(AUTH_ACCEPTED)] = {};
+    os_mbuf_copydata(om, 0, std::min<int>(OS_MBUF_PKTLEN(om), sizeof(reply) - 1), reply);
+    if (strncmp(reply, AUTH_ACCEPTED, sizeof(AUTH_ACCEPTED) - 1) == 0) {
+        linked = true;
+    } else if (strncmp(reply, AUTH_REJECTED, sizeof(AUTH_REJECTED) - 1) == 0) {
+        pin_rejected = true;
+        drop_connection(conn);
+    }
 }
 
 static int on_characteristic(uint16_t conn, const struct ble_gatt_error *error, const struct ble_gatt_chr *chr, void *) {
@@ -193,14 +232,16 @@ static int on_characteristic(uint16_t conn, const struct ble_gatt_error *error, 
             console_in_handle = chr->val_handle;
         } else if (ble_uuid_cmp(&chr->uuid.u, &console_out_uuid.u) == 0) {
             console_out_handle = chr->val_handle;
+        } else if (ble_uuid_cmp(&chr->uuid.u, &command_uuid.u) == 0) {
+            command_handle = chr->val_handle;
+        } else if (ble_uuid_cmp(&chr->uuid.u, &reply_uuid.u) == 0) {
+            reply_handle = chr->val_handle;
         }
         return 0;
     }
-    if (error->status == BLE_HS_EDONE && console_in_handle != 0 && console_out_handle != 0) {
-        // NimBLE places the client configuration descriptor right after the value of a notifying characteristic
-        static const uint8_t enable_notifications[2] = {1, 0};
-        if (ble_gattc_write_flat(conn, console_out_handle + 1, enable_notifications, sizeof(enable_notifications),
-                                 on_subscribed, nullptr) == 0) {
+    if (error->status == BLE_HS_EDONE && console_in_handle != 0 && console_out_handle != 0 && command_handle != 0 &&
+        reply_handle != 0) {
+        if (subscribe(conn, console_out_handle, on_console_subscribed) == 0) {
             return 0;
         }
     } else if (error->status == BLE_HS_EDONE) {
@@ -227,7 +268,11 @@ static int on_service(uint16_t conn, const struct ble_gatt_error *error, const s
     return 0;
 }
 
-static int on_mtu(uint16_t, const struct ble_gatt_error *, uint16_t, void *) {
+// discovers the service only after the MTU exchange, so that only one request is outstanding
+static int on_mtu(uint16_t conn, const struct ble_gatt_error *, uint16_t, void *) {
+    if (ble_gattc_disc_svc_by_uuid(conn, &svc_uuid.u, on_service, nullptr) != 0) {
+        drop_connection(conn);
+    }
     return 0;
 }
 
@@ -276,49 +321,21 @@ static int on_gap_event(struct ble_gap_event *event, void *) {
         conn_handle = event->connect.conn_handle;
         console_in_handle = 0;
         console_out_handle = 0;
+        command_handle = 0;
+        reply_handle = 0;
         service_start = 0;
         service_end = 0;
         ble_gap_set_data_len(event->connect.conn_handle, 0xFB, 0x0848);
-        ble_gattc_exchange_mtu(event->connect.conn_handle, on_mtu, nullptr);
-        ble_gap_security_initiate(event->connect.conn_handle); // encrypts with a stored bond or pairs with the PIN
-        return 0;
-
-    case BLE_GAP_EVENT_PASSKEY_ACTION:
-        if (event->passkey.params.action == BLE_SM_IOACT_INPUT) {
-            struct ble_sm_io io = {};
-            io.action = BLE_SM_IOACT_INPUT;
-            io.passkey = pin;
-            ble_sm_inject_io(event->passkey.conn_handle, &io);
+        if (ble_gattc_exchange_mtu(event->connect.conn_handle, on_mtu, nullptr) != 0) {
+            drop_connection(event->connect.conn_handle);
         }
         return 0;
-
-    case BLE_GAP_EVENT_ENC_CHANGE:
-        if (event->enc_change.status == 0) {
-            if (ble_gattc_disc_svc_by_uuid(event->enc_change.conn_handle, &svc_uuid.u, on_service, nullptr) != 0) {
-                drop_connection(event->enc_change.conn_handle);
-            }
-        } else {
-            // a wrong PIN or a bond the robot no longer knows: forget ours, so that the next attempt pairs again
-            struct ble_gap_conn_desc desc;
-            if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) == 0) {
-                ble_store_util_delete_peer(&desc.peer_id_addr);
-            }
-            pairing_failed = true;
-            drop_connection(event->enc_change.conn_handle);
-        }
-        return 0;
-
-    case BLE_GAP_EVENT_REPEAT_PAIRING: {
-        struct ble_gap_conn_desc desc;
-        if (ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc) == 0) {
-            ble_store_util_delete_peer(&desc.peer_id_addr);
-        }
-        return BLE_GAP_REPEAT_PAIRING_RETRY;
-    }
 
     case BLE_GAP_EVENT_NOTIFY_RX:
         if (event->notify_rx.attr_handle == console_out_handle) {
             receive(event->notify_rx.om);
+        } else if (event->notify_rx.attr_handle == reply_handle && !linked) {
+            handle_reply(event->notify_rx.conn_handle, event->notify_rx.om);
         }
         return 0;
 
@@ -390,16 +407,8 @@ BleBridge::BleBridge(const std::string name) : ConsoleBridge(name) {
     if (err != ESP_OK) {
         throw std::runtime_error(std::string("nimble_port_init failed: ") + esp_err_to_name(err));
     }
-    ble_store_config_init();
     ble_hs_cfg.reset_cb = on_reset;
     ble_hs_cfg.sync_cb = on_sync;
-    ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
-    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_KEYBOARD_ONLY; // the robot shows its PIN, the bridge enters it
-    ble_hs_cfg.sm_bonding = 1;
-    ble_hs_cfg.sm_mitm = 1;
-    ble_hs_cfg.sm_sc = 1;
-    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
-    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
     ble_svc_gap_init();
     ble_svc_gatt_init();
     ble_svc_gap_device_name_set(name.c_str());
@@ -455,8 +464,8 @@ void BleBridge::step() {
             echo("%s: link to \"%s\" closed", this->name.c_str(), this->linked_name.c_str());
         }
     }
-    if (pairing_failed.exchange(false)) {
-        echo("warning: %s could not pair with \"%s\", check the PIN", this->name.c_str(), this->link_target.c_str());
+    if (pin_rejected.exchange(false)) {
+        echo("warning: %s: \"%s\" rejected the PIN", this->name.c_str(), this->link_target.c_str());
     }
     if (no_console.exchange(false)) {
         echo("warning: \"%s\" offers no Bluetooth console (Lizard too old?)", this->link_target.c_str());

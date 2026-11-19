@@ -90,7 +90,8 @@ core.restart()
 ```
 
 Both scripts can also be uploaded with `configure.py`, e.g. `./configure.py dongle.liz /dev/ttyUSB1`.
-The dongle prints `usb: linked to "robot"` once it has paired and reconnects by itself after a reset of either ESP32.
+The dongle sends the PIN as `AUTH <pin>`, prints `usb: linked to "robot"` once the robot has accepted it, and reconnects by itself after a reset of either ESP32.
+With the robot's PIN deactivated (`bluetooth.deactivate_pin()`), the robot accepts any PIN.
 From now on the host talks to the dongle's serial port as if it were the robot's UART0, e.g. with `./monitor.py /dev/ttyUSB1`, `./configure.py`, or RoSys pointed at that device:
 
 ```
