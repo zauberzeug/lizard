@@ -13,6 +13,13 @@ Shadows are useful if multiple modules should behave exactly the same, e.g. two 
 
 The `broadcast` method is used internally with [port expanders](#expander).
 
+A module reserves the pins and peripherals it uses on its microcontroller, i.e. GPIO pins, UART ports, the CAN controller and ADC units, until the core restarts.
+I2C modules on the same port share its SDA and SCL pins, which stay reserved for that port.
+Creating a module on a reserved pin or peripheral fails with an error that names the owner, e.g. `pin 15 is already used by module "led"`.
+In the startup script, such an error stops the script like any other error (see [Startup Script](getting_started.md#startup-script)).
+The console UART with its pins and the pins of the SPI flash are reserved from the start.
+Only a serial bus can take over the console UART (see [Console as Link](#serial-bus)).
+
 ## Core
 
 The core module encapsulates various properties and methods that are related to the microcontroller itself.
@@ -25,27 +32,31 @@ It is automatically created right after the boot sequence.
 | `core.heap`             | Free heap memory (bytes)                                        | `int`     |
 | `core.last_message_age` | Time since last input message was received and interpreted (ms) | `int`     |
 
-| Methods                          | Description                                                         | Arguments    |
-| -------------------------------- | ------------------------------------------------------------------- | ------------ |
-| `core.restart()`                 | Restart the microcontroller                                         |              |
-| `core.version()`                 | Show project name and version                                       |              |
-| `core.info()`                    | Show project name, version, compile time and IDF version            |              |
-| `core.print(...)`                | Print arbitrary arguments to the command line                       | arbitrary    |
-| `core.output(format)`            | Define the output format                                            | `str`        |
-| `core.startup_checksum()`        | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes) |              |
-| `core.get_pin_status(pin)`       | Print the status of the chosen pin                                  | `int`        |
-| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level                     | `int`, `int` |
-| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register                  | `int`        |
-| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS                   |              |
-| `core.set_baudrate(baud)`        | Persist UART0 baud rate (applied after restart)                     | `int`        |
-| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)                             |              |
-| `core.resume_broadcasts()`       | Resume property broadcasts                                          |              |
-| `core.clear_schedule()`          | Discard all pending scheduled blocks                                |              |
-| `core.keep_alive()`              | Reset `last_message_age` without producing output                   |              |
+| Methods                          | Description                                                                                        | Arguments    |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- | ------------ |
+| `core.restart()`                 | Restart the microcontroller                                                                        |              |
+| `core.version()`                 | Show project name and version                                                                      |              |
+| `core.info()`                    | Show project name, project version (and Lizard version if different), compile time and IDF version |              |
+| `core.print(...)`                | Print arbitrary arguments to the command line                                                      | arbitrary    |
+| `core.output(format)`            | Define the output format                                                                           | `str`        |
+| `core.startup_checksum()`        | Show 16-bit checksum of the startup script (sum of its UTF-8 bytes), or the error of a failed `!.` |              |
+| `core.get_pin_status(pin)`       | Print the status of the chosen pin                                                                 | `int`        |
+| `core.set_pin_level(pin, value)` | Turns the pin into an output and sets its level                                                    | `int`, `int` |
+| `core.get_pin_strapping(pin)`    | Print value of the pin from the strapping register                                                 | `int`        |
+| `core.forget_serial_bus()`       | Remove the saved SerialBus configuration from NVS                                                  |              |
+| `core.set_baudrate(baud)`        | Persist UART0 baud rate (applied after restart)                                                    | `int`        |
+| `core.pause_broadcasts()`        | Pause property broadcasts (all modules)                                                            |              |
+| `core.resume_broadcasts()`       | Resume property broadcasts                                                                         |              |
+| `core.clear_schedule()`          | Discard all pending scheduled blocks                                                               |              |
+| `core.keep_alive()`              | Reset `last_message_age` without producing output                                                  |              |
+| `core.telemetry(...)`            | Define a telemetry frame of properties and variables                                               | see below    |
+| `core.telemetry_info()`          | Send the layout lines of all telemetry frames again and ask passed-on bus peers for theirs         |              |
+| `core.clear_telemetry()`         | Clear all telemetry frames                                                                         |              |
 
 The output `format` is a string with multiple space-separated elements of the pattern `<module>.<property>[:<precision>]` or `<variable>[:<precision>]`.
 The `precision` is an optional integer specifying the number of decimal places for a floating point number.
 For example, the format `"core.millis input.level motor.position:3"` might yield an output like `"92456 1 12.789"`.
+An empty format `""` stops the core line until a new format is set.
 
 `core.get_pin_status(pin)` reads the pin's voltage, not the output state directly.
 
@@ -53,8 +64,83 @@ For example, the format `"core.millis input.level motor.position:3"` might yield
 The console (UART0) defaults to 115200 baud.
 `core.set_baudrate(baud)` persists a new rate to non-volatile storage; it takes effect on the next restart, so the change is not a breaking one for hosts that are not updated yet.
 After `core.set_baudrate(921600)` followed by `core.restart()`, reconnect with the host tools at the new rate, e.g. `./monitor.py /dev/ttyUSB0 --baud 921600` (`monitor.py`, `configure.py` and `otb_update.py` all accept `--baud`, defaulting to 115200).
-Supported rates are 115200, 230400, 460800 and 921600.
+Supported rates are 115200, 230400, 460800, 921600, 1000000, 1500000, 2000000 and 3000000.
+Above 921600, check which rates the host's UART actually produces: a Jetson Orin, for example, produces 1000000, 1500000 and 3000000 exactly, but 2000000 about 2 % too slow.
+Some USB-UART bridges stop below 3000000.
+The host's UART also has to keep up with the rate: a Jetson whose UART received without DMA lost 5 to 20 % of the core's lines at 1500000 to 3000000 (see [discussion #260](https://github.com/zauberzeug/lizard/discussions/260)), while with RX DMA enabled in its device tree it ran clean up to 3000000.
+If the host cannot talk to the core at the new rate, erase the chip with `./espresso.py erase` and flash it again.
+Erasing also clears the startup script and the other settings stored in non-volatile storage, so configure the core again afterwards.
 Note that the ROM bootloader and the early boot log always use 115200 regardless of this setting, so pre-application boot output will look garbled at higher rates.
+
+**Console load:**
+Sending a line blocks the main loop until its bytes are on the wire, so at 115200 baud only about 115 bytes fit into one 10 ms cycle.
+When printing is what stretches at least half of the cycles well past their 10 ms for three seconds in a row, Lizard warns, e.g. `warning: printing stretched the loop to 83 ms, the console baud rate is too low for its output`, at most once a minute.
+Print less, for example by broadcasting fewer proxies, or raise the baud rate.
+On an expander the console is its serial link to the core: the warning arrives there with the expander's name in front, e.g. `p: warning: …`, and the rate in question is that of the link, not the core's UART0.
+
+**Telemetry frames:**
+`core.telemetry(...)` sends properties and variables in binary form, as one line per frame next to the text lines on the console.
+Layout lines name and type the fields, so a reader needs no configuration.
+
+```
+core.telemetry(imu.yaw, imu.pitch, imu.temp)                   # frame 1, every step
+core.telemetry(wheels.linear_speed, wheels.angular_speed, 20)  # frame 2, every 20 ms
+```
+
+Each call defines one frame, or several if its values take more than 180 bytes (see below); frame IDs count up from 1 in the order of definition.
+The arguments are properties or variables of type `bool`, `int` or `float`, and a field may appear in several calls, but only once per call.
+A field's name, `<module>.<property>` or the variable's name, has at most 200 characters.
+An integer literal as last argument is the interval in milliseconds (0 to 3600000); an `int` variable or property in that place is a field.
+Without an interval or with 0, the frame is sent every step.
+Frames go out with the 10 ms steps, so the gaps between them vary, e.g. 10 and 20 ms for an interval of 15 ms, but match the interval on average.
+Frames are built at the end of the step, after modules, rules and routines, so all fields of a frame come from the same step.
+The values of one frame take at most 180 bytes, e.g. 45 floats.
+A call whose values take more is split into several frames, each filled up in the order of the arguments, with its own frame ID and layout.
+These frames share their timer and are sent in the same step, only once all of them are announced, so they carry the same millis and a reader can merge them into one step by that time.
+Every one of them counts against the limit of 255 frames.
+`core.clear_telemetry()` removes all frames and frees their IDs.
+
+A frame line is `~<base64>@xx`: a tilde, the Base64 encoding of the frame body (standard alphabet with `=` padding) and the usual [checksum](machine_safety.md#checksums).
+
+| Bytes | Content                                                           |
+| ----- | ----------------------------------------------------------------- |
+| 1     | frame ID                                                          |
+| 1     | layout ID, see below                                              |
+| 1     | sequence number per frame ID, modulo 256; a gap means lost frames |
+| 4     | time since booting (ms) when the frame was built                  |
+| n     | values of the fields                                              |
+| 2     | CRC-16/CCITT-FALSE over all preceding bytes                       |
+
+The sequence number starts at 0 when a frame is defined, also when its ID is reused after `core.clear_telemetry()`.
+The `float` and `int` fields come first, in the order of the arguments: a `float` as float32, an `int` as its low 32 bits, so a value beyond the int32 range wraps around instead of sticking at the limit.
+Every reader, the host decoder included, reads them as int32.
+Send an age rather than a timestamp: a timestamp in µs like `last_heartbeat` of a CANopen motor turns negative after 36 minutes, and a host reads the time of the sender from the header anyway.
+The `bool` fields follow as bits in their order, least significant bit first, padded to a full byte.
+All multi-byte numbers, including the time and the CRC, are little-endian.
+
+A layout line `__LAYOUT__v1 <frame>.<index>/<count> <layout ID> <name>:<type>` describes one field: its frame ID, its position from 0, the number of fields in the frame, the layout ID in two hex digits, its name and its type: `f` for `float`, `i` for `int` or `?` for `bool`.
+For example, `core.telemetry(motor.position, motor.axis_state, motor.enabled)` yields:
+
+```
+__LAYOUT__v1 1.0/3 bf motor.position:f@4a
+__LAYOUT__v1 1.1/3 bf motor.axis_state:i@76
+__LAYOUT__v1 1.2/3 bf motor.enabled:?@6d
+~Ab8HQOIBALbznT8IAAAAAY/t@25
+```
+
+The frame body `01 bf 07 40e20100 b6f39d3f 08000000 01 8fed` holds frame ID 1, layout ID `bf`, sequence number 7, millis 123456, the values 1.234, 8 and true, and the CRC.
+
+The layout ID is the low byte of the CRC-16/CCITT-FALSE over the fields as `<name>:<type>`, separated by spaces, here `motor.position:f motor.axis_state:i motor.enabled:?`.
+A reader decodes a frame only with layout lines of the same frame ID and layout ID, so a frame ID that `core.clear_telemetry()` frees and a new frame reuses is not decoded with the old fields.
+Different fields get the same layout ID with a chance of 1 in 256.
+
+Layout lines go out when a frame is defined and on `core.telemetry_info()`, four per step in the order of the frames.
+A new frame is sent for the first time once all of its layout lines are out.
+Frames that are already running keep coming while `core.telemetry_info()` repeats their layout lines, except on a serial bus peer, see [Serial Bus](#serial-bus).
+There is no timer for them: a host that connects later or logs for hours calls `core.telemetry_info()` itself.
+On a serial bus peer, frames and layout lines go to the coordinator once it polls the peer, see [Serial Bus](#serial-bus).
+Only the prefix `~` and the word `__LAYOUT__` stay the same in future versions of the format; the version is part of each layout line.
+On the host, the [`lizard_host`](tools.md#telemetry-decoder) package decodes these lines.
 
 ## Bluetooth
 
@@ -73,18 +159,28 @@ Clients uploading many lines at once should therefore pace their writes or wait 
 | `bluetooth.connected`        | Whether a device is currently connected                  | `bool`    |
 | `bluetooth.last_message_age` | Time since the last line was received via Bluetooth (ms) | `int`     |
 
-| Methods                      | Description                                             | Arguments |
-| ---------------------------- | ------------------------------------------------------- | --------- |
-| `bluetooth.send(data)`       | send `data` via notification                            | `str`     |
-| `bluetooth.set_pin(pin)`     | set 6-digit user PIN (000000-999999)                    | `int`     |
-| `bluetooth.get_pin()`        | print current user PIN or "No user PIN set"             |           |
-| `bluetooth.reset_pin()`      | remove the user PIN                                     |           |
-| `bluetooth.reset_bonds()`    | forget all bonded devices saved in NVS (BLE bond store) |           |
-| `bluetooth.deactivate_pin()` | Disables PIN enforcement                                |           |
+| Methods                      | Description                                 | Arguments |
+| ---------------------------- | ------------------------------------------- | --------- |
+| `bluetooth.send(data)`       | send `data` via notification                | `str`     |
+| `bluetooth.set_pin(pin)`     | set 6-digit user PIN (000000-999999)        | `int`     |
+| `bluetooth.get_pin()`        | print current user PIN or "No user PIN set" |           |
+| `bluetooth.reset_pin()`      | remove the user PIN                         |           |
+| `bluetooth.deactivate_pin()` | Disables PIN enforcement                    |           |
 
 Lizard will offer a service 23014CCC-4677-4864-B4C1-8F772B373FAC and a characteristic 37107598-7030-46D3-B688-E3664C1712F0
 that allows writing Lizard statements like on the command line.
 On a second characteristic 19f91f52-e3b1-4809-9d71-bc16ecd81069 notifications will be emitted when `send(data)` is executed.
+
+Access is guarded by a PIN on application level; connections are neither encrypted nor bonded.
+When a client enables notifications, Lizard sends `AUTH_REQUIRED` if a PIN is needed and an empty line otherwise.
+A phone bonded under older firmware gets its subscription restored on connection and can miss this greeting; it can write an empty line instead, which Lizard answers with `AUTH_REQUIRED` if a PIN is needed.
+The client then writes `AUTH <pin>` and receives `POST /notification Connected` or `AUTH_FAIL`.
+Until then, Lizard answers every other line with `AUTH_REQUIRED` and does not execute it.
+`bluetooth.send(data)` does not reach the client before it has entered the PIN either.
+After three wrong PINs or 30 seconds without a PIN attempt, Lizard closes the connection.
+The PIN is the user PIN set with `bluetooth.set_pin(pin)` or, without one, the PIN configured at build time; Lizard prints it on every connection.
+After `bluetooth.deactivate_pin()`, every client is accepted without a PIN until the next restart.
+Note that the PIN is sent unencrypted, so it keeps out accidental connections but not someone listening in.
 
 Three more characteristics carry the console for a [BLE bridge](#ble-bridge) dongle.
 75cdc16b-212b-4176-8bb8-4222f21cc826 takes console lines as a byte stream, each terminated by a newline, and runs them like lines on UART0, including `!+` and `!.` startup editing.
@@ -92,13 +188,9 @@ f8f511b2-1401-4e28-82f1-ad753df3b750 streams every console line via notification
 Both carry the lines like UART0 does: output lines end with their `@xx` checksum, and input lines may carry one, which is checked.
 d1e7616c-a8ac-4ec8-9c49-3ae32a008a89 notifies how many input bytes (each line with its newline) and lines the robot has processed since the connection began, as two little-endian 32-bit counters.
 A client that keeps less than 8 KB and 64 lines of its input unprocessed never loses a line; without this flow control, lines that arrive faster than the robot processes them are dropped.
-The characteristics only serve an authenticated central, or every central after `bluetooth.deactivate_pin()`.
-A laptop can use them directly as well, e.g. with Python's `bleak`; the robot asks such a central for a connection interval of 7.5 to 15 ms.
-
-The Bluetooth module stores up to four devices.
-When a fifth connects, the oldest entry is removed.
-
-To force re-pairing, call `bluetooth.reset_bonds()` to clear stored bonds, then restart the ESP to apply the change.
+The console is guarded by the same PIN: a client writes `AUTH <pin>` to the command characteristic and waits for `POST /notification Connected` on the second one before its console input is run and the console output reaches it.
+After `bluetooth.deactivate_pin()`, the console serves every client right away.
+A laptop can use the characteristics directly as well, e.g. with Python's `bleak`; the robot asks such a client for a connection interval of 7.5 to 15 ms.
 
 Unlike `core.last_message_age`, which any input channel resets, `bluetooth.last_message_age` only counts lines received via Bluetooth.
 Together with `connected`, it lets rules and the host tell a silent or disconnected app apart from a host that keeps talking on UART0.
@@ -107,8 +199,9 @@ Neither property stops anything by itself; use the wheels' `drive_command_timeou
 ## BLE Bridge
 
 The BLE bridge makes an ESP32 a Bluetooth dongle for a robot's console.
-It connects as a BLE central to the robot's [Bluetooth](#bluetooth) module, which it finds by the advertised device name, and pairs with the robot's PIN.
-After a reset or a radio loss on either side, it reconnects by itself with the stored bond.
+It connects as a BLE central to the robot's [Bluetooth](#bluetooth) module, which it finds by the advertised device name, and authenticates with the robot's PIN by writing `AUTH <pin>`.
+A wrong PIN is reported as a warning, and the bridge tries again after 5 seconds.
+After a reset or a radio loss on either side, it reconnects and authenticates by itself.
 BLE hops between 37 channels, which helps in crowded radio environments like a trade fair.
 
 Every line the host writes to the dongle's UART0 is forwarded to the robot, and the robot's console comes back unprefixed, so the host talks to the dongle as if it were the robot's UART0.
@@ -129,11 +222,11 @@ The link carries about 50 kB/s in each direction, so at 115200 baud the UARTs ar
 | `bridge.tx`        | lines forwarded to the robot                  | `int`     |
 | `bridge.lost`      | lines dropped (link down or queues full)      | `int`     |
 
-| Methods                         | Description                                           | Arguments    |
-| ------------------------------- | ----------------------------------------------------- | ------------ |
-| `bridge.link(device_name)`      | connect to the robot, pairing with the developer PIN  | `str`        |
-| `bridge.link(device_name, pin)` | same, pairing with the robot's user PIN (`set_pin()`) | `str`, `int` |
-| `bridge.unlink()`               | disconnect and stop forwarding                        |              |
+| Methods                         | Description                                   | Arguments    |
+| ------------------------------- | --------------------------------------------- | ------------ |
+| `bridge.link(device_name)`      | connect to the robot with the developer PIN   | `str`        |
+| `bridge.link(device_name, pin)` | same, with the robot's user PIN (`set_pin()`) | `str`, `int` |
+| `bridge.unlink()`               | disconnect and stop forwarding                |              |
 
 Robot and dongle startup scripts (see the [examples](examples.md#use-a-wireless-console-dongle) for the complete setup):
 
@@ -164,12 +257,32 @@ The serial bus module lets multiple ESP32s share a UART link with a coordinator 
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
 | `bus.offset_<id>`          | Estimated clock offset of peer `<id>` (peer clock minus coordinator clock) in milliseconds, NaN while invalid | `float`   |
 | `bus.offset_<id>_accuracy` | Error bound of `offset_<id>` in milliseconds (the true offset lies within `offset_<id>` ± this value)         | `float`   |
+| `bus.telemetry_errors`     | Malformed telemetry frames and layout lines of passed-on or mirrored peers, e.g. with a wrong CRC             | `int`     |
+| `bus.telemetry_dropped`    | Telemetry frames of any peer dropped for room in the inbound queue, e.g. while layout lines are awaited       | `int`     |
+| `bus.ignored_lines`        | Received lines that are no bus messages and were not printed, e.g. the boot output of a peer                  | `int`     |
 
-| Methods                             | Description                                                                                                                                 | Arguments         |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ... |
-| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s            |
-| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                   |
+| Methods                             | Description                                                                                                                                 | Arguments          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `bus.send(receiver, fmt, args...)`  | Send a printf-formatted line to peer `receiver` (0-254). Specifiers: `%d` int, `%f` number (opt. `%.Nf`), `%s` string (bool→`true`/`false`) | `int`, `str`, ...  |
+| `bus.make_coordinator(peer_ids...)` | Set the list of peer IDs, making this node the coordinator                                                                                  | `int`s             |
+| `bus.enable_time_sync()`            | Enable clock offset estimation between coordinator and peers (call on all nodes)                                                            |                    |
+| `bus.pass_telemetry(peer_ids...)`   | Pass the telemetry frames of these peers, or of all peers without IDs, on to the console                                                    | `int`s             |
+| `bus.flash_peer(id, boot, enable)`  | Flash peer `id` through its boot and enable outputs with this node's firmware (see [Flashing a Peer](#serial-bus))                          | `int`, 2x `Output` |
+
+The coordinator prints the lines that reach it from its peers, e.g. `Ready.` and the output of commands sent with `bus.send()`, with the coordinator's name for the bus and the peer's ID in front, e.g. `bus[2]: Ready.` for peer 2 of a bus that the coordinator calls `bus`.
+So two buses of a node, e.g. `plexus` and `p0`, keep their peers apart, also when both have a peer 2.
+
+**Polling:**
+The coordinator polls its peers in turn, and a peer answers with the messages it has queued.
+A poll that its peer does not answer within 250 ms times out with `warning: serial bus <name> poll to <id> timed out`.
+The warning comes once until the peer answers again, e.g. after its restart, and then the coordinator prints `serial bus <name>: peer <id> answers again after <n> timed out polls`.
+
+**Other Lines:**
+Lines on the link that are no bus messages are not processed, e.g. the boot output or a panic of a peer, or what a peer prints whose bus has not taken over its console.
+A coordinator prints those that are readable text, without their Lizard checksum if they have one.
+With a single peer it prints them as lines of that peer, e.g. `bus[2]: Guru Meditation Error: ...`, and with several peers, any of which may have sent the line, with only its name for the bus in front, e.g. `bus: Guru Meditation Error: ...`.
+All others, and all such lines on a peer, are counted in `ignored_lines` and reported with `warning: serial bus <name> ignored <n> lines that are no bus messages`, at most once per second.
+The ROM bootloader and the boot log of a peer always print at 115200 baud, whatever the rate of the link; on a link with another rate they arrive as an unreadable line, so a restart of the peer is followed by one warning about an ignored line.
 
 **Time Synchronization:**
 Calling `bus.enable_time_sync()` on the coordinator _and_ all peers enables passive clock offset estimation on top of the regular poll cycle.
@@ -193,18 +306,163 @@ This is intended for timestamping sensor data (e.g. wheel odometry) received fro
 - Compatibility: update the coordinator's firmware first, and treat `__POLL__<digits>` and `__DONE__<digits>,<digits>,<digits>` payloads as reserved for this protocol.
   A coordinator sends a sequence number in its POLL only to peers that have answered with a stamped DONE, so peers with older firmware keep working (without an estimate) until they are updated.
 
+**Telemetry Frames:**
+A peer that defines [telemetry frames](#core) with `core.telemetry(...)` sends them to its own console until a coordinator polls it, and from then on to the coordinator until the peer restarts.
+A peer whose console is the bus link holds them back until then (see [Console as Link](#serial-bus)).
+With the first poll the peer sends their layout lines again, this time to the coordinator.
+While layout lines go to the coordinator, the peer holds back all of its frames.
+Then it keeps the newest frame of each ID in a slot and sends the slots with the next poll, so a poll delivers the current values and no backlog, and a frame ID arrives at most once per poll of its peer.
+A frame that is replaced before it was sent does not count in the sequence number, so a gap is still a loss.
+A peer has eight slots; a frame beyond them is not sent, and the peer warns on its own console and through the coordinator, at most every 10 s.
+A call that is split into several frames takes one slot per frame; if the slots run out within a call, only its first frames are sent.
+The frames of a split call arrive as one step only while a poll can carry them within their interval; a peer that sends more than the bus carries delivers steps with some of their frames missing, without a gap in the sequence numbers.
+
+The coordinator checks payloads starting with `~` or `__LAYOUT__` and never processes them as Lizard code.
+`bus.pass_telemetry()` passes the frames and layout lines of all peers on to the console with the coordinator's name for the bus and the peer's ID in front, here `bus[2]: `, and `bus.pass_telemetry(2)` only those of peer 2:
+
+```
+bus = SerialBus(serial, 1)
+bus.make_coordinator(2, 3)
+bus.pass_telemetry(2)
+```
+
+```
+bus[2]: __LAYOUT__v1 1.0/2 d3 motor.position:f@52
+bus[2]: __LAYOUT__v1 1.1/2 d3 motor.enabled:?@76
+bus[2]: ~AdMHQOIBALbznT8BIbs=@31
+```
+
+Each call replaces the selection of the previous one; without a call nothing is passed on.
+Peers send their frames over the bus whether they are passed on or not.
+The coordinator drops the frames of a peer it neither passes on nor mirrors with a [BusTelemetry](#bus-telemetry) without checking them.
+Malformed frames and layout lines of passed-on or mirrored peers, e.g. no valid Base64 or with a wrong CRC, are dropped and counted in `telemetry_errors`.
+
+- Recovery: when a frame arrives whose layout the coordinator does not have or that does not match the frame, e.g. because `pass_telemetry` came after the peer sent its layout lines or the coordinator booted after the peer, it asks the peer for its layout lines with `core.telemetry_info()`, at most every 2 s.
+  Until the first of them arrives, at most for 2 s, it does not pass the peer's frames on and counts them in `telemetry_dropped`, since printing the frames queued ahead of the layout lines would keep the inbound queue full and drop those.
+  A [BusTelemetry](#bus-telemetry) of the peer still gets them.
+  Frames from before the request are passed on anyway, so a reader skips frames whose layout it has not seen yet.
+  When the peer reports `Ready.`, the coordinator forgets its layouts; the peer sends them again with the first poll.
+- Late hosts: `core.telemetry_info()` on the coordinator also asks every passed-on peer of its `make_coordinator` list for its layout lines, so a host that connects later gets them too.
+- Queues: a bus keeps the messages of each direction at their length in a queue of 4 KB, and telemetry leaves room for eight of the longest messages free (frames on the coordinator, layout lines on the peer), so commands, their replies and update chunks still get through while frames pile up, e.g. while long prints or the startup block the coordinator.
+  A message takes its length plus 11 to 14 bytes, and a frame is stored without its bus header and checksum, so the room left to telemetry holds 35 frames of 4 floats or 12 frames of 20 floats.
+  Lost telemetry recovers by itself: the next frame replaces a lost one, and missing layout lines are requested again.
+  Frames dropped this way are counted in `telemetry_dropped`.
+- Bus load: a frame of n floats or ints is a line of about 5.3·n + 25 bytes, on the bus as well as on the coordinator's console.
+  A frame of 20 floats takes 132 bytes, i.e. 2.9 ms at 460800 baud; 100 such frames per second would take almost a third of the bus.
+  The most one poll can carry is all eight slots with the largest frame of 45 floats, about 2.1 KB:
+  46 ms at 460800 baud, but 180 ms at 115200 baud, close to the coordinator's poll timeout of 250 ms.
+  The room left to telemetry in the coordinator's queue holds six of these frames, so its loop has to take them while they arrive.
+- Console load: the coordinator prints every frame it passes on, and printing blocks its loop until the line is on the wire (see [Console load](#core)).
+  So every passed-on frame adds its line's time to the coordinator's loop: a frame of 45 floats takes 5.8 ms at 460800 baud, and one of them every 10 ms already needs more than half of the loop.
+  A step handles only the messages that were waiting when it started, so frames that arrive faster than the console prints them slow the loop down instead of stalling it; those that no longer fit into the inbound queue are dropped and counted in `telemetry_dropped`.
+- Compatibility: update the coordinator's firmware first, since an older coordinator tries to run the peer's frames and layout lines as Lizard code.
+  Payloads starting with `~` or `__LAYOUT__` are reserved for telemetry.
+
 **Bus Backup:**
 When a SerialBus is created, its configuration (pins, baud rate, UART number, node ID) is automatically saved to non-volatile storage.
 If multiple SerialBus modules exist, only the first one is backed up.
 On boot, if the startup script does not create a SerialBus but a backup config exists,
 Lizard removes all existing Serial modules and recreates the SerialBus from the saved config.
 This keeps the node reachable over the bus even if a broken script is deployed, avoiding the need for physical USB access.
+A bus on the console is restored the same way and takes over the console again (see [Console as Link](#serial-bus)).
 To remove the saved configuration, call `core.forget_serial_bus()`.
+
+**Console as Link:**
+A node can use its console UART as a bus link, e.g. a port expander that is wired to the core by its console pins:
+
+```
+serial = Serial(3, 1, 115200, 0)
+bus = SerialBus(serial, 2)
+```
+
+A serial on UART0 with the console's RX and TX pins (3 and 1 on an ESP32, 44 and 43 on an ESP32-S3) leaves the console alone until a serial bus is created on it.
+From then on, only the bus reads and writes UART0, at the serial's baud rate, and the node runs no console lines, only commands from the bus.
+Everything the node prints goes to the node that polls it, which prints it as a line of this peer, e.g. `bus[2]: ...`.
+That includes replies, warnings and the output of unmuted modules.
+Lines printed before the first poll wait in the bus queue; when only the room for eight of the longest messages is free, further lines are dropped and a warning with their number follows.
+The node does not print `Ready.` on its console; the coordinator prints it with the first answer, e.g. `bus[2]: Ready.`.
+Telemetry frames and their layout lines wait for the first poll.
+While the bus has the console, ESP-IDF log and ROM output is dropped, but a panic still reaches the wire (see [Other Lines](#serial-bus)).
+Put the two lines at the top of the startup script, so that the output of the lines below reaches the coordinator, including an error that stops the script.
+What the node prints before the bus takes over the console still goes out on the console itself, e.g. an error in a line above the two.
+While the bus backup holds a bus on the console pins, i.e. from the boot after the first one with that bus, the console starts at the bus's baud rate instead of its own, so that the coordinator can read these lines and prints them (see [Other Lines](#serial-bus)).
+If no bus takes the console over during such a boot, the console returns to its own baud rate before it prints `Ready.`.
+A startup script that keeps failing is skipped after two failed boots (see [Startup Script](getting_started.md#startup-script)); the bus backup then takes over the console again, and the lines the node printed before tell the coordinator why.
+The console stays silent on USB as long as the startup script or the bus backup creates the bus, also after `./espresso.py flash`, which keeps both.
+To get it back, send the node `!-`, `!.` and `core.forget_serial_bus()` over the bus and restart it, or erase its flash with `./espresso.py erase` and flash it again; it then runs at its own baud rate again (see [`core.set_baudrate()`](#core)).
+
+**Flashing a Peer:**
+A coordinator can flash a peer that is wired to it by the bus's RX and TX pins and by two outputs to the peer's GPIO0 and EN, e.g. a port expander:
+
+```
+serial = Serial(26, 27, 460800, 1)
+p0 = SerialBus(serial, 1)
+p0.make_coordinator(2)
+p0_boot = Output(25)
+p0_boot.on()
+p0_enable = Output(14)
+p0_enable.on()
+```
+
+Keep both outputs on while the peer runs, and turn the boot output on first, so that the peer starts its firmware and not its bootloader.
+With these lines in the coordinator's startup script, `p0.flash_peer(2, p0_boot, p0_enable)` flashes the peer, sent once, e.g. from the command line; in the startup script it would flash the peer with every boot.
+A port expander on a Robot Brain does not run while its enable pin is not driven high.
+
+`flash_peer` copies this node's firmware onto the peer like `expander.flash()` at 921600 baud, whatever the link's rate, which erases the peer's NVS, i.e. its startup script, its bus backup and a persisted console baud rate.
+It needs no answer from the peer, so it also flashes a peer without firmware.
+It does not check the strapping pins; a peer that does not enter its bootloader fails the transfer before anything is erased.
+The copy boots with its console at 115200 baud; the coordinator writes it the two lines of a bus on its console as its startup script, with the baud rate of the coordinator's serial and the ID `id`, and restarts it (see [Console as Link](#serial-bus)).
+The rest of the peer's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
+`flash_peer` blocks the main loop for the whole transfer like `expander.flash()`.
+It fails if another module uses the serial, if `boot` or `enable` is no output on a pin of this node, or if the copy does not report `Ready.` within 5 s.
+It drives the two pins itself while flashing; afterwards they are high and follow their outputs again, and a peer that a failed transfer left in its bootloader is restarted through its enable pin.
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.
 Use the `otb_update.py` tool to push new firmware to any peer node.
 See [OTB Update](tools.md#otb-update) for details.
+
+## Bus Telemetry
+
+On a serial bus coordinator, a BusTelemetry module mirrors values that one peer sends in its [telemetry frames](#core), so that rules, `core.output` and the coordinator's own frames can use them.
+
+| Constructor                        | Description                     | Arguments          |
+| ---------------------------------- | ------------------------------- | ------------------ |
+| `arm = BusTelemetry(bus, peer_id)` | Mirror values of peer `peer_id` | `SerialBus`, `int` |
+
+The module has no properties of its own.
+Each value it mirrors is a [property declaration](language.md) with the name the peer gives the field:
+
+```
+bus = SerialBus(serial, 1)
+bus.make_coordinator(2)
+arm = BusTelemetry(bus, 2)
+bool arm.motor.enabled = false    # property motor.enabled of peer 2
+float arm.motor.position = 0.0
+bool arm.parked = false           # variable parked of peer 2
+when arm.motor.enabled then wheels.locked = true end
+core.telemetry(wheels.linear_speed, arm.motor.position, 100)
+```
+
+Peer 2 has to send these values in one of its frames, e.g. with `core.telemetry(motor.position, motor.enabled, parked, 100)` in its startup.
+Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `arm2 = BusTelemetry(bus, 3)`.
+
+- Declarations: only `bool`, `int` and `float` can be declared.
+  Declaring a name again with the same type only sets the value while no frame has delivered one yet.
+  Another type is an error, and so is the same name of the same peer in a second module, e.g. `"motor.position" of peer 2 is already declared by arm`.
+- Values: a declared property is read-only.
+  It keeps its declared value until a frame delivers one, and its last value when the peer stops sending or restarts.
+  An `int` arrives as int32, as at every reader of the [frame format](#core), so a value beyond that range wraps around.
+- Layouts: mirroring works whether or not the coordinator passes the peer's frames on.
+  A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after; the other mirrored values keep following meanwhile.
+  When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field, and the check for missing names runs again.
+- Warnings: a field the peer sends with another type is not mirrored, and the module warns once, e.g. `warning: arm: peer 2 sends "motor.position" as a boolean, not a number`.
+  When the peer's frames arrive but none carries a declared name within 5 s, the module warns once, e.g. `warning: arm: no frame of peer 2 carries "parked"`.
+  Both warnings come once per run of the peer, i.e. again after its `Ready.`.
+  When no frame of the peer arrives within 5 s of a declaration or of the peer's `Ready.`, e.g. because its startup sends none, the peer ID is wrong or the peer is not polled, the module warns once, e.g. `warning: arm: no frame of peer 2 within 5 s`.
+  A peer whose layout lines have another version than this node reads is not mirrored; the bus warns once per run of the peer, e.g. `warning: serial bus bus does not read layout version 2 of peer 2, only version 1`, and the module does not report its names as missing.
+- Cost: each mirrored value takes about 100 bytes of heap on the coordinator.
+  Rules over many mirrored values are expensive on their own, so a peer should compute a predicate like `parked` itself and the coordinator mirror one bool.
 
 ## Input
 
@@ -276,20 +534,34 @@ The PWM output module is associated with a digital output pin that is connected 
 
 The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
 When using multiple PWM outputs, set different channel IDs to avoid conflicts.
-Channels sharing a timer also share its frequency; use different timers to run outputs at independent frequencies.
+Channels sharing a timer also share its frequency: a new output adopts the timer's frequency, and setting `frequency` on one output changes it for all of them.
+Use different timers to run outputs at independent frequencies.
+The lowest reachable frequency is about 4 Hz on the ESP32 and about 70 Hz on the ESP32-S3; lower values are rejected with an error.
+On the ESP32-S3 all timers share one clock source, so the 70 Hz are only reachable while no other timer is in use, also none of a `StepperMotor`.
+With a second timer running, all frequencies must fit the same source, in practice all above about 306 Hz or all on one timer; a value that needs another source is rejected with an error.
 
-| Properties         | Description                              | Data type |
-| ------------------ | ---------------------------------------- | --------- |
-| `output.duty`      | Duty cycle (8 bit: 0..256, default: 128) | `int`     |
-| `output.frequency` | Frequency (Hz, default: 1000)            | `int`     |
-| `output.enabled`   | Whether the output is enabled            | `bool`    |
+| Properties      | Description                              | Data type |
+| --------------- | ---------------------------------------- | --------- |
+| `pwm.duty`      | Duty cycle (0..256, default: 128)        | `int`     |
+| `pwm.frequency` | Frequency (Hz, 1..312500, default: 1000) | `int`     |
+| `pwm.enabled`   | Whether the output is enabled            | `bool`    |
 
-| Methods            | Description             | Arguments |
-| ------------------ | ----------------------- | --------- |
-| `output.on()`      | Turn on the PWM signal  |           |
-| `output.off()`     | Turn off the PWM signal |           |
-| `output.enable()`  | Enable the PWM output   |           |
-| `output.disable()` | Disable the PWM output  |           |
+A PWM period is divided into 256 steps, and `duty` sets for how many of them the pin stays high.
+That makes 257 settings, one more than an 8 bit value holds:
+
+| `duty` | Output                                  |
+| ------ | --------------------------------------- |
+| 0      | always low                              |
+| 128    | high for half of the period             |
+| 255    | high for 255 of 256 steps, not fully on |
+| 256    | always high                             |
+
+| Methods         | Description             | Arguments |
+| --------------- | ----------------------- | --------- |
+| `pwm.on()`      | Turn on the PWM signal  |           |
+| `pwm.off()`     | Turn off the PWM signal |           |
+| `pwm.enable()`  | Enable the PWM output   |           |
+| `pwm.disable()` | Disable the PWM output  |           |
 
 When the output is disabled, it will turn off the PWM signal and ignore on/off commands.
 
@@ -519,10 +791,18 @@ The CAN module allows communicating with peripherals on the specified CAN bus.
 | Methods                                             | Description                    | Arguments |
 | --------------------------------------------------- | ------------------------------ | --------- |
 | `can.send(node_id, d0, d1, d2, d3, d4, d5, d6, d7)` | Send a frame with 8 data bytes | 9x `int`  |
+| `can.output_extended(mask, code)`                   | Print matching 29-bit frames   | 2x `int`  |
 | `can.get_status()`                                  | Print the driver status        |           |
 | `can.start()`                                       | Start the driver               |           |
 | `can.stop()`                                        | Stop the driver                |           |
 | `can.reset()`                                       | Reset the driver               |           |
+
+IDs above `0x7FF` are sent as extended (29-bit) frames, IDs above `0x1FFFFFFF` are rejected.
+An extended frame with an ID up to `0x7FF` cannot be sent; `send` puts such an ID into a standard frame.
+Received extended frames never reach other modules, which subscribe to 11-bit IDs only.
+`output_extended(mask, code)` prints every extended frame with `(id & mask) == code` in the same format as the module's output; it can be called several times to add more filters, and `code` must not have bits outside `mask`.
+`can.mute()` also removes all `output_extended` filters; `unmute()` does not bring them back.
+Extended frames are always printed with an 8-digit hex ID, also after `unmute()`, so `can 00000123,…` is an extended and `can 123,…` a standard frame.
 
 The method `get_status()` prints the following information:
 
@@ -542,6 +822,9 @@ The `start()` and `stop()` methods are primarily for debugging purposes.
 
 The `reset()` method will stop the driver, try to recover it and then start it again.
 It can be used to recover the driver from a "BUS_OFF" state.
+The module does the same by itself while the bus is "BUS_OFF", at most once per second.
+It prints "CAN bus running again" once the bus has stayed out of "BUS_OFF" for a second.
+Each reset sets the counters of `get_status()` back to zero.
 
 ## Serial interface
 
@@ -558,9 +841,71 @@ The serial module allows communicating with peripherals via the specified connec
 
 This module might be used by other modules that communicate with peripherals via serial.
 You can, however, unmute the serial module to have incoming messages printed to the command line instead of keeping them buffered for other modules.
+An unmuted module prints one line per batch of bytes the hardware hands over, so a sender that pauses between its messages gets one line per message.
+A line carries at most 85 bytes; the rest of a longer batch follows on the next line.
 
-A UART number and its pins can be used by one serial module at a time.
-They stay reserved for that module until the core restarts, also after `Expander.disconnect()`.
+The UART number and its pins stay reserved for the serial module until the core restarts, also after `Expander.disconnect()`.
+
+A serial on UART0 with the console's pins can only carry a [serial bus](#serial-bus), which takes over the console (see [Console as Link](#serial-bus)); its own methods fail.
+
+## JBD BMS
+
+The JBD BMS module reads a battery management system with the JBD protocol (frames from `0xDD` to `0x77`) over a [serial](#serial-interface), usually at 9600 baud.
+
+| Constructor            | Description                    | Arguments |
+| ---------------------- | ------------------------------ | --------- |
+| `bms = JbdBms(serial)` | Serial module wired to the BMS | `Serial`  |
+
+| Properties              | Description                                                | Data type |
+| ----------------------- | ---------------------------------------------------------- | --------- |
+| `bms.voltage`           | Total voltage (V)                                          | `float`   |
+| `bms.current`           | Current (A), positive while charging                       | `float`   |
+| `bms.residual_capacity` | Remaining capacity (Ah)                                    | `float`   |
+| `bms.nominal_capacity`  | Nominal capacity (Ah)                                      | `float`   |
+| `bms.percentage`        | State of charge (%)                                        | `int`     |
+| `bms.cycles`            | Charge cycles                                              | `int`     |
+| `bms.temperature`       | Mean of the temperature sensors (°C)                       | `float`   |
+| `bms.protections`       | Protection flags (see below)                               | `int`     |
+| `bms.fets`              | MOSFETs that are on: charging (bit 0), discharging (bit 1) | `int`     |
+| `bms.cells`             | Number of cells                                            | `int`     |
+| `bms.interval`          | Time between requests (s), 0 to stop them                  | `float`   |
+| `bms.last_message_age`  | Time since the values were last updated (ms)               | `int`     |
+| `bms.errors`            | Answers that were missing or invalid                       | `int`     |
+
+| Methods                  | Description                                  | Arguments |
+| ------------------------ | -------------------------------------------- | --------- |
+| `bms.cell_voltages()`    | Ask for the cell voltages and print them (V) |           |
+| `bms.hardware_version()` | Ask for the hardware version and print it    |           |
+
+The module asks for the basic information every `interval` seconds, 1 s by default, and updates the properties with each valid answer.
+Until the first valid answer with the basic information, the values of the BMS are 0 and `last_message_age` counts from the boot, like `core.last_message_age`.
+An answer that is missing after 500 ms or invalid, e.g. with a wrong checksum or an error status, counts in `errors`, and the properties keep their last values.
+If the answer to a method is missing or invalid, the module also prints a warning, e.g. `warning: bms got no cell voltages`.
+Keep the serial muted, since the module reads its bytes.
+
+The bits of `protections` are:
+
+- bit 0: cell over-voltage,
+- bit 1: cell under-voltage,
+- bit 2: battery over-voltage,
+- bit 3: battery under-voltage,
+- bit 4: charging over-temperature,
+- bit 5: charging under-temperature,
+- bit 6: discharging over-temperature,
+- bit 7: discharging under-temperature,
+- bit 8: charging over-current,
+- bit 9: discharging over-current,
+- bit 10: short circuit,
+- bit 11: front-end IC error and
+- bit 12: MOSFET software lock.
+
+On a [serial bus](#serial-bus) peer, the values can travel to the coordinator in [telemetry frames](#core):
+
+```
+bms_serial = Serial(26, 27, 9600, 2)
+bms = JbdBms(bms_serial)
+core.telemetry(bms.voltage, bms.current, bms.percentage, bms.temperature, bms.protections, 1000)
+```
 
 ## Linear motor
 
@@ -646,6 +991,7 @@ The ODrive wheels module combines two ODrive motors and provides odometry and st
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
@@ -665,6 +1011,15 @@ When the wheels are disabled, they will stop and ignore movement commands.
 This allows disabling the wheels permanently by setting `enabled = false` in conjunction with calling the `off()` method.
 Now the vehicle can be pushed manually with motors turned off, without taking care of every line of code potentially re-activating the motors.
 
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+`power()` is not limited.
+
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; any other `speed()`, `power()` or `off()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second, so call `wheels.off()` rather than `off()` on each motor to idle them right after a stop.
+
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
@@ -672,7 +1027,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -808,6 +1163,7 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.m_per_tick`            | Meters per encoder tick                                       | `float`   |
@@ -826,6 +1182,15 @@ The RoboClaw wheels module combines two RoboClaw motors and provides odometry an
 
 When the wheels are disabled, they will stop and ignore movement commands.
 
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+`power()` is not limited.
+
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; any other `speed()`, `power()` or `off()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second.
+
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
@@ -833,7 +1198,7 @@ The hold is sent when `locked` becomes `true` and refreshed about once per secon
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 While `locked` is `true`, `off()` does not stick — the hold re-engages within about a second; call `disable()` to switch the motors off durably.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` or `power()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -922,6 +1287,12 @@ If acceleration is 0, the motor stops immediately.
 
 The `read_position_error()` method requests the current position error from the motor via CAN.
 The result is available in the `position_error` property (in degrees) once the motor responds.
+
+The `position` and `speed` properties are read in turns, so each of them is updated every other step.
+
+On construction, the module switches off the motor's answers to speed and position commands (command `0x8C`),
+including the status the motor would otherwise send when a move or a stop completes.
+The motor keeps answering read and configuration commands.
 
 The `set_bitrate()` method changes the CAN bitrate on the motor.
 The rate is given in Hz and must be one of the four supported values (125000, 250000, 500000 or 1000000);
@@ -1160,6 +1531,7 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 | Properties                     | Description                                                   | Data type |
 | ------------------------------ | ------------------------------------------------------------- | --------- |
 | `wheels.width`                 | Wheel distance (m)                                            | `float`   |
+| `wheels.max_wheel_speed`       | Speed limit of the faster wheel in `speed()` (m/s, 0 = off)   | `float`   |
 | `wheels.linear_speed`          | Forward speed (m/s)                                           | `float`   |
 | `wheels.angular_speed`         | Turning speed (rad/s)                                         | `float`   |
 | `wheels.enabled`               | Whether the wheels are enabled                                | `bool`    |
@@ -1175,13 +1547,21 @@ The DunkerWheels module combines two DunkerMotor modules and provides odometry a
 
 When the wheels are disabled, they will freewheel and ignore movement commands.
 
+`max_wheel_speed` caps `speed()` at what the drivetrain can do.
+Driving and turning at once asks the outer wheel for more than either alone; if the drive cut off only that wheel, the robot would veer instead of following the requested curve.
+So when the faster wheel would exceed `max_wheel_speed`, both wheels are scaled down together: the robot keeps its direction and curve radius and only gets slower.
+
+A `speed(0, 0)` after motion is repeated about every 100 ms for one second, because a single stop can be lost on the bus or refused by a drive, which would leave a wheel creeping at its last setpoint.
+A further `speed(0, 0)` restarts the repeat; a non-zero `speed()` that goes through ends it early, and so do `locked`, a tripped dead man's switch and disabling the wheels, which hold or stop the wheels on their own.
+Commands sent to the motors directly are not noticed and get overwritten within that second.
+
 The `locked` property is a safety interlock for rules running on the microcontroller:
 while it is `true`, drive commands are ignored and the wheels are actively held at standstill with a zero-speed setpoint — the motors stay enabled.
 This lets a rule block driving while some other condition is unmet, for example while a tool is not in its parking position.
 The hold is sent when `locked` becomes `true` and refreshed about once per second, so it re-engages even if a motor controller restarts.
 `locked` only blocks commands: `disable()` still switches the motors off, and a locked but switched-off robot can be pushed by hand.
 Driving resumes as soon as `locked` is `false` again.
-Writes to `locked`, `enabled` and `drive_command_timeout` are forwarded to shadow modules, so shadowed wheels stop together with their master.
+Writes to `locked`, `enabled`, `drive_command_timeout` and `max_wheel_speed` are forwarded to shadow modules, so shadowed wheels stop together with their master and keep to the same speed limit.
 
 The `drive_command_timeout` property is a dead man's switch against lost or silent hosts:
 after a non-zero `speed()` command, the wheels stop on their own with a zero-speed setpoint once no further drive command arrived for `drive_command_timeout` seconds — the motors stay enabled.
@@ -1312,3 +1692,7 @@ Declare the depending module on the same microcontroller instead.
 
 `is_ready` turns `false` again when the other microcontroller restarts or the connection is lost,
 because the main microcontroller cannot tell whether the remote module still exists (see [Expander](#expander)).
+
+A proxy accepts [property declarations](language.md) without nesting, e.g. `float x.level = 0.5`, so rules can use a property before the remote module broadcasts it.
+An unknown property is added, a known one of the same type is set to the declared value, and a known one of another type is an error.
+Nothing is sent to the remote module; its broadcasts overwrite the declared values.

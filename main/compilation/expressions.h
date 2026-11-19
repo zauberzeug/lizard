@@ -41,10 +41,12 @@ public:
 };
 
 class VariableExpression : public Expression {
-private:
-    const ConstVariable_ptr variable;
+protected:
+    virtual const char *kind() const; // "variable" or "property", for error messages
 
 public:
+    const ConstVariable_ptr variable;
+
     VariableExpression(const ConstVariable_ptr variable);
     bool evaluate_boolean() const override;
     int64_t evaluate_integer() const override;
@@ -53,18 +55,16 @@ public:
     std::string evaluate_identifier() const override;
 };
 
-class PropertyExpression : public Expression {
-private:
+// resolved once at compile time, since a module never replaces the variable of a property
+class PropertyExpression : public VariableExpression {
+protected:
+    const char *kind() const override;
+
+public:
     const ConstModule_ptr module;
     const std::string property_name;
 
-public:
     PropertyExpression(const ConstModule_ptr module, const std::string property_name);
-    bool evaluate_boolean() const override;
-    int64_t evaluate_integer() const override;
-    double evaluate_number() const override;
-    std::string evaluate_string() const override;
-    std::string evaluate_identifier() const override;
 };
 
 class PowerExpression : public Expression {

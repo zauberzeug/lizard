@@ -3,7 +3,49 @@
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "driver/twai.h"
+#include "esp_attr.h"
+#include "esp_idf_version.h"
+#include "hal/twai_hal.h"
+#include <algorithm>
 #include <stdexcept>
+
+#ifdef CONFIG_IDF_TARGET_ESP32
+#if ESP_IDF_VERSION_MAJOR >= 6
+#error "ESP-IDF 6 renames the TX event and always enables the lost-interrupt workaround; adapt the wrapper below"
+#endif
+// Linked in place of the IDF's function (see CMakeLists.txt): only a frame that still occupies the TX buffer can finish,
+// so a TX interrupt arriving after the lost-interrupt workaround has already counted its frame is not counted again.
+extern "C" uint32_t __real_twai_hal_get_events(twai_hal_context_t *hal_ctx);
+extern "C" uint32_t IRAM_ATTR __wrap_twai_hal_get_events(twai_hal_context_t *hal_ctx) {
+    const bool tx_pending = twai_hal_check_state_flags(hal_ctx, TWAI_HAL_STATE_FLAG_TX_BUFF_OCCUPIED);
+    uint32_t events = __real_twai_hal_get_events(hal_ctx);
+    if (!tx_pending) {
+        events &= ~TWAI_HAL_EVENT_TX_BUFF_FREE;
+    }
+    return events;
+}
+#endif
+
+static constexpr int64_t MAX_STANDARD_ID = 0x7FF;
+static constexpr int64_t MAX_EXTENDED_ID = 0x1FFFFFFF;
+static constexpr unsigned long RECOVERY_INTERVAL_MS = 1000;
+
+// Checks script integers before they are narrowed, so that e.g. 0x100000123 is rejected instead of becoming 0x123.
+static uint32_t to_29_bit(const int64_t value, const std::string &what) {
+    if (value < 0 || value > MAX_EXTENDED_ID) {
+        throw std::runtime_error(what + " does not fit into 29 bits");
+    }
+    return value;
+}
+
+// Lizard's own modules send in every step, so a stopped bus or a full TX queue would flood the console.
+static void log_dropped_frame(const char *reason) {
+    static unsigned long last_drop_log = 0;
+    if (millis_since(last_drop_log) > 1000) {
+        echo("CAN send dropped: %s", reason);
+        last_drop_log = millis();
+    }
+}
 
 static Module_ptr create_can(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 3, integer, integer, integer);
@@ -31,6 +73,9 @@ const std::map<std::string, Variable_ptr> Can::get_defaults() {
 
 Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate)
     : Module(name) {
+    this->claims.can();
+    this->claims.pin(rx_pin);
+    this->claims.pin(tx_pin);
     this->g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
     this->f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -95,14 +140,21 @@ void Can::step() {
     this->properties.at("arb_lost_count")->set_integer_value(status_info.arb_lost_count);
     this->properties.at("bus_error_count")->set_integer_value(status_info.bus_error_count);
 
-    if (status_info.state == TWAI_STATE_BUS_OFF && this->previous_state != TWAI_STATE_BUS_OFF) {
+    // retry while the bus stays off; report only the first attempt of an outage and failures
+    if (status_info.state == TWAI_STATE_BUS_OFF && millis_since(this->last_recovery_attempt) >= RECOVERY_INTERVAL_MS) {
+        const bool verbose = !this->in_bus_off;
+        this->in_bus_off = true;
+        this->last_recovery_attempt = millis();
         try {
-            this->reset_can_bus();
+            this->reset_can_bus(verbose);
         } catch (const std::exception &e) {
             echo("CAN recovery failed: %s", e.what());
         }
+    } else if (status_info.state == TWAI_STATE_RUNNING && this->in_bus_off &&
+               millis_since(this->last_recovery_attempt) >= RECOVERY_INTERVAL_MS) {
+        this->in_bus_off = false;
+        echo("CAN bus running again");
     }
-    this->previous_state = status_info.state;
 
     Module::step();
 }
@@ -119,16 +171,26 @@ bool Can::receive() {
         return false;
     }
 
-    if (this->subscribers.count(message.identifier)) {
+    // Subscriptions are 11-bit IDs; an extended frame with the same numeric value must not reach them.
+    bool print = this->output_on;
+    if (message.extd) {
+        for (const auto &[mask, code] : this->extended_outputs) {
+            if ((message.identifier & mask) == code) {
+                print = true;
+                break;
+            }
+        }
+    } else if (this->subscribers.count(message.identifier)) {
         this->subscribers[message.identifier]->handle_can_msg(
             message.identifier,
             message.data_length_code,
             message.data);
     }
 
-    if (this->output_on) {
+    if (print) {
         static char buffer[256];
-        int pos = csprintf(buffer, sizeof(buffer), "%s %03lx", this->name.c_str(), message.identifier);
+        int pos = csprintf(buffer, sizeof(buffer), message.extd ? "%s %08lx" : "%s %03lx", this->name.c_str(),
+                           message.identifier);
         if (!(message.flags & TWAI_MSG_FLAG_RTR)) {
             for (int i = 0; i < message.data_length_code; ++i) {
                 pos += csprintf(&buffer[pos], sizeof(buffer) - pos, ",%02x", message.data[i]);
@@ -140,40 +202,46 @@ bool Can::receive() {
     return true;
 }
 
-void Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, uint8_t dlc) const {
+bool Can::send(const uint32_t id, const uint8_t data[8], const bool rtr, const uint8_t dlc) const {
+    if (id > MAX_EXTENDED_ID) {
+        throw std::runtime_error("CAN ID does not fit into 29 bits");
+    }
+
     twai_status_info_t status_info;
     if (twai_get_status_info(&status_info) != ESP_OK || status_info.state != TWAI_STATE_RUNNING) {
-        static unsigned long last_drop_log = 0;
-        if (millis_since(last_drop_log) > 1000) {
-            echo("CAN send dropped: bus not RUNNING");
-            last_drop_log = millis();
-        }
-        return;
+        log_dropped_frame("bus not RUNNING");
+        return false;
     }
 
     twai_message_t message;
     message.identifier = id;
     message.flags = rtr ? TWAI_MSG_FLAG_RTR : TWAI_MSG_FLAG_NONE;
+    message.extd = id > MAX_STANDARD_ID; // without the flag the driver silently cuts the ID to 11 bits
     message.data_length_code = dlc;
     for (int i = 0; i < dlc; ++i) {
         message.data[i] = data[i];
     }
 
-    twai_transmit(&message, pdMS_TO_TICKS(0));
+    const esp_err_t result = twai_transmit(&message, pdMS_TO_TICKS(0));
+    if (result != ESP_OK) {
+        log_dropped_frame(result == ESP_ERR_TIMEOUT ? "TX queue full" : esp_err_to_name(result));
+        return false;
+    }
+    return true;
 }
 
-void Can::send(uint32_t id,
-               uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3,
-               uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7,
-               bool rtr) const {
+bool Can::send(const uint32_t id,
+               const uint8_t d0, const uint8_t d1, const uint8_t d2, const uint8_t d3,
+               const uint8_t d4, const uint8_t d5, const uint8_t d6, const uint8_t d7,
+               const bool rtr) const {
     uint8_t data[8] = {d0, d1, d2, d3, d4, d5, d6, d7};
-    this->send(id, data, rtr);
+    return this->send(id, data, rtr);
 }
 
 void Can::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
     if (method_name == "send") {
         Module::expect(arguments, 9, integer, integer, integer, integer, integer, integer, integer, integer, integer);
-        this->send(arguments[0]->evaluate_integer(),
+        this->send(to_29_bit(arguments[0]->evaluate_integer(), "CAN ID"),
                    arguments[1]->evaluate_integer(),
                    arguments[2]->evaluate_integer(),
                    arguments[3]->evaluate_integer(),
@@ -182,6 +250,21 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
                    arguments[6]->evaluate_integer(),
                    arguments[7]->evaluate_integer(),
                    arguments[8]->evaluate_integer());
+    } else if (method_name == "output_extended") {
+        Module::expect(arguments, 2, integer, integer);
+        const uint32_t mask = to_29_bit(arguments[0]->evaluate_integer(), "mask");
+        const uint32_t code = to_29_bit(arguments[1]->evaluate_integer(), "code");
+        if (code & ~mask) {
+            throw std::runtime_error("code has bits outside the mask and would never match");
+        }
+        const std::pair<uint32_t, uint32_t> filter = {mask, code};
+        auto &outputs = this->extended_outputs;
+        if (std::find(outputs.begin(), outputs.end(), filter) == outputs.end()) {
+            outputs.push_back(filter);
+        }
+    } else if (method_name == "mute") {
+        Module::call(method_name, arguments);
+        this->extended_outputs.clear();
     } else if (method_name == "get_status") {
         Module::expect(arguments, 0);
         echo("state:            %s", this->properties.at("state")->string_value().c_str());
@@ -218,25 +301,30 @@ void Can::call(const std::string method_name, const std::vector<ConstExpression_
 }
 
 void Can::subscribe(const uint32_t id, const Module_ptr module) {
+    if (id > MAX_STANDARD_ID) {
+        throw std::runtime_error("CAN subscriptions take 11-bit IDs only");
+    }
     if (this->subscribers.count(id)) {
         throw std::runtime_error("there is already a subscriber for this CAN ID");
     }
     this->subscribers[id] = module;
 }
 
-void Can::reset_can_bus() {
+void Can::reset_can_bus(const bool verbose) {
     twai_status_info_t status_info;
 
     if (twai_get_status_info(&status_info) != ESP_OK) {
         throw std::runtime_error("could not get TWAI status");
     }
 
-    echo("CAN bus state before reset: %s",
-         status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
-         : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
-         : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
-         : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
-                                                      : "UNKNOWN");
+    if (verbose) {
+        echo("CAN bus state before reset: %s",
+             status_info.state == TWAI_STATE_STOPPED      ? "STOPPED"
+             : status_info.state == TWAI_STATE_RUNNING    ? "RUNNING"
+             : status_info.state == TWAI_STATE_BUS_OFF    ? "BUS_OFF"
+             : status_info.state == TWAI_STATE_RECOVERING ? "RECOVERING"
+                                                          : "UNKNOWN");
+    }
 
     if (status_info.state == TWAI_STATE_RUNNING) {
         if (twai_stop() != ESP_OK) {
@@ -262,9 +350,6 @@ void Can::reset_can_bus() {
         }
     }
 
-    // Tear down and rebuild the driver instead of calling twai_initiate_recovery():
-    // ESP-IDF v5.3.1 asserts tx_msg_count >= 0 in the TX ISR while leaving BUS_OFF,
-    // which would call abort() from interrupt context.
     if (twai_driver_uninstall() != ESP_OK) {
         throw std::runtime_error("could not uninstall TWAI driver");
     }
@@ -278,5 +363,7 @@ void Can::reset_can_bus() {
         throw std::runtime_error("TWAI driver didn't start properly");
     }
 
-    echo("CAN bus reset successful, state: RUNNING");
+    if (verbose) {
+        echo("CAN bus reset successful, state: RUNNING");
+    }
 }

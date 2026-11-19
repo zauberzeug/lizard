@@ -23,7 +23,6 @@ int send(const std::string_view &data);
 bool is_connected();
 void finalize();
 void deactivate_pin();
-void reset_bonds();
 
 // Called on the NimBLE host task with a console line (without its '\n') from an authorized central; returns false if it
 // cannot take the line, which is dropped then. A taken line has to be released once it has been processed.

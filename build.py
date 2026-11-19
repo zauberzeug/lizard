@@ -25,6 +25,8 @@ def main() -> int:
         all_defaults.append(str(secret_defaults.resolve()))
 
     os.environ['IDF_TARGET'] = args.target
+    # Let ldgen fail the build when a linker fragment entry (see main/parser.lf) matches no function.
+    os.environ.setdefault('LDGEN_CHECK_MAPPING', '1')
     os.environ['SDKCONFIG_DEFAULTS'] = ';'.join(all_defaults)
     print(f'Using target: {args.target}')
     print(f'Using defaults: {all_defaults}')

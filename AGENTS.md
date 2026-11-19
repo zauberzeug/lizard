@@ -77,7 +77,7 @@ end
 | **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `BleBridge`, `Expander`                                                                                               |
 | **Motor Controllers** | `LinearMotor`, `ODriveMotor`, `ODriveWheels`, `RmdMotor`, `RmdPair`, `StepperMotor`, `RoboClawMotor`, `RoboClawWheels`, `D1Motor`, `DunkerMotor`, `DunkerWheels` |
 | **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                  |
-| **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                       |
+| **Sensors**           | `Imu`, `ImuBno085`, `TemperatureSensor`, `JbdBms`                                                                                                                |
 | **Expanders**         | `Mcp23017` (I2C GPIO expander)                                                                                                                                   |
 | **Utilities**         | `MotorAxis`, `Proxy`                                                                                                                                             |
 
@@ -99,9 +99,21 @@ lizard/
 ├── docs/                   # MkDocs documentation
 ├── examples/               # Usage examples (ROS integration, trajectories)
 ├── build.py               # Build script (wraps idf.py)
-├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
-├── monitor.py             # Serial monitor
-├── serial_devices.py      # Serial device discovery shared by the host tools
+├── espresso.py            # Flash & control script (ESP32 / ESP32-S3), runs lizard_host/espresso.py
+├── monitor.py             # Serial monitor, runs lizard_host/monitor.py
+├── lizard_host/           # Python package lizard-host on PyPI: host tools and library
+│   ├── monitor.py         # Serial monitor (lizard-monitor)
+│   ├── configure.py       # Writes startup scripts (lizard-configure)
+│   ├── espresso.py        # Flashing and pin control (lizard-espresso)
+│   ├── otb_update.py      # Firmware update of serial bus peers (lizard-otb-update)
+│   ├── connection.py      # Runs the procedures on a serial port or in an async host
+│   ├── procedures.py      # Startup scripts, requests and version checks without I/O
+│   ├── version.py         # Lizard versions and the features they bring
+│   ├── core_line.py       # Core lines and clock offset
+│   ├── serial_devices.py  # Serial device discovery
+│   ├── console_line.py    # Console line checksum
+│   └── telemetry.py       # Telemetry frame decoder, steps and layout requests
+├── tests/                 # Unit tests of the host tools (pytest)
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
 └── gen_parser.sh          # Regenerates parser.h from language.owl
 ```
@@ -133,6 +145,8 @@ python build.py --clean
 python build.py esp32s3 --clean
 ```
 
+The firmware needs ESP-IDF 5.3.6 or newer: older versions skip the linker fragment `main/parser.lf` without a warning, so the parser ends up in flash instead of IRAM. `./compile.sh` builds in the matching Docker image.
+
 ### Flash & Monitor
 
 ```bash
@@ -145,6 +159,15 @@ python monitor.py
 # Or use idf.py directly
 idf.py flash monitor
 ```
+
+### Host Tool Tests
+
+```bash
+pytest
+```
+
+The checks of the host tools (ruff, mypy) run with pre-commit; `pyproject.toml` holds their configuration.
+The host tools stay compatible with Python 3.8, the system Python of L4T 35 Robot Brains.
 
 ### Parser Regeneration
 
@@ -321,7 +344,7 @@ For significant changes:
 
 ### Main Loop Timing
 
-The main loop runs every **10ms** (`delay(10)` in `app_main`). Any operation that takes longer will delay all modules, rules, and routines. Avoid:
+The main loop runs every **10ms** (`LOOP_PERIOD_MS` in `app_main`, paced with `xTaskDelayUntil`). Any operation that takes longer will delay all modules, rules, and routines. Avoid:
 
 - Blocking I/O operations
 - Long computations

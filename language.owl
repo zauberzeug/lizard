@@ -13,6 +13,7 @@ statement =
   property_assignment |
   variable_assignment |
   variable_declaration |
+  property_declaration |
   routine_definition |
   rule_definition |
   schedule_definition
@@ -32,6 +33,7 @@ constructor = identifier@module_name '=' (identifier@expander_name '.')? identif
 property_assignment = identifier@module_name '.' identifier@property_name '=' expression
 variable_assignment = identifier@variable_name '=' expression
 variable_declaration = datatype identifier@variable_name ('=' expression)?
+property_declaration = datatype identifier@module_name '.' identifier@property_name ('.' identifier@subproperty_name)? ('=' expression)?
 rule_definition = 'when' expression@condition '\n'* [ 'then' actions 'end' ]
 schedule_definition = 'at' expression@time '\n'* [ 'do' actions 'end' ]
 routine_definition = 'let' identifier@routine_name [ 'do' actions 'end' ]
@@ -55,7 +57,7 @@ expression =
     integer : integer
     number : number
     identifier : variable
-    identifier@module_name '.' identifier@property_name : property
+    identifier@module_name '.' identifier@property_name ('.' identifier@subproperty_name)? : property
     [ '(' expression ')' ] : parentheses
   .operators infix left
     '**' : power

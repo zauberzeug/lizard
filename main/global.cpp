@@ -2,6 +2,7 @@
 #include <stdexcept>
 
 std::map<const std::string, Module_ptr> Global::modules;
+std::list<Module_ptr> Global::ordered_modules;
 std::map<const std::string, Routine_ptr> Global::routines;
 std::list<Rule_ptr> Global::rules;
 std::map<const std::string, Variable_ptr> Global::variables;
@@ -35,7 +36,15 @@ void Global::add_module(const std::string module_name, const Module_ptr module) 
         throw std::runtime_error("variable \"" + module_name + "\" already exists");
     }
     modules[module_name] = module;
+    ordered_modules.push_back(module);
     variables[module_name] = std::make_shared<IdentifierVariable>(module_name);
+}
+
+void Global::remove_module(const std::string module_name) {
+    const Module_ptr module = get_module(module_name);
+    ordered_modules.remove(module);
+    modules.erase(module_name);
+    variables.erase(module_name);
 }
 
 void Global::add_routine(const std::string routine_name, const Routine_ptr routine) {

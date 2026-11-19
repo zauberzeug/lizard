@@ -4,7 +4,7 @@ import logging
 
 import numpy as np
 import pylab as pl
-from nicegui import ui, app
+from nicegui import app, ui
 from serial_connection import SerialConnection
 from trajectory import trajectories
 
@@ -34,8 +34,10 @@ truth = {'x': 0, 'y': 0}
 
 with ui.header().style(f'background-color: {BLUE}').classes('items-center'):
     ui.label('RMD Motor Synchronization').classes('text-lg font-medium')
-    command = ui.input('Lizard Command', on_change=lambda e: serial.send(e.value) or e.sender.set_value('')) \
-        .props('dark').classes('ml-auto')
+    def send_command(e) -> None:
+        serial.send(e.value)
+        e.sender.set_value('')
+    command = ui.input('Lizard Command', on_change=send_command).props('dark').classes('ml-auto')
     ui.button('Configure', on_click=lambda: serial.configure(STARTUP)).props(f'flat color={WHITE}')
 
 
