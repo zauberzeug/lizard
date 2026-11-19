@@ -177,3 +177,17 @@ const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std:
     }
     return it->second.defaults();
 }
+
+Variable_ptr *PropertyMap::find_remembered(const char *literal) const {
+    for (const auto &[known_literal, entry] : this->known) {
+        if (known_literal == literal) {
+            return entry;
+        }
+    }
+    const auto it = Base::find(literal);
+    if (it == Base::end()) {
+        return nullptr;
+    }
+    this->known.emplace_back(literal, const_cast<Variable_ptr *>(&it->second));
+    return this->known.back().second;
+}

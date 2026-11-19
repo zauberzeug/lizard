@@ -10,7 +10,7 @@ class Expression;
 using Expression_ptr = std::shared_ptr<Expression>;
 using ConstExpression_ptr = std::shared_ptr<const Expression>;
 
-int write_arguments_to_buffer(const std::vector<ConstExpression_ptr> arguments, char *buffer, size_t buffer_len);
+int write_arguments_to_buffer(const std::vector<ConstExpression_ptr> &arguments, char *buffer, size_t buffer_len);
 
 class Expression {
 protected:

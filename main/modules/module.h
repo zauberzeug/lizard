@@ -34,7 +34,11 @@ using DefaultsFunction = std::function<std::map<std::string, Variable_ptr>()>;
 class PropertyMap : public std::map<std::string, Variable_ptr> {
 private:
     using Base = std::map<std::string, Variable_ptr>;
-    mutable std::vector<std::pair<const char *, Variable_ptr *>> known; // literal -> its entry, which the map never moves
+    // literal -> its entry, which the map never moves; the first lookup of a literal writes here, so lookups by
+    // literal belong to the tasks that hold the InterpreterLock (main loop, scheduler), not to a module's own task
+    mutable std::vector<std::pair<const char *, Variable_ptr *>> known;
+
+    Variable_ptr *find_remembered(const char *literal) const;
 
 public:
     PropertyMap() = default;
@@ -42,32 +46,35 @@ public:
     PropertyMap(const Base &other) : Base(other) {}
     PropertyMap(const PropertyMap &other) : Base(other) {}
     PropertyMap &operator=(const Base &other) {
-        Base::operator=(other);
         this->known.clear();
+        Base::operator=(other);
         return *this;
     }
     PropertyMap &operator=(const PropertyMap &other) {
         return *this = static_cast<const Base &>(other);
     }
 
+    // the remembered entries point into the map, so nothing may remove an entry or exchange the content
+    template <typename... Args>
+    void erase(Args &&...) = delete;
+    void clear() = delete;
+    template <typename... Args>
+    void swap(Args &&...) = delete;
+    template <typename... Args>
+    void extract(Args &&...) = delete;
+    template <typename... Args>
+    void merge(Args &&...) = delete;
+
     using Base::at;
     using Base::operator[];
 
     /// The entry of a literal name, or nullptr if there is none.
+    /// The name must be a string literal or a const array with static storage duration:
+    /// a local array can share its address with another name later.
     template <typename Char, size_t N>
     Variable_ptr *find_literal(Char (&literal)[N]) const {
         static_assert(std::is_same_v<Char, const char>, "only a name that cannot change can be remembered by its address");
-        for (const auto &[known_literal, entry] : this->known) {
-            if (known_literal == literal) {
-                return entry;
-            }
-        }
-        const auto it = Base::find(literal);
-        if (it == Base::end()) {
-            return nullptr;
-        }
-        this->known.emplace_back(literal, const_cast<Variable_ptr *>(&it->second));
-        return this->known.back().second;
+        return this->find_remembered(literal);
     }
 
     template <typename Char, size_t N>

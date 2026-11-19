@@ -317,7 +317,7 @@ void Expander::add_proxy(Module *proxy) {
     this->proxies.push_back(proxy);
 }
 
-void Expander::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::send_proxy(const std::string &module_name, const std::string &module_type, const std::vector<ConstExpression_ptr> &arguments) {
     static char buffer[512];
     int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
