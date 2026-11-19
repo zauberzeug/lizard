@@ -10,6 +10,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
+#include "soc/uart_pins.h"
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
@@ -774,6 +775,8 @@ extern "C" void app_main() {
     uart_config.source_clk = UART_SCLK_DEFAULT;
     ESP_ERROR_CHECK(uart_driver_install(UART, UART_RX_BUFFER, UART_TX_BUFFER, 32, &uart_events, 0));
     ESP_ERROR_CHECK(uart_param_config(UART, &uart_config));
+    // without a console UART, the driver ties the receiver to a constant high level until a pin is set
+    ESP_ERROR_CHECK(uart_set_pin(UART, U0TXD_GPIO_NUM, U0RXD_GPIO_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
     uart_set_rx_timeout(UART, 2); // hand over bytes after 2 idle symbols instead of 10
 
     ble_uuid_from_str(&svc_uuid, CONFIG_DONGLE_SVC_UUID);
