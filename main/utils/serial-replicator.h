@@ -12,7 +12,8 @@ namespace ZZ::Replicator {
  * the target boots ota_0, and ota_0 receives the running app, also when this
  * core runs from ota_1. Without OTA slots the running partition is copied to its
  * own address instead. It connects at 115200 and flashes at 921600, whatever
- * rate the link runs at. Returns true on success.
+ * rate the link runs at. It needs one block of `block_size` bytes of heap,
+ * which it takes before it puts the target into its bootloader. Returns true on success.
  * On failure, returns false and prints a message detailing what went wrong
  * to the error log. */
 auto flash_replica(const uart_port_t uart_num,

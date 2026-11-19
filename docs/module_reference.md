@@ -355,7 +355,8 @@ It does not check the strapping pins; a peer that does not enter its bootloader 
 The copy boots with its console at 115200 baud; the coordinator writes it the two lines of a bus on its console as its startup script, with the baud rate of the coordinator's serial and the ID `id`, and restarts it (see [Console as Link](#serial-bus)).
 The rest of the peer's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
 `flash_peer` blocks the main loop for the whole transfer like `expander.flash()`.
-It fails if another module uses the serial, if `boot` or `enable` is no output on a pin of this node, or if the copy does not report `Ready.` within 5 s.
+It fails if another module uses the serial, if `boot` or `enable` is no output on a pin of this node, if this node has no free block of 4 KB of heap for the transfer, or if the copy does not report `Ready.` within 5 s.
+Without that block it fails before the transfer begins: the peer restarts with its previous firmware and the bus goes on.
 It drives the two pins itself while flashing; afterwards they are high and follow their outputs again, and a peer that a failed transfer left in its bootloader is restarted through its enable pin.
 
 **Firmware Updates:**

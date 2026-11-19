@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <vector>
+#include <memory>
+#include <new>
 
 #include <esp_err.h>
 #include <esp_flash.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_ota_ops.h>
 
@@ -112,7 +114,7 @@ static auto contains(const esp_partition_t *partition, const uint32_t offset) ->
     return partition != nullptr && offset >= partition->address && offset < partition->address + partition->size;
 }
 
-static auto flash(const esp_partition_t *running_partition, uint32_t transfer_block_size) -> bool {
+static auto flash(const esp_partition_t *running_partition, std::byte *block, uint32_t transfer_block_size) -> bool {
     esp_loader_error_t status;
 
     // the target gets a blank NVS instead of a copy of ours, so it boots with an empty startup and default settings
@@ -132,8 +134,6 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transfer_bl
             return false;
         }
     }
-    std::vector<std::byte> blank(transfer_block_size, std::byte{0xFF});
-    std::vector<std::byte> block(transfer_block_size);
 
     // copy up to the end of the target slot, so the whole app arrives and not only the running partition's size from address 0
     const uint32_t used_size{target->address + target->size};
@@ -148,17 +148,16 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transfer_bl
             ESP_LOGI(TAG, "%lu/%lu kb", offset / 1000, used_size / 1000);
         }
         const uint32_t size{std::min(transfer_block_size, used_size - offset)};
-        std::byte *data = block.data();
         if (contains(nvs, offset) || contains(otadata, offset)) {
-            data = blank.data();
+            std::fill_n(block, size, std::byte{0xFF});
         } else if (contains(target, offset)) {
-            const esp_err_t ec{esp_partition_read(running_partition, offset - target->address, block.data(), size)};
+            const esp_err_t ec{esp_partition_read(running_partition, offset - target->address, block, size)};
             HANDLE_ESP_ERROR(ec, "reading the running app");
         } else {
-            const esp_err_t ec{esp_flash_read(nullptr, block.data(), offset, size)};
+            const esp_err_t ec{esp_flash_read(nullptr, block, offset, size)};
             HANDLE_ESP_ERROR(ec, "reading our flash");
         }
-        status = esp_loader_flash_write(data, size);
+        status = esp_loader_flash_write(block, size);
         ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", offset);
 
         HANDLE_ERROR(status, "writing target flash");
@@ -186,6 +185,15 @@ auto flash_replica(const uart_port_t uart_num,
                    const gpio_num_t rx_pin,
                    const gpio_num_t tx_pin,
                    const uint32_t block_size) -> bool {
+    // taken before the target enters its bootloader, so that a node short of heap fails before the target changes
+    const std::unique_ptr<std::byte[]> block{new (std::nothrow) std::byte[block_size]};
+    if (!block) {
+        ESP_LOGE(TAG, "Not enough heap for a transfer block of %lu bytes: %u bytes free, the largest free block has %u",
+                 block_size, (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        return false;
+    }
+
     ESP_LOGI(TAG, "Initializing pins..");
     if (!init_connection(uart_num, enable_pin, boot_pin, rx_pin, tx_pin)) {
         return false;
@@ -217,7 +225,7 @@ auto flash_replica(const uart_port_t uart_num,
         return false;
     }
 
-    return flash(running_partition, block_size);
+    return flash(running_partition, block.get(), block_size);
 }
 
 } // namespace ZZ::Replicator

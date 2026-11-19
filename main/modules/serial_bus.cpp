@@ -377,6 +377,18 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
             if (!this->completed) {
                 restart_through_enable_pin(this->enable_pin); // a failed transfer may have left the peer in its bootloader
             }
+            // the communication task must not resume on a UART without a driver, where every call only logs an error
+            if (!uart_is_driver_installed(this->bus->serial->uart_num)) {
+                try {
+                    this->bus->serial->reinitialize_after_flash();
+                } catch (...) {
+                    try {
+                        echo("error: serial bus %s stays paused, its serial has no UART driver", this->bus->name.c_str());
+                    } catch (...) {
+                    }
+                    return;
+                }
+            }
             this->bus->pause_requested = false;
         }
     } resume{this, boot_pin, enable_pin};
