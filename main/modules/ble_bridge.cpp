@@ -46,7 +46,6 @@ static constexpr int32_t SCAN_MS = 10000;
 static constexpr int32_t CONNECT_TIMEOUT_MS = 5000;
 static constexpr uint32_t RECONNECT_MS = 500;
 static constexpr uint32_t RETRY_AFTER_FAILURE_MS = 5000;
-static constexpr uint32_t LINK_TIMEOUT_MS = 10000; // from the connect request until the robot accepts the PIN
 static constexpr unsigned long LOST_WARNING_INTERVAL_MS = 1000;
 static constexpr size_t MAX_PRINT_PER_STEP = 1024; // printing blocks the main loop, which also has to read the host's lines
 static constexpr char AUTH_ACCEPTED[] = "POST /notification Connected";
@@ -77,7 +76,6 @@ static std::string requested_target;
 static uint32_t requested_pin = 0;
 static struct ble_npl_event request_event;
 static struct ble_npl_callout scan_callout;
-static struct ble_npl_callout link_callout;
 
 // host task only
 static LinkState link_state = LinkState::IDLE;
@@ -86,7 +84,6 @@ static uint32_t pin = 0;
 static bool synced = false;
 static bool backoff = false; // the last attempt failed: wait longer before the next one
 static uint8_t own_addr_type = 0;
-static ble_addr_t robot_addr;
 static uint16_t service_start = 0;
 static uint16_t service_end = 0;
 static uint16_t command_handle = 0;
@@ -103,7 +100,6 @@ static std::atomic<uint16_t> console_out_handle{0};
 static std::atomic<bool> linked{false};
 static std::atomic<bool> pin_rejected{false};
 static std::atomic<bool> no_console{false};
-static std::atomic<bool> link_timed_out{false};
 static std::atomic<uint32_t> lost_lines{0};
 
 static int on_gap_event(struct ble_gap_event *event, void *arg);
@@ -223,7 +219,6 @@ static void handle_reply(uint16_t conn, const struct os_mbuf *om) {
     char reply[sizeof(AUTH_ACCEPTED)] = {};
     os_mbuf_copydata(om, 0, std::min<int>(OS_MBUF_PKTLEN(om), sizeof(reply) - 1), reply);
     if (strncmp(reply, AUTH_ACCEPTED, sizeof(AUTH_ACCEPTED) - 1) == 0) {
-        ble_npl_callout_stop(&link_callout);
         linked = true;
     } else if (strncmp(reply, AUTH_REJECTED, sizeof(AUTH_REJECTED) - 1) == 0) {
         pin_rejected = true;
@@ -302,8 +297,6 @@ static int on_gap_event(struct ble_gap_event *event, void *) {
         params.supervision_timeout = 200; // 2 s
         if (ble_gap_connect(own_addr_type, &event->disc.addr, CONNECT_TIMEOUT_MS, &params, on_gap_event, nullptr) == 0) {
             link_state = LinkState::CONNECTING;
-            robot_addr = event->disc.addr;
-            ble_npl_callout_reset(&link_callout, ble_npl_time_ms_to_ticks32(LINK_TIMEOUT_MS));
         } else {
             link_state = LinkState::IDLE;
             ble_npl_callout_reset(&scan_callout, ble_npl_time_ms_to_ticks32(RECONNECT_MS));
@@ -320,7 +313,6 @@ static int on_gap_event(struct ble_gap_event *event, void *) {
 
     case BLE_GAP_EVENT_CONNECT:
         if (event->connect.status != 0) {
-            ble_npl_callout_stop(&link_callout);
             link_state = LinkState::IDLE;
             ble_npl_callout_reset(&scan_callout, ble_npl_time_ms_to_ticks32(RECONNECT_MS));
             return 0;
@@ -348,7 +340,6 @@ static int on_gap_event(struct ble_gap_event *event, void *) {
         return 0;
 
     case BLE_GAP_EVENT_DISCONNECT:
-        ble_npl_callout_stop(&link_callout);
         conn_handle = BLE_HS_CONN_HANDLE_NONE;
         linked = false;
         link_state = LinkState::IDLE;
@@ -360,23 +351,6 @@ static int on_gap_event(struct ble_gap_event *event, void *) {
 
     default:
         return 0;
-    }
-}
-
-// a setup that stalls, on either side, would otherwise hold the connection without ever linking
-static void on_link_timeout(struct ble_npl_event *) {
-    if (linked || (link_state != LinkState::CONNECTING && link_state != LinkState::CONNECTED)) {
-        return;
-    }
-    link_timed_out = true;
-    struct ble_gap_conn_desc desc;
-    if (ble_gap_conn_find_by_addr(&robot_addr, &desc) == 0) { // also a connection NimBLE has not reported yet
-        drop_connection(desc.conn_handle);
-        ble_npl_callout_reset(&link_callout, ble_npl_time_ms_to_ticks32(LINK_TIMEOUT_MS)); // until the disconnect event arrives
-    } else if (link_state == LinkState::CONNECTED || ble_gap_conn_cancel() != 0) {
-        conn_handle = BLE_HS_CONN_HANDLE_NONE;
-        link_state = LinkState::IDLE;
-        ble_npl_callout_reset(&scan_callout, ble_npl_time_ms_to_ticks32(RETRY_AFTER_FAILURE_MS));
     }
 }
 
@@ -440,7 +414,6 @@ BleBridge::BleBridge(const std::string name) : ConsoleBridge(name) {
     ble_svc_gap_device_name_set(name.c_str());
     ble_npl_event_init(&request_event, on_request, nullptr);
     ble_npl_callout_init(&scan_callout, nimble_port_get_dflt_eventq(), on_scan_callout, nullptr);
-    ble_npl_callout_init(&link_callout, nimble_port_get_dflt_eventq(), on_link_timeout, nullptr);
     nimble_port_freertos_init(run_host_task);
     this->console_input = std::make_unique<BleLineStream>(
         "ble_bridge", INPUT_QUEUE_LENGTH, QUEUE_BYTES, [] { return linked.load(); },
@@ -493,9 +466,6 @@ void BleBridge::step() {
     }
     if (pin_rejected.exchange(false)) {
         echo("warning: %s: \"%s\" rejected the PIN", this->name.c_str(), this->link_target.c_str());
-    }
-    if (link_timed_out.exchange(false)) {
-        echo("warning: %s: linking to \"%s\" timed out", this->name.c_str(), this->link_target.c_str());
     }
     if (no_console.exchange(false)) {
         echo("warning: \"%s\" offers no Bluetooth console (Lizard too old?)", this->link_target.c_str());
