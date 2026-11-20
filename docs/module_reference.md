@@ -288,6 +288,8 @@ Malformed frames and layout lines of passed-on or mirrored peers, e.g. no valid 
   A message takes its length plus 11 to 14 bytes, and a frame is stored without its bus header and checksum, so the room left to telemetry holds 35 frames of 4 floats or 12 frames of 20 floats.
   Lost telemetry recovers by itself: the next frame replaces a lost one, and missing layout lines are requested again.
   Frames dropped this way are counted in `telemetry_dropped`.
+- UART buffers: a bus reads and writes its serial in a task of its own, so the UART driver of that serial buffers only 1 KB of input and 512 bytes of output instead of the 4 KB and 2 KB of a serial without a bus.
+  That frees 4.5 KB of heap per bus; a bus on the console keeps the console's driver.
 - Bus load: a frame of n floats or ints is a line of about 5.3·n + 25 bytes, on the bus as well as on the coordinator's console.
   A frame of 20 floats takes 132 bytes, i.e. 2.9 ms at 460800 baud; 100 such frames per second would take almost a third of the bus.
   The most one poll can carry is all eight slots with the largest frame of 45 floats, about 2.1 KB:

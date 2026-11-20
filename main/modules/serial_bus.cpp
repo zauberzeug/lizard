@@ -25,6 +25,9 @@
 static constexpr unsigned long POLL_TIMEOUT_MS = 250;
 static constexpr size_t OFFSET_QUEUE_LENGTH = 8;    // full-state snapshots; a full queue only delays one
 static constexpr size_t MESSAGE_BUFFER_SIZE = 4096; // per direction; a message takes its length plus 11 to 14 bytes
+// of the serial's UART driver: the bus reads in a task of its own, so they only hold what arrives or leaves meanwhile
+static constexpr int UART_RX_BUFFER_SIZE = 1024; // two of the longest lines of a peer (RX_FRAME_SIZE)
+static constexpr int UART_TX_BUFFER_SIZE = 512;
 static constexpr size_t RINGBUF_ITEM_HEADER = 8;
 // a message in a ring buffer: this header, the payload and its terminating zero; an outbound message names this node
 // as its sender, so that both buffers hold the same item
@@ -144,6 +147,9 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     if (serial->on_console && console_handed_over()) {
         throw std::runtime_error("the console is already taken over by another serial bus");
     }
+    // before the driver is reinstalled: another module on this serial would lose its driver under its feet
+    this->serial->require_sole_user(name);
+    this->serial->resize_buffers(UART_RX_BUFFER_SIZE, UART_TX_BUFFER_SIZE);
     this->serial->enable_line_detection();
 
     // everything that can throw comes before the task exists: an exception from a constructor unwinds without running
