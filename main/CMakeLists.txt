@@ -36,6 +36,8 @@ if(CONFIG_IDF_TARGET_ESP32)
     # The workaround for lost TX interrupts can count a frame twice and trip an assert in the TWAI ISR (see can.cpp)
     target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=twai_hal_get_events")
 endif()
-add_compile_definitions(OWL_TOKEN_RUN_LENGTH=256)
+# The parser mallocs a token run for every line it parses, however short: an 8-byte header plus 10 bytes per token, so 648 bytes;
+# a line of more than 64 tokens gets further runs.
+add_compile_definitions(OWL_TOKEN_RUN_LENGTH=64)
 component_compile_options(-std=gnu++17 -Wsuggest-override)
 set_source_files_properties(parser.c PROPERTIES COMPILE_FLAGS -Wno-missing-field-initializers)
