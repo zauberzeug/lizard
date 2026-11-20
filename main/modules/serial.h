@@ -17,7 +17,9 @@ private:
     mutable std::string pending_lines; // lines after the first of a read that held several; not visible to read() and available()
     // dropped by has_buffered_lines() for lack of a line end, counted since flush()
     mutable size_t discarded_bytes = 0;
-    mutable int rx_buffer_size; // of the UART driver; a line can take half of the receive buffer
+    // of the driver this Serial installs; a line can take half of the receive buffer. A Serial on the console keeps the
+    // console's driver (8 KB in, no TX ring), there they only size that line limit and the timeout of wait_until_sent()
+    mutable int rx_buffer_size;
     mutable int tx_buffer_size;
 
     /// Set the receive FIFO threshold to what the current reader needs; call after install and after mute/unmute.

@@ -86,13 +86,13 @@ void Serial::resize_buffers(const int rx_buffer_size, const int tx_buffer_size) 
     if (this->on_console) {
         return; // the driver stays with the console
     }
-    this->rx_buffer_size = rx_buffer_size;
-    this->tx_buffer_size = tx_buffer_size;
     this->pending_lines.clear();
     if (uart_is_driver_installed(this->uart_num)) {
-        this->wait_until_sent();
+        this->wait_until_sent(); // with the timeout of the old buffer, which still drains
         uart_driver_delete(this->uart_num);
     }
+    this->rx_buffer_size = rx_buffer_size;
+    this->tx_buffer_size = tx_buffer_size;
     this->initialize_uart();
 }
 

@@ -147,6 +147,8 @@ SerialBus::SerialBus(const std::string &name, const ConstSerial_ptr serial, cons
     if (serial->on_console && console_handed_over()) {
         throw std::runtime_error("the console is already taken over by another serial bus");
     }
+    // before the driver is reinstalled: another module on this serial would lose its driver under its feet
+    this->serial->require_sole_user(name);
     this->serial->resize_buffers(UART_RX_BUFFER_SIZE, UART_TX_BUFFER_SIZE);
     this->serial->enable_line_detection();
 
