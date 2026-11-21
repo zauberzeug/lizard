@@ -107,16 +107,13 @@ StepperMotor::StepperMotor(const std::string name,
         .channel = this->ledc_channel,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = this->ledc_timer,
-        .duty = 0,
+        .duty = DUTY_VALUE, // for good: route_pulses() decides in the GPIO matrix whether the pulses reach the pin
         .hpoint = 0,
         .flags = {},
     };
     check_error(ledc_channel_config(&channel_config), "failed to configure LEDC channel");
-
-    // the duty stays at 50 % from now on; route_pulses() decides in the GPIO matrix whether the pulses reach the pin
+    // the duty takes effect with the timer's next period, so the pin gets no pulse before it is routed away again
     gpio_matrix_out(step_pin, SIG_GPIO_OUT_IDX, 0, 0);
-    ledc_set_duty(SPEED_MODE, this->ledc_channel, DUTY_VALUE);
-    ledc_update_duty(SPEED_MODE, this->ledc_channel);
 
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);

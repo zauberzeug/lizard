@@ -497,7 +497,8 @@ That makes 257 settings, one more than an 8 bit value holds:
 | 255    | high for 255 of 256 steps, not fully on |
 | 256    | always high                             |
 
-The output takes up a new `duty` at most once every two periods, so below 200 Hz it skips changes that come faster.
+A new `duty`, `on()`, `off()` and disabling the output reach the LEDC with the next step of the main loop, and the pin with the start of the following PWM period.
+On the ESP32 the LEDC takes a change only once it has finished the previous one, two periods after it; a change that comes earlier is not lost but waits, and the output then takes up the latest state.
 
 | Methods         | Description             | Arguments |
 | --------------- | ----------------------- | --------- |
