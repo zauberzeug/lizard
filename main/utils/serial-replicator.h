@@ -15,12 +15,14 @@ namespace ZZ::Replicator {
  * rate the link runs at. It needs one block of `block_size` bytes of heap,
  * which it takes before it puts the target into its bootloader. Returns true on success.
  * On failure, returns false and prints a message detailing what went wrong
- * to the error log. */
+ * to the error log; `erased` then tells whether it may have left the target
+ * without a complete firmware, i.e. failed between erasing and verifying. */
 auto flash_replica(const uart_port_t uart_num,
                    const gpio_num_t enable_pin,
                    const gpio_num_t boot_pin,
                    const gpio_num_t rx_pin,
                    const gpio_num_t tx_pin,
+                   bool &erased,
                    const uint32_t block_size = 0x1000) -> bool;
 
 } // namespace ZZ::Replicator

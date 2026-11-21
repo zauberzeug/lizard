@@ -114,7 +114,7 @@ static auto contains(const esp_partition_t *partition, const uint32_t offset) ->
     return partition != nullptr && offset >= partition->address && offset < partition->address + partition->size;
 }
 
-static auto flash(const esp_partition_t *running_partition, std::byte *block, uint32_t transfer_block_size) -> bool {
+static auto flash(const esp_partition_t *running_partition, std::byte *block, uint32_t transfer_block_size, bool &erased) -> bool {
     esp_loader_error_t status;
 
     // the target gets a blank NVS instead of a copy of ours, so it boots with an empty startup and default settings
@@ -140,7 +140,15 @@ static auto flash(const esp_partition_t *running_partition, std::byte *block, ui
     const uint32_t block_count{(used_size + transfer_block_size - 1) / transfer_block_size};
     ESP_LOGI(TAG, "Replicating [%lu] bytes in [%lu] blocks", used_size, block_count);
 
+    // flash_start() reads the flash size, the first command at the flash rate, before its FLASH_BEGIN erases anything:
+    // read it here, so that a link that fails at that rate leaves the target with its firmware
+    uint32_t flash_size{0};
+    status = esp_loader_flash_detect_size(&flash_size);
+    if (status != ESP_LOADER_ERROR_UNSUPPORTED_CHIP) { // an unknown flash ID only makes flash_start() assume a size
+        HANDLE_ERROR(status, "reading the target's flash size");
+    }
     status = esp_loader_flash_start(0, used_size, transfer_block_size);
+    erased = status != ESP_LOADER_ERROR_IMAGE_SIZE; // refused before erasing; any other result may have begun it
     HANDLE_ERROR(status, "erasing target flash");
 
     for (uint32_t offset = 0; offset < used_size; offset += transfer_block_size) {
@@ -165,6 +173,7 @@ static auto flash(const esp_partition_t *running_partition, std::byte *block, ui
 
     status = esp_loader_flash_verify();
     HANDLE_ERROR(status, "verifying md5 checksum");
+    erased = false; // the target holds a complete copy, also if finishing fails
 
     status = esp_loader_flash_finish(true);
     HANDLE_ERROR(status, "finishing flash process");
@@ -184,7 +193,9 @@ auto flash_replica(const uart_port_t uart_num,
                    const gpio_num_t boot_pin,
                    const gpio_num_t rx_pin,
                    const gpio_num_t tx_pin,
+                   bool &erased,
                    const uint32_t block_size) -> bool {
+    erased = false;
     // taken before the target enters its bootloader, so that a node short of heap fails before the target changes
     const std::unique_ptr<std::byte[]> block{new (std::nothrow) std::byte[block_size]};
     if (!block) {
@@ -225,7 +236,7 @@ auto flash_replica(const uart_port_t uart_num,
         return false;
     }
 
-    return flash(running_partition, block.get(), block_size);
+    return flash(running_partition, block.get(), block_size, erased);
 }
 
 } // namespace ZZ::Replicator
