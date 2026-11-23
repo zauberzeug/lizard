@@ -111,9 +111,11 @@ StepperMotor::StepperMotor(const std::string name,
         .hpoint = 0,
         .flags = {},
     };
+    // the timer stands still while the channel takes the duty and the pin is routed away again, so no pulse leaves meanwhile
+    ledc_timer_pause(SPEED_MODE, this->ledc_timer);
     check_error(ledc_channel_config(&channel_config), "failed to configure LEDC channel");
-    // the duty takes effect with the timer's next period, so the pin gets no pulse before it is routed away again
     gpio_matrix_out(step_pin, SIG_GPIO_OUT_IDX, 0, 0);
+    ledc_timer_resume(SPEED_MODE, this->ledc_timer);
 
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);

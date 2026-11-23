@@ -1184,6 +1184,7 @@ The pulse counter used for position feedback is created internally.
 | `motor.disable()`                                 | Disable the motor        |            |
 
 The optional acceleration argument defaults to 0, which starts and stops pulsing immediately.
+Below 490 steps per second the module sends no pulses and the step pin stays low; `speed` still shows the commanded value, so a move with `acceleration` starts pulsing once the ramp reaches that rate.
 
 When the motor is disabled, it will stop and ignore movement commands.
 
