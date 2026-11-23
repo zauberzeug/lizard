@@ -266,7 +266,8 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             if (!erased) {
                 this->restart();
             }
-            throw std::runtime_error("could not flash expander \"" + this->name + "\"");
+            throw std::runtime_error("could not flash expander \"" + this->name + "\"" +
+                                     (erased ? ", which may have lost its firmware and stays in its bootloader until the next flash()" : ""));
         } else {
             echo("%s: Replica complete", this->name.c_str());
             this->restart();

@@ -403,7 +403,8 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
     delay(100);
     this->serial->reinitialize_after_flash();
     if (!success) {
-        throw std::runtime_error("serial bus \"" + this->name + "\" could not flash peer " + std::to_string(peer_id));
+        throw std::runtime_error("serial bus \"" + this->name + "\" could not flash peer " + std::to_string(peer_id) +
+                                 (erased ? ", which may have lost its firmware and stays in its bootloader until the next flash_peer" : ""));
     }
     resume.drive_pins_high();
     restart_through_enable_pin(enable_pin); // boots the copy
