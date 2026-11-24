@@ -371,6 +371,7 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
         const gpio_num_t boot_pin;
         const gpio_num_t enable_pin;
         bool completed = false;
+        bool keep_in_bootloader = false; // after a transfer that failed between erasing the peer's flash and verifying it
         // both high until the outputs' next step, since a peer's EN may be pulled low
         void drive_pins_high() const {
             for (const gpio_num_t pin : {this->boot_pin, this->enable_pin}) {
@@ -380,20 +381,36 @@ void SerialBus::flash_peer(const uint8_t peer_id, const gpio_num_t boot_pin, con
         }
         ~Resume() {
             this->drive_pins_high();
-            if (!this->completed) {
+            if (!this->completed && !this->keep_in_bootloader) {
                 restart_through_enable_pin(this->enable_pin); // a failed transfer may have left the peer in its bootloader
+            }
+            // the communication task must not resume on a UART without a driver, where every call only logs an error
+            if (!uart_is_driver_installed(this->bus->serial->uart_num)) {
+                try {
+                    this->bus->serial->reinitialize_after_flash();
+                } catch (...) {
+                    try {
+                        echo("error: serial bus %s stays paused until this node restarts or a later flash_peer reinstalls its UART driver",
+                             this->bus->name.c_str());
+                    } catch (...) {
+                    }
+                    return;
+                }
             }
             this->bus->pause_requested = false;
         }
     } resume{this, boot_pin, enable_pin};
     this->serial->deinstall();
     // the replicator connects at 115200 baud and flashes at 921600, whatever the link's rate
+    bool erased = false;
     const bool success = ZZ::Replicator::flash_replica(this->serial->uart_num, enable_pin, boot_pin,
-                                                       this->serial->rx_pin, this->serial->tx_pin);
+                                                       this->serial->rx_pin, this->serial->tx_pin, erased);
+    resume.keep_in_bootloader = !success && erased; // a restart might only boot an erased flash
     delay(100);
     this->serial->reinitialize_after_flash();
     if (!success) {
-        throw std::runtime_error("serial bus \"" + this->name + "\" could not flash peer " + std::to_string(peer_id));
+        throw std::runtime_error("serial bus \"" + this->name + "\" could not flash peer " + std::to_string(peer_id) +
+                                 (erased ? ", which may have lost its firmware and stays in its bootloader until the next flash_peer" : ""));
     }
     resume.drive_pins_high();
     restart_through_enable_pin(enable_pin); // boots the copy

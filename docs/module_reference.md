@@ -357,8 +357,11 @@ It does not check the strapping pins; a peer that does not enter its bootloader 
 The copy boots with its console at 115200 baud; the coordinator writes it the two lines of a bus on its console as its startup script, with the baud rate of the coordinator's serial and the ID `id`, and restarts it (see [Console as Link](#serial-bus)).
 The rest of the peer's startup script goes over the bus, e.g. with `configure.py --serial-bus 2 --bus-name p0`, which replaces the whole script, so keep the two lines at its top.
 `flash_peer` blocks the main loop for the whole transfer like `expander.flash()`.
-It fails if another module uses the serial, if `boot` or `enable` is no output on a pin of this node, or if the copy does not report `Ready.` within 5 s.
+It fails if another module uses the serial, if `boot` or `enable` is no output on a pin of this node, if this node has no free block of 4 KB of heap for the transfer, or if the copy does not report `Ready.` within 5 s.
+Without that block it fails before the transfer begins: the peer restarts with its previous firmware and the bus goes on.
+If the UART driver of the bus serial cannot be installed again after a transfer, the bus stays paused until this node restarts or a later `flash_peer` installs the driver again.
 It drives the two pins itself while flashing; afterwards they are high and follow their outputs again, and a peer that a failed transfer left in its bootloader is restarted through its enable pin.
+A transfer that fails after it began to erase the peer's flash, e.g. on a loose wire, may leave no firmware to start, so the peer then stays silent in its bootloader until the next `flash_peer`.
 
 **Firmware Updates:**
 Peers on the serial bus can be updated remotely via the coordinator.
@@ -1589,6 +1592,8 @@ The optional `force` argument skips the default check whether certain strapping 
 Flashing erases the other microcontroller's NVS:
 its startup script, a persisted console baud rate and the bus backup are reset to defaults.
 The other microcontroller then boots the copied app from its first OTA slot.
+If the transfer fails, e.g. because the main microcontroller has no free block of 4 KB of heap for it, `flash()` reports the error and restarts the other microcontroller, which runs its previous firmware again.
+A transfer that fails after it began to erase the other microcontroller's flash, e.g. on a loose wire, may leave no firmware to start, so it then stays silent in its bootloader until the next `flash()`.
 
 The `disconnect()` method might be useful to access the other microcontroller on UART0 via USB while still being physically connected to the main microcontroller.
 After `disconnect()` the expander stays disconnected until `flash(true)` reinstalls the serial connection;
