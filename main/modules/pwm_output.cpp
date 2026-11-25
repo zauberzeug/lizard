@@ -2,6 +2,7 @@
 #include "../global.h"
 #include "../utils/esp_error.h"
 #include <driver/ledc.h>
+#include <soc/ledc_struct.h>
 #include <soc/soc.h>
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
@@ -116,11 +117,23 @@ void PwmOutput::write_property(const std::string property_name, const ConstExpre
     Module::write_property(property_name, expression, from_expander);
 }
 
+static bool duty_update_pending(const ledc_channel_t channel) {
+#ifdef CONFIG_IDF_TARGET_ESP32
+    // the LEDC clears this bit once it has taken over the last duty; until then ledc_update_duty() waits with interrupts off
+    return LEDC.channel_group[SPEED_MODE].channel[channel].conf1.duty_start;
+#else
+    return false; // the S3's ledc_update_duty() does not wait
+#endif
+}
+
 void PwmOutput::step() {
-    uint32_t duty = this->properties.at("duty")->integer_value();
-    ledc_set_duty(SPEED_MODE, this->ledc_channel, this->is_on ? duty : 0);
-    ledc_update_duty(SPEED_MODE, this->ledc_channel);
-    this->sync_enabled();
+    this->sync_enabled(); // before the duty, so that disabling reaches the LEDC in this step like off()
+    const uint32_t duty = this->is_on ? this->properties.at("duty")->integer_value() : 0;
+    if (duty != this->applied_duty && !duty_update_pending(this->ledc_channel)) {
+        ledc_set_duty(SPEED_MODE, this->ledc_channel, duty);
+        ledc_update_duty(SPEED_MODE, this->ledc_channel);
+        this->applied_duty = duty;
+    }
     Module::step();
 }
 

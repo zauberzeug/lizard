@@ -248,17 +248,28 @@ void Expander::call(const std::string &method_name, const std::vector<ConstExpre
             }
         }
         deinstall();
+        bool erased = false;
         bool success = ZZ::Replicator::flash_replica(this->serial->uart_num,
                                                      this->enable_pin,
                                                      this->boot_pin,
                                                      this->serial->rx_pin,
-                                                     this->serial->tx_pin);
+                                                     this->serial->tx_pin,
+                                                     erased);
         delay(100);
         this->serial->reinitialize_after_flash();
         this->disconnected = false;
         if (!success) {
-            throw std::runtime_error("could not flash expander \"" + this->name + "\"");
+            // a transfer that failed before the replicator drove the pins, e.g. short of heap, leaves them floating
+            // after deinstall(); drive both high and restart the expander, so that it runs its previous firmware.
+            // One whose flash may be erased would only print boot errors, so it stays in its bootloader instead.
+            this->drive_pins_high();
+            if (!erased) {
+                this->restart();
+            }
+            throw std::runtime_error("could not flash expander \"" + this->name + "\"" +
+                                     (erased ? ", which may have lost its firmware and stays in its bootloader until the next flash()" : ""));
         } else {
+            echo("%s: Replica complete", this->name.c_str());
             this->restart();
         }
     } else {
@@ -310,6 +321,14 @@ void Expander::deinstall() {
         gpio_set_direction(this->enable_pin, GPIO_MODE_INPUT);
         gpio_set_pull_mode(this->boot_pin, GPIO_FLOATING);
         gpio_set_pull_mode(this->enable_pin, GPIO_FLOATING);
+    }
+}
+
+void Expander::drive_pins_high() {
+    for (const gpio_num_t pin : {this->boot_pin, this->enable_pin}) {
+        gpio_reset_pin(pin);
+        gpio_set_level(pin, 1); // before the direction, so that no pin drives an old low for a moment
+        gpio_set_direction(pin, GPIO_MODE_OUTPUT);
     }
 }
 

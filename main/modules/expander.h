@@ -18,6 +18,7 @@ private:
 
     void require_connected() const;
     void deinstall();
+    void drive_pins_high();
     void handle_ready();
     void set_not_ready();
     void set_proxies_not_ready();
