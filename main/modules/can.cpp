@@ -47,7 +47,10 @@ static void log_dropped_frame(const char *reason) {
     }
 }
 
-// The timing of ESP-IDF v5.3.1: v5.3.6 coarsened its macros from 125 kbit/s up, at 1 Mbit/s to 8 quanta per bit.
+// The timing of ESP-IDF v5.3.1 for the ESP32 and the ESP32-S3, whose TWAI runs from the 80 MHz APB clock: v5.3.6 coarsened
+// its macros for APB-clocked chips from 125 kbit/s up, at 1 Mbit/s to 8 quanta per bit. The quanta frequencies below must
+// divide that clock, so a chip with another TWAI clock needs its own values.
+static_assert(TWAI_CLK_SRC_DEFAULT == TWAI_CLK_SRC_APB, "bit_timing() assumes the 80 MHz APB clock as the TWAI clock");
 static twai_timing_config_t bit_timing(const uint32_t quanta_hz, const uint8_t tseg_1, const uint8_t tseg_2) {
     twai_timing_config_t config = {};
     config.clk_src = TWAI_CLK_SRC_DEFAULT;
@@ -107,13 +110,13 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
         this->t_config = bit_timing(2500000, 15, 4);
         break;
     case 100000:
-        this->t_config = TWAI_TIMING_CONFIG_100KBITS();
+        this->t_config = bit_timing(2000000, 15, 4);
         break;
     case 50000:
-        this->t_config = TWAI_TIMING_CONFIG_50KBITS();
+        this->t_config = bit_timing(1000000, 15, 4);
         break;
     case 25000:
-        this->t_config = TWAI_TIMING_CONFIG_25KBITS();
+        this->t_config = bit_timing(625000, 16, 8);
         break;
     default:
         throw std::runtime_error("invalid baud rate");
