@@ -269,7 +269,7 @@ std::string Serial::get_output() const {
     return buffer;
 }
 
-void Serial::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Serial::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (this->on_console) {
         throw std::runtime_error("serial \"" + this->name + "\" on the console pins can only carry a serial bus");
     }

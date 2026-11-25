@@ -56,7 +56,7 @@ void MotorAxis::step() {
     Module::step();
 }
 
-void MotorAxis::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void MotorAxis::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "position") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");

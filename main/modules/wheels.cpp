@@ -121,7 +121,7 @@ void Wheels::do_off() {
     throw std::runtime_error("module \"" + this->name + "\" has no idle state");
 }
 
-void Wheels::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Wheels::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "speed") {
         Module::expect(arguments, 2, numbery, numbery);
         const double linear = arguments[0]->evaluate_number();

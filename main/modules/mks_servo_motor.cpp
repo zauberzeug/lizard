@@ -198,7 +198,7 @@ void MksServoMotor::step() {
     Module::step();
 }
 
-void MksServoMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void MksServoMotor::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "enable") {
         Module::expect(arguments, 0);
         this->enable();

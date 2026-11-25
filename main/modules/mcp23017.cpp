@@ -39,7 +39,7 @@ void Mcp23017::step() {
     Module::step();
 }
 
-void Mcp23017::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Mcp23017::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "levels") {
         Module::expect(arguments, 1, integer);
         const uint16_t value = arguments[0]->evaluate_integer();

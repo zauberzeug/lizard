@@ -222,7 +222,7 @@ void StepperMotor::step() {
     Module::step();
 }
 
-void StepperMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void StepperMotor::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "position") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");

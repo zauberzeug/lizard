@@ -242,7 +242,7 @@ void ImuBno085::step() {
     Module::step();
 }
 
-void ImuBno085::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void ImuBno085::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "set_mode") {
         Module::expect(arguments, 1, string);
         std::string mode = arguments[0]->evaluate_string();

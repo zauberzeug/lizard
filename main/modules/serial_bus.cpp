@@ -269,7 +269,7 @@ void SerialBus::step() {
     Module::step();
 }
 
-void SerialBus::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void SerialBus::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "send") {
         // bus.send(receiver, fmt[, args...]) — printf-style formatting.
         // See utils/format.h for supported specifiers.

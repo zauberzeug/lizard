@@ -52,7 +52,7 @@ void Output::step() {
     }
 }
 
-void Output::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Output::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "on") {
         Module::expect(arguments, 0);
         if (this->enabled) {

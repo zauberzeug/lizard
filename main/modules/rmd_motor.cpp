@@ -132,7 +132,7 @@ bool RmdMotor::clear_errors() {
     return this->send(0x76, 0, 0, 0, 0, 0, 0, 0);
 }
 
-void RmdMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void RmdMotor::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "power") {
         Module::expect(arguments, 1, numbery);
         this->power(arguments[0]->evaluate_number());

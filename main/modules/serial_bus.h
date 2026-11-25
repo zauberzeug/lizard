@@ -30,7 +30,7 @@ public:
     ~SerialBus() override;
 
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
     static uint8_t to_peer_id(const ConstExpression_ptr &argument);
 
