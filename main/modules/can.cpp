@@ -47,6 +47,20 @@ static void log_dropped_frame(const char *reason) {
     }
 }
 
+// The timing of ESP-IDF v5.3.1 for the ESP32 and the ESP32-S3, whose TWAI runs from the 80 MHz APB clock: v5.3.6 coarsened
+// its macros for APB-clocked chips from 125 kbit/s up, at 1 Mbit/s to 8 quanta per bit. The quanta frequencies below must
+// divide that clock, so a chip with another TWAI clock needs its own values.
+static_assert(TWAI_CLK_SRC_DEFAULT == TWAI_CLK_SRC_APB, "bit_timing() assumes the 80 MHz APB clock as the TWAI clock");
+static twai_timing_config_t bit_timing(const uint32_t quanta_hz, const uint8_t tseg_1, const uint8_t tseg_2) {
+    twai_timing_config_t config = {};
+    config.clk_src = TWAI_CLK_SRC_DEFAULT;
+    config.quanta_resolution_hz = quanta_hz;
+    config.tseg_1 = tseg_1;
+    config.tseg_2 = tseg_2;
+    config.sjw = 3;
+    return config;
+}
+
 static Module_ptr create_can(const std::string &name, const std::vector<ConstExpression_ptr> &arguments, MessageHandler) {
     Module::expect(arguments, 3, integer, integer, integer);
     const gpio_num_t rx_pin = (gpio_num_t)arguments[0]->evaluate_integer();
@@ -81,28 +95,28 @@ Can::Can(const std::string name, const gpio_num_t rx_pin, const gpio_num_t tx_pi
 
     switch (baud_rate) {
     case 1000000:
-        this->t_config = TWAI_TIMING_CONFIG_1MBITS();
+        this->t_config = bit_timing(20000000, 15, 4);
         break;
     case 800000:
-        this->t_config = TWAI_TIMING_CONFIG_800KBITS();
+        this->t_config = bit_timing(20000000, 16, 8);
         break;
     case 500000:
-        this->t_config = TWAI_TIMING_CONFIG_500KBITS();
+        this->t_config = bit_timing(10000000, 15, 4);
         break;
     case 250000:
-        this->t_config = TWAI_TIMING_CONFIG_250KBITS();
+        this->t_config = bit_timing(5000000, 15, 4);
         break;
     case 125000:
-        this->t_config = TWAI_TIMING_CONFIG_125KBITS();
+        this->t_config = bit_timing(2500000, 15, 4);
         break;
     case 100000:
-        this->t_config = TWAI_TIMING_CONFIG_100KBITS();
+        this->t_config = bit_timing(2000000, 15, 4);
         break;
     case 50000:
-        this->t_config = TWAI_TIMING_CONFIG_50KBITS();
+        this->t_config = bit_timing(1000000, 15, 4);
         break;
     case 25000:
-        this->t_config = TWAI_TIMING_CONFIG_25KBITS();
+        this->t_config = bit_timing(625000, 16, 8);
         break;
     default:
         throw std::runtime_error("invalid baud rate");
