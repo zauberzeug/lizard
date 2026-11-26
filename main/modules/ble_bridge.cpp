@@ -484,7 +484,7 @@ void BleBridge::step() {
     Module::step();
 }
 
-void BleBridge::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void BleBridge::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "link") {
         if (arguments.size() < 1 || arguments.size() > 2) {
             throw std::runtime_error("expecting 1 or 2 arguments (device_name[, pin])");

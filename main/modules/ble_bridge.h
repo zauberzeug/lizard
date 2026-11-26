@@ -18,7 +18,7 @@ public:
     BleBridge(const std::string name);
 
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 
 protected:
