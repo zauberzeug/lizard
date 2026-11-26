@@ -38,7 +38,7 @@ void Input::step() {
     Module::step();
 }
 
-void Input::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Input::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "get") {
         Module::expect(arguments, 0);
         echo("%s %d", this->name.c_str(), this->get_level());

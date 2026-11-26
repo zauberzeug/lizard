@@ -11,6 +11,7 @@ private:
     const ledc_timer_t ledc_timer;
     const ledc_channel_t ledc_channel;
     bool is_on = false;
+    uint32_t applied_duty = 0; // the duty last handed to the LEDC; the channel starts at 0
     void do_disable() override;
     void configure_timer(const uint32_t frequency);
     std::vector<PwmOutput *> timer_siblings() const;
@@ -24,6 +25,6 @@ public:
               const ledc_channel_t ledc_channel);
     void write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) override;
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

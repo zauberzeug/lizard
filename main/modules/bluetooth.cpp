@@ -127,7 +127,7 @@ void Bluetooth::step() {
     Module::step();
 }
 
-void Bluetooth::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Bluetooth::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "send") {
         expect(arguments, 1, string);
         ZZ::BleCommand::send(arguments[0]->evaluate_string());

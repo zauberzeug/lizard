@@ -4,7 +4,7 @@
 #include "math.h"
 #include <stdexcept>
 
-int write_arguments_to_buffer(const std::vector<ConstExpression_ptr> arguments, char *buffer, size_t buffer_len) {
+int write_arguments_to_buffer(const std::vector<ConstExpression_ptr> &arguments, char *buffer, size_t buffer_len) {
     int pos = 0;
     for (auto const &argument : arguments) {
         if (argument != arguments[0]) {

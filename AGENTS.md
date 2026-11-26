@@ -198,7 +198,7 @@ public:
 
     MyModule(const std::string name, /* constructor args */);
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     std::string get_output() const override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };
@@ -237,7 +237,7 @@ void MyModule::step() {
     // Per-cycle logic
 }
 
-void MyModule::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void MyModule::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "my_method") {
         Module::expect(arguments, 1, numbery);
         // Implementation
@@ -355,6 +355,8 @@ The main loop runs every **10ms** (`LOOP_PERIOD_MS` in `app_main`, paced with `x
 Modules self-register via `REGISTER_MODULE(ClassName, &create_X)` in their own `.cpp`. The macro keys off the class's `static constexpr const char *TYPE` constant — both the factory and the static `ClassName::get_defaults()` method are registered under that string. Forgetting either the macro or the `TYPE` constant causes the DSL to report `unknown module type "ClassName"`. Two modules trying to register under the same `TYPE` throw a hard error at static-init time, so collisions are caught at first boot rather than silently shadowing.
 
 The class must define `static const std::map<std::string, Variable_ptr> get_defaults()` (return an empty map if there are no defaults) and pass only the instance name to the `Module(name)` base constructor — the runtime type identity comes from RTTI on the polymorphic `Module`. Inheriting `get_defaults()` from an intermediate base class (e.g. `Wheels`) is fine; a subclass that adds properties must shadow `get_defaults()` and pass its result to the base constructor, so that the registered defaults always equal the constructed properties — expander proxies seed their properties exclusively from the registered `get_defaults()`, so a property that exists only in a constructor breaks proxied instances at runtime.
+
+`this->properties` is a `PropertyMap`: only ever add entries, never remove or replace one, because compiled property expressions, telemetry frames and the lookups by string literal keep what they found once (`erase`, `clear` and `swap` do not compile). A lookup by literal such as `this->properties.at("level")` remembers its entry on first use, so it belongs to code that holds the `InterpreterLock`: `step()`, `call()`, rules, routines and scheduled blocks. A module with its own FreeRTOS task hands its values to `step()` through a queue, as `Imu` does, instead of touching `properties` from the task.
 
 #### `WHOLE_ARCHIVE` is mandatory
 

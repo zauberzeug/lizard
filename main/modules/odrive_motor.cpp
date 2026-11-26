@@ -68,7 +68,7 @@ void ODriveMotor::set_mode(const uint8_t state, const uint8_t control_mode, cons
     }
 }
 
-void ODriveMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void ODriveMotor::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "zero") {
         Module::expect(arguments, 0);
         const Variable_ptr &tick_offset = this->properties.at("tick_offset");
