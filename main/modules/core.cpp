@@ -258,7 +258,7 @@ std::string Core::get_output() const {
                 pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%.*f", element.precision, variable->number_value());
                 break;
             case string:
-                pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "\"%s\"", variable->string_value().c_str());
+                pos += csprint_quoted(&output_buffer[pos], sizeof(output_buffer) - pos, variable->string_value());
                 break;
             default:
                 throw std::runtime_error("invalid type");

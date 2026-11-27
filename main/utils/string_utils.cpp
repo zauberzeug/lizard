@@ -28,3 +28,23 @@ int csprintf(char *buffer, size_t buffer_len, const char *format, ...) {
 
     return num_chars;
 }
+
+int csprint_quoted(char *const buffer, const size_t buffer_len, const std::string &text) {
+    size_t pos = 0;
+    const auto put = [&](const char c) {
+        if (pos + 1 >= buffer_len) { // the final '\0' needs a byte as well
+            throw BufferTooSmallError();
+        }
+        buffer[pos++] = c;
+    };
+    put('"');
+    for (const char c : text) {
+        if (c == '"' || c == '\\') {
+            put('\\');
+        }
+        put(c);
+    }
+    put('"');
+    buffer[pos] = '\0';
+    return pos;
+}
