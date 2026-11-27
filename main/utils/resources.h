@@ -13,7 +13,10 @@ namespace resources {
 enum class Kind { pin,
                   uart,
                   can,
-                  adc };
+                  adc,
+                  ledc_channel,
+                  ledc_timer,
+                  shared_ledc_timer };
 
 // Reserves the console UART with its pins and the pins of the SPI flash, which no module may use.
 void reserve_boot_resources();
@@ -31,6 +34,9 @@ public:
     void uart(const uart_port_t port);
     void can();                  // the single TWAI controller
     void adc(const int unit_id); // 1 or 2, as the AnalogUnit argument counts
+    void ledc_channel(const int channel);
+    void ledc_timer(const int timer);        // for this owner alone, e.g. because it changes the frequency while it runs
+    void shared_ledc_timer(const int timer); // together with other owners that share it
     std::string owner() const;
 
 private:

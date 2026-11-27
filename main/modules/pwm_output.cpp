@@ -47,6 +47,8 @@ PwmOutput::PwmOutput(const std::string name,
                      const ledc_channel_t ledc_channel)
     : Module(name), pin(pin), ledc_timer(ledc_timer), ledc_channel(ledc_channel) {
     this->claims.pin(pin);
+    this->claims.ledc_channel(ledc_channel);
+    this->claims.shared_ledc_timer(ledc_timer); // with other PwmOutputs, see timer_siblings()
     gpio_reset_pin(pin);
 
     this->properties = PwmOutput::get_defaults();
