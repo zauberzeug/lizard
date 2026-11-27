@@ -52,7 +52,7 @@ void Output::step() {
     }
 }
 
-void Output::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Output::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "on") {
         Module::expect(arguments, 0);
         if (this->enabled) {
@@ -102,6 +102,7 @@ void Output::call(const std::string method_name, const std::vector<ConstExpressi
 
 GpioOutput::GpioOutput(const std::string name, const gpio_num_t number)
     : Output(name), number(number) {
+    this->claims.pin(number);
     gpio_reset_pin(number);
     gpio_set_direction(number, GPIO_MODE_OUTPUT);
 }

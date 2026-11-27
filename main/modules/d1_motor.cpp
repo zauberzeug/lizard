@@ -93,7 +93,7 @@ void D1Motor::wait() {
     this->waiting_sdo_writes = 0;
 }
 
-void D1Motor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void D1Motor::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "setup") {
         Module::expect(arguments, 0);
         this->setup();

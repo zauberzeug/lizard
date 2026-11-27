@@ -12,6 +12,9 @@ class Variable;
 using Variable_ptr = std::shared_ptr<Variable>;
 using ConstVariable_ptr = std::shared_ptr<const Variable>;
 
+// "a boolean", "an integer", ... for error messages
+const char *describe(const Type type);
+
 // A variable holds exactly one value of its type. The value shares one 8-byte slot; string and identifier
 // variables keep their text on the heap behind the same slot. The slot is reached only through the typed
 // accessors below, which throw on a type mismatch instead of reinterpreting the bytes. Every property of every

@@ -1,4 +1,5 @@
 #include "proxy.h"
+#include "../compilation/expressions.h"
 #include "../utils/string_utils.h"
 #include "../utils/uart.h"
 #include "driver/uart.h"
@@ -22,7 +23,7 @@ Proxy::Proxy(const std::string name,
     this->expander->add_proxy(this); // last: a throw above frees this proxy, and the expander must not keep a pointer to it
 }
 
-void Proxy::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Proxy::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     this->expander->send_call(this->name, method_name, arguments);
 }
 
@@ -35,4 +36,19 @@ void Proxy::write_property(const std::string property_name, const ConstExpressio
         this->expander->send_property(this->name, property_name, expression);
     }
     Module::get_property(property_name)->assign(expression);
+}
+
+void Proxy::declare_property(const std::string &property_name, const Variable_ptr &variable) {
+    if (property_name.find('.') != std::string::npos) {
+        throw std::runtime_error("proxy \"" + this->name + "\" does not accept nested property \"" + property_name + "\"");
+    }
+    const auto it = this->properties.find(property_name);
+    if (it == this->properties.end()) {
+        this->properties[property_name] = variable;
+    } else if (it->second->type == variable->type) {
+        it->second->assign(std::make_shared<VariableExpression>(variable));
+    } else {
+        throw std::runtime_error("property \"" + this->name + "." + property_name + "\" is " +
+                                 describe(it->second->type) + ", not " + describe(variable->type));
+    }
 }

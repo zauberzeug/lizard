@@ -15,6 +15,12 @@ class Serial : public Module {
 private:
     mutable std::vector<std::string> users;
     mutable std::string pending_lines; // lines after the first of a read that held several; not visible to read() and available()
+    // dropped by has_buffered_lines() for lack of a line end, counted since flush()
+    mutable size_t discarded_bytes = 0;
+    // of the driver this Serial installs; a line can take half of the receive buffer. A Serial on the console keeps the
+    // console's driver (8 KB in, no TX ring), there they only size that line limit and the timeout of wait_until_sent()
+    mutable int rx_buffer_size;
+    mutable int tx_buffer_size;
 
     /// Set the receive FIFO threshold to what the current reader needs; call after install and after mute/unmute.
     void apply_rx_full_threshold() const;
@@ -26,18 +32,23 @@ public:
     const gpio_num_t tx_pin;
     const long baud_rate;
     const uart_port_t uart_num;
+    const bool on_console; // UART0 on the console pins, only for a SerialBus, which takes over the console's driver
 
     Serial(const std::string name,
            const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num);
+    static bool is_console(const int rx_pin, const int tx_pin, const int uart_num);
     ~Serial();
     void initialize_uart() const;
+    /// Reinstall the driver with other buffers, e.g. smaller ones for a reader that reads in a task of its own.
+    void resize_buffers(const int rx_buffer_size, const int tx_buffer_size) const;
     void enable_line_detection() const;
-    void claim(const std::string &user) const;
+    void claim(const std::string &user) const; // refused on the console pins, which only a SerialBus takes over
     void require_sole_user(const std::string &user) const;
     void deinstall() const;
     void reinitialize_after_flash() const;
     int available() const;
     bool has_buffered_lines() const;
+    size_t unterminated_bytes() const; // input that never formed a line since flush(): dropped plus still buffered
     int read(const uint32_t timeout = 0) const;
     static constexpr int LINE_DISCARDED = -1;
     static constexpr size_t CHECKSUM_TRAILER_LENGTH = 4; // "@xx\n" appended by write_checked_line
@@ -47,7 +58,8 @@ public:
     void write_checked_line(const char *message) const;
     void write_checked_line(const char *message, const int length) const;
     void flush() const;
+    void wait_until_sent() const;
     std::string get_output() const override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

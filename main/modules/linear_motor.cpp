@@ -42,7 +42,7 @@ void LinearMotor::step() {
     Module::step();
 }
 
-void LinearMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void LinearMotor::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "in") {
         Module::expect(arguments, 0);
         if (!this->enabled)
@@ -81,6 +81,10 @@ GpioLinearMotor::GpioLinearMotor(const std::string name,
                                  const gpio_num_t end_in,
                                  const gpio_num_t end_out)
     : LinearMotor(name), move_in(move_in), move_out(move_out), end_in(end_in), end_out(end_out) {
+    this->claims.pin(move_in);
+    this->claims.pin(move_out);
+    this->claims.pin(end_in);
+    this->claims.pin(end_out);
     gpio_reset_pin(move_in);
     gpio_reset_pin(move_out);
     gpio_reset_pin(end_in);

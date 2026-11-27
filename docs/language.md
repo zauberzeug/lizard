@@ -22,6 +22,9 @@ button.level
 
 Expressions can be assigned to variables, used in conditions and passed to constructors, method calls or routine calls.
 Plain expression statements print their result to the command line.
+Expressions can be nested up to 39 levels deep, where every operator and every pair of parentheses adds a level.
+A chain like `a + b + c + ...` can therefore have up to 40 terms.
+Deeper expressions are rejected with "expression is nested too deeply".
 
 **Variables: declaration and assignment**
 
@@ -72,6 +75,17 @@ Some module properties are meant to be written to:
 ```
 motor.reversed = true
 ```
+
+**Properties: declaration**
+
+Some modules accept property declarations, which work like variable declarations:
+
+```
+float x.level = 0.5
+```
+
+Modules that do not accept declarations report an error.
+[Proxies](module_reference.md#proxy) and [BusTelemetry](module_reference.md#bus-telemetry) modules accept declarations.
 
 **Routines: definition and call**
 
@@ -193,6 +207,14 @@ when button.level == 0 then
 end
 ```
 
+**Failing actions**
+
+If an action fails, for example because a module reports an error, the error is printed and the remaining actions are skipped.
+The rule or routine has then finished: a rule fires again the next time its condition is true and starts again from its first action, and a routine can be called again.
+A rule that uses a flag to fire only once should therefore set the flag after its actions; otherwise a failed action is never attempted again.
+If an awaited routine fails, the `await` fails as well and the actions after it are skipped.
+A routine started without `await` runs on its own, so its failure does not affect the rule or routine that started it.
+
 ## Data types
 
 Lizard currently supports five data types:
@@ -240,7 +262,13 @@ Lines with a leading `!` can indicate one of the following control commands.
 | `!!abc` | Interpret `abc` as Lizard code                           |
 | `!"abc` | Print `abc` to the command-line                          |
 
-Note that the commands `!+`, `!-` and `!?` affect the startup script in RAM, which is only written to non-volatile storage with the `!.` command.
+Note that `!+` and `!-` edit a copy of the startup script in RAM, which is only written to non-volatile storage with the `!.` command; until then `!?` prints this copy.
+Otherwise the startup script is not held in RAM: `!?` reads it from non-volatile storage, and the boot runs it from there statement by statement.
+The `!.` command does not reply when it succeeds and prints an error when it cannot write to non-volatile storage.
+The [`core.startup_checksum()`](module_reference.md#core) command sums the bytes of the copy while there is one, so before `!.` it checks the result of the `!+` and `!-` commands.
+After a successful `!.` there is no copy, and the same command sums what `!.` has stored, also before a restart.
+If `!.` fails, the copy stays in RAM for another `!.`, and `core.startup_checksum()` reports the error instead of a checksum until the copy changes or a `!.` succeeds.
+If the stored script cannot be read, `!+` and `!-abc` report the error and change nothing; `!-` starts a new script without reading the old one.
 
 Input from the default command-line interface UART0 is usually interpreted as Lizard code;
 input from a [port expander](module_reference.md#expander) is usually printed to the command-line on UART0.

@@ -34,6 +34,7 @@ It provides interaction with the microcontroller itself, e.g. reading the system
 During a main loop Lizard repeatedly performs the following tasks:
 
 1. Read and evaluate input from the serial interface.
-2. Run the step functions of each module. (The `core` module is evaluated last.)
+2. Run the step functions of each module in the order of their creation, the `core` module last.
 3. Check all rules and execute associated routines.
 4. Advance routines that are already running and waiting for certain conditions.
+5. Send the [telemetry frames](module_reference.md#core) that are due.

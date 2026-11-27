@@ -8,6 +8,7 @@ struct output_element_t {
     const ConstModule_ptr module;
     const std::string property_name;
     const unsigned int precision;
+    mutable ConstVariable_ptr variable; // nullptr until a loop finds it, then kept, since it is never replaced
 };
 
 class Core;
@@ -22,7 +23,7 @@ private:
 public:
     Core(const std::string name);
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     double get(const std::string property_name) const;
     void set(std::string property_name, double value);
     std::string get_output() const override;

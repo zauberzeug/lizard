@@ -17,7 +17,7 @@ std::string format_args(const std::string &fmt,
             continue;
         }
         const size_t start = i++;
-        while (i < fmt.size() && !std::strchr("dfs%", fmt[i])) {
+        while (i < fmt.size() && std::strchr("-+ #0123456789.", fmt[i])) {
             ++i;
         }
         if (i >= fmt.size()) {

@@ -8,8 +8,13 @@ bool Routine::is_running() const {
     return 0 <= this->instruction_index && this->instruction_index < this->actions.size();
 }
 
+bool Routine::has_failed() const {
+    return this->failed;
+}
+
 void Routine::start() {
     this->instruction_index = 0;
+    this->failed = false;
 }
 
 void Routine::step() {
@@ -24,4 +29,9 @@ void Routine::step() {
         this->instruction_index++;
     }
     this->instruction_index = -1;
+}
+
+void Routine::fail() {
+    this->instruction_index = -1;
+    this->failed = true;
 }

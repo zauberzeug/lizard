@@ -11,6 +11,7 @@ namespace boot_guard {
 
 static constexpr unsigned MAX_FAILED_BOOTS = 2;
 static constexpr unsigned long SETTLE_MS = 5000;
+static constexpr unsigned long BUS_DRAIN_MS = 1000; // a booting peer is polled about every 250 ms, after each timeout
 static constexpr uint32_t MAGIC = 0x4c495a44;
 
 // RTC memory survives panics, watchdogs and esp_restart(), but not a power-on or EN reset.
@@ -66,7 +67,11 @@ void startup_failed(const char *what) {
     std::snprintf(reason, sizeof(reason), "%s", what);
     echo("error while loading startup script: %s", what);
     echo("restarting (failed boot %u of %u)", failed_boots, MAX_FAILED_BOOTS);
-    uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(500));
+    if (console_handed_over()) {
+        drain_console(BUS_DRAIN_MS); // the coordinator takes these lines with its next polls
+    } else {
+        uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(500));
+    }
     esp_restart();
 }
 

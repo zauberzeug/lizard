@@ -9,6 +9,7 @@
 #include "compilation/rule.h"
 #include "compilation/variable.h"
 #include "compilation/variable_assignment.h"
+#include "esp_timer.h"
 #include "global.h"
 #include "main.h"
 #include "modules/bluetooth.h"
@@ -23,11 +24,14 @@
 #include "utils/boot_guard.h"
 #include "utils/bus_backup.h"
 #include "utils/interpreter_lock.h"
+#include "utils/resources.h"
 #include "utils/scheduler.h"
+#include "utils/telemetry.h"
 #include "utils/tictoc.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
 #include "utils/uart_driver.h"
+#include <cctype>
 #include <chrono>
 #include <functional>
 #include <math.h>
@@ -61,6 +65,27 @@ std::string identifier_to_string(const struct owl_ref ref) {
     return std::string(identifier.identifier, identifier.length);
 }
 
+std::string property_name_to_string(const struct owl_ref property_name, const struct owl_ref subproperty_name) {
+    const std::string name = identifier_to_string(property_name);
+    return subproperty_name.empty ? name : name + "." + identifier_to_string(subproperty_name);
+}
+
+Variable_ptr create_variable(const struct owl_ref ref) {
+    const struct parsed_datatype datatype = parsed_datatype_get(ref);
+    switch (datatype.type) {
+    case PARSED_BOOLEAN:
+        return std::make_shared<BooleanVariable>();
+    case PARSED_INTEGER:
+        return std::make_shared<IntegerVariable>();
+    case PARSED_NUMBER:
+        return std::make_shared<NumberVariable>();
+    case PARSED_STRING:
+        return std::make_shared<StringVariable>();
+    default:
+        throw std::runtime_error("invalid data type for declaration");
+    }
+}
+
 Expression_ptr compile_expression(const struct owl_ref ref);
 
 std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
@@ -71,8 +96,9 @@ std::vector<ConstExpression_ptr> compile_arguments(const struct owl_ref ref) {
     return arguments;
 }
 
-Expression_ptr compile_expression(const struct owl_ref ref) {
-    const struct parsed_expression expression = parsed_expression_get(ref);
+// compile_leaf, compile_unary and compile_binary are kept out of line
+// so that compile_expression's recursive frame does not hold the temporaries of every case (256 instead of 1056 B)
+__attribute__((noinline)) static Expression_ptr compile_leaf(const struct parsed_expression &expression) {
     switch (expression.type) {
     case PARSED_TRUE:
         return std::make_shared<BooleanExpression>(true);
@@ -94,55 +120,85 @@ Expression_ptr compile_expression(const struct owl_ref ref) {
         return std::make_shared<VariableExpression>(Global::get_variable(identifier_to_string(expression.identifier)));
     case PARSED_PROPERTY:
         return std::make_shared<PropertyExpression>(Global::get_module(identifier_to_string(expression.module_name)),
-                                                    identifier_to_string(expression.property_name));
+                                                    property_name_to_string(expression.property_name, expression.subproperty_name));
+    default:
+        throw std::runtime_error("invalid expression");
+    }
+}
+
+template <typename T>
+__attribute__((noinline)) static Expression_ptr compile_unary(const struct owl_ref operand) {
+    return std::make_shared<T>(compile_expression(operand));
+}
+
+template <typename T>
+__attribute__((noinline)) static Expression_ptr compile_binary(const struct owl_ref left, const struct owl_ref right) {
+    return std::make_shared<T>(compile_expression(left), compile_expression(right));
+}
+
+Expression_ptr compile_expression(const struct owl_ref ref) {
+    // each level takes up to 336 B of the 32 kB main task stack (256 B here plus 80 B in compile_binary, IDF 5.3);
+    // an ESP32 crashed at 95 levels, but an "at" block runs and is torn down on the 8 kB scheduler stack,
+    // where a sum of 47 terms crashed, so 40 leaves some headroom there
+    static const int MAX_EXPRESSION_DEPTH = 40;
+    static int depth = 0; // a plain static is fine: compilation only runs under the InterpreterLock
+    if (depth >= MAX_EXPRESSION_DEPTH) {
+        throw std::runtime_error("expression is nested too deeply");
+    }
+    struct DepthGuard {
+        DepthGuard() { ++depth; }
+        ~DepthGuard() { --depth; }
+    } depth_guard;
+    const struct parsed_expression expression = parsed_expression_get(ref);
+    switch (expression.type) {
     case PARSED_PARENTHESES:
         return compile_expression(expression.expression);
     case PARSED_POWER:
-        return std::make_shared<PowerExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<PowerExpression>(expression.left, expression.right);
     case PARSED_NEGATE:
-        return std::make_shared<NegateExpression>(compile_expression(expression.operand));
+        return compile_unary<NegateExpression>(expression.operand);
     case PARSED_MULTIPLY:
-        return std::make_shared<MultiplyExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<MultiplyExpression>(expression.left, expression.right);
     case PARSED_DIVIDE:
-        return std::make_shared<DivideExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<DivideExpression>(expression.left, expression.right);
     case PARSED_MODULO:
-        return std::make_shared<ModuloExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<ModuloExpression>(expression.left, expression.right);
     case PARSED_FLOOR_DIVIDE:
-        return std::make_shared<FloorDivideExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<FloorDivideExpression>(expression.left, expression.right);
     case PARSED_ADD:
-        return std::make_shared<AddExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<AddExpression>(expression.left, expression.right);
     case PARSED_SUBTRACT:
-        return std::make_shared<SubtractExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<SubtractExpression>(expression.left, expression.right);
     case PARSED_SHIFT_LEFT:
-        return std::make_shared<ShiftLeftExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<ShiftLeftExpression>(expression.left, expression.right);
     case PARSED_SHIFT_RIGHT:
-        return std::make_shared<ShiftRightExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<ShiftRightExpression>(expression.left, expression.right);
     case PARSED_BIT_AND:
-        return std::make_shared<BitAndExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<BitAndExpression>(expression.left, expression.right);
     case PARSED_BIT_XOR:
-        return std::make_shared<BitXorExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<BitXorExpression>(expression.left, expression.right);
     case PARSED_BIT_OR:
-        return std::make_shared<BitOrExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<BitOrExpression>(expression.left, expression.right);
     case PARSED_GREATER:
-        return std::make_shared<GreaterExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<GreaterExpression>(expression.left, expression.right);
     case PARSED_LESS:
-        return std::make_shared<LessExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<LessExpression>(expression.left, expression.right);
     case PARSED_GREATER_EQUAL:
-        return std::make_shared<GreaterEqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<GreaterEqualExpression>(expression.left, expression.right);
     case PARSED_LESS_EQUAL:
-        return std::make_shared<LessEqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<LessEqualExpression>(expression.left, expression.right);
     case PARSED_EQUAL:
-        return std::make_shared<EqualExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<EqualExpression>(expression.left, expression.right);
     case PARSED_UNEQUAL:
-        return std::make_shared<UnequalExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<UnequalExpression>(expression.left, expression.right);
     case PARSED_NOT:
-        return std::make_shared<NotExpression>(compile_expression(expression.operand));
+        return compile_unary<NotExpression>(expression.operand);
     case PARSED_AND:
-        return std::make_shared<AndExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<AndExpression>(expression.left, expression.right);
     case PARSED_OR:
-        return std::make_shared<OrExpression>(compile_expression(expression.left), compile_expression(expression.right));
+        return compile_binary<OrExpression>(expression.left, expression.right);
     default:
-        throw std::runtime_error("invalid expression");
+        return compile_leaf(expression);
     }
 }
 
@@ -196,7 +252,7 @@ std::vector<Action_ptr> compile_actions(const struct owl_ref ref, const bool all
             struct parsed_await_routine await_routine = parsed_await_routine_get(action.await_routine);
             const std::string routine_name = identifier_to_string(await_routine.routine_name);
             const Routine_ptr routine = Global::get_routine(routine_name);
-            actions.push_back(std::make_shared<AwaitRoutine>(routine));
+            actions.push_back(std::make_shared<AwaitRoutine>(routine, routine_name));
         } else {
             throw std::runtime_error("unknown action type");
         }
@@ -277,28 +333,23 @@ void process_tree(owl_tree *const tree, bool from_expander) {
             variable->assign(expression);
         } else if (!statement.variable_declaration.empty) {
             const struct parsed_variable_declaration variable_declaration = parsed_variable_declaration_get(statement.variable_declaration);
-            const struct parsed_datatype datatype = parsed_datatype_get(variable_declaration.datatype);
             const std::string variable_name = identifier_to_string(variable_declaration.variable_name);
-            switch (datatype.type) {
-            case PARSED_BOOLEAN:
-                Global::add_variable(variable_name, std::make_shared<BooleanVariable>());
-                break;
-            case PARSED_INTEGER:
-                Global::add_variable(variable_name, std::make_shared<IntegerVariable>());
-                break;
-            case PARSED_NUMBER:
-                Global::add_variable(variable_name, std::make_shared<NumberVariable>());
-                break;
-            case PARSED_STRING:
-                Global::add_variable(variable_name, std::make_shared<StringVariable>());
-                break;
-            default:
-                throw std::runtime_error("invalid data type for variable declaration");
-            }
+            Global::add_variable(variable_name, create_variable(variable_declaration.datatype));
             if (!variable_declaration.expression.empty) {
                 const ConstExpression_ptr expression = compile_expression(variable_declaration.expression);
                 Global::get_variable(variable_name)->assign(expression);
             }
+        } else if (!statement.property_declaration.empty) {
+            const struct parsed_property_declaration property_declaration = parsed_property_declaration_get(statement.property_declaration);
+            const std::string module_name = identifier_to_string(property_declaration.module_name);
+            const Module_ptr module = Global::get_module(module_name);
+            const std::string property_name = property_name_to_string(property_declaration.property_name, property_declaration.subproperty_name);
+            const Variable_ptr variable = create_variable(property_declaration.datatype);
+            if (!property_declaration.expression.empty) {
+                const ConstExpression_ptr expression = compile_expression(property_declaration.expression);
+                variable->assign(expression);
+            }
+            module->declare_property(property_name, variable);
         } else if (!statement.routine_definition.empty) {
             const struct parsed_routine_definition routine_definition = parsed_routine_definition_get(statement.routine_definition);
             const std::string routine_name = identifier_to_string(routine_definition.routine_name);
@@ -328,6 +379,44 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
+// Reports a parse error of `text`; `offset` is where `text` starts in a longer script, so positions refer to that script.
+static bool check_parse(owl_tree *tree, const char *text, const size_t offset) {
+    if (!tree) {
+        echo("error: allocation failure while parsing");
+        return false;
+    }
+    struct source_range range;
+    switch (owl_tree_get_error(tree, &range)) {
+    case ERROR_NONE:
+        return true;
+    case ERROR_INVALID_FILE:
+        echo("error: invalid file");
+        break;
+    case ERROR_INVALID_OPTIONS:
+        echo("error: invalid options");
+        break;
+    case ERROR_INVALID_TOKEN:
+        echo("error: invalid token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
+             std::string(text, range.start, range.end - range.start).c_str());
+        break;
+    case ERROR_UNEXPECTED_TOKEN:
+        echo("error: unexpected token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
+             std::string(text, range.start, range.end - range.start).c_str());
+        break;
+    case ERROR_MORE_INPUT_NEEDED:
+        echo("error: more input needed at range %zu %zu", offset + range.start, offset + range.end);
+        break;
+    case ERROR_ALLOCATION_FAILURE:
+        echo("error: allocation failure while parsing");
+        break;
+    default:
+        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
+        echo("error: unknown parse error");
+        break;
+    }
+    return false;
+}
+
 void process_lizard(const char *line, bool trigger_keep_alive, bool from_expander) {
     InterpreterLock lock;
     if (trigger_keep_alive) {
@@ -343,46 +432,97 @@ void process_lizard(const char *line, bool trigger_keep_alive, bool from_expande
     if (debug) {
         toc("Tree creation");
     }
-    if (!tree) {
-        echo("error: allocation failure while parsing");
+    if (!check_parse(tree.get(), line, 0)) {
         return;
     }
-    struct source_range range;
-    switch (owl_tree_get_error(tree.get(), &range)) {
-    case ERROR_INVALID_FILE:
-        echo("error: invalid file");
-        break;
-    case ERROR_INVALID_OPTIONS:
-        echo("error: invalid options");
-        break;
-    case ERROR_INVALID_TOKEN:
-        echo("error: invalid token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(line, range.start, range.end - range.start).c_str());
-        break;
-    case ERROR_UNEXPECTED_TOKEN:
-        echo("error: unexpected token at range %zu %zu \"%s\"", range.start, range.end,
-             std::string(line, range.start, range.end - range.start).c_str());
-        break;
-    case ERROR_MORE_INPUT_NEEDED:
-        echo("error: more input needed at range %zu %zu", range.start, range.end);
-        break;
-    case ERROR_ALLOCATION_FAILURE:
-        echo("error: allocation failure while parsing");
-        break;
-    case ERROR_NONE:
-        if (debug) {
-            owl_tree_print(tree.get());
-            tic();
+    if (debug) {
+        if (!console_handed_over()) {
+            owl_tree_print(tree.get()); // prints to stdout directly
         }
-        process_tree(tree.get(), from_expander);
-        if (debug) {
-            toc("Tree traversal");
+        tic();
+    }
+    process_tree(tree.get(), from_expander);
+    if (debug) {
+        toc("Tree traversal");
+    }
+}
+
+// Whether `line` holds the word "end", which can close a rule, routine or schedule.
+static bool has_end_word(const std::string &line) {
+    const auto is_word = [](const char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (size_t i = line.find("end"); i != std::string::npos; i = line.find("end", i + 1)) {
+        if ((i == 0 || !is_word(line[i - 1])) && (i + 3 >= line.size() || !is_word(line[i + 3]))) {
+            return true;
         }
-        break;
-    default:
-        // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
-        echo("error: unknown parse error");
-        break;
+    }
+    return false;
+}
+
+// Goes through the startup script statement by statement, straight from NVS, so that neither the script nor one parse
+// tree for all of it has to fit into the heap. A statement ends where owl stops asking for more input, so rules and
+// routines may still span lines. Error positions refer to the whole script, as with the former single parse.
+// Returns false after reporting the first syntax error; with `run`, each statement runs right after its parse and an
+// exception aborts the rest.
+static bool walk_startup(const bool run) {
+    std::string statement;
+    size_t statement_offset = 0;
+    size_t offset = 0;
+    bool ok = true;
+    Storage::read_startup_lines([&](const std::string &line) {
+        if (!ok) {
+            return;
+        }
+        const bool continued = !statement.empty();
+        if (!continued) {
+            statement_offset = offset;
+        }
+        statement += line;
+        statement += '\n';
+        offset += line.size() + 1;
+        // an open block ends only with "end", so other lines need no new parse
+        if (continued && !has_end_word(line)) {
+            return;
+        }
+        auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
+        struct source_range range;
+        if (tree && owl_tree_get_error(tree.get(), &range) == ERROR_MORE_INPUT_NEEDED) {
+            return; // a rule or routine continues on the next line
+        }
+        if (!check_parse(tree.get(), statement.c_str(), statement_offset)) {
+            ok = false;
+            return;
+        }
+        if (run) {
+            process_tree(tree.get(), false);
+        }
+        statement.clear();
+    });
+    if (ok && !statement.empty()) {
+        // the script ends inside a statement
+        auto const tree = std::unique_ptr<owl_tree, std::function<void(owl_tree *)>>(owl_tree_create_from_string(statement.c_str()), owl_tree_destroy);
+        ok = check_parse(tree.get(), statement.c_str(), statement_offset);
+        if (ok && run) {
+            process_tree(tree.get(), false);
+        }
+    }
+    return ok;
+}
+
+// Like the former single parse of the whole script: a syntax error anywhere means that nothing runs, and a script that
+// cannot be read from storage is reported and skipped. A statement that fails to parse while running (only a lack of
+// heap can cause that after the check pass) aborts the startup through the boot guard, so that no half of it runs.
+static void run_startup() {
+    InterpreterLock lock;
+    core_module->keep_alive();
+    bool valid = false;
+    try {
+        valid = walk_startup(false);
+    } catch (const std::exception &e) {
+        echo("error while reading startup script from storage: %s", e.what());
+        return;
+    }
+    if (valid && !walk_startup(true)) {
+        throw std::runtime_error("a statement of the startup script could not be parsed while running");
     }
 }
 
@@ -391,7 +531,7 @@ void process_line(const char *line, const int len, const bool trigger_keep_alive
     if (len >= 2 && line[0] == '!') {
         switch (line[1]) {
         case '+':
-            Storage::append_to_startup(line + 2);
+            Storage::append_to_startup(std::string(line + 2));
             break;
         case '-':
             Storage::remove_from_startup(line + 2);
@@ -434,6 +574,9 @@ static void process_uart_line(char *line, const int len) {
 void process_uart() {
     static char input[CONSOLE_LINE_SIZE];
     static bool discarding = false; // an unterminated run exceeded a line: drop everything up to its line end
+    if (console_handed_over()) {
+        return; // a serial bus reads UART0
+    }
     while (true) {
         const int pos = uart_pattern_pop_pos(UART_NUM_0);
         if (pos < 0) {
@@ -474,6 +617,9 @@ void process_uart() {
             process_uart_line(input + start, end - start);
             start = end;
         }
+        if (console_handed_over()) {
+            return; // a line created a serial bus on the console, which reads UART0 from now on
+        }
     }
 }
 
@@ -489,12 +635,15 @@ void run_step(Module_ptr module) {
 void app_main() {
     vTaskDelay(1500 / portTICK_PERIOD_MS); // ensure that all log messages are sent out completely before proceeding
 
-    // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be
-    // initialized first; Storage::init() below calls nvs_flash_init() again, which is safe.
+    // Read the persisted baud rate before configuring UART0 (default 115200). NVS must be initialized first.
     // Note: the ROM bootloader and early boot log always use 115200 regardless of this value.
     nvs_flash_init();
-    uint32_t baud_rate = 115200;
+    uint32_t baud_rate = CONSOLE_DEFAULT_BAUD_RATE;
     Storage::get_baudrate(baud_rate);
+    // a node whose console is a bus link prints at the link's rate from here on, so its coordinator can read
+    // what it prints before its bus takes over the console
+    const uint32_t own_baud_rate = baud_rate;
+    const bool at_bus_rate = bus_backup::get_console_baud_rate(baud_rate);
 
     const uart_config_t uart_config = {
         .baud_rate = static_cast<int>(baud_rate),
@@ -510,8 +659,13 @@ void app_main() {
     ESP_ERROR_CHECK(install_uart_driver_on_core1(UART_NUM_0, RX_RING_SIZE, 0));
     uart_enable_pattern_det_baud_intr(UART_NUM_0, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(UART_NUM_0, RX_PATTERN_QUEUE);
+    if (at_bus_rate) {
+        // the coordinator read the boot log as garbage; a line end keeps it out of the first line printed here
+        uart_write_bytes(UART_NUM_0, "\n", 1);
+    }
 
     try {
+        resources::reserve_boot_resources();
         Global::add_module("core", core_module = std::make_shared<Core>("core"));
         scheduler::init();
     } catch (const std::runtime_error &e) {
@@ -519,16 +673,9 @@ void app_main() {
         exit(1);
     }
 
-    // a storage error is not a failed startup: report it and continue with an empty script so the console stays reachable
-    try {
-        Storage::init();
-    } catch (const std::exception &e) {
-        echo("error while reading startup script from storage: %s", e.what());
-    }
-
     try {
         if (boot_guard::should_run_startup()) {
-            process_lizard(Storage::startup.c_str());
+            run_startup();
         }
     } catch (const std::exception &e) {
         boot_guard::startup_failed(e.what());
@@ -539,13 +686,22 @@ void app_main() {
     bus_backup::save_if_present();
     bus_backup::restore_if_needed();
 
-    printf("\nReady.\n");
+    if (!console_handed_over()) {
+        if (at_bus_rate) {
+            // no bus took the console over, e.g. the startup script moved it to other pins
+            uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
+            uart_set_baudrate(UART_NUM_0, own_baud_rate);
+        }
+        printf("\nReady.\n"); // a serial bus that took over the console reports "Ready." with its first answer
+    }
 
+    constexpr int LOOP_PERIOD_MS = 10;
     // Anchor for the deadline loop below: xTaskDelayUntil advances this by one period
     // each iteration, giving a drift-free 10 ms cadence (no millis() re-read per loop).
     TickType_t last_wake = xTaskGetTickCount();
 
     while (true) {
+        const int64_t cycle_start_us = esp_timer_get_time();
         boot_guard::step();
 
         try {
@@ -554,7 +710,7 @@ void app_main() {
             echo("error processing uart0: %s", e.what());
         }
 
-        for (auto const &[module_name, module] : Global::modules) {
+        for (auto const &module : Global::ordered_modules) {
             if (module != core_module) {
                 run_step(module);
             }
@@ -563,12 +719,19 @@ void app_main() {
 
         for (auto const &rule : Global::rules) {
             InterpreterLock lock;
+            bool condition = false;
             try {
-                if (rule->condition->evaluate_boolean() && !rule->routine->is_running()) {
+                condition = rule->condition->evaluate_boolean();
+            } catch (const std::runtime_error &e) {
+                echo("error in rule: %s", e.what()); // only prevents a new start, a running run keeps stepping
+            }
+            try {
+                if (condition && !rule->routine->is_running()) {
                     rule->routine->start();
                 }
                 rule->routine->step();
             } catch (const std::runtime_error &e) {
+                rule->routine->fail(); // end the run, otherwise every loop repeats the failing action
                 echo("error in rule: %s", e.what());
             }
         }
@@ -578,15 +741,20 @@ void app_main() {
             try {
                 routine->step();
             } catch (const std::runtime_error &e) {
+                routine->fail();
                 echo("error in routine \"%s\": %s", routine_name.c_str(), e.what());
             }
         }
+
+        telemetry::step();
+
+        check_console_load(esp_timer_get_time() - cycle_start_us, LOOP_PERIOD_MS * 1000);
 
         // Sleep until the next 10 ms period boundary instead of a full vTaskDelay(10) after
         // work, so the period is max(10 ms, work) and drift-free (#213). On overrun
         // xTaskDelayUntil returns pdFALSE without blocking; floor at 1 tick so the idle task
         // still runs to feed the watchdog (vTaskDelay(0) only yields to equal-prio tasks).
-        if (xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10)) == pdFALSE) {
+        if (xTaskDelayUntil(&last_wake, pdMS_TO_TICKS(LOOP_PERIOD_MS)) == pdFALSE) {
             last_wake = xTaskGetTickCount();
             delay(1);
         }

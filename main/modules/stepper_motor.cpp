@@ -1,4 +1,5 @@
 #include "stepper_motor.h"
+#include "../utils/esp_error.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "rom/gpio.h"
@@ -9,12 +10,6 @@
 #include <stdexcept>
 
 #define MIN_SPEED 490
-
-static void check_error(esp_err_t err, const char *msg) {
-    if (err != ESP_OK) {
-        throw std::runtime_error(std::string(msg) + ": " + esp_err_to_name(err));
-    }
-}
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 #define SPEED_MODE LEDC_LOW_SPEED_MODE
@@ -60,6 +55,8 @@ StepperMotor::StepperMotor(const std::string name,
       dir_pin(dir_pin),
       ledc_timer(ledc_timer),
       ledc_channel(ledc_channel) {
+    this->claims.pin(step_pin);
+    this->claims.pin(dir_pin);
     gpio_reset_pin(step_pin);
     gpio_reset_pin(dir_pin);
 
@@ -110,11 +107,15 @@ StepperMotor::StepperMotor(const std::string name,
         .channel = this->ledc_channel,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = this->ledc_timer,
-        .duty = 0,
+        .duty = DUTY_VALUE, // for good: route_pulses() decides in the GPIO matrix whether the pulses reach the pin
         .hpoint = 0,
         .flags = {},
     };
+    // the timer stands still while the channel takes the duty and the pin is routed away again, so no pulse leaves meanwhile
+    ledc_timer_pause(SPEED_MODE, this->ledc_timer);
     check_error(ledc_channel_config(&channel_config), "failed to configure LEDC channel");
+    gpio_matrix_out(step_pin, SIG_GPIO_OUT_IDX, 0, 0);
+    ledc_timer_resume(SPEED_MODE, this->ledc_timer);
 
     gpio_set_direction(step_pin, GPIO_MODE_INPUT_OUTPUT);
     gpio_set_direction(dir_pin, GPIO_MODE_INPUT_OUTPUT);
@@ -138,10 +139,20 @@ void StepperMotor::read_position() {
 void StepperMotor::set_state(StepperState new_state) {
     this->state = new_state;
     this->properties.at("idle")->set_boolean_value((new_state == Idle));
+    if (new_state == Idle) {
+        this->route_pulses(false);
+    }
+}
 
-    gpio_matrix_out(this->step_pin, new_state == Idle ? SIG_GPIO_OUT_IDX : SPEED_OUT_IDX + this->ledc_channel, 0, 0);
-    ledc_set_duty(SPEED_MODE, this->ledc_channel, new_state == Idle ? 0 : DUTY_VALUE);
-    ledc_update_duty(SPEED_MODE, this->ledc_channel);
+void StepperMotor::route_pulses(const bool on) {
+    if (on == this->pulsing) {
+        return;
+    }
+    if (on) {
+        ledc_timer_rst(SPEED_MODE, this->ledc_timer); // a fresh period starts with a whole pulse
+    }
+    gpio_matrix_out(this->step_pin, on ? SPEED_OUT_IDX + this->ledc_channel : SIG_GPIO_OUT_IDX, 0, 0);
+    this->pulsing = on;
 }
 
 void StepperMotor::step() {
@@ -188,15 +199,15 @@ void StepperMotor::step() {
             }
         }
 
-        // set frequency and pause/resume LED controller
+        // set direction and frequency, and let the pulses through only from the minimum speed on
         int32_t abs_speed = std::abs(speed);
+        gpio_set_level(this->dir_pin, speed > 0 ? 1 : 0);
         if (abs_speed < MIN_SPEED) {
-            ledc_timer_pause(SPEED_MODE, this->ledc_timer);
+            this->route_pulses(false);
         } else {
             ledc_set_freq(SPEED_MODE, this->ledc_timer, abs_speed);
-            ledc_timer_resume(SPEED_MODE, this->ledc_timer);
+            this->route_pulses(true);
         }
-        gpio_set_level(this->dir_pin, speed > 0 ? 1 : 0);
 
         // stop if target is reached
         if (target_speed == 0 && abs_speed < MIN_SPEED) {
@@ -211,7 +222,7 @@ void StepperMotor::step() {
     Module::step();
 }
 
-void StepperMotor::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void StepperMotor::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "position") {
         if (arguments.size() < 2 || arguments.size() > 3) {
             throw std::runtime_error("unexpected number of arguments");

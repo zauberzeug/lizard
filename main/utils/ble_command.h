@@ -22,7 +22,6 @@ int send(const std::string_view &data);
 bool is_connected();
 void finalize();
 void deactivate_pin();
-void reset_bonds();
 
 } // namespace ZZ::BleCommand
 

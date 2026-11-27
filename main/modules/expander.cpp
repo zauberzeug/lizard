@@ -46,6 +46,11 @@ Expander::Expander(const std::string name,
 
     this->properties = Expander::get_defaults();
 
+    if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
+        // before the serial takes this expander as its user, which a refused pin could not undo
+        this->claims.pin(boot_pin);
+        this->claims.pin(enable_pin);
+    }
     this->serial->claim(name);
     this->serial->enable_line_detection();
     if (boot_pin != GPIO_NUM_NC && enable_pin != GPIO_NUM_NC) {
@@ -60,7 +65,13 @@ Expander::Expander(const std::string name,
     const unsigned long boot_timeout = this->get_property("boot_timeout")->number_value() * 1000;
     while (this->properties.at("is_ready")->boolean_value() == false) {
         if (boot_timeout > 0 && millis_since(this->boot_start_time) > boot_timeout) {
-            echo("warning: expander %s connection timed out.", this->name.c_str());
+            const size_t unterminated = this->serial->unterminated_bytes();
+            if (unterminated > 0) {
+                echo("warning: expander %s connection timed out. %d bytes arrived without a line end, is the expander at %ld baud?",
+                     this->name.c_str(), (int)unterminated, this->serial->baud_rate);
+            } else {
+                echo("warning: expander %s connection timed out.", this->name.c_str());
+            }
             // TODO: trigger error code
             break;
         }
@@ -194,7 +205,7 @@ void Expander::handle_messages(bool check_for_strapping_pins) {
     }
 }
 
-void Expander::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "run") {
         Module::expect(arguments, 1, string);
         this->require_connected();
@@ -237,18 +248,28 @@ void Expander::call(const std::string method_name, const std::vector<ConstExpres
             }
         }
         deinstall();
+        bool erased = false;
         bool success = ZZ::Replicator::flash_replica(this->serial->uart_num,
                                                      this->enable_pin,
                                                      this->boot_pin,
                                                      this->serial->rx_pin,
                                                      this->serial->tx_pin,
-                                                     this->serial->baud_rate);
+                                                     erased);
         delay(100);
         this->serial->reinitialize_after_flash();
         this->disconnected = false;
         if (!success) {
-            throw std::runtime_error("could not flash expander \"" + this->name + "\"");
+            // a transfer that failed before the replicator drove the pins, e.g. short of heap, leaves them floating
+            // after deinstall(); drive both high and restart the expander, so that it runs its previous firmware.
+            // One whose flash may be erased would only print boot errors, so it stays in its bootloader instead.
+            this->drive_pins_high();
+            if (!erased) {
+                this->restart();
+            }
+            throw std::runtime_error("could not flash expander \"" + this->name + "\"" +
+                                     (erased ? ", which may have lost its firmware and stays in its bootloader until the next flash()" : ""));
         } else {
+            echo("%s: Replica complete", this->name.c_str());
             this->restart();
         }
     } else {
@@ -303,11 +324,19 @@ void Expander::deinstall() {
     }
 }
 
+void Expander::drive_pins_high() {
+    for (const gpio_num_t pin : {this->boot_pin, this->enable_pin}) {
+        gpio_reset_pin(pin);
+        gpio_set_level(pin, 1); // before the direction, so that no pin drives an old low for a moment
+        gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+    }
+}
+
 void Expander::add_proxy(Module *proxy) {
     this->proxies.push_back(proxy);
 }
 
-void Expander::send_proxy(const std::string module_name, const std::string module_type, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::send_proxy(const std::string &module_name, const std::string &module_type, const std::vector<ConstExpression_ptr> &arguments) {
     static char buffer[512];
     int pos = csprintf(buffer, sizeof(buffer), "%s = %s(", module_name.c_str(), module_type.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);
@@ -316,14 +345,14 @@ void Expander::send_proxy(const std::string module_name, const std::string modul
     this->serial->write_checked_line(buffer, pos);
 }
 
-void Expander::send_property(const std::string proxy_name, const std::string property_name, const ConstExpression_ptr expression) {
+void Expander::send_property(const std::string &proxy_name, const std::string &property_name, const ConstExpression_ptr expression) {
     static char buffer[512];
     int pos = csprintf(buffer, sizeof(buffer), "%s.%s = ", proxy_name.c_str(), property_name.c_str());
     pos += expression->print_to_buffer(&buffer[pos], sizeof(buffer) - pos);
     this->serial->write_checked_line(buffer, pos);
 }
 
-void Expander::send_call(const std::string proxy_name, const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Expander::send_call(const std::string &proxy_name, const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     static char buffer[512];
     int pos = csprintf(buffer, sizeof(buffer), "%s.%s(", proxy_name.c_str(), method_name.c_str());
     pos += write_arguments_to_buffer(arguments, &buffer[pos], sizeof(buffer) - pos);

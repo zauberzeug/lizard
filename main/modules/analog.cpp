@@ -36,10 +36,13 @@ Analog::Analog(const std::string name, const AnalogUnit_ptr unit, gpio_num_t pin
     if (!unit) {
         throw std::runtime_error("Analog module requires a valid unit");
     }
+    this->claims.pin(pin);
 
     adc_unit_t detected_unit;
     adc_channel_t detected_channel;
-    ESP_ERROR_CHECK(adc_oneshot_io_to_channel(pin, &detected_unit, &detected_channel));
+    if (adc_oneshot_io_to_channel(pin, &detected_unit, &detected_channel) != ESP_OK) {
+        throw std::runtime_error("Analog pin " + std::to_string(pin) + " has no ADC channel");
+    }
     if (detected_unit != unit->get_adc_unit()) {
         throw std::runtime_error("Analog pin does not belong to the provided unit");
     }

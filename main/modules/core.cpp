@@ -4,6 +4,7 @@
 #include "../utils/bus_backup.h"
 #include "../utils/scheduler.h"
 #include "../utils/string_utils.h"
+#include "../utils/telemetry.h"
 #include "../utils/timing.h"
 #include "../utils/uart.h"
 #include "driver/gpio.h"
@@ -13,6 +14,8 @@
 #include "hal/gpio_hal.h"
 #include "soc/io_mux_reg.h"
 #include "soc/soc.h"
+#include "version.h"
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <stdlib.h>
@@ -31,7 +34,7 @@ void Core::step() {
     Module::step();
 }
 
-void Core::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Core::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "restart") {
         Module::expect(arguments, 0);
         esp_restart();
@@ -42,7 +45,11 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 0);
         const esp_app_desc_t *app_desc = esp_app_get_description();
         echo("project name: %s", app_desc->project_name);
-        echo("version: %s", app_desc->version);
+        echo("project version: %s", app_desc->version);
+        // a project with its own version also reports the Lizard version it is built from
+        if (strncmp(app_desc->version, GIT_VERSION, sizeof(app_desc->version) - 1) != 0) {
+            echo("lizard version: %s", GIT_VERSION);
+        }
         echo("compile time: %s, %s", app_desc->date, app_desc->time);
         echo("idf version: %s", app_desc->idf_ver);
     } else if (method_name == "print") {
@@ -66,23 +73,19 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
                 // variable[:precision]
                 std::string variable_name = cut_first_word(element, ':');
                 const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
-                this->output_list.push_back({nullptr, variable_name, precision});
+                this->output_list.push_back({nullptr, variable_name, precision, nullptr});
             } else {
                 // module.property[:precision]
                 std::string module_name = cut_first_word(element, '.');
                 const ConstModule_ptr module = Global::get_module(module_name);
                 const std::string property_name = cut_first_word(element, ':');
                 const unsigned int precision = element.empty() ? 0 : atoi(element.c_str());
-                this->output_list.push_back({module, property_name, precision});
+                this->output_list.push_back({module, property_name, precision, nullptr});
             }
         }
         this->output_on = true;
     } else if (method_name == "startup_checksum") {
-        uint16_t checksum = 0;
-        for (char const &c : Storage::startup) {
-            checksum += static_cast<uint8_t>(c);
-        }
-        echo("checksum: %04x", checksum);
+        echo("checksum: %04x", Storage::startup_checksum());
     } else if (method_name == "get_pin_status") {
         Module::expect(arguments, 1, integer);
         const int gpio_num = arguments[0]->evaluate_integer();
@@ -191,14 +194,14 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
         Module::expect(arguments, 1, integer);
         const int baudrate = arguments[0]->evaluate_integer();
         bool supported = false;
-        for (const int rate : {115200, 230400, 460800, 921600}) {
+        for (const int rate : {115200, 230400, 460800, 921600, 1000000, 1500000, 2000000, 3000000}) {
             if (rate == baudrate) {
                 supported = true;
                 break;
             }
         }
         if (!supported) {
-            throw std::runtime_error("unsupported baudrate (use 115200, 230400, 460800 or 921600)");
+            throw std::runtime_error("unsupported baudrate (use 115200, 230400, 460800, 921600, 1000000, 1500000, 2000000 or 3000000)");
         }
         Storage::set_baudrate(baudrate);
         echo("baudrate set to %d; restart to apply", baudrate);
@@ -216,6 +219,14 @@ void Core::call(const std::string method_name, const std::vector<ConstExpression
     } else if (method_name == "keep_alive") {
         Module::expect(arguments, 0);
         this->keep_alive();
+    } else if (method_name == "telemetry") {
+        telemetry::add_frame(arguments);
+    } else if (method_name == "telemetry_info") {
+        Module::expect(arguments, 0);
+        telemetry::announce();
+    } else if (method_name == "clear_telemetry") {
+        Module::expect(arguments, 0);
+        telemetry::clear();
     } else {
         Module::call(method_name, arguments);
     }
@@ -230,8 +241,11 @@ std::string Core::get_output() const {
             if (pos > 0) {
                 pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, " ");
             }
-            const Variable_ptr variable =
-                element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
+            if (!element.variable) {
+                element.variable =
+                    element.module ? element.module->get_property(element.property_name) : Global::get_variable(element.property_name);
+            }
+            const ConstVariable_ptr &variable = element.variable;
             switch (variable->type) {
             case boolean:
                 pos += csprintf(&output_buffer[pos], sizeof(output_buffer) - pos, "%s", variable->boolean_value() ? "true" : "false");
@@ -259,7 +273,7 @@ std::string Core::get_output() const {
         }
         return "";
     }
-    return std::string(output_buffer);
+    return std::string(output_buffer, pos);
 }
 
 void Core::keep_alive() {

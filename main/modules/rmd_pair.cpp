@@ -106,7 +106,7 @@ void RmdPair::move(double x, double y) {
     }
 }
 
-void RmdPair::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void RmdPair::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "move") {
         Module::expect(arguments, 2, numbery, numbery);
         this->move(arguments[0]->evaluate_number(), arguments[1]->evaluate_number());
