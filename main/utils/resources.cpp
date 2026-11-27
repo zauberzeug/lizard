@@ -61,11 +61,13 @@ const Claims *&slot(const Kind kind, const int index) {
             throw std::runtime_error("invalid adc unit " + std::to_string(index));
         }
         return adc_owners[index];
-    default:
+    case Kind::ledc_channel:
         if (index < 0 || index >= LEDC_CHANNEL_MAX) {
             throw std::runtime_error("invalid LEDC channel " + std::to_string(index));
         }
         return ledc_channel_owners[index];
+    default:
+        throw std::logic_error("LEDC timers have no slot"); // they are taken by take_ledc_timer() instead
     }
 }
 

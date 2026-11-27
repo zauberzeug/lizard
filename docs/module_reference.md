@@ -13,7 +13,7 @@ Shadows are useful if multiple modules should behave exactly the same, e.g. two 
 
 The `broadcast` method is used internally with [port expanders](#expander).
 
-A module reserves the pins and peripherals it uses on its microcontroller, i.e. GPIO pins, UART ports, the CAN controller, ADC units and LEDC channels and timers, until the core restarts.
+A module reserves the pins and peripherals it uses on its microcontroller, i.e. GPIO pins, UART ports, the CAN controller, ADC units, and LEDC channels and timers, until the core restarts.
 I2C modules on the same port share its SDA and SCL pins, which stay reserved for that port.
 [PWM outputs](#pwm-output) may share an LEDC timer, while a [stepper motor](#stepper-motor) needs one of its own.
 Creating a module on a reserved pin or peripheral fails with an error that names the owner, e.g. `pin 15 is already used by module "led"`.

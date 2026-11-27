@@ -30,9 +30,15 @@ static Module_ptr create_stepper_motor(const std::string &name, const std::vecto
     Module::expect(arguments, -1, integer, integer, integer, integer);
     const gpio_num_t step_pin = (gpio_num_t)arguments[0]->evaluate_integer();
     const gpio_num_t dir_pin = (gpio_num_t)arguments[1]->evaluate_integer();
-    const ledc_timer_t ledc_timer = arguments.size() > 2 ? (ledc_timer_t)arguments[2]->evaluate_integer() : LEDC_TIMER_0;
-    const ledc_channel_t ledc_channel = arguments.size() > 3 ? (ledc_channel_t)arguments[3]->evaluate_integer() : LEDC_CHANNEL_0;
-    return std::make_shared<StepperMotor>(name, step_pin, dir_pin, ledc_timer, ledc_channel);
+    const int64_t ledc_timer = arguments.size() > 2 ? arguments[2]->evaluate_integer() : 0;
+    const int64_t ledc_channel = arguments.size() > 3 ? arguments[3]->evaluate_integer() : 0;
+    if (ledc_timer < 0 || ledc_timer >= LEDC_TIMER_MAX) {
+        throw std::runtime_error("LEDC timer must be 0.." + std::to_string(LEDC_TIMER_MAX - 1));
+    }
+    if (ledc_channel < 0 || ledc_channel >= LEDC_CHANNEL_MAX) {
+        throw std::runtime_error("LEDC channel must be 0.." + std::to_string(LEDC_CHANNEL_MAX - 1));
+    }
+    return std::make_shared<StepperMotor>(name, step_pin, dir_pin, (ledc_timer_t)ledc_timer, (ledc_channel_t)ledc_channel);
 }
 REGISTER_MODULE(StepperMotor, &create_stepper_motor)
 
