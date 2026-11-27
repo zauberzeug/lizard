@@ -27,6 +27,7 @@ FEATURES: List[Feature] = [
             re.compile(r'\.pass_telemetry\s*\(')),
     Feature('the BusTelemetry module', (0, 16, 0), re.compile(r'\bBusTelemetry\s*\(')),
     Feature('the JbdBms module', (0, 16, 0), re.compile(r'\bJbdBms\s*\(')),
+    Feature('the last_frame_age property of BusTelemetry', (0, 17, 0), re.compile(r'\.last_frame_age\b')),
 ]
 
 
