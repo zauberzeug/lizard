@@ -31,11 +31,14 @@ static Type to_type(const char letter) {
 }
 
 const std::map<std::string, Variable_ptr> BusTelemetry::get_defaults() {
-    return {};
+    return {
+        {"last_frame_age", std::make_shared<IntegerVariable>()},
+    };
 }
 
 BusTelemetry::BusTelemetry(const std::string &name, const SerialBus_ptr bus, const uint8_t peer_id)
     : Module(name), bus(bus), peer_id(peer_id) {
+    this->properties = BusTelemetry::get_defaults();
     this->restart_missing_check();
     this->bus->add_telemetry_listener(this);
 }
@@ -50,6 +53,7 @@ void BusTelemetry::step() {
         this->silence_warned = true;
         echo("warning: %s: no frame of peer %u within %lu s", this->name.c_str(), this->peer_id, MISSING_WARNING_MS / 1000);
     }
+    this->properties.at("last_frame_age")->set_integer_value(millis_since(this->last_frame_millis));
     Module::step();
 }
 
@@ -64,6 +68,9 @@ void BusTelemetry::write_property(const std::string property_name, const ConstEx
 void BusTelemetry::declare_property(const std::string &property_name, const Variable_ptr &variable) {
     if (variable->type != boolean && variable->type != integer && variable->type != number) {
         throw std::runtime_error("property \"" + this->name + "." + property_name + "\" must be a bool, int or float");
+    }
+    if (property_name == "last_frame_age") {
+        throw std::runtime_error("property \"" + this->name + "." + property_name + "\" is the module's own and mirrors no field");
     }
     const auto it = this->properties.find(property_name);
     if (it != this->properties.end()) {
@@ -149,6 +156,7 @@ void BusTelemetry::handle_layout_line(const telemetry::LayoutLine &line, const b
 }
 
 void BusTelemetry::handle_frame(const uint8_t *body, const std::vector<char> *types) {
+    this->last_frame_millis = millis();
     if (!this->frames_arriving) {
         this->frames_arriving = true;
         this->frames_since_millis = millis();

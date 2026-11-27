@@ -376,8 +376,11 @@ On a serial bus coordinator, a BusTelemetry module mirrors values that one peer 
 | ---------------------------------- | ------------------------------- | ------------------ |
 | `arm = BusTelemetry(bus, peer_id)` | Mirror values of peer `peer_id` | `SerialBus`, `int` |
 
-The module has no properties of its own.
-Each value it mirrors is a [property declaration](language.md) with the name the peer gives the field:
+| Properties           | Description                                      | Data type |
+| -------------------- | ------------------------------------------------ | --------- |
+| `arm.last_frame_age` | Time since the last valid frame of the peer (ms) | `int`     |
+
+Each value the module mirrors is a [property declaration](language.md) with the name the peer gives the field:
 
 ```
 bus = SerialBus(serial, 1)
@@ -399,6 +402,10 @@ Two identical peers become two modules, e.g. `arm1 = BusTelemetry(bus, 2)` and `
 - Values: a declared property is read-only.
   It keeps its declared value until a frame delivers one, and its last value when the peer stops sending or restarts.
   An `int` arrives as int32, as at every reader of the [frame format](#core), so a value beyond that range wraps around.
+- Age: `last_frame_age` counts on the coordinator's clock and restarts with every frame of the peer that passes the CRC check, whether or not it carries a mirrored value.
+  Until the first frame it counts from the boot, like `core.last_message_age`.
+  So a rule can tell that the peer's frames stopped, e.g. `when arm.last_frame_age > 500 then wheels.off() end`, and the peer needs no `core.millis` field for that.
+  The name cannot be declared as a mirrored value.
 - Layouts: mirroring works whether or not the coordinator passes the peer's frames on.
   A declaration made later, e.g. at the console, asks the peer for its layout lines again, so the value follows shortly after; the other mirrored values keep following meanwhile.
   When the peer gives a frame ID to other fields, the module drops the old mapping, so a property does not take the value of another field, and the check for missing names runs again.
