@@ -5,6 +5,9 @@ namespace boot_guard {
 // Counts boots that died before the main loop settled and decides whether the startup script may run.
 bool should_run_startup();
 
+// Why should_run_startup() skipped the startup script on this boot, empty if it did not.
+const char *skip_message();
+
 // Records why the startup script failed and restarts; the next boot tries again or skips the script.
 [[noreturn]] void startup_failed(const char *reason);
 

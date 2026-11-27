@@ -282,7 +282,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                 }
                 const std::string module_type = identifier_to_string(constructor.module_type);
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr module = Module::create(module_type, module_name, arguments, process_lizard);
+                Module_ptr module;
+                try {
+                    module = Module::create(module_type, module_name, arguments, process_lizard);
+                } catch (const std::exception &e) {
+                    throw std::runtime_error("module \"" + module_name + "\" (" + module_type + "): " + e.what());
+                }
                 Global::add_module(module_name, module);
             } else {
                 const std::string module_name = identifier_to_string(constructor.module_name);
@@ -300,7 +305,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                Module_ptr proxy;
+                try {
+                    proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                } catch (const std::exception &e) {
+                    throw std::runtime_error("module \"" + module_name + "\" (" + module_type + "): " + e.what());
+                }
                 Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
@@ -379,6 +389,39 @@ void process_tree(owl_tree *const tree, bool from_expander) {
     }
 }
 
+static bool loading_startup = false;
+
+struct StartupLoadScope {
+    StartupLoadScope() { loading_startup = true; }
+    ~StartupLoadScope() { loading_startup = false; }
+};
+
+// Control characters become spaces: the offending token of a parse error can be a newline, which would split the
+// console line or the property over two lines.
+static std::string single_line(std::string text) {
+    for (char &c : text) {
+        if (static_cast<unsigned char>(c) < ' ') {
+            c = ' ';
+        }
+    }
+    return text;
+}
+
+static void set_startup_error(const std::string &value) {
+    core_module->get_property("startup_error")->set_string_value(single_line(value));
+}
+
+// A rejected line is dropped instead of throwing, so these paths have to feed core.startup_error
+// themselves. The out-of-memory branches deliberately don't: building a message allocates, and
+// they exist to drop the line rather than reboot.
+static void report_parse_error(const std::string &message) {
+    const std::string line = single_line(message);
+    echo("error: %s", line.c_str());
+    if (loading_startup) {
+        set_startup_error(line);
+    }
+}
+
 // Reports a parse error of `text`; `offset` is where `text` starts in a longer script, so positions refer to that script.
 static bool check_parse(owl_tree *tree, const char *text, const size_t offset) {
     if (!tree) {
@@ -390,28 +433,29 @@ static bool check_parse(owl_tree *tree, const char *text, const size_t offset) {
     case ERROR_NONE:
         return true;
     case ERROR_INVALID_FILE:
-        echo("error: invalid file");
+        report_parse_error("invalid file");
         break;
     case ERROR_INVALID_OPTIONS:
-        echo("error: invalid options");
+        report_parse_error("invalid options");
         break;
     case ERROR_INVALID_TOKEN:
-        echo("error: invalid token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
-             std::string(text, range.start, range.end - range.start).c_str());
+        report_parse_error("invalid token at range " + std::to_string(offset + range.start) + " " +
+                           std::to_string(offset + range.end) + " \"" + std::string(text, range.start, range.end - range.start) + "\"");
         break;
     case ERROR_UNEXPECTED_TOKEN:
-        echo("error: unexpected token at range %zu %zu \"%s\"", offset + range.start, offset + range.end,
-             std::string(text, range.start, range.end - range.start).c_str());
+        report_parse_error("unexpected token at range " + std::to_string(offset + range.start) + " " +
+                           std::to_string(offset + range.end) + " \"" + std::string(text, range.start, range.end - range.start) + "\"");
         break;
     case ERROR_MORE_INPUT_NEEDED:
-        echo("error: more input needed at range %zu %zu", offset + range.start, offset + range.end);
+        report_parse_error("more input needed at range " + std::to_string(offset + range.start) + " " +
+                           std::to_string(offset + range.end));
         break;
     case ERROR_ALLOCATION_FAILURE:
         echo("error: allocation failure while parsing");
         break;
     default:
         // owl's accessors exit() on a failed tree (aborting on ESP-IDF), so never let an error reach process_tree.
-        echo("error: unknown parse error");
+        report_parse_error("unknown parse error");
         break;
     }
     return false;
@@ -518,7 +562,9 @@ static void run_startup() {
     try {
         valid = walk_startup(false);
     } catch (const std::exception &e) {
-        echo("error while reading startup script from storage: %s", e.what());
+        const std::string message = std::string("error while reading startup script from storage: ") + e.what();
+        echo("%s", message.c_str());
+        set_startup_error(message);
         return;
     }
     if (valid && !walk_startup(true)) {
@@ -673,14 +719,20 @@ void app_main() {
         exit(1);
     }
 
-    try {
-        if (boot_guard::should_run_startup()) {
-            run_startup();
+    {
+        InterpreterLock lock; // keep another task's parse errors out of loading_startup
+        StartupLoadScope scope;
+        try {
+            if (boot_guard::should_run_startup()) {
+                run_startup();
+            } else {
+                set_startup_error(boot_guard::skip_message());
+            }
+        } catch (const std::exception &e) {
+            boot_guard::startup_failed(e.what());
+        } catch (...) {
+            boot_guard::startup_failed("unknown exception");
         }
-    } catch (const std::exception &e) {
-        boot_guard::startup_failed(e.what());
-    } catch (...) {
-        boot_guard::startup_failed("unknown exception");
     }
 
     bus_backup::save_if_present();
