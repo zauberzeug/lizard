@@ -18,9 +18,9 @@ static constexpr uint32_t MAGIC = 0x4c495a44;
 RTC_NOINIT_ATTR static uint32_t magic;
 RTC_NOINIT_ATTR static uint32_t failed_boots;
 RTC_NOINIT_ATTR static bool armed;
-RTC_NOINIT_ATTR static char reason[128];
+RTC_NOINIT_ATTR static char reason[256]; // the module prefix of process_tree plus the constructor's message
 
-static char skip_reason[192];
+static char skip_reason[320];
 
 static const char *reset_reason_name(const esp_reset_reason_t reason) {
     switch (reason) {

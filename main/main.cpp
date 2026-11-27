@@ -305,7 +305,12 @@ void process_tree(owl_tree *const tree, bool from_expander) {
                     throw std::runtime_error("module \"" + expander_name + "\" is not an expander");
                 }
                 const std::vector<ConstExpression_ptr> arguments = compile_arguments(constructor.argument);
-                const Module_ptr proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                Module_ptr proxy;
+                try {
+                    proxy = std::make_shared<Proxy>(module_name, expander_name, module_type, expander, arguments);
+                } catch (const std::exception &e) {
+                    throw std::runtime_error("module \"" + module_name + "\" (" + module_type + "): " + e.what());
+                }
                 Global::add_module(module_name, proxy);
             }
         } else if (!statement.method_call.empty) {
@@ -391,22 +396,29 @@ struct StartupLoadScope {
     ~StartupLoadScope() { loading_startup = false; }
 };
 
-static void set_startup_error(std::string value) {
-    for (char &c : value) {
+// Control characters become spaces: the offending token of a parse error can be a newline, which would split the
+// console line or the property over two lines.
+static std::string single_line(std::string text) {
+    for (char &c : text) {
         if (static_cast<unsigned char>(c) < ' ') {
-            c = ' '; // the offending token can be a newline, which would split the property over two lines
+            c = ' ';
         }
     }
-    core_module->get_property("startup_error")->set_string_value(value);
+    return text;
+}
+
+static void set_startup_error(const std::string &value) {
+    core_module->get_property("startup_error")->set_string_value(single_line(value));
 }
 
 // A rejected line is dropped instead of throwing, so these paths have to feed core.startup_error
 // themselves. The out-of-memory branches deliberately don't: building a message allocates, and
 // they exist to drop the line rather than reboot.
 static void report_parse_error(const std::string &message) {
-    echo("error: %s", message.c_str());
+    const std::string line = single_line(message);
+    echo("error: %s", line.c_str());
     if (loading_startup) {
-        set_startup_error(message);
+        set_startup_error(line);
     }
 }
 
@@ -550,7 +562,9 @@ static void run_startup() {
     try {
         valid = walk_startup(false);
     } catch (const std::exception &e) {
-        echo("error while reading startup script from storage: %s", e.what());
+        const std::string message = std::string("error while reading startup script from storage: ") + e.what();
+        echo("%s", message.c_str());
+        set_startup_error(message);
         return;
     }
     if (valid && !walk_startup(true)) {
