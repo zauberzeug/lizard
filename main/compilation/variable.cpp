@@ -110,7 +110,7 @@ int Variable::print_to_buffer(char *const buffer, size_t buffer_len) const {
     case number:
         return csprintf(buffer, buffer_len, "%f", this->number_slot);
     case string:
-        return csprintf(buffer, buffer_len, "\"%s\"", this->text->c_str());
+        return csprint_quoted(buffer, buffer_len, *this->text);
     case identifier:
         return csprintf(buffer, buffer_len, "%s", this->text->c_str());
     default:

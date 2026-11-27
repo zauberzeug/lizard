@@ -12,3 +12,6 @@ struct BufferTooSmallError : std::runtime_error {
 };
 
 int csprintf(char *buffer, size_t buffer_len, const char *format, ...);
+
+// writes the text in double quotes with '"' and '\\' escaped, as the parser reads a string literal
+int csprint_quoted(char *buffer, size_t buffer_len, const std::string &text);
