@@ -57,6 +57,8 @@ StepperMotor::StepperMotor(const std::string name,
       ledc_channel(ledc_channel) {
     this->claims.pin(step_pin);
     this->claims.pin(dir_pin);
+    this->claims.ledc_channel(ledc_channel);
+    this->claims.ledc_timer(ledc_timer); // alone, since the motor sets the timer's frequency with every speed
     gpio_reset_pin(step_pin);
     gpio_reset_pin(dir_pin);
 

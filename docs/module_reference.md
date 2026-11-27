@@ -13,8 +13,9 @@ Shadows are useful if multiple modules should behave exactly the same, e.g. two 
 
 The `broadcast` method is used internally with [port expanders](#expander).
 
-A module reserves the pins and peripherals it uses on its microcontroller, i.e. GPIO pins, UART ports, the CAN controller and ADC units, until the core restarts.
+A module reserves the pins and peripherals it uses on its microcontroller, i.e. GPIO pins, UART ports, the CAN controller, ADC units and LEDC channels and timers, until the core restarts.
 I2C modules on the same port share its SDA and SCL pins, which stay reserved for that port.
+[PWM outputs](#pwm-output) may share an LEDC timer, while a [stepper motor](#stepper-motor) needs one of its own.
 Creating a module on a reserved pin or peripheral fails with an error that names the owner, e.g. `pin 15 is already used by module "led"`.
 In the startup script, such an error stops the script like any other error (see [Startup Script](getting_started.md#startup-script)).
 The console UART with its pins and the pins of the SPI flash are reserved from the start.
@@ -479,7 +480,7 @@ The PWM output module is associated with a digital output pin that is connected 
 | `pwm = PwmOutput(pin[, lt[, lc]])` | `pin` is the corresponding GPIO number | 1–3x `int` |
 
 The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
-When using multiple PWM outputs, set different channel IDs to avoid conflicts.
+Every PWM output needs a channel of its own: a channel that another module uses is refused, e.g. `LEDC channel 0 is already used by module "pwm"`, and so is the timer of a `StepperMotor`.
 Channels sharing a timer also share its frequency: a new output adopts the timer's frequency, and setting `frequency` on one output changes it for all of them.
 Use different timers to run outputs at independent frequencies.
 The lowest reachable frequency is about 4 Hz on the ESP32 and about 70 Hz on the ESP32-S3; lower values are rejected with an error.
@@ -1170,7 +1171,8 @@ It uses the ESP LED Control API to generate pulses with sufficiently high freque
 | `motor = StepperMotor(step, dir[, lt[, lc]])` | Step and direction pins | 2–4x `int` |
 
 The constructor arguments `lt` (LEDC timer) and `lc` (LEDC channel) are optional and default to 0.
-When using multiple stepper motors, set different timer/channel pairs to avoid conflicts.
+A stepper motor needs a timer and a channel of its own, since it sets the timer's frequency with every speed.
+A timer or channel that another module uses, also a `PwmOutput`, is refused, e.g. `LEDC timer 0 is already used by module "pwm"`.
 The pulse counter used for position feedback is created internally.
 
 | Properties       | Description                    | Data type |
