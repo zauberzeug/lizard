@@ -37,7 +37,8 @@ private:
     bool missing_checked = false;
     unsigned long silence_since_millis = 0; // the last declaration or restart of the peer, while no frame arrived
     bool silence_warned = false;
-    bool layout_unreadable = false; // the peer sends a layout version this node does not read, until its restart
+    bool layout_unreadable = false;      // the peer sends a layout version this node does not read, until its restart
+    unsigned long last_frame_millis = 0; // 0 until the first frame, so the age counts from the boot
 
     int find_mirror(const std::string_view name) const;
     bool is_mapped(const size_t mirror) const;
@@ -57,7 +58,7 @@ public:
     static const std::map<std::string, Variable_ptr> get_defaults();
 
     // called by the bus on the main task
-    bool declares(const std::string &property_name) const { return this->properties.count(property_name) > 0; }
+    bool declares(const std::string &property_name) const { return this->find_mirror(property_name) >= 0; }
     void handle_layout_line(const telemetry::LayoutLine &line, const bool redefined);
     void handle_frame(const uint8_t *body, const std::vector<char> *types); // without types while the bus lacks the frame's layout
     void mark_layout_unreadable();                                          // the peer's layout lines have another version

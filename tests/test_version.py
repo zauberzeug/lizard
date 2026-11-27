@@ -36,3 +36,5 @@ def test_parse_info_line():
 def test_required_features():
     assert [f.release for f in required_features('core.telemetry(1, a.b)\n')] == [(0, 16, 0)]
     assert required_features('# core.telemetry(1, a.b)\nled = Output(15)\n') == []
+    script = 'arm = BusTelemetry(bus, 2)\nwhen arm.last_frame_age > 500 then wheels.off() end\n'
+    assert [f.release for f in required_features(script)] == [(0, 16, 0), (0, 17, 0)]
