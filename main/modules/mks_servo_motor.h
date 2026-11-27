@@ -11,6 +11,7 @@ class MksServoMotor : public Module, public std::enable_shared_from_this<MksServ
 private:
     Can_ptr can;
     const uint16_t can_id;
+    bool read_speed_next = false;
 
     void send(const uint8_t *data, uint8_t len);
     bool crc_ok(const uint8_t *data, int count) const;
@@ -22,6 +23,7 @@ private:
     void do_enable() override;
     void do_disable() override;
     void send_set_mode(uint8_t mode);
+    void send_motion_answers_off();
     void send_set_bitrate(int64_t hz);
     void send_set_can_id(int64_t new_id);
     void send_working_current(int64_t ma);
@@ -74,7 +76,7 @@ public:
     MksServoMotor(const std::string name, const Can_ptr can, const uint16_t can_id);
     void subscribe_to_can();
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     void handle_can_msg(const uint32_t id, const int count, const uint8_t *const data) override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };

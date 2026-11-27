@@ -1,5 +1,5 @@
 esp-coredump
 esptool
-gpiod; sys_platform == "linux"
+gpiod; sys_platform == "linux" and python_version >= "3.9"
 prompt_toolkit
 pyserial

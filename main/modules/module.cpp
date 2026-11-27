@@ -26,7 +26,7 @@ bool Module::broadcast_paused = false;
 Module::Module(const std::string name) : name(name), claims(this->name) {
 }
 
-void Module::expect(const std::vector<ConstExpression_ptr> arguments, const int num, ...) {
+void Module::expect(const std::vector<ConstExpression_ptr> &arguments, const int num, ...) {
     if (num >= 0 && arguments.size() != num) {
         throw std::runtime_error("expecting " + std::to_string(num) + " arguments, got " + std::to_string(arguments.size()));
     }
@@ -105,7 +105,7 @@ void Module::disable() {
     this->get_enabled_property()->set_boolean_value(false);
 }
 
-void Module::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Module::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "mute") {
         Module::expect(arguments, 0);
         this->output_on = false;
@@ -130,7 +130,7 @@ void Module::call(const std::string method_name, const std::vector<ConstExpressi
     }
 }
 
-void Module::call_with_shadows(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Module::call_with_shadows(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     this->call(method_name, arguments);
     for (auto const &module : this->shadow_modules) {
         module->call(method_name, arguments);
@@ -141,11 +141,12 @@ std::string Module::get_output() const {
     return "";
 }
 
-Variable_ptr Module::get_property(const std::string property_name) const {
-    if (!this->properties.count(property_name)) {
+const Variable_ptr &Module::get_property(const std::string &property_name) const {
+    const auto it = this->properties.find(property_name);
+    if (it == this->properties.end()) {
         throw std::runtime_error("unknown property \"" + property_name + "\"");
     }
-    return this->properties.at(property_name);
+    return it->second;
 }
 
 void Module::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
@@ -175,4 +176,18 @@ const std::map<std::string, Variable_ptr> Module::get_module_defaults(const std:
         throw std::runtime_error("No defaults registered for module type \"" + type_name + "\"");
     }
     return it->second.defaults();
+}
+
+Variable_ptr *PropertyMap::find_remembered(const char *literal) const {
+    for (const auto &[known_literal, entry] : this->known) {
+        if (known_literal == literal) {
+            return entry;
+        }
+    }
+    const auto it = Base::find(literal);
+    if (it == Base::end()) {
+        return nullptr;
+    }
+    this->known.emplace_back(literal, const_cast<Variable_ptr *>(&it->second));
+    return this->known.back().second;
 }

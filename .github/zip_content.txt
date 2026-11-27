@@ -4,8 +4,9 @@ build/lizard.elf
 build/lizard.bin
 configure.py
 espresso.py
+lizard_host
 monitor.py
-serial_devices.py
+otb_update.py
 upload_ssh.py
 README.md
 requirements.txt

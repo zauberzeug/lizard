@@ -77,7 +77,7 @@ end
 | **Communication**     | `Serial`, `SerialBus`, `Can`, `Bluetooth`, `Expander`                                                                                                            |
 | **Motor Controllers** | `LinearMotor`, `ODriveMotor`, `ODriveWheels`, `RmdMotor`, `RmdPair`, `StepperMotor`, `RoboClawMotor`, `RoboClawWheels`, `D1Motor`, `DunkerMotor`, `DunkerWheels` |
 | **CANopen**           | `CanOpenMaster`, `CanOpenMotor`                                                                                                                                  |
-| **Sensors**           | `Imu`, `TemperatureSensor`                                                                                                                                       |
+| **Sensors**           | `Imu`, `ImuBno085`, `TemperatureSensor`, `JbdBms`                                                                                                                |
 | **Expanders**         | `Mcp23017` (I2C GPIO expander)                                                                                                                                   |
 | **Utilities**         | `MotorAxis`, `Proxy`                                                                                                                                             |
 
@@ -99,9 +99,21 @@ lizard/
 ├── docs/                   # MkDocs documentation
 ├── examples/               # Usage examples (ROS integration, trajectories)
 ├── build.py               # Build script (wraps idf.py)
-├── espresso.py            # Flash & control script (ESP32 / ESP32-S3)
-├── monitor.py             # Serial monitor
-├── serial_devices.py      # Serial device discovery shared by the host tools
+├── espresso.py            # Flash & control script (ESP32 / ESP32-S3), runs lizard_host/espresso.py
+├── monitor.py             # Serial monitor, runs lizard_host/monitor.py
+├── lizard_host/           # Python package lizard-host on PyPI: host tools and library
+│   ├── monitor.py         # Serial monitor (lizard-monitor)
+│   ├── configure.py       # Writes startup scripts (lizard-configure)
+│   ├── espresso.py        # Flashing and pin control (lizard-espresso)
+│   ├── otb_update.py      # Firmware update of serial bus peers (lizard-otb-update)
+│   ├── connection.py      # Runs the procedures on a serial port or in an async host
+│   ├── procedures.py      # Startup scripts, requests and version checks without I/O
+│   ├── version.py         # Lizard versions and the features they bring
+│   ├── core_line.py       # Core lines and clock offset
+│   ├── serial_devices.py  # Serial device discovery
+│   ├── console_line.py    # Console line checksum
+│   └── telemetry.py       # Telemetry frame decoder, steps and layout requests
+├── tests/                 # Unit tests of the host tools (pytest)
 ├── language.owl           # Lizard grammar definition (Owl parser generator)
 └── gen_parser.sh          # Regenerates parser.h from language.owl
 ```
@@ -133,6 +145,8 @@ python build.py --clean
 python build.py esp32s3 --clean
 ```
 
+The firmware needs ESP-IDF 5.3.6 or newer: older versions skip the linker fragment `main/parser.lf` without a warning, so the parser ends up in flash instead of IRAM. `./compile.sh` builds in the matching Docker image.
+
 ### Flash & Monitor
 
 ```bash
@@ -145,6 +159,15 @@ python monitor.py
 # Or use idf.py directly
 idf.py flash monitor
 ```
+
+### Host Tool Tests
+
+```bash
+pytest
+```
+
+The checks of the host tools (ruff, mypy) run with pre-commit; `pyproject.toml` holds their configuration.
+The host tools stay compatible with Python 3.8, the system Python of L4T 35 Robot Brains.
 
 ### Parser Regeneration
 
@@ -175,7 +198,7 @@ public:
 
     MyModule(const std::string name, /* constructor args */);
     void step() override;
-    void call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) override;
+    void call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) override;
     std::string get_output() const override;
     static const std::map<std::string, Variable_ptr> get_defaults();
 };
@@ -214,7 +237,7 @@ void MyModule::step() {
     // Per-cycle logic
 }
 
-void MyModule::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void MyModule::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "my_method") {
         Module::expect(arguments, 1, numbery);
         // Implementation
@@ -332,6 +355,8 @@ The main loop runs every **10ms** (`LOOP_PERIOD_MS` in `app_main`, paced with `x
 Modules self-register via `REGISTER_MODULE(ClassName, &create_X)` in their own `.cpp`. The macro keys off the class's `static constexpr const char *TYPE` constant — both the factory and the static `ClassName::get_defaults()` method are registered under that string. Forgetting either the macro or the `TYPE` constant causes the DSL to report `unknown module type "ClassName"`. Two modules trying to register under the same `TYPE` throw a hard error at static-init time, so collisions are caught at first boot rather than silently shadowing.
 
 The class must define `static const std::map<std::string, Variable_ptr> get_defaults()` (return an empty map if there are no defaults) and pass only the instance name to the `Module(name)` base constructor — the runtime type identity comes from RTTI on the polymorphic `Module`. Inheriting `get_defaults()` from an intermediate base class (e.g. `Wheels`) is fine; a subclass that adds properties must shadow `get_defaults()` and pass its result to the base constructor, so that the registered defaults always equal the constructed properties — expander proxies seed their properties exclusively from the registered `get_defaults()`, so a property that exists only in a constructor breaks proxied instances at runtime.
+
+`this->properties` is a `PropertyMap`: only ever add entries, never remove or replace one, because compiled property expressions, telemetry frames and the lookups by string literal keep what they found once (`erase`, `clear` and `swap` do not compile). A lookup by literal such as `this->properties.at("level")` remembers its entry on first use, so it belongs to code that holds the `InterpreterLock`: `step()`, `call()`, rules, routines and scheduled blocks. A module with its own FreeRTOS task hands its values to `step()` through a queue, as `Imu` does, instead of touching `properties` from the task.
 
 #### `WHOLE_ARCHIVE` is mandatory
 

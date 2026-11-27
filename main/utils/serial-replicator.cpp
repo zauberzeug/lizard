@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <vector>
+#include <memory>
+#include <new>
 
 #include <esp_err.h>
 #include <esp_flash.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_ota_ops.h>
 
@@ -16,6 +18,12 @@
 namespace ZZ::Replicator {
 
 static constexpr char TAG[]{"replicator"};
+
+// The target sits in its ROM bootloader while it is flashed, so its console rate and the link's rate do not apply:
+// connect at the ROM's default and raise to the rate esptool flashes with. A multiple of the link rate would exceed
+// what the UARTs reach once the link runs above 921600.
+static constexpr uint32_t CONNECT_BAUD_RATE{115200};
+static constexpr uint32_t FLASH_BAUD_RATE{921600};
 
 static constexpr char const *ERROR_STRINGS[]{
     "SUCCESS",          /*!< Success */
@@ -50,11 +58,9 @@ static auto init_connection(const uart_port_t uart_num,
                             const gpio_num_t enable_pin,
                             const gpio_num_t boot_pin,
                             const gpio_num_t rx_pin,
-                            const gpio_num_t tx_pin,
-                            const uint32_t baud_rate,
-                            const uint32_t block_size) -> bool {
+                            const gpio_num_t tx_pin) -> bool {
     loader_esp32_config_t conf{};
-    conf.baud_rate = baud_rate;
+    conf.baud_rate = CONNECT_BAUD_RATE;
     conf.uart_port = uart_num;
     conf.uart_rx_pin = rx_pin;
     conf.uart_tx_pin = tx_pin;
@@ -91,14 +97,13 @@ static auto connect() -> bool {
     return true;
 }
 
-static auto up_baudrate(uart_port_t uart_num, uint32_t base_baud_rate) -> bool {
-    const uint32_t higher_rate{base_baud_rate * 8};
-    esp_loader_error_t status{esp_loader_change_baudrate(higher_rate)};
+static auto up_baudrate(uart_port_t uart_num) -> bool {
+    esp_loader_error_t status{esp_loader_change_baudrate(FLASH_BAUD_RATE)};
 
-    ESP_LOGD(TAG, "esp_loader_change_baudrate(%lu)", higher_rate);
+    ESP_LOGD(TAG, "esp_loader_change_baudrate(%lu)", FLASH_BAUD_RATE);
     HANDLE_ERROR(status, "raising target baudrate");
 
-    esp_err_t ec{uart_set_baudrate(uart_num, higher_rate)};
+    esp_err_t ec{uart_set_baudrate(uart_num, FLASH_BAUD_RATE)};
 
     HANDLE_ESP_ERROR(ec, "raising host baudrate");
 
@@ -109,7 +114,7 @@ static auto contains(const esp_partition_t *partition, const uint32_t offset) ->
     return partition != nullptr && offset >= partition->address && offset < partition->address + partition->size;
 }
 
-static auto flash(const esp_partition_t *running_partition, uint32_t transfer_block_size) -> bool {
+static auto flash(const esp_partition_t *running_partition, std::byte *block, uint32_t transfer_block_size, bool &erased) -> bool {
     esp_loader_error_t status;
 
     // the target gets a blank NVS instead of a copy of ours, so it boots with an empty startup and default settings
@@ -129,15 +134,21 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transfer_bl
             return false;
         }
     }
-    std::vector<std::byte> blank(transfer_block_size, std::byte{0xFF});
-    std::vector<std::byte> block(transfer_block_size);
 
     // copy up to the end of the target slot, so the whole app arrives and not only the running partition's size from address 0
     const uint32_t used_size{target->address + target->size};
     const uint32_t block_count{(used_size + transfer_block_size - 1) / transfer_block_size};
     ESP_LOGI(TAG, "Replicating [%lu] bytes in [%lu] blocks", used_size, block_count);
 
+    // flash_start() reads the flash size, the first command at the flash rate, before its FLASH_BEGIN erases anything:
+    // read it here, so that a link that fails at that rate leaves the target with its firmware
+    uint32_t flash_size{0};
+    status = esp_loader_flash_detect_size(&flash_size);
+    if (status != ESP_LOADER_ERROR_UNSUPPORTED_CHIP) { // an unknown flash ID only makes flash_start() assume a size
+        HANDLE_ERROR(status, "reading the target's flash size");
+    }
     status = esp_loader_flash_start(0, used_size, transfer_block_size);
+    erased = status != ESP_LOADER_ERROR_IMAGE_SIZE; // refused before erasing; any other result may have begun it
     HANDLE_ERROR(status, "erasing target flash");
 
     for (uint32_t offset = 0; offset < used_size; offset += transfer_block_size) {
@@ -145,17 +156,16 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transfer_bl
             ESP_LOGI(TAG, "%lu/%lu kb", offset / 1000, used_size / 1000);
         }
         const uint32_t size{std::min(transfer_block_size, used_size - offset)};
-        std::byte *data = block.data();
         if (contains(nvs, offset) || contains(otadata, offset)) {
-            data = blank.data();
+            std::fill_n(block, size, std::byte{0xFF});
         } else if (contains(target, offset)) {
-            const esp_err_t ec{esp_partition_read(running_partition, offset - target->address, block.data(), size)};
+            const esp_err_t ec{esp_partition_read(running_partition, offset - target->address, block, size)};
             HANDLE_ESP_ERROR(ec, "reading the running app");
         } else {
-            const esp_err_t ec{esp_flash_read(nullptr, block.data(), offset, size)};
+            const esp_err_t ec{esp_flash_read(nullptr, block, offset, size)};
             HANDLE_ESP_ERROR(ec, "reading our flash");
         }
-        status = esp_loader_flash_write(data, size);
+        status = esp_loader_flash_write(block, size);
         ESP_LOGD(TAG, "esp_loader_flash_write(0x%08lX)", offset);
 
         HANDLE_ERROR(status, "writing target flash");
@@ -163,6 +173,7 @@ static auto flash(const esp_partition_t *running_partition, uint32_t transfer_bl
 
     status = esp_loader_flash_verify();
     HANDLE_ERROR(status, "verifying md5 checksum");
+    erased = false; // the target holds a complete copy, also if finishing fails
 
     status = esp_loader_flash_finish(true);
     HANDLE_ERROR(status, "finishing flash process");
@@ -182,10 +193,20 @@ auto flash_replica(const uart_port_t uart_num,
                    const gpio_num_t boot_pin,
                    const gpio_num_t rx_pin,
                    const gpio_num_t tx_pin,
-                   const uint32_t baud_rate,
+                   bool &erased,
                    const uint32_t block_size) -> bool {
+    erased = false;
+    // taken before the target enters its bootloader, so that a node short of heap fails before the target changes
+    const std::unique_ptr<std::byte[]> block{new (std::nothrow) std::byte[block_size]};
+    if (!block) {
+        ESP_LOGE(TAG, "Not enough heap for a transfer block of %lu bytes: %u bytes free, the largest free block has %u",
+                 block_size, (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        return false;
+    }
+
     ESP_LOGI(TAG, "Initializing pins..");
-    if (!init_connection(uart_num, enable_pin, boot_pin, rx_pin, tx_pin, baud_rate, block_size)) {
+    if (!init_connection(uart_num, enable_pin, boot_pin, rx_pin, tx_pin)) {
         return false;
     }
 
@@ -197,7 +218,7 @@ auto flash_replica(const uart_port_t uart_num,
     }
 
     ESP_LOGI(TAG, "Raising baudrate..");
-    if (!up_baudrate(uart_num, baud_rate)) {
+    if (!up_baudrate(uart_num)) {
         return false;
     }
 
@@ -215,13 +236,7 @@ auto flash_replica(const uart_port_t uart_num,
         return false;
     }
 
-    if (!flash(running_partition, block_size)) {
-        return false;
-    }
-
-    ESP_LOGI(TAG, "Replica complete.");
-
-    return true;
+    return flash(running_partition, block.get(), block_size, erased);
 }
 
 } // namespace ZZ::Replicator

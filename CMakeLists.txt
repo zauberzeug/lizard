@@ -1,16 +1,15 @@
 cmake_minimum_required(VERSION 3.5)
 
-# Find Git and if available set the version variable
-find_package(Git QUIET)
-if(GIT_FOUND)
-    execute_process(
-        COMMAND ${GIT_EXECUTABLE} describe --always --tags
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE GIT_VERSION
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-else()
-    set(PROJECT_VER "unknown")
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+# The Lizard version for core.info(): the git describe ESP-IDF uses for PROJECT_VER, so that both agree
+# in a plain build, with its reconfigure dependency on HEAD and the current ref, also when PROJECT_VER is given
+git_describe(GIT_VERSION "${CMAKE_CURRENT_LIST_DIR}")
+if(NOT GIT_VERSION)
+    set(GIT_VERSION "unknown")
+    if(NOT DEFINED PROJECT_VER)
+        set(PROJECT_VER "unknown")
+    endif()
 endif()
 
 # Configure version.h to place in the build directory
@@ -27,5 +26,4 @@ if(LIZARD_PROJECT_NAME_LENGTH GREATER 31)
                         "ESP-IDF would truncate it in esp_app_desc_t.project_name.")
 endif()
 
-include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(${LIZARD_PROJECT_NAME})

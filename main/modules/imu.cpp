@@ -242,7 +242,7 @@ void Imu::publish(const Sample &sample) {
     }
 }
 
-void Imu::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Imu::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
     if (method_name == "set_mode") {
         Module::expect(arguments, 1, string);
         std::string mode = arguments[0]->evaluate_string();

@@ -1,4 +1,6 @@
 #include "serial.h"
+#include "soc/soc_caps.h"
+#include "soc/uart_channel.h"
 #include "utils/string_utils.h"
 #include "utils/timing.h"
 #include "utils/uart.h"
@@ -24,10 +26,27 @@ const std::map<std::string, Variable_ptr> Serial::get_defaults() {
     return {};
 }
 
+static const Serial *console_serial = nullptr;
+
+bool Serial::is_console(const int rx_pin, const int tx_pin, const int uart_num) {
+    return uart_num == UART_NUM_0 && rx_pin == UART_NUM_0_RXD_DIRECT_GPIO_NUM && tx_pin == UART_NUM_0_TXD_DIRECT_GPIO_NUM;
+}
+
 Serial::Serial(const std::string name,
                const gpio_num_t rx_pin, const gpio_num_t tx_pin, const long baud_rate, const uart_port_t uart_num)
-    : Module(name), rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num) {
+    : Module(name), rx_buffer_size(RX_BUF_SIZE), tx_buffer_size(TX_BUF_SIZE),
+      rx_pin(rx_pin), tx_pin(tx_pin), baud_rate(baud_rate), uart_num(uart_num),
+      on_console(Serial::is_console(rx_pin, tx_pin, uart_num)) {
     this->properties = Serial::get_defaults();
+
+    if (this->on_console) {
+        // the console keeps UART0, its pins and its driver until a SerialBus on this serial takes them over
+        if (console_serial) {
+            throw std::runtime_error("uart 0 is already used by module \"" + console_serial->name + "\"");
+        }
+        console_serial = this;
+        return;
+    }
 
     // the claims outlive deinstall(), so a later Serial cannot be torn down by this one's next deinstall()
     this->claims.uart(uart_num);
@@ -38,6 +57,9 @@ Serial::Serial(const std::string name,
 }
 
 Serial::~Serial() {
+    if (console_serial == this) {
+        console_serial = nullptr;
+    }
     this->deinstall();
 }
 
@@ -54,10 +76,24 @@ void Serial::initialize_uart() const {
     };
     uart_param_config(uart_num, &uart_config);
     uart_set_pin(uart_num, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    if (install_uart_driver_on_core1(uart_num, RX_BUF_SIZE, TX_BUF_SIZE) != ESP_OK) {
+    if (install_uart_driver_on_core1(uart_num, this->rx_buffer_size, this->tx_buffer_size) != ESP_OK) {
         throw std::runtime_error("could not install the uart driver");
     }
     this->apply_rx_full_threshold();
+}
+
+void Serial::resize_buffers(const int rx_buffer_size, const int tx_buffer_size) const {
+    if (this->on_console) {
+        return; // the driver stays with the console
+    }
+    this->pending_lines.clear();
+    if (uart_is_driver_installed(this->uart_num)) {
+        this->wait_until_sent(); // with the timeout of the old buffer, which still drains
+        uart_driver_delete(this->uart_num);
+    }
+    this->rx_buffer_size = rx_buffer_size;
+    this->tx_buffer_size = tx_buffer_size;
+    this->initialize_uart();
 }
 
 void Serial::apply_rx_full_threshold() const {
@@ -67,11 +103,17 @@ void Serial::apply_rx_full_threshold() const {
 }
 
 void Serial::enable_line_detection() const {
+    if (this->on_console) {
+        return; // the console detects line ends already, with a longer pattern queue
+    }
     uart_enable_pattern_det_baud_intr(this->uart_num, '\n', 1, 9, 0, 0);
     uart_pattern_queue_reset(this->uart_num, UART_PATTERN_QUEUE_SIZE);
 }
 
 void Serial::claim(const std::string &user) const {
+    if (this->on_console) {
+        throw std::runtime_error("serial \"" + this->name + "\" on the console pins can only carry a serial bus");
+    }
     this->users.push_back(user);
 }
 
@@ -85,7 +127,11 @@ void Serial::require_sole_user(const std::string &user) const {
 
 void Serial::deinstall() const {
     this->pending_lines.clear();
+    if (this->on_console) {
+        return; // the driver and the pins stay with the console
+    }
     if (uart_is_driver_installed(this->uart_num)) {
+        this->wait_until_sent(); // bytes left in a deleted driver break the next one, e.g. the flasher's connection to a peer
         uart_driver_delete(this->uart_num);
     }
     gpio_reset_pin(this->rx_pin);
@@ -114,7 +160,7 @@ void Serial::write_checked_line(const char *message) const {
 }
 
 void Serial::write_checked_line(const char *message, const int length) const {
-    static char checksum_buffer[16];
+    char checksum_buffer[CHECKSUM_TRAILER_LENGTH + 1]; // not static: several tasks write lines at the same time
     uint8_t checksum = 0;
     int start = 0;
     for (unsigned int i = 0; i < length + 1; ++i) {
@@ -143,7 +189,7 @@ bool Serial::has_buffered_lines() const {
     // a ring that fills without a line end stops receiving, so drop what can never become a line; the driver
     // updates the byte count and the pattern queue together, so without a pattern all `buffered` bytes are unterminated
     const int buffered = this->available();
-    if (buffered > CONSOLE_LINE_SIZE && uart_pattern_get_pos(this->uart_num) == -1) {
+    if (buffered > this->rx_buffer_size / 2 && uart_pattern_get_pos(this->uart_num) == -1) {
         discard_uart_input(this->uart_num, buffered);
         this->discarded_bytes += buffered;
     }
@@ -159,6 +205,12 @@ void Serial::flush() const {
     this->pending_lines.clear();
     this->discarded_bytes = 0;
     uart_flush(this->uart_num);
+}
+
+void Serial::wait_until_sent() const {
+    // 100 ms plus twice the time the driver's TX buffer and the FIFO take on the wire
+    const uint32_t timeout_ms = 100 + 2 * (this->tx_buffer_size + SOC_UART_FIFO_LEN) * 10 * 1000 / this->baud_rate;
+    uart_wait_tx_done(this->uart_num, pdMS_TO_TICKS(timeout_ms));
 }
 
 int Serial::read(uint32_t timeout) const {
@@ -217,7 +269,10 @@ std::string Serial::get_output() const {
     return buffer;
 }
 
-void Serial::call(const std::string method_name, const std::vector<ConstExpression_ptr> arguments) {
+void Serial::call(const std::string &method_name, const std::vector<ConstExpression_ptr> &arguments) {
+    if (this->on_console) {
+        throw std::runtime_error("serial \"" + this->name + "\" on the console pins can only carry a serial bus");
+    }
     if (method_name == "send") {
         for (auto const &argument : arguments) {
             if ((argument->type & integer) == 0) {
