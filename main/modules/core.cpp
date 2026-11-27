@@ -28,6 +28,13 @@ Core::Core(const std::string name) : Module(name) {
     this->properties["startup_error"] = std::make_shared<StringVariable>();
 }
 
+void Core::write_property(const std::string property_name, const ConstExpression_ptr expression, const bool from_expander) {
+    if (property_name == "startup_error") {
+        throw std::runtime_error("property \"" + this->name + "." + property_name + "\" is read-only");
+    }
+    Module::write_property(property_name, expression, from_expander);
+}
+
 void Core::step() {
     this->properties.at("millis")->set_integer_value(millis());
     this->properties.at("heap")->set_integer_value(xPortGetFreeHeapSize());

@@ -66,6 +66,7 @@ A failing startup script is reported during boot, before `Ready.`, which a host 
 `core.startup_error` keeps the reason available afterwards, so a host can check whether the persisted configuration was applied at all.
 After a statement throws, the core restarts and skips the script after two failed boots; the property then holds the skip message with the reason, e.g. `"startup skipped after 2 failed boots (module \"imu\" (Imu): imu setup failed: I2CError: Check your wiring.)"`.
 It is also set by a syntax error, which drops the whole script without a restart.
+The property is read-only.
 
 **UART baud rate:**
 The console (UART0) defaults to 115200 baud.
